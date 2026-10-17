@@ -69,7 +69,8 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     // Secrets appear by key only, so the note never states them as facts.
     addLine(lines, 'Do not reveal', secrets.map(record => record.key), '; ');
     addLine(lines, 'Corrections', fixes);
-    lines.push(instruction);
+    // No instruction when a capture call writes the changes instead of the model.
+    if (instruction) lines.push(instruction);
     return lines.join('\n');
 }
 

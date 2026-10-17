@@ -15,6 +15,8 @@
 //   mirrored into the scene block's Off-Screen section for NPC State Delta.
 // - With a world pack (the reader's map), travel legs are checked against its roads and
 //   paces, corrections go into the next note, and /route plans a journey.
+// - Optionally, a capture call (a model of its own) writes a reply's change lines when the
+//   model did not, or always, for writers that skip or garble them.
 // - Once per arc, the planner (one model call, on the chat's model or a connection profile)
 //   turns the next arc into tracked records: an arc, dated beats, agendas, hooks, clocks and
 //   secrets. A plan waits in the tab for the reader unless they chose to skip review.
@@ -32,8 +34,10 @@ import { renderTab } from './src/ui/tab.js';
 import { MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
+import { buildCaptureMessages, parseCapture } from './src/capture.js';
+import { importWorldStateAlpha } from './src/wsa.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -53,6 +57,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     mirrorOffscreen: true,
     calendar: PRESETS.gregorian,
     arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' }),
+    capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
 });
 
 let initialized = false;
@@ -122,6 +127,7 @@ function settings(ctx = context()) {
         ...saved,
         calendar: normalizeCalendar(saved.calendar ?? DEFAULT_SETTINGS.calendar),
         arc: { ...DEFAULT_SETTINGS.arc, ...(saved.arc && typeof saved.arc === 'object' ? saved.arc : {}) },
+        capture: { ...DEFAULT_SETTINGS.capture, ...(saved.capture && typeof saved.capture === 'object' ? saved.capture : {}) },
     };
     return store[SETTINGS_KEY];
 }
@@ -323,7 +329,9 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
         const { selection, tracker } = situation(type);
         const cal = calendar();
         const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
-        const note = buildNote(selection, { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes });
+        // With capture writing every reply's changes, the model is not asked to.
+        const instructionless = settings(ctx).capture.mode === 'always' ? { instruction: '' } : {};
+        const note = buildNote(selection, { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, ...instructionless });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -348,6 +356,8 @@ async function onReply({ messageIndex }) {
     const chat = ctx.chat ?? [];
     if (!isAssistant(chat[index])) return;
     try {
+        // Capture first, so the checks below see the changes it wrote.
+        if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
         const before = trackerAt(index - 1).tracker;
         const { tracker: after, problems, info } = trackerAt(index);
         const block = sb.blockInText(chat[index].mes, BLOCK.tag);
@@ -519,14 +529,14 @@ function connectionProfiles() {
 }
 
 // The planner's one call: a connection profile (its own API and model) or the chat's own.
-async function sendToPlanner(messages, own) {
+// One call on the chosen model: a connection profile (its own API and model) or the chat's own.
+async function sendToModel(messages, model, maxTokens) {
     const ctx = context();
-    const maxTokens = Number(own.arc.maxTokens) || 1500;
-    if (own.arc.model?.source === 'profile' && own.arc.model.profileId) {
+    if (model?.source === 'profile' && model.profileId) {
         const service = ctx.ConnectionManagerRequestService;
         if (!service?.sendRequest) throw new Error('Connection Manager is not available; choose "Same as chat".');
         // A missing profile fails loudly; it never falls back to another model.
-        const result = await service.sendRequest(own.arc.model.profileId, messages, maxTokens);
+        const result = await service.sendRequest(model.profileId, messages, maxTokens);
         return typeof result === 'string' ? result : String(result?.content ?? '');
     }
     if (typeof ctx.generateRaw !== 'function') throw new Error('This SillyTavern cannot run a raw generation.');
@@ -564,7 +574,7 @@ async function planArc({ reason = 'manual' } = {}) {
             previousArc: previous ? `${previous.key}${previous.fields?.desc ? ` — ${previous.fields.desc}` : ''}` : '',
         }).map(message => ({ ...message, content: subst(message.content) }));
         if (reason !== 'manual') notify('info', 'Planning the next arc…');
-        const answer = await sendToPlanner(messages, own);
+        const answer = await sendToModel(messages, own.arc.model, Number(own.arc.maxTokens) || 1500);
         const plan = parsePlan(answer, { calendar: cal, now });
         const userName = String(ctx.name1 ?? '');
         const findings = validatePlan(plan, { calendar: cal, now, userName });
@@ -620,6 +630,69 @@ async function acceptDraft(text, draft = arcDraft()) {
         planError = error instanceof Error ? error.message : String(error);
     }
     storyBlock()?.refresh?.();
+}
+
+// ---------------------------------------------------------------------------
+// Capture: a second call writes the change lines for one reply
+
+async function capture(index) {
+    const ctx = context();
+    const sb = storyBlock();
+    const own = settings(ctx);
+    const chat = ctx?.chat ?? [];
+    const reply = chat[index];
+    if (!isAssistant(reply)) return;
+    const user = [...chat.slice(0, index)].reverse().find(message => message.is_user);
+    const before = trackerAt(index - 1).tracker;
+    const cal = calendar();
+    const scene = sb.blockInText(reply.mes, own.sceneTag);
+    const sceneText = scene?.text ?? '';
+    const parsed = sceneText ? cal.parse(sceneTimeText(sceneText), { reference: before.time }) : null;
+    const now = parsed?.abs ?? before.time ?? null;
+    const subst = text => (typeof ctx.substituteParams === 'function' ? ctx.substituteParams(text) : text);
+    const messages = buildCaptureMessages({
+        trackerSummary: summarizeTracker(before, { calendar: cal }),
+        nowText: now === null ? '' : cal.format(now),
+        place: scenePlace(sceneText),
+        userText: user ? visibleText(user) : '',
+        replyText: visibleText(reply),
+    }).map(message => ({ ...message, content: subst(message.content) }));
+    reportStatus('Capturing the reply’s changes…');
+    try {
+        const answer = await sendToModel(messages, own.capture.model, Number(own.capture.maxTokens) || 800);
+        // The chat may have moved on (a swipe, a delete) while the call ran.
+        if (context()?.chat?.[index] !== reply) return;
+        const result = parseCapture(answer, before);
+        if (result.dropped.length) console.info('[Story Director] capture dropped', result.dropped);
+        if (result.lines) await sb.setBlockText(index, BLOCK.tag, result.lines);
+        reportStatus(`Last reply: captured ${result.ops.length} ${result.ops.length === 1 ? 'change' : 'changes'}${result.dropped.length ? `, dropped ${result.dropped.length}` : ''}.`);
+    } catch (error) {
+        const cause = error?.cause instanceof Error ? ` (${error.cause.message})` : '';
+        notify('warning', `Capture failed: ${error instanceof Error ? error.message : String(error)}${cause}`);
+        console.error('[Story Director] capture failed', error);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// World State Alpha import
+
+async function importWsa(text) {
+    const ctx = context();
+    if (!ctx || !chatIdOf(ctx) || !storyBlock()) return notify('warning', 'Open a chat first.');
+    const { ops, counts, errors } = importWorldStateAlpha(text);
+    if (errors.length) return notify('error', errors[0]);
+    if (!ops.length) return notify('info', 'The export has no active records to import.');
+    const question = `Track ${counts.facts} ${counts.facts === 1 ? 'fact' : 'facts'} and ${counts.developments} ${counts.developments === 1 ? 'development' : 'developments'} from World State Alpha as World records? They are written into the latest reply, so deleting that reply undoes this.`;
+    const confirmed = typeof ctx.callGenericPopup === 'function'
+        ? await ctx.callGenericPopup(question, ctx.POPUP_TYPE?.CONFIRM ?? 2)
+        : globalThis.confirm?.(question);
+    if (!confirmed) return;
+    try {
+        await appendDirectorLines(ops.map(formatOp).join('\n'));
+        notify('success', `Imported ${ops.length} World ${ops.length === 1 ? 'record' : 'records'} from World State Alpha.`);
+    } catch (error) {
+        notify('error', `Could not import: ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 
 async function endArc() {
@@ -750,7 +823,7 @@ function addSettingsPanel(documentRef) {
         blocks: (sb?.listBlocks?.() ?? []).filter(block => block.tag !== BLOCK.tag).map(({ tag, name }) => ({ tag, name })),
         onChange: next => {
             const ctx = context();
-            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) } };
+            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) }, capture: { ...DEFAULT_SETTINGS.capture, ...(next.capture ?? {}) } };
             saveSettings(ctx);
             // The calendar or the scene block may have changed: every cached replay is stale.
             cache = { chatId: null, entries: [] };
@@ -760,6 +833,7 @@ function addSettingsPanel(documentRef) {
         status: sb ? `v${VERSION}` : `v${VERSION} · needs Story Block 0.6 or newer`,
         profiles: connectionProfiles(),
         defaultPlannerPrompt: DEFAULT_PLANNER_PROMPT,
+        onImportWsa: text => void importWsa(text),
         packSummary: worldPack() ? packSummary(worldPack()) : '',
         onImportPack: importPack,
         onClearPack: clearPack,

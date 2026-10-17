@@ -210,3 +210,12 @@ test('the current arc gets its own line under the header', () => {
     const lines = note.split('\n');
     assert.equal(lines[1], 'Arc: The Weir Bullion — who sold the weir route');
 });
+
+test('with capture writing the changes, the note carries no instruction', () => {
+    const empty = { now: null, place: '', arc: null, due: [], arriving: [], relevant: [], dormant: [], secrets: [], resolvedRecently: [] };
+    assert.equal(buildNote(empty, { calendar: null, instruction: '' }), '');
+    const arc = { key: 'The Weir Bullion', kind: 'arc', status: 'active', fields: { desc: '' } };
+    const note = buildNote({ ...empty, arc }, { calendar: null, instruction: '' });
+    assert.ok(!/<Director>/.test(note));
+    assert.ok(!note.endsWith('\n'));
+});

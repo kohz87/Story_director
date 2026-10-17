@@ -1,4 +1,4 @@
-# Story Director v0.4.0
+# Story Director v0.5.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
@@ -166,6 +166,30 @@ secrets under "Do not reveal". The planning prompt is editable (with reset); its
 `{{recent}}`, `{{tracker}}`, `{{now}}`, `{{place}}`, `{{nearby}}`, `{{note}}`, `{{genre}}`,
 `{{previous_arc}}`, `{{user}}` and `{{char}}`.
 
+## Capture (for models that skip the change lines)
+
+Some models forget the `<Director>` block, or garble it. **Capture** hands that job to a second
+call on a model of your choice (a small, fast one is enough):
+
+- **When a reply has no `<Director>` block:** the model still writes its own changes; capture
+  fills in only when it did not.
+- **Always:** the note no longer asks the model for change lines at all; capture writes them
+  for every reply.
+
+The capture call reads only that exchange (your message and the reply) with the tracker for
+context, and follows World State Alpha's capture rules: only what the exchange established,
+never plans or guesses; a claim in dialogue stays a claim, a rumour a rumour. Changes to keys
+that are not tracked are dropped, and capture never starts an arc. Its lines are written into
+the reply like the model's own, so swipes and edits behave the same.
+
+## Coming from World State Alpha
+
+**Settings → Existing chat → Import from World State Alpha** takes an exported World State
+Alpha bundle. Its active facts and developments become **World** records (developments keep
+their trend; facts are marked settled), keyed by the first words of their summary, with their
+anchors as the names to watch for. Resolved and superseded records stay behind. Turn World
+State Alpha off afterwards; the two would inject overlapping notes.
+
 ## Settings
 
 | Setting | Default | |
@@ -180,6 +204,7 @@ secrets under "Do not reveal". The planning prompt is editable (with reset); its
 | Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for NPC State Delta (once tracking has started) |
 | World pack | none | Your map: places, roads, paces and travel rules, as JSON |
 | Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note, prompt |
+| Capture | off | Off, when a reply has no `<Director>` block, or always; its model and answer length |
 
 ## The Director tab
 
@@ -194,7 +219,7 @@ problems with the last reply's changes.
 | 0.1 | Tracker, change lines, calendar, Due now, relevance and budget, dormant shelf, checks, the tab, seeding, Off-Screen mirror |
 | 0.3 | World packs (places, routes, paces), travel legs checked and corrected, `/route` and the route tool |
 | 0.4 | Arc planning on a model you choose (a connection profile or the chat's model): manual or automatic; Director's note, genre, review |
-| 0.5 | Optional capture call for models too weak to write change lines; World State Alpha import |
+| 0.5 | Capture call on a model you choose (fallback or always); World State Alpha import |
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md), the module contract in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

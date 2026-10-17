@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+Capture, and coming from World State Alpha.
+
+- **Capture:** a second call, on the chat's model or a connection profile, writes a reply's change lines. *When a reply has no `<Director>` block* fills in only when the model skipped it; *Always* stops asking the model for change lines and captures every reply. It reads only that exchange with the tracker for context, records only what the exchange established (no plans or guesses; claims in dialogue stay claims), drops changes to untracked keys and never starts an arc. The lines are written into the reply, so swipes and edits behave as with the model's own.
+- **Import from World State Alpha** (Settings → Existing chat): an exported bundle's active facts and developments become World records, with their trend or "settled", keyed by their summary's first words, anchors as the names to watch for; previewed before it applies, written into the latest reply.
+- The note carries no change-line instructions when capture writes them.
 ## 0.4.0
 
 Arc planning: one model call per arc, tracked every reply.

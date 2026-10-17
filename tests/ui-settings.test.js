@@ -41,7 +41,7 @@ test('drawer markup, header and status line', () => {
     assert.equal(status.textContent, 'Tracking 4 records.');
     assert.equal(container.querySelectorAll('#story_director_status').length, 1);
     const heads = container.querySelectorAll('.story-director-section-head').map(node => node.textContent);
-    assert.deepEqual(heads.slice(0, 6), ['Tracking', 'Dormant', 'Calendar', 'World pack', 'Arc planning', 'NPC State Delta']);
+    assert.deepEqual(heads.slice(0, 7), ['Tracking', 'Dormant', 'Calendar', 'World pack', 'Arc planning', 'Capture', 'NPC State Delta']);
 });
 
 test('re-rendering into the same container keeps the status the runtime wrote', () => {
@@ -263,4 +263,24 @@ test('world pack: summary, paste import, clear, and messages', async () => {
     assert.match(map().textContent, /No world pack/);
     panel.update({}, { packSummary: '1 place · 0 routes' });
     assert.match(map().textContent, /1 place · 0 routes/);
+});
+
+test('capture: mode, model and answer length go through onChange', () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const changes = [];
+    renderSettings(container, { settings: {}, profiles: [{ id: 'p1', name: 'Fast' }], onChange: next => changes.push(next) });
+    const mode = container.querySelector('#story_director_capture_mode');
+    assert.equal(mode.value, 'off');
+    mode.value = 'fallback';
+    mode.dispatch('change');
+    const model = container.querySelector('#story_director_capture_model');
+    model.value = 'p1';
+    model.dispatch('change');
+    const tokens = container.querySelector('#story_director_capture_tokens');
+    tokens.value = '600';
+    tokens.dispatch('change');
+    const last = changes.at(-1).capture;
+    assert.deepEqual(last, { mode: 'fallback', model: { source: 'profile', profileId: 'p1' }, maxTokens: 600 });
+    assert.ok(container.querySelector('#story_director_wsa_file'), 'the World State Alpha import is offered');
 });

@@ -401,6 +401,29 @@ stores it in `record.arc` (not in `extra`). Relevance: the current arc is the ne
 `arc` record; priority 2 = beats with `record.arc === currentArc.arc`; `Selection.arc` = the
 current arc record or null.
 
+## `src/capture.js` (v0.5)
+
+```js
+export const DEFAULT_CAPTURE_PROMPT;   // macros {{tracker}}, {{now}}, {{place}}, {{exchange}}, {{user}}, {{char}}
+export function buildCaptureMessages({ template, trackerSummary, nowText, place, userText, replyText }) → [{ role, content }]
+export function parseCapture(text, tracker) → { ops, lines, dropped: [{ raw, reason }], errors }
+```
+
+The answer's `<Director>` block (else the whole text, minus thinking and fences) is parsed as
+change lines; `~`/`-`/`!` of an untracked key and `+ arc` are dropped. `lines` is the kept ops
+through `formatOp`, written into the reply's `<Director>` block. Settings `capture: { mode:
+'off' | 'fallback' | 'always', model, maxTokens }`; `always` also drops the note's instruction.
+
+## `src/wsa.js` (v0.5)
+
+```js
+export function importWorldStateAlpha(input) → { ops, counts: { facts, developments, skipped }, errors }
+```
+
+A `world_state_alpha_bundle`: each active record → `+ event` with key = the summary's first
+clause (≤ 7 words, made unique), `desc` = the summary (unless it is the key), `people` = anchors,
+`extra.trend` for developments, `extra.settled: yes` for facts, `extra.since` = timeAnchor.
+
 ## `src/ui/settings.js`
 
 ```js
