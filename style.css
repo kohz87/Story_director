@@ -69,6 +69,13 @@
     display: none;
 }
 
+/* "Manage all in Story Suite": one line on top while Story Block's overlay is available. */
+.story-director-settings .story-director-suite-link {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0.45rem 0 0;
+}
+
 /* Section heads: Tracking, Dormant, Calendar, NPC State Delta, Existing chat. */
 .story-director-settings .story-director-section-head {
     display: flex;

@@ -227,9 +227,10 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
  * Render the Story Director settings into `container`.
  * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
  * `others` = names of the other Story Suite extensions announced now.
- * Returns `{ root, update(settings), setOthers(names) }`.
+ * `suiteLink` shows the "Manage all in Story Suite" line, which calls `onOpenSuite()`.
+ * Returns `{ root, update(settings), setOthers(names), setSource(area, choice), setEnabled(on), setSuiteLink(shown) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null, others = [] } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null, others = [], suiteLink = false, onOpenSuite = null } = {}) {
     let summary = packSummary;
     // The other Story Suite extensions announced now, by name; see setOthers.
     let suiteNames = [...others];
@@ -241,6 +242,16 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     const previousStatus = container.querySelector?.('#story_director_status')?.textContent ?? '';
     const statusNode = el('div', { className: 'story-director-status', text: status || previousStatus, attrs: { id: 'story_director_status', 'aria-live': 'polite' } });
     const view = el('div', { className: 'story-director-view' });
+    // Story Suite's overlay, while Story Block offers it; outside the view, so redraws keep it.
+    // data-story-suite-link lets the overlay hide it while the panel sits inside the overlay.
+    const suiteLinkNode = el('div', { className: 'story-director-suite-link', attrs: { 'data-story-suite-link': '' } }, [
+        button('Manage all in Story Suite', 'story-director-open-suite', { iconName: 'fa-layer-group', title: 'Open Story Suite: every story extension\'s settings and one Source of truth table', onClick: () => onOpenSuite?.() }),
+    ]);
+    const showSuiteLink = shown => {
+        if (shown) suiteLinkNode.removeAttribute('hidden');
+        else suiteLinkNode.setAttribute('hidden', '');
+    };
+    showSuiteLink(suiteLink);
     const root = el('div', { className: 'story-director-settings' }, [
         el('div', { className: 'inline-drawer' }, [
             el('div', { className: 'inline-drawer-toggle inline-drawer-header' }, [
@@ -250,7 +261,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
                 ]),
                 el('div', { className: 'inline-drawer-icon fa-solid fa-circle-chevron-down down' }),
             ]),
-            el('div', { className: 'inline-drawer-content' }, [statusNode, view]),
+            el('div', { className: 'inline-drawer-content' }, [suiteLinkNode, statusNode, view]),
         ]),
     ]);
     container.replaceChildren(root);
@@ -624,6 +635,28 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             suiteNames = [...(names ?? [])];
             const note = view.querySelector?.('.story-director-suite-note');
             if (note) note.textContent = suiteText();
+        },
+        /**
+         * A Source of truth choice saved elsewhere (Story Suite's overlay): kept for the next
+         * edit and shown in its select, without redrawing or calling onChange.
+         */
+        setSource(area, choice) {
+            if (!SOURCE_AREAS.some(([known]) => known === area) || !SOURCE_CHOICES.some(option => option.value === choice)) return;
+            current = complete(current);
+            current.sourceOfTruth[area] = choice;
+            const control = view.querySelector?.(`#story_director_source_${area}`);
+            if (control) control.value = choice;
+        },
+        /** The tracking switch flipped elsewhere: kept and shown, without onChange. */
+        setEnabled(on) {
+            current = complete(current);
+            current.enabled = Boolean(on);
+            const control = view.querySelector?.('#story_director_enabled');
+            if (control) control.checked = current.enabled;
+        },
+        /** Story Suite's overlay became available, or stopped being. */
+        setSuiteLink(shown) {
+            showSuiteLink(Boolean(shown));
         },
     };
 }

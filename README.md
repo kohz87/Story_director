@@ -1,4 +1,4 @@
-# Story Director v0.8.0
+# Story Director v0.8.1
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -358,7 +358,8 @@ area, so the model is not told the same thing twice.
 
 - While it tracks the story (the switch on, Story Block there), Story Director offers the
   **calendar**, the **timeline** (agendas, quests, clocks, arcs) and **NPCs**, and shares the
-  same object as `globalThis.StoryDirector` (below). Turning tracking off withdraws it.
+  same object as `globalThis.StoryDirector` (below). Turning tracking off stops it offering
+  anything; it stays listed as switched off, so Story Suite can turn it back on.
 - **NPCs** are NPC State Delta's while it is installed and on: it keeps who each NPC is.
   Story Director's agenda lines then give only what an NPC plans and when; one short line in
   the note, in the planner's request and in the capture call asks for that.
@@ -370,6 +371,10 @@ area, so the model is not told the same thing twice.
   calendar); for the timeline it also stops the Off-Screen mirror while another extension
   keeps it. With no other story extension installed, every choice works like Automatic, and
   nothing changes.
+- **Story Suite overlay:** with Story Block 0.9 or later and another story extension installed, *Manage
+  all in Story Suite* (on top of the settings) opens one overlay for all of them, with this
+  panel as a tab and one Source of truth table
+  ([One place to manage them all](docs/STORY_SUITE.md#one-place-to-manage-them-all)).
 
 ## For other extensions
 
