@@ -36,7 +36,7 @@ reader-configured data.
 |---|---|---|
 | **Story Block** | The scene block, as a camera: Time, Location, Weather, the player character, NPCs present. Also Inventory, Choices, Dice. | Main model, every reply |
 | **Story Director** | The tracker (agendas, events, hooks, clocks, beats, secrets), the calendar, travel, the arc plan, the injected note | Code every reply, from the model's change lines; the arc plan from one planning call per arc |
-| **NPC State Delta** | NPC dossiers | Unchanged. Reads off-screen lines from Director (see 11) |
+| **NPC State Delta** | NPC dossiers | Its own extension. With the Story Suite (see 11) it keeps who each NPC is, and reads Director's calendar |
 
 The World_State block keeps its first half (time, place, people) and loses its list
 sections. Its prompt gets shorter, not longer.
@@ -308,13 +308,18 @@ Everything under `src/` except `ui/` is pure and tested without SillyTavern.
 
 Story Block needs a small plugin API (0.6): read a block's current and previous copy, the copy
 a generation will see, a notice after each reply, and tab keys and badges. NPC State Delta
-needs nothing until it chooses to read Director's records.
+needs nothing from Director to work; with the Story Suite it reads Director's calendar.
 
 ## 11. Compatibility
 
-- **NPC State Delta** reads `Off-Screen` and `NPCs Present` from the World_State block. Until
-  it reads Director directly, Director can mirror its active agendas as an `Off-Screen`
-  section in the stored block (a toggle, on by default).
+- **Off-Screen mirror:** Director can mirror its active agendas as an `Off-Screen` section in
+  the stored World_State block, for readers who keep that section (a toggle, on by default).
+  NPC State Delta does not read it.
+- **Story Suite** (v0.8, [STORY_SUITE.md](STORY_SUITE.md)): Story Block, Director, NPC State
+  Delta and RPG Battle announce what they own on a shared registry. Director offers the
+  calendar, the timeline and NPCs; while NPC State Delta keeps who each NPC is, Director's
+  agenda lines give only plans and timing. NPC State Delta takes Director's calendar
+  (`StoryDirector.calendar()`).
 - **World State Alpha:** turn it off when Director is on; the two would inject overlapping
   notes.
 - **Megumin Suite's Story Director:** turn it off; Director replaces it.
@@ -336,4 +341,4 @@ needs nothing until it chooses to read Director's records.
 3. Dormant: unseen for 15 replies or 1 story month (30 days), nothing due within 3 days; all
    adjustable.
 4. Arc planning trigger: both, the reader chooses manual or automatic.
-5. Off-Screen mirror for NPC State Delta: on by default, with a toggle.
+5. Off-Screen mirror into the World_State block: on by default, with a toggle.

@@ -1,5 +1,5 @@
 // Off-Screen mirror: writes the tracker's active agendas back into the stored World_State
-// block as its Off-Screen section, for readers that still look there (NPC State Delta).
+// block as its Off-Screen section, for readers who keep that section in Story Block's block.
 // Only that section changes; every byte outside it is kept as it was. Pure.
 
 import { readHeading } from './seed.js';

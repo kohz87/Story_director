@@ -202,3 +202,52 @@ function isActive(record) {
 function isNumber(value) {
     return typeof value === 'number' && Number.isFinite(value);
 }
+
+// ---------------------------------------------------------------------------------------
+// Encounters: planned fights, for other extensions (RPG Battle offers "Fight?" with them)
+
+function encounterText(record) {
+    return String(record?.fields?.encounter ?? '').trim();
+}
+
+// When the fight comes: a clock fires at its due, everything else at its on. A quest's due
+// is a deadline, not a fight, so a quest's fight is soon only by its on.
+function fightDate(record) {
+    const fields = record.fields ?? {};
+    return record.kind === 'clock' ? fields.due || fields.on || '' : fields.on || '';
+}
+
+/**
+ * The planned fights a Selection holds: due ones first, then arriving ones (both
+ * `status: 'due'`), then relevant ones whose date falls within `dueSoonDays` (`'soon'`).
+ * Each is `{ key, id, kind, encounter, place, on, status }`, `on` being the date as written.
+ * Story Director never resolves a fight; it only says which ones the story has reached.
+ */
+export function encountersIn(selection, { calendar = null, now = null, dueSoonDays = DEFAULTS.dueSoonDays } = {}) {
+    const out = [];
+    const listed = new Set();
+    const add = (record, status, on) => {
+        const encounter = encounterText(record);
+        if (!encounter || listed.has(record.id)) return;
+        listed.add(record.id);
+        out.push({ key: record.key, id: record.id, kind: record.kind, encounter, place: String(record.fields?.place ?? '').trim(), on: String(on ?? '').trim(), status });
+    };
+    for (const record of selection?.due ?? []) add(record, 'due', fightDate(record) || record.fields?.due);
+    for (const record of selection?.arriving ?? []) add(record, 'due', record.fields?.arrive);
+
+    if (calendar && isNumber(now)) {
+        const days = Number(dueSoonDays) >= 0 ? Number(dueSoonDays) : DEFAULTS.dueSoonDays;
+        const limit = calendar.addDays(now, days);
+        // The soonest first: that is the fight the story reaches next.
+        const soon = [];
+        for (const { record } of selection?.relevant ?? []) {
+            const on = fightDate(record);
+            if (!on || !encounterText(record)) continue;
+            const parsed = calendar.parse(on, { reference: now });
+            if (reachedBy(parsed, limit, calendar)) soon.push({ record, on, at: parsed.abs });
+        }
+        soon.sort((a, b) => a.at - b.at);
+        for (const { record, on } of soon) add(record, 'soon', on);
+    }
+    return out;
+}

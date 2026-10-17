@@ -477,3 +477,19 @@ test('quests live in their own tab: the Director tab does not list them', () => 
     assert.doesNotMatch(pane.textContent, /Kettle Jack/);
     assert.match(pane.textContent, /Senior Listener Geva/);
 });
+
+test('a planned fight: an encounter row and a fight tag in the record head', () => {
+    const ambush = record('Ambush at the weir', 'beat', { desc: 'bandits hit the road', on: 'Goldwane 16', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' });
+    const later = record('Wolves on the ridge', 'beat', { on: 'Goldwane 19', encounter: '2 x dire wolf rank D' });
+    const pane = render({ selection: selection({ due: [ambush], relevant: [{ record: later, reason: 'beat', priority: 2 }, { record: COUNCIL, reason: 'beat', priority: 2 }] }) });
+
+    const due = itemFor(pane, 'Ambush at the weir');
+    assert.deepEqual(texts(due, '.story-director-tag'), ['Beats', 'fight']);
+    assert.ok(due.querySelector('.story-director-tag.is-fight'));
+    assert.deepEqual(facts(due), [['', 'bandits hit the road'], ['on', 'Goldwane 16'], ['place', 'Weir road'], ['encounter', '3 bandit, bandit captain (boss)']]);
+
+    const planned = itemFor(pane, 'Wolves on the ridge');
+    assert.deepEqual(texts(planned, '.story-director-tag'), ['fight']);
+    assert.deepEqual(facts(planned), [['on', 'Goldwane 19'], ['encounter', '2 x dire wolf rank D']]);
+    assert.equal(itemFor(pane, 'Council session opens').querySelector('.story-director-tag.is-fight'), null, 'no foes, no tag');
+});

@@ -7,14 +7,14 @@
 
 import { estimateTokens } from './relevance.js';
 
-// About 120 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
+// About 135 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
     'End your reply with one <Director>…</Director> block of change lines, one per line:',
     '+ kind Key — part | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown; a quest (only once {{user}} accepts it): type, giver, goal, reward, step, due. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (only once {{user}} accepts it): type, giver, goal, reward, step, due. Dates go only in on, due and arrive.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
@@ -26,6 +26,14 @@ export const PACING = [
 ].join(' ');
 // The same, when a capture call writes the changes and the model writes none.
 export const PACING_NO_CHANGES = PACING.replace(/ What cannot fit yet happens off-screen \(!\) or slips \(~ on: later\)\./, ' What cannot fit yet can happen off-screen or later.');
+// Added to the Pacing line only while a due or arriving record carries an encounter, about 35
+// tokens. The fight is resolved in code by another extension (RPG Battle); a storyteller left
+// alone would narrate the whole fight and decide how it ends, so it stops at the first blow.
+export const ENCOUNTER_CUE = 'A due fight starts when the scene reaches it: show the foes appear and stop at the first blow; the fight is resolved outside the story.';
+// While NPC State Delta is the source of truth for who an NPC is (Story Suite, area `npc`),
+// about 20 tokens after the instruction (and in the planner's and capture's request), so an
+// agenda never restates a dossier the reader keeps there.
+export const NPC_PLANS_ONLY = 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.';
 
 // Kind lines, in the order the note shows them.
 const KIND_LINES = [
@@ -44,7 +52,10 @@ export function buildNote(selection, {
     budgetTokens = 1000,
     corrections = [],
     instruction = CHANGE_INSTRUCTION,
+    npcPlansOnly = false,
 } = {}) {
+    // Only where the model writes change lines: with none asked for, there is nothing to steer.
+    if (npcPlansOnly && instruction) instruction = `${instruction}\n${NPC_PLANS_ONLY}`;
     const due = selection?.due ?? [];
     const arriving = selection?.arriving ?? [];
     const relevant = selection?.relevant ?? [];
@@ -71,15 +82,18 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     // The arc steers: its name and what it is about, so every reply leans the same way.
     const arc = selection?.arc;
     if (arc) lines.push(`Arc: ${arc.key}${arc.fields?.desc ? ` — ${arc.fields.desc}` : ''}`);
-    addLine(lines, 'Due now', due.map(dueItem));
-    addLine(lines, 'Arriving', arriving.map(arrivalItem));
+    addLine(lines, 'Due now', due.map(record => withFight(dueItem(record), record)));
+    addLine(lines, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
         addLine(lines, label, relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record)));
     }
     // Secrets appear by key only, so the note never states them as facts.
     addLine(lines, 'Do not reveal', secrets.map(record => record.key), '; ');
     addLine(lines, 'Corrections', fixes);
-    if (scheduled(selection, due, arriving, relevant)) lines.push(instruction ? PACING : PACING_NO_CHANGES);
+    if (scheduled(selection, due, arriving, relevant)) {
+        const pacing = instruction ? PACING : PACING_NO_CHANGES;
+        lines.push([...due, ...arriving].some(encounterOf) ? `${pacing} ${ENCOUNTER_CUE}` : pacing);
+    }
     // No instruction when a capture call writes the changes instead of the model.
     if (instruction) lines.push(instruction);
     return lines.join('\n');
@@ -99,6 +113,24 @@ function header(selection, calendar) {
     if (calendar && typeof now === 'number' && Number.isFinite(now)) parts.push(calendar.format(now));
     if (selection?.place) parts.push(selection.place);
     return `[${parts.join(ITEM_SEPARATOR)}]`;
+}
+
+// The foes of a planned fight, as written ('' for a record that is not one).
+function encounterOf(record) {
+    return String(record?.fields?.encounter ?? '').trim();
+}
+
+// "Ambush at the weir (Haywane 14) (fight: 3 bandit, bandit captain (boss))": a due fight
+// says who is coming, so the storyteller can bring them on.
+function withFight(item, record) {
+    const foes = encounterOf(record);
+    return foes ? `${item} (fight: ${foes})` : item;
+}
+
+// The compact form for the kind lines: the fight is planned, not happening yet.
+function fightPart(record) {
+    const foes = encounterOf(record);
+    return foes ? `${ITEM_SEPARATOR}fight: ${foes}` : '';
 }
 
 function addLine(lines, label, items, separator = ITEM_SEPARATOR) {
@@ -132,7 +164,7 @@ function questItem(record) {
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
     const type = String(f.type ?? '').trim();
-    return record.key + (type ? ` (${type})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '');
+    return record.key + (type ? ` (${type})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '') + fightPart(record);
 }
 
 function recordItem(record) {
@@ -152,7 +184,7 @@ function recordItem(record) {
     // With no then, the date belongs to the record itself (a beat's on, a clock's due).
     if (when && !f.then) item += ` (${when})`;
     if (record.kind === 'clock' && f.shown && !/^none$/i.test(f.shown.trim())) item += `${ITEM_SEPARATOR}shown: ${f.shown}`;
-    return item;
+    return item + fightPart(record);
 }
 
 // The far end of a one-hop leg: "Shorn → Varnhold Watch 35 B, courier 70/day → 0.5" gives

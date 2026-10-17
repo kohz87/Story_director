@@ -30,7 +30,7 @@ const KIND_GROUPS = [
 
 // Labelled rows in this order; desc heads the record as a plain line (it is what the
 // record is), and labels the tracker does not know follow as written.
-const FACT_FIELDS = ['goal', 'step', 'giver', 'reward', 'now', 'then', 'on', 'due', 'leg', 'arrive', 'place', 'people', 'shown'];
+const FACT_FIELDS = ['goal', 'step', 'giver', 'reward', 'now', 'then', 'on', 'due', 'leg', 'arrive', 'place', 'encounter', 'people', 'shown'];
 const DATE_FIELDS = new Set(['on', 'due', 'arrive']);
 
 const SEVERITIES = [
@@ -174,6 +174,8 @@ function renderRecord(record, { formatDate, onPin, note = '' }) {
     const head = el('div', { className: 'story-director-record-head' }, [
         el('span', { className: 'story-director-record-key', text: record.key }),
         note ? el('span', { className: 'story-director-tag', text: note }) : null,
+        // A planned fight (its foes are the encounter row): RPG Battle offers it when due.
+        text(record.fields?.encounter) ? el('span', { className: 'story-director-tag is-fight', text: 'fight' }) : null,
         typeof onPin === 'function' ? pinButton(record, onPin) : null,
     ]);
     item.append(head);

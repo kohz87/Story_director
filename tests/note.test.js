@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHANGE_INSTRUCTION, PACING, PACING_NO_CHANGES, buildNote } from '../src/note.js';
+import { CHANGE_INSTRUCTION, ENCOUNTER_CUE, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -248,4 +248,58 @@ test('quests: their own line, deadline wording when due, and the instruction nam
     const due = buildNote(selection({ due: [bounty] }), { calendar });
     assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
     assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): type, giver, goal, reward, step, due/);
+});
+
+test('encounters: a due fight names its foes, the kind lines show them compactly', () => {
+    const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { desc: 'bandits hit the road', on: 'Goldwane 16', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' } });
+    const due = buildNote(selection({ due: [ambush] }), { calendar });
+    assert.equal(lines(due)[1], 'Due now: Ambush at the weir (Goldwane 16) (fight: 3 bandit, bandit captain (boss))');
+
+    const raiders = record({ key: 'Raiders', fields: { leg: 'Shorn → Auvoth 120 B, ride 60/day → 2', arrive: 'Goldwane 16', encounter: '2 x raider rank D' } });
+    const arriving = buildNote(selection({ arriving: [raiders] }), { calendar });
+    assert.equal(lines(arriving)[1], 'Arriving: Raiders arrives Auvoth (Goldwane 16) (fight: 2 x raider rank D)');
+
+    const later = record({ ...ambush, fields: { ...ambush.fields, on: 'Goldwane 19' } });
+    const bounty = record({ key: 'Bounty on Kettle Jack', kind: 'quest', fields: { goal: 'bring him in alive', encounter: 'Kettle Jack (boss), 2 thug' } });
+    const planned = buildNote(selection({ relevant: [later, bounty] }), { calendar });
+    assert.ok(lines(planned).includes('Beats: Ambush at the weir — bandits hit the road (Goldwane 19) · fight: 3 bandit, bandit captain (boss)'));
+    assert.ok(lines(planned).includes('Quests: Bounty on Kettle Jack — bring him in alive · fight: Kettle Jack (boss), 2 thug'));
+    assert.ok(!lines(due).some(line => line.startsWith('Beats:')), 'a due fight is not repeated');
+});
+
+test('ENCOUNTER_CUE: short, and only while a due or arriving record carries a fight', () => {
+    assert.ok(estimateTokens(ENCOUNTER_CUE) <= 35, `${estimateTokens(ENCOUNTER_CUE)} tokens`);
+    assert.match(ENCOUNTER_CUE, /first blow/);
+    assert.match(ENCOUNTER_CUE, /resolved outside the story/);
+    const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { on: 'Goldwane 16', encounter: '3 bandit' } });
+    const later = record({ ...ambush, fields: { on: 'Goldwane 19', encounter: '3 bandit' } });
+
+    const due = buildNote(selection({ due: [ambush] }), { calendar });
+    assert.equal(lines(due).at(-CHANGE_INSTRUCTION.split('\n').length - 1), `${PACING} ${ENCOUNTER_CUE}`);
+    const captured = buildNote(selection({ due: [ambush] }), { calendar, instruction: '' });
+    assert.equal(lines(captured).at(-1), `${PACING_NO_CHANGES} ${ENCOUNTER_CUE}`);
+
+    assert.ok(!buildNote(selection({ relevant: [later] }), { calendar }).includes(ENCOUNTER_CUE), 'a planned fight not yet due');
+    assert.ok(!buildNote(selection({ due: [sale] }), { calendar }).includes(ENCOUNTER_CUE), 'a due record without foes');
+    assert.match(CHANGE_INSTRUCTION, /shown, encounter;/);
+});
+
+test('npcPlansOnly: one short line after the instruction, and only where change lines are asked for', () => {
+    assert.ok(estimateTokens(NPC_PLANS_ONLY) <= 25, `${estimateTokens(NPC_PLANS_ONLY)} tokens`);
+    assert.match(NPC_PLANS_ONLY, /NPC State Delta keeps who each NPC is/);
+    assert.match(NPC_PLANS_ONLY, /what they plan and when/);
+    const scene = selection({ due: [sale], relevant: [geva, fires] });
+
+    // Alone (the default) the note is exactly as before.
+    const alone = buildNote(scene, { calendar });
+    assert.equal(buildNote(scene, { calendar, npcPlansOnly: false }), alone);
+    assert.ok(!alone.includes(NPC_PLANS_ONLY));
+
+    const deferring = buildNote(scene, { calendar, npcPlansOnly: true });
+    assert.equal(deferring, `${alone}\n${NPC_PLANS_ONLY}`);
+    assert.ok(lines(deferring).includes('Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17)'), 'the plan and its timing stay');
+    assert.equal(buildNote(selection(), { calendar, npcPlansOnly: true }), `${CHANGE_INSTRUCTION}\n${NPC_PLANS_ONLY}`);
+
+    // With capture writing the changes, the note asks for none, so there is nothing to steer.
+    assert.equal(buildNote(scene, { calendar, instruction: '', npcPlansOnly: true }), buildNote(scene, { calendar, instruction: '' }));
 });

@@ -1,29 +1,31 @@
 // Story Director: arc planning (pure).
 //
 // Once per arc a chosen model plays showrunner: it reads the recent story and the tracker and
-// answers with a short plan in fixed lines (ARC, BEAT, AGENDA, HOOK, CLOCK, SECRET). This
+// answers with a short plan in fixed lines (ARC, BEAT, AGENDA, HOOK, CLOCK, SECRET; a planned
+// fight is a BEAT with `encounter:`, or an ENCOUNTER line, which becomes one). This
 // module writes that prompt, reads the answer back leniently (models add thinking, bold,
 // bullets, numbering and their own label names), turns relative dates into calendar dates,
 // checks the plan, and turns it into `+` change ops tagged with the arc. Pure: no DOM, no
 // globals; the calendar is passed in.
 
 import { KINDS, formatOp, lineKey, parseChanges } from './changes.js';
+import { NPC_PLANS_ONLY } from './note.js';
 
-export const DEFAULT_PLANNER_PROMPT = `You are the showrunner of an ongoing story between {{user}} and {{char}}. Your job is to plan the NEXT ARC: what the world and the people in it will do over the coming days, so the story moves with purpose. You do not write the story. You write the plan the storyteller will follow.
+export const DEFAULT_PLANNER_PROMPT = `You are the showrunner of an ongoing story between {{user}} and {{char}}. Your job is to plan the NEXT ARC: what the world and its people will do over the coming days, so the story moves with purpose. You write the plan the storyteller follows, not the story.
 
 ## How you plan
-- Decide. Never ask questions, offer options or hedge. Commit to one plan and make it specific.
-- Plan the world, never {{user}}. {{user}}'s actions, words, thoughts and choices belong to {{user}} alone. Create pressures, opportunities and consequences that {{user}} can meet in any way; never script the response.
-- Every NPC has goals, fears, loyalties and limits, and pursues them off-screen whether or not {{user}} is watching. Keep plans true to who they are: a coward does not turn brave because the plot needs it.
-- Plan the future, not the present scene. The current scene is already in motion; your beats start after it and unfold over the coming days.
-- Build from what is already there. Pull dropped threads, unpaid debts, broken promises, rumours and characters who were mentioned but never seen back into play. Paying off what exists beats inventing something new.
-- Make consequences real. What {{user}} and others have done comes back, on a schedule.
+- Decide. Never ask questions, offer options or hedge. Commit to one specific plan.
+- Plan the world, never {{user}}. {{user}}'s actions, words, thoughts and choices belong to {{user}} alone. Create pressures, opportunities and consequences that {{user}} can meet any way; never script the response.
+- Every NPC has goals, fears, loyalties and limits, and pursues them off-screen, watched or not. Keep plans true to who they are: a coward does not turn brave because the plot needs it.
+- Plan the future: the current scene is already in motion, and your beats start after it.
+- Build from what is there: pull dropped threads, unpaid debts, broken promises, rumours and characters mentioned but never seen back into play. Paying off what exists beats inventing.
+- Make consequences real: what {{user}} and others did comes back, on a schedule.
 - Quests are {{user}}'s: press on them (rivals, deadlines), never complete them. Offer new work as a HOOK.
-- Give the arc a shape: pressure that builds, a turn, and a point where it comes to a head. Leave the outcome open for {{user}} to change.
+- Give the arc a shape: pressure that builds, a turn, and a climax. Leave the outcome open for {{user}}.
 - Leave room: beats are when the world acts, not appointments for {{user}}. Each must work without {{user}} present (heard of, or met as aftermath), and may slip.
-- Protect secrets. Write every secret you create as a SECRET line. The storyteller hints and never tells until the story earns the reveal.
-- Respect time and distance. Nobody is in two places at once, and travel takes time.
-- Match the genre and tone. Follow the reader's note when there is one.
+- Protect secrets: write each as a SECRET line. The storyteller hints and never tells until the story earns the reveal.
+- Respect time and distance: nobody is in two places at once; travel takes time.
+- Match the genre and tone. Follow the reader's note if any.
 
 ## What you know
 Genre and tone: {{genre}}
@@ -40,7 +42,7 @@ Recent story:
 {{recent}}
 
 ## Your answer
-Answer with only a <plan> block and nothing before or after it. One item per line, each starting with its label:
+Answer with only a <plan> block, one item per line, each starting with its label:
 
 <plan>
 ARC: Name — what the arc is about and where it is heading
@@ -53,6 +55,7 @@ SECRET: Key — what {{user}} must not learn yet
 
 - Exactly one ARC line.
 - 3 to 6 BEATs in story order: things that happen in the world, not things {{user}} does. Give a beat "after: Other beat" instead of a date when it follows another beat.
+- A fight is a BEAT with "| encounter: 3 bandit, bandit captain (boss)", only where the story would really come to blows (a quest's target, an ambush an agenda sets up); at most 1 or 2 per arc, foes named as the story names them.
 - One AGENDA for every NPC the arc moves, named the way the story names them.
 - 1 to 3 HOOKs, 0 to 2 CLOCKs, and a SECRET for every secret.
 - DATE is a date in the story's calendar, written like "Now" above, or relative to now: "in 2 days", "tomorrow at dusk", "next morning", "in 6 hours".
@@ -81,7 +84,10 @@ const LABELS = Object.freeze({
     quest: 'hook', bounty: 'hook', contract: 'hook',
     clock: 'clock', timer: 'clock',
     secret: 'secret', 'off limits': 'secret', offlimits: 'secret',
+    // A planned fight is a beat that carries its foes; see fightBeat.
+    encounter: 'beat', fight: 'beat',
 });
+const FIGHT_LABELS = new Set(['encounter', 'fight']);
 
 // `BEAT:`, `NPC AGENDA:`, `BEAT 2:` (numbered beats are common); the label is words only, so
 // `Geva — now: Court` is not read as a label.
@@ -165,6 +171,8 @@ function recordLine(record) {
     if (fields.then) line += ` → ${fields.then}`;
     const when = fields.on || fields.due;
     if (when) line += ` (${when})`;
+    // A planned fight says so, so the next plan neither repeats nor forgets it.
+    if (fields.encounter) line += ` · fight: ${fields.encounter}`;
     return line;
 }
 
@@ -192,6 +200,8 @@ function resolvedMessage(record) {
 /**
  * The planning call: the template with its macros filled as the system message, and a short
  * user turn. Unknown macros, `{{user}}` and `{{char}}` included, stay for SillyTavern.
+ * `npcPlansOnly` (NPC State Delta keeps who each NPC is) adds one line to the user turn, so
+ * it holds for the reader's own template too.
  */
 export function buildPlannerMessages({
     template = DEFAULT_PLANNER_PROMPT,
@@ -203,6 +213,7 @@ export function buildPlannerMessages({
     directorNote = '',
     genre = '',
     previousArc = '',
+    npcPlansOnly = false,
 } = {}) {
     const values = {
         recent,
@@ -224,7 +235,7 @@ export function buildPlannerMessages({
     });
     return [
         { role: 'system', content },
-        { role: 'user', content: USER_MESSAGE },
+        { role: 'user', content: npcPlansOnly ? `${USER_MESSAGE} ${NPC_PLANS_ONLY}` : USER_MESSAGE },
     ];
 }
 
@@ -300,7 +311,8 @@ function readLine(trimmed) {
     const match = text.match(LABEL);
     if (!match) return { error: 'no label (expected ARC:, BEAT:, AGENDA:, HOOK:, CLOCK: or SECRET:)' };
     const label = match[1].trim();
-    const kind = LABELS[label.toLowerCase().replace(/[\s_-]+/g, ' ')];
+    const name = label.toLowerCase().replace(/[\s_-]+/g, ' ');
+    const kind = LABELS[name];
     if (!kind) return { error: `unknown label "${label}"` };
     const rest = match[2].trim();
     if (!rest || SEPARATOR_FIRST.test(rest)) return { error: 'missing key' };
@@ -310,7 +322,23 @@ function readLine(trimmed) {
     // description are kept.
     const { ops, errors } = parseChanges(`+ ${kind === 'arc' ? 'event' : kind} ${rest}`);
     if (!ops.length) return { error: errors[0]?.message ?? 'not readable' };
-    return { kind, op: ops[0] };
+    return { kind, op: FIGHT_LABELS.has(name) ? fightBeat(ops[0]) : ops[0] };
+}
+
+// `ENCOUNTER: Ambush at the weir — 3 bandit, bandit captain (boss) | on: …`: without an
+// `encounter:` part, the description is the foes; with neither, the key is (`ENCOUNTER:
+// 2 x dire wolf | on: …`). A beat without foes would not be a fight at all.
+function fightBeat(op) {
+    const fields = { ...op.fields };
+    if (!String(fields.encounter ?? '').trim()) {
+        if (String(fields.desc ?? '').trim()) {
+            fields.encounter = fields.desc;
+            delete fields.desc;
+        } else {
+            fields.encounter = op.key;
+        }
+    }
+    return { ...op, fields };
 }
 
 function resolveDates(fields, { calendar, now }) {

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import { makeCalendar } from '../src/calendar.js';
 import { parseChanges } from '../src/changes.js';
+import { NPC_PLANS_ONLY } from '../src/note.js';
 import { replay } from '../src/tracker.js';
 import {
     DEFAULT_PLANNER_PROMPT,
@@ -368,6 +369,17 @@ test('buildPlannerMessages with the default prompt leaves only {{user}} and {{ch
     assert.equal(buildPlannerMessages({ template: '' })[0].content, buildPlannerMessages()[0].content);
 });
 
+test('buildPlannerMessages with npcPlansOnly asks for agendas as plans and timing, in any template', () => {
+    const alone = buildPlannerMessages({ nowText: 'Haywane 12' });
+    assert.deepEqual(buildPlannerMessages({ nowText: 'Haywane 12', npcPlansOnly: false }), alone);
+    const [system, user] = buildPlannerMessages({ nowText: 'Haywane 12', npcPlansOnly: true });
+    assert.equal(system.content, alone[0].content, 'the system prompt is untouched');
+    assert.equal(user.content, `Plan the next arc. Answer only with the <plan> block. ${NPC_PLANS_ONLY}`);
+    const custom = buildPlannerMessages({ template: 'Plan {{now}}.', nowText: 'Haywane 12', npcPlansOnly: true });
+    assert.equal(custom[0].content, 'Plan Haywane 12.');
+    assert.ok(custom[1].content.endsWith(NPC_PLANS_ONLY), 'a reader\'s own template gets it too');
+});
+
 test('the default prompt asks for the plan lines and assumes no setting', () => {
     for (const macro of ['recent', 'tracker', 'now', 'place', 'nearby', 'note', 'genre', 'previous_arc', 'user', 'char']) {
         assert.ok(DEFAULT_PLANNER_PROMPT.includes(`{{${macro}}}`), macro);
@@ -383,4 +395,60 @@ test('the default prompt asks for the plan lines and assumes no setting', () => 
     assert.ok(example.arc);
     assert.equal(example.items.length, 5);
     assert.deepEqual(example.errors, []);
+});
+
+// --- encounters ----------------------------------------------------------------------------
+
+test('parsePlan and planToOps carry a fight beat\'s encounter', () => {
+    const plan = parsePlan([
+        '<plan>',
+        'ARC: The Weir Bullion — who sold the weir route',
+        'BEAT: Ambush at the weir — the legation\'s hirelings strike | on: in 2 days | place: Weir road | encounter: 3 bandit, bandit captain (boss)',
+        '</plan>',
+    ].join('\n'), { calendar, now });
+    assert.deepEqual(plan.errors, []);
+    const [beat] = plan.items;
+    assert.equal(beat.kind, 'beat');
+    assert.deepEqual(beat.fields, { desc: 'the legation\'s hirelings strike', on: 'Haywane 14, 05:35 pm', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' });
+
+    const [, op] = planToOps(plan, { arcId: 'arc-3' });
+    assert.equal(op.raw, '+ beat Ambush at the weir — the legation\'s hirelings strike | on: Haywane 14, 05:35 pm | place: Weir road | encounter: 3 bandit, bandit captain (boss) | arc: arc-3');
+    const { ops: back } = parseChanges(op.raw);
+    assert.equal(back[0].fields.encounter, '3 bandit, bandit captain (boss)');
+    const { tracker } = replay([{ message: 0, time: now, text: '', ops: [op] }]);
+    assert.equal(tracker.records[0].fields.encounter, '3 bandit, bandit captain (boss)');
+    assert.equal(tracker.records[0].arc, 'arc-3');
+});
+
+test('an ENCOUNTER line is a beat with its foes, from encounter:, the description or the key', () => {
+    const plan = parsePlan([
+        '**ENCOUNTER:** Wolves on the ridge — 2 x dire wolf rank D | on: tomorrow at dusk',
+        'ENCOUNTER: Kettle Jack\'s stand — he will not go quietly | encounter: Kettle Jack (boss), 2 thug | on: Haywane 16',
+        'Encounter 2: 1 river troll (boss) | place: the weir',
+    ].join('\n'), { calendar, now });
+    assert.deepEqual(plan.errors, []);
+    assert.deepEqual(plan.items.map(item => [item.kind, item.key, item.fields.encounter, item.fields.desc]), [
+        ['beat', 'Wolves on the ridge', '2 x dire wolf rank D', undefined],
+        ['beat', 'Kettle Jack\'s stand', 'Kettle Jack (boss), 2 thug', 'he will not go quietly'],
+        ['beat', '1 river troll (boss)', '1 river troll (boss)', undefined],
+    ]);
+    assert.equal(plan.items[0].fields.on, 'Haywane 13, 07:00 pm');
+});
+
+test('the default prompt plans fights sparingly, and stays within 600 words', () => {
+    const rule = DEFAULT_PLANNER_PROMPT.split('\n').find(line => line.includes('encounter:'));
+    assert.ok(rule, 'a rule for fights');
+    assert.match(rule, /BEAT/);
+    assert.match(rule, /at most 1 or 2 per arc/);
+    assert.match(rule, /named as the story names them/);
+    const words = DEFAULT_PLANNER_PROMPT.split(/\s+/).length;
+    assert.ok(words <= 600, `${words} words`);
+    // The rule's example is itself readable as a fight beat.
+    const example = rule.match(/"(\| encounter: [^"]+)"/)[1];
+    assert.equal(parsePlan(`BEAT: Ambush ${example}`).items[0].fields.encounter, '3 bandit, bandit captain (boss)');
+});
+
+test('summarizeTracker marks a planned fight', () => {
+    const { tracker } = replay([{ message: 0, time: now, text: '', ops: parseChanges('+ beat Ambush at the weir — on: Haywane 14 | encounter: 3 bandit').ops }]);
+    assert.match(summarizeTracker(tracker), /- Ambush at the weir \(Haywane 14\) · fight: 3 bandit/);
 });

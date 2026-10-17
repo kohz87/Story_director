@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { parseChanges } from '../src/changes.js';
 import { replay } from '../src/tracker.js';
 import { DEFAULT_CAPTURE_PROMPT, buildCaptureMessages, parseCapture } from '../src/capture.js';
+import { NPC_PLANS_ONLY } from '../src/note.js';
 
 const tracker = replay([{ message: 1, time: 0, text: '', ops: parseChanges('+ agenda Senior Listener Geva — now: Bailiff Court | then: argues the warrant | on: Haywane 12\n+ hook River stranger — who pulled Ren from the sump').ops }]).tracker;
 
@@ -16,7 +17,17 @@ test('buildCaptureMessages fills the exchange, tracker, time and place; leaves {
     assert.match(system.content, /\{\{user\}\}/, 'macros SillyTavern fills stay');
     assert.match(user.content, /<Director>/);
     assert.match(DEFAULT_CAPTURE_PROMPT, /Never plans/);
+    assert.match(DEFAULT_CAPTURE_PROMPT, /people, encounter \(the foes of a fight that is coming\)/, 'the fields name the encounter');
     assert.match(buildCaptureMessages({})[0].content, /\(nothing tracked yet\)/);
+});
+
+test('buildCaptureMessages with npcPlansOnly: the same line as the note, in the request only', () => {
+    const exchange = { trackerSummary: 'Off-screen:\n- Geva', replyText: 'Geva left for the court.' };
+    const alone = buildCaptureMessages(exchange);
+    assert.ok(!alone[1].content.includes(NPC_PLANS_ONLY));
+    const [system, user] = buildCaptureMessages({ ...exchange, npcPlansOnly: true });
+    assert.equal(system.content, alone[0].content);
+    assert.equal(user.content, `${alone[1].content} ${NPC_PLANS_ONLY}`);
 });
 
 test('parseCapture keeps changes to tracked keys and new records, drops the rest', () => {

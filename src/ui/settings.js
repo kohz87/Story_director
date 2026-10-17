@@ -24,7 +24,20 @@ const DEFAULTS = {
     arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
     capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
     map: { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25 },
+    sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' },
 };
+
+// The Story Suite areas Story Director shares, and what each choice means here.
+const SOURCE_AREAS = [
+    ['calendar', 'Calendar and story time', 'Dates are always read with Story Director’s own calendar. The other one: it stops offering it to the others.'],
+    ['timeline', 'Timeline', 'Agendas, quests, clocks, arcs. The other one: it stops offering it and stops mirroring agendas into World State.'],
+    ['npc', 'Who each NPC is', 'Automatic: NPC State Delta, when it is here; agenda lines then give only what an NPC plans and when.'],
+];
+const SOURCE_CHOICES = [
+    { value: 'auto', label: 'Automatic' },
+    { value: 'mine', label: 'This extension' },
+    { value: 'theirs', label: 'The other one' },
+];
 
 // Bounds for the number fields; a value outside them is clamped, not rejected.
 const LIMITS = {
@@ -155,6 +168,7 @@ function complete(settings) {
     const arc = given.arc && typeof given.arc === 'object' ? given.arc : {};
     const capture = given.capture && typeof given.capture === 'object' ? given.capture : {};
     const map = given.map && typeof given.map === 'object' ? given.map : {};
+    const sources = given.sourceOfTruth && typeof given.sourceOfTruth === 'object' ? given.sourceOfTruth : {};
     // structuredClone so nothing the panel later changes reaches the caller's object,
     // including fields this panel does not know about (partsOfDay, a newer version's keys).
     return structuredClone({
@@ -171,6 +185,7 @@ function complete(settings) {
         arc: { ...DEFAULTS.arc, ...arc, model: arc.model && typeof arc.model === 'object' ? { ...arc.model } : { ...DEFAULTS.arc.model } },
         capture: { ...DEFAULTS.capture, ...capture, model: capture.model && typeof capture.model === 'object' ? { ...capture.model } : { ...DEFAULTS.capture.model } },
         map: { ...DEFAULTS.map, ...map },
+        sourceOfTruth: { ...DEFAULTS.sourceOfTruth, ...sources },
     });
 }
 
@@ -211,10 +226,13 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
 /**
  * Render the Story Director settings into `container`.
  * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
- * Returns `{ root, update(settings) }`.
+ * `others` = names of the other Story Suite extensions announced now.
+ * Returns `{ root, update(settings), setOthers(names) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null, others = [] } = {}) {
     let summary = packSummary;
+    // The other Story Suite extensions announced now, by name; see setOthers.
+    let suiteNames = [...others];
     openGroups ??= loadOpenGroups();
     let current = complete(settings);
 
@@ -340,7 +358,29 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const mirror = toggle('story_director_mirror', current.mirrorOffscreen, 'Mirror off-screen agendas');
         mirror.input.addEventListener('change', () => commit(next => { next.mirrorOffscreen = Boolean(mirror.input.checked); }));
         return [
-            row('Mirror off-screen agendas', 'Rewrite the scene block’s Off-Screen list from the tracker, so NPC State Delta shows them.', mirror.wrapper, { id: 'story_director_mirror', className: 'is-switch' }),
+            row('Mirror off-screen agendas', 'Rewrite the scene block’s Off-Screen list from the tracker, for a World State that keeps one.', mirror.wrapper, { id: 'story_director_mirror', className: 'is-switch' }),
+        ];
+    }
+
+    function suiteText() {
+        return suiteNames.length
+            ? `Also here: ${suiteNames.join(', ')}. Automatic gives each area to its specialist.`
+            : 'No other story extension is here, so every choice works like Automatic.';
+    }
+
+    // Story Suite: who is the source of truth when several story extensions share an area.
+    function renderSources() {
+        const rows = SOURCE_AREAS.map(([area, name, hint]) => {
+            const id = `story_director_source_${area}`;
+            const value = SOURCE_CHOICES.some(choice => choice.value === current.sourceOfTruth[area]) ? current.sourceOfTruth[area] : 'auto';
+            const choice = select(id, SOURCE_CHOICES, value);
+            choice.addEventListener('change', () => commit(next => { next.sourceOfTruth[area] = choice.value; }));
+            return row(name, hint, choice, { id, wide: true });
+        });
+        return [
+            sectionHead('Source of truth'),
+            el('p', { className: 'story-director-group-note story-director-suite-note', text: suiteText() }),
+            ...rows,
         ];
     }
 
@@ -565,7 +605,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
                 group('pack', 'Map & travel', 'Places, coordinates, and an optional world pack', [...renderMapSettings(), ...renderPack()]),
                 group('arc', 'Arc planning', 'When to plan, which model, your Director’s note', renderArc()),
                 group('capture', 'Capture', 'A second model for missing change lines', renderCapture()),
-                group('chat', 'Existing chat & compatibility', 'World State Alpha import, NPC State Delta mirror', [...renderSeed(), ...renderMirror()]),
+                group('chat', 'Existing chat & compatibility', 'World State Alpha import, Off-Screen mirror, source of truth', [...renderSeed(), ...renderMirror(), ...renderSources()]),
             ]),
         );
     }
@@ -578,6 +618,12 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             current = complete(next);
             if (nextSummary !== undefined) summary = nextSummary;
             render();
+        },
+        /** The other Story Suite extensions changed: only the note says so, nothing redraws. */
+        setOthers(names) {
+            suiteNames = [...(names ?? [])];
+            const note = view.querySelector?.('.story-director-suite-note');
+            if (note) note.textContent = suiteText();
         },
     };
 }
