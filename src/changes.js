@@ -93,8 +93,9 @@ export function lineKey(key) {
         .trim();
 }
 
-function kindOf(word) {
-    const lower = word.toLowerCase();
+/** The kind a word names (`hook`, or an alias such as `thread`), or null. */
+export function kindOf(word) {
+    const lower = String(word ?? '').trim().toLowerCase();
     if (KINDS.includes(lower)) return lower;
     return Object.hasOwn(KIND_ALIASES, lower) ? KIND_ALIASES[lower] : null;
 }

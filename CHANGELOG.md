@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.3
+
+Changes to untracked keys are matched, added or corrected. A `~ Footing in Bluewatch — …` for a record tracked as *Footing at Bluewatch* (or never added with `+`) used to be dropped with an `unknown-key` warning the model never saw, so it kept writing it.
+
+- **Near keys are matched:** a `~`, `!` or `-` on a key that is not tracked goes to the one active record it plainly means: the same words once case, punctuation, a leading *the/a/an* and small connective words (*in, at, of, on, to, for, from, the, and*) are set aside; or, failing that, one key's words inside the other's (the shorter of two words or more), or a word overlap of three quarters. The Director tab notes it (`"Footing in Bluewatch" read as "Footing at Bluewatch".`). Two such records are never guessed between; the warning names them.
+- **A `~` that carries something is added:** with no near record, a `~` with at least one part becomes a new **hook** (a `type:` that names a kind, such as `type: clock`, sets that kind; `type: bounty` makes a bounty quest), noted as `"Key" was not tracked; added as a hook (write "+ kind Key" to set its kind).` A `!` stays strict, and a `-` of something never tracked still does nothing.
+- **The model is told:** a `~` or `!` still ignored is corrected in the next note's `Corrections:` line, next to the travel corrections: `"Key" is not tracked: add it with "+ kind Key — …" before changing it.` (or, between two near records, `use its exact key ("A" or "B") or add it …`). Only from the latest reply, at most three, once per key; an older reply's lines are not repeated, and nothing is added when there is nothing to correct (or while capture writes every reply's changes).
+- **Director tab:** lines read as a near key or added show under Notes; the `unknown-key` warning remains for lines that were ignored.
+- **Capture** keeps a `~`, `-` or `!` whose key plainly means one tracked record instead of dropping it; it still never adds a record from a `~`.
+- **API (pure, `src/tracker.js`):** `keyWords(key)`, `nearMatches(records, key)`, `untrackedCorrections(problems, { message, limit })`; `src/changes.js` exports `kindOf(word)`. `unknown-key` findings carry `op` (and `candidates` when ambiguous).
+
 ## 0.8.2
 
 Quest difficulty, and the quests a reply finished.

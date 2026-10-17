@@ -31,7 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { activeRecords, emptyTracker, questsDoneIn, replay } from './src/tracker.js';
+import { activeRecords, emptyTracker, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.8.2';
+const VERSION = '0.8.3';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -389,12 +389,26 @@ function setNote(text) {
     ctx.setExtensionPrompt(PROMPT_KEY, text, EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
 }
 
+// Corrections for the `~`/`!` lines the newest assistant reply at or before `upTo` wrote on
+// keys that are not tracked: in the next note only, never again after another reply.
+function latestReplyCorrections(upTo) {
+    trackerAt(upTo);
+    const chat = context()?.chat ?? [];
+    for (let index = Math.min(Number(upTo), cache.entries.length - 1); index >= 0; index--) {
+        if (isAssistant(chat[index])) return untrackedCorrections(cache.entries[index]?.problems, { message: index });
+    }
+    return [];
+}
+
 // How the note is built for a reply: the same for the injected note and for its token count.
-function noteOptions(ctx, tracker) {
+function noteOptions(ctx, tracker, upTo) {
     const cal = calendar();
-    const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
     // With capture writing every reply's changes, the model is not asked to.
-    const instructionless = settings(ctx).capture.mode === 'always' ? { instruction: '' } : {};
+    const asks = settings(ctx).capture.mode !== 'always';
+    const instructionless = asks ? {} : { instruction: '' };
+    const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
+    // The last reply's `~`/`!` lines on keys that are not tracked, while the model writes them.
+    if (asks) fixes.push(...latestReplyCorrections(upTo));
     return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), ...instructionless };
 }
 
@@ -407,9 +421,9 @@ function noteOptions(ctx, tracker) {
 function nextReplyTokens() {
     const ctx = context();
     if (!ctx || !chatIdOf(ctx) || !storyBlock() || !settings(ctx).enabled) return noteTokens([]);
-    const { selection, tracker } = situation('normal');
+    const { selection, tracker, upTo } = situation('normal');
     const substitute = typeof ctx.substituteParams === 'function' ? text => ctx.substituteParams(text) : text => text;
-    const parts = noteParts(selection, noteOptions(ctx, tracker)).map(entry => ({ ...entry, text: substitute(entry.text) }));
+    const parts = noteParts(selection, noteOptions(ctx, tracker, upTo)).map(entry => ({ ...entry, text: substitute(entry.text) }));
     return noteTokens(parts);
 }
 
@@ -421,8 +435,8 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
             setNote('');
             return;
         }
-        const { selection, tracker } = situation(type);
-        const note = buildNote(selection, noteOptions(ctx, tracker));
+        const { selection, tracker, upTo } = situation(type);
+        const note = buildNote(selection, noteOptions(ctx, tracker, upTo));
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;

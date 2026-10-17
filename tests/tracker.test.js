@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseChanges } from '../src/changes.js';
-import { activeRecords, applyOps, emptyTracker, findRecord, markSeen, questsDoneIn, replay } from '../src/tracker.js';
+import { activeRecords, applyOps, emptyTracker, findRecord, keyWords, markSeen, nearMatches, questsDoneIn, replay, untrackedCorrections } from '../src/tracker.js';
 
 function ops(text) {
     const parsed = parseChanges(text);
@@ -66,8 +66,8 @@ test('replay applies every op rule in chat order', () => {
         { message: 0, time: 1000, text: 'The chat begins.', ops: START },
         // Duplicate add: applied as a change.
         { message: 1, time: 1060, text: '', ops: ops('+ agenda Senior Listener Geva — then: files the warrant | on: Haywane 13') },
-        // Unknown keys: warn for ~, info for -.
-        { message: 2, time: 1120, text: '', ops: ops('~ Thys — then: leaves\n- Ghost of Shorn — gone') },
+        // Unknown keys: warn for a ~ with nothing to add, info for -.
+        { message: 2, time: 1120, text: '', ops: ops('~ Thys\n- Ghost of Shorn — gone') },
         // `!` with no fields: then becomes now, then/on clear.
         { message: 3, time: 1180, text: '', ops: ops('! Canal Street Granary Fires — curfew declared') },
         // `!` with fields: only those apply.
@@ -353,4 +353,169 @@ test('questsDoneIn: superseded or given-up quests are not done', () => {
         { message: 2, time: 60, text: '', ops: ops('- A — replaced by the guild contract\n- B — abandoned when the bridge fell\n- C — expired') },
     ]);
     assert.deepEqual(questsDoneIn(tracker, 2), []);
+});
+
+// v0.8.3: change lines on keys that are not tracked.
+
+const BLUEWATCH = ops([
+    '+ hook Footing at Bluewatch — the party needs a foothold in the village',
+    '+ agenda Senior Listener Geva — now: Court',
+    '+ event The Fall of the Weir — the old weir gave way',
+].join('\n'));
+
+function after(lines) {
+    return replay([
+        { message: 0, time: 0, ops: BLUEWATCH },
+        { message: 1, time: 10, ops: ops(lines) },
+    ]);
+}
+
+test('keyWords drops case, punctuation, a leading article and small connective words', () => {
+    assert.deepEqual(keyWords('Footing in Bluewatch'), ['footing', 'bluewatch']);
+    assert.deepEqual(keyWords('**The** footing, at BLUEWATCH!'), ['footing', 'bluewatch']);
+    assert.deepEqual(keyWords('A Fall of the Weir'), ['fall', 'weir']);
+    // Only a leading article goes; "a" inside a key stays.
+    assert.deepEqual(keyWords('Plan a Heist'), ['plan', 'a', 'heist']);
+    assert.deepEqual(keyWords('The'), []);
+});
+
+test('a ~ on a near key is applied to the one record it means', () => {
+    for (const key of ['Footing in Bluewatch', 'FOOTING IN BLUEWATCH', 'The Footing, Bluewatch', 'Footing for Bluewatch!']) {
+        const { tracker, problems } = after(`~ ${key} — now: a room at the inn`);
+        assert.equal(findRecord(tracker, 'Footing at Bluewatch').fields.now, 'a room at the inn', key);
+        assert.equal(tracker.records.length, 3, key);
+        assert.deepEqual(problems.map(({ kind, severity, text }) => ({ kind, severity, text })), [
+            { kind: 'near-key', severity: 'info', text: `"${key}" read as "Footing at Bluewatch".` },
+        ], key);
+        assert.deepEqual(findRecord(tracker, 'Footing at Bluewatch').history.at(-1), { message: 1, op: '~', text: `~ ${key} — now: a room at the inn` });
+    }
+});
+
+test('near keys: containment of two words or more, word overlap, and ! and -', () => {
+    // The shorter key's words inside the longer's (two words or more).
+    let result = after('~ Senior Listener Geva of the Court — then: files the warrant');
+    assert.equal(findRecord(result.tracker, 'Senior Listener Geva').fields.then, 'files the warrant');
+    result = after('! Weir Fall — the river floods | now: flooded fields');
+    assert.equal(findRecord(result.tracker, 'The Fall of the Weir').fields.now, 'flooded fields');
+    // One word is not enough to be contained: Geva alone is not a match.
+    result = after('~ Geva — then: files the warrant');
+    assert.equal(findRecord(result.tracker, 'Senior Listener Geva').fields.then, '');
+    assert.equal(findRecord(result.tracker, 'Geva').kind, 'hook');
+    // A `-` on a near key resolves it.
+    result = after('- Fall of Weir — rebuilt');
+    assert.equal(findRecord(result.tracker, 'The Fall of the Weir').status, 'resolved');
+    assert.equal(result.problems[0].kind, 'near-key');
+    // Jaccard 3/4: three of four words shared.
+    const four = replay([{ message: 0, time: 0, ops: ops('+ hook Smugglers under Shorn docks tunnel — rumours') }]).tracker;
+    assert.deepEqual(nearMatches(four.records, 'Smugglers Shorn tunnel').map(entry => entry.record.key), ['Smugglers under Shorn docks tunnel']);
+    assert.deepEqual(nearMatches(four.records, 'Smugglers Shorn harbour tunnel'), []);
+});
+
+test('two near records are never guessed between', () => {
+    const base = ops('+ hook Footing at Bluewatch — a foothold\n+ hook Footing on Bluewatch — another');
+    const { tracker, problems } = replay([
+        { message: 0, time: 0, ops: base },
+        { message: 1, time: 10, ops: ops('~ Footing in Bluewatch — now: a room at the inn') },
+    ]);
+    assert.equal(tracker.records.length, 2);
+    assert.ok(tracker.records.every(record => record.fields.now === ''));
+    assert.deepEqual(problems.map(({ kind, severity, key, op, candidates }) => ({ kind, severity, key, op, candidates })), [
+        { kind: 'unknown-key', severity: 'warn', key: 'Footing in Bluewatch', op: '~', candidates: ['Footing at Bluewatch', 'Footing on Bluewatch'] },
+    ]);
+    assert.equal(problems[0].text, '"Footing in Bluewatch" is not tracked (it could be "Footing at Bluewatch" or "Footing on Bluewatch"); the ~ line was ignored.');
+    assert.deepEqual(untrackedCorrections(problems), [
+        '"Footing in Bluewatch" is not tracked: use its exact key ("Footing at Bluewatch" or "Footing on Bluewatch") or add it with "+ kind Footing in Bluewatch — …".',
+    ]);
+});
+
+test('an exact word match wins over looser ones, and resolved records are not matched', () => {
+    const { tracker, problems } = replay([
+        { message: 0, time: 0, ops: ops('+ hook Footing at Bluewatch — a foothold\n+ hook Footing at Bluewatch docks — another\n+ hook Old Mill fire — smoke') },
+        { message: 1, time: 5, ops: ops('- Old Mill fire — out') },
+        { message: 2, time: 10, ops: ops('~ Footing in Bluewatch — now: a room\n! The Old Mill Fire — rekindled') },
+    ]);
+    assert.equal(findRecord(tracker, 'Footing at Bluewatch').fields.now, 'a room');
+    assert.equal(findRecord(tracker, 'Footing at Bluewatch docks').fields.now, '');
+    // Only active records are matched: the resolved fire is not fired again.
+    assert.equal(findRecord(tracker, 'Old Mill fire').status, 'resolved');
+    assert.deepEqual(problems.filter(problem => problem.message === 2).map(problem => problem.kind), ['near-key', 'unknown-key']);
+});
+
+test('a ~ with something to say on a key that is not tracked adds a hook', () => {
+    const { tracker, problems } = after('~ Lantern Guild dues — now: two silver owed | people: Brann');
+    const added = findRecord(tracker, 'Lantern Guild dues');
+    assert.equal(added.kind, 'hook');
+    assert.equal(added.status, 'active');
+    assert.equal(added.fields.now, 'two silver owed');
+    assert.equal(added.fields.people, 'Brann');
+    assert.deepEqual(added.created, { message: 1, time: 10 });
+    assert.deepEqual(added.history, [{ message: 1, op: '~', text: '~ Lantern Guild dues — now: two silver owed | people: Brann' }]);
+    assert.deepEqual(problems.map(({ kind, severity, key, text }) => ({ kind, severity, key, text })), [
+        { kind: 'untracked-added', severity: 'info', key: 'Lantern Guild dues', text: '"Lantern Guild dues" was not tracked; added as a hook (write "+ kind Key" to set its kind).' },
+    ]);
+    assert.deepEqual(untrackedCorrections(problems), []);
+    // A later ~ finds it by its key.
+    const next = replay([{ message: 2, time: 20, ops: ops('~ Lantern Guild dues — then: paid') }], { seed: tracker });
+    assert.deepEqual(next.problems, []);
+    assert.equal(findRecord(next.tracker, 'Lantern Guild dues').fields.then, 'paid');
+});
+
+test('a type: that names a kind sets the added record\'s kind', () => {
+    let { tracker, problems } = after('~ Bell tower collapse — type: clock | due: Haywane 20');
+    assert.equal(findRecord(tracker, 'Bell tower collapse').kind, 'clock');
+    assert.equal(findRecord(tracker, 'Bell tower collapse').fields.type, '');
+    assert.match(problems[0].text, /added as a clock/);
+    ({ tracker, problems } = after('~ Wolf pelts — type: bounty | reward: 10 crowns'));
+    assert.equal(findRecord(tracker, 'Wolf pelts').kind, 'quest');
+    assert.equal(findRecord(tracker, 'Wolf pelts').fields.type, 'bounty');
+    ({ tracker, problems } = after('~ Ashen pact — type: agenda | now: waits'));
+    assert.match(problems[0].text, /added as an agenda/);
+    // A type that is no kind is a hook's part like any other.
+    ({ tracker } = after('~ Side work — type: errand | now: open'));
+    assert.equal(findRecord(tracker, 'Side work').kind, 'hook');
+    assert.equal(findRecord(tracker, 'Side work').fields.type, 'errand');
+});
+
+test('~ with nothing to say and ! on a key that is not tracked are ignored and corrected; - stays a note', () => {
+    const { tracker, problems } = after('~ Lantern Guild dues\n~ Lantern Guild dues — now:\n! Harbour riot — it broke out | now: fires\n- Ghost of Shorn — gone');
+    assert.equal(tracker.records.length, 3);
+    assert.deepEqual(problems.map(({ kind, severity, key, op }) => ({ kind, severity, key, op })), [
+        { kind: 'unknown-key', severity: 'warn', key: 'Lantern Guild dues', op: '~' },
+        { kind: 'unknown-key', severity: 'warn', key: 'Lantern Guild dues', op: '~' },
+        { kind: 'unknown-key', severity: 'warn', key: 'Harbour riot', op: '!' },
+        { kind: 'unknown-key', severity: 'info', key: 'Ghost of Shorn', op: '-' },
+    ]);
+    assert.equal(problems[2].text, '"Harbour riot" is not tracked; the ! line was ignored.');
+    // Once per key; a `-` needs no correction.
+    assert.deepEqual(untrackedCorrections(problems), [
+        '"Lantern Guild dues" is not tracked: add it with "+ kind Lantern Guild dues — …" before changing it.',
+        '"Harbour riot" is not tracked: add it with "+ kind Harbour riot — …" before changing it.',
+    ]);
+});
+
+test('untrackedCorrections: at most three, only unknown ~ and ! lines', () => {
+    const problem = (key, op = '~', kind = 'unknown-key') => ({ kind, severity: 'warn', key, op, message: 4, text: '' });
+    const lines = untrackedCorrections([
+        problem('One'), problem('one'), problem('Two', '!'), problem('Gone', '-'), problem('Near', '~', 'near-key'),
+        problem('Three'), problem('Four'),
+    ]);
+    assert.deepEqual(lines.map(line => line.split('"')[1]), ['One', 'Two', 'Three']);
+    assert.deepEqual(untrackedCorrections([problem('One')], { limit: 0 }), []);
+    assert.deepEqual(untrackedCorrections(null), []);
+});
+
+test('corrections come only from the latest reply', () => {
+    const { problems } = replay([
+        { message: 0, time: 0, ops: BLUEWATCH },
+        { message: 1, time: 5, ops: ops('! Harbour riot — it broke out') },
+        { message: 2, time: 6, text: 'The player speaks.', ops: null },
+        { message: 3, time: 10, ops: ops('~ Lantern Guild dues') },
+        { message: 5, time: 20, ops: ops('~ Footing at Bluewatch — now: settled') },
+    ]);
+    assert.deepEqual(untrackedCorrections(problems, { message: 3 }), [
+        '"Lantern Guild dues" is not tracked: add it with "+ kind Lantern Guild dues — …" before changing it.',
+    ]);
+    // The newest reply changed only what is tracked: nothing to correct, nothing repeated.
+    assert.deepEqual(untrackedCorrections(problems, { message: 5 }), []);
+    assert.equal(untrackedCorrections(problems).length, 2);
 });

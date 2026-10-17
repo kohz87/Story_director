@@ -8,10 +8,12 @@
 // dialogue stays a claim; a rumour stays a rumour; nothing is invented to keep the world busy.
 //
 // The answer is held to the tracker: a change, resolution or firing of a key that is not
-// tracked is dropped (and reported), and capture never opens an arc. Pure.
+// tracked (and is not plainly one tracked record under another spelling) is dropped (and
+// reported), and capture never opens an arc. Pure.
 
 import { formatOp, parseChanges } from './changes.js';
 import { NPC_PLANS_ONLY } from './note.js';
+import { nearMatches } from './tracker.js';
 
 export const DEFAULT_CAPTURE_PROMPT = `You keep the story tracker for a roleplay between {{user}} and {{char}}. Read ONE exchange (the player's message and the narrator's reply) and write the tracker changes that exchange established. You write no story.
 
@@ -82,7 +84,8 @@ export function parseCapture(text, tracker) {
     for (const op of ops) {
         if (op.op === '+' && op.kind === 'arc') {
             dropped.push({ raw: op.raw, reason: 'capture does not plan arcs' });
-        } else if (op.op !== '+' && !known.has(op.id)) {
+        } else if (op.op !== '+' && !known.has(op.id) && nearMatches(tracker?.records, op.key).length !== 1) {
+            // A key that plainly means one tracked record is kept; the tracker reads it as that one.
             dropped.push({ raw: op.raw, reason: `"${op.key}" is not tracked` });
         } else {
             kept.push(op);

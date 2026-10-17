@@ -140,18 +140,42 @@ export function replay(entries, { seed = null } = {}) → { tracker, problems: [
 export function findRecord(tracker, keyOrId) → Record | null
 export function activeRecords(tracker, { kind = null } = {}) → [Record]
 export function questsDoneIn(tracker, message) → [{ id, name, type, difficulty, reward, giver }]
+export function keyWords(key) → [word]                       // v0.8.3
+export function nearMatches(records, key) → [{ record, index }]
+export function untrackedCorrections(problems, { message, limit = 3 } = {}) → [string]
 ```
 
 All return new objects; inputs are never mutated.
 
 - `+` new id → new record. `+` on an active id → applied as `~`, finding `duplicate-add`
   (info). `+` on a resolved id → reopened, finding `reopened` (info).
-- `~` → only the given fields/extra change. Unknown id → finding `unknown-key` (warn), nothing
-  invented.
+- `~` → only the given fields/extra change.
 - `-` → status `resolved` (`superseded` when the reason matches /supersed|replac|merged/i);
-  `resolved` filled. Unknown id → `unknown-key` (info).
+  `resolved` filled.
 - `!` (fired) → given fields applied; with none given, `then` becomes `now` and `then`/`on`
-  clear; a `clock` becomes `resolved` (reason `fired`). Unknown id → `unknown-key` (warn).
+  clear; a `clock` becomes `resolved` (reason `fired`).
+- Unknown id on `~`, `-` or `!` (v0.8.3), in this order:
+  1. **Near match.** `nearMatches(records, op.key)` over **active** records only, by
+     `keyWords` (lineKey's words less leading `the`/`a`/`an` and every `in at of on to for from
+     the and`). Tier 1: the same word list. Only when tier 1 is empty, tier 2: one word set
+     contains the other and the smaller has ≥ 2 words, or Jaccard ≥ 0.75. Exactly one hit in
+     the first non-empty tier → the op is applied to it as if written with its key (history
+     keeps op.raw), finding `near-key` (info): `"Footing in Bluewatch" read as "Footing at
+     Bluewatch".` Two or more → no guess.
+  2. **`~` with content** (some field or extra with a non-empty value) and no near match at all
+     → a new record as `+` would make it, id `lineKey(op.key)`, kind `hook` unless `type:`
+     names a kind (`kindOf`; the `type` field is then dropped, except a quest category such as
+     `bounty`), finding `untracked-added` (info): `"Key" was not tracked; added as a hook
+     (write "+ kind Key" to set its kind).`
+  3. Otherwise → finding `unknown-key` (warn for `~`/`!`, info for `-`), `{ op, candidates? }`
+     added (`candidates`: the ambiguous keys, also named in the message), nothing changes.
+- `untrackedCorrections(problems, { message })`: one line per key (at most 3) for `unknown-key`
+  problems of a `~` or `!` (with `message`, only replay problems from that message):
+  `"Key" is not tracked: add it with "+ kind Key — …" before changing it.`, or with
+  candidates `"Key" is not tracked: use its exact key ("A" or "B") or add it with "+ kind Key —
+  …".` index.js passes the newest assistant reply at or before the note's `upTo` and appends
+  the lines after the travel corrections (not while capture is on *always*), so a reply is
+  corrected once, in the next note.
 - Every applied op updates `changed`, `seen` and `history` (`text` = op.raw).
 - `markSeen`: records whose key or any `people` name (comma separated, each ≥ 3 chars) appears
   in `text` (case-insensitive, word boundaries) get `seen = { message, time }`.
@@ -467,7 +491,8 @@ export function parseCapture(text, tracker) → { ops, lines, dropped: [{ raw, r
 ```
 
 The answer's `<Director>` block (else the whole text, minus thinking and fences) is parsed as
-change lines; `~`/`-`/`!` of an untracked key and `+ arc` are dropped. `lines` is the kept ops
+change lines; `~`/`-`/`!` of an untracked key (unless `nearMatches` finds exactly one record:
+the tracker then reads it as that one; v0.8.3) and `+ arc` are dropped. `lines` is the kept ops
 through `formatOp`, written into the reply's `<Director>` block. Settings `capture: { mode:
 'off' | 'fallback' | 'always', model, maxTokens }`; `always` also drops the note's instruction.
 
