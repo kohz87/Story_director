@@ -152,6 +152,21 @@ test('corrections get their own line', () => {
     assert.ok(lines(note).includes('Corrections: Courier — leg is Shorn → Varnhold Watch 35 km B, arrive Goldwane 16, morning'));
 });
 
+test('corrections for keys that are not tracked share the line, and only when there are some', () => {
+    const untracked = '"Footing in Bluewatch" is not tracked: add it with "+ kind Footing in Bluewatch — …" before changing it.';
+    const note = buildNote(selection({ relevant: [courier] }), {
+        calendar,
+        corrections: ['Courier — leg Shorn → Varnhold Watch 35 B', untracked],
+    });
+    assert.ok(lines(note).includes(`Corrections: Courier — leg Shorn → Varnhold Watch 35 B · ${untracked}`));
+    // With nothing tracked yet the correction still reaches the model, before the instruction.
+    assert.deepEqual(noteParts(selection(), { calendar, corrections: [untracked] }).map(entry => entry.label), ['Header', 'Corrections', 'Change instruction']);
+    assert.ok(estimateTokens(untracked) <= 30);
+    // Nothing to correct: no Corrections line at all.
+    assert.ok(!buildNote(selection({ relevant: [courier] }), { calendar, corrections: [] }).includes('Corrections'));
+    assert.equal(buildNote(selection(), { calendar, corrections: [] }), CHANGE_INSTRUCTION);
+});
+
 test('the instruction comes last', () => {
     const note = buildNote(selection({ relevant: [fires] }), { calendar });
     assert.ok(note.endsWith(`\n${CHANGE_INSTRUCTION}`));

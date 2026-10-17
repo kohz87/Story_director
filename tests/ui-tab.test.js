@@ -6,6 +6,9 @@ import { installFakeDom, texts } from './ui-fake-dom.js';
 
 const doc = installFakeDom();
 const { renderTab } = await import('../src/ui/tab.js');
+const { parseChanges } = await import('../src/changes.js');
+const { applyOps, emptyTracker } = await import('../src/tracker.js');
+const { checkReply } = await import('../src/checks.js');
 
 // A Record as tracker.js builds it, with only what a test cares about filled in.
 function record(key, kind, fields = {}, more = {}) {
@@ -255,6 +258,22 @@ test('problems grouped by severity, errors first', () => {
     const empty = render({ selection: EMPTY, findings: [findings[1]] });
     assert.ok(empty.querySelector('.story-director-empty'));
     assert.deepEqual(texts(empty, '.story-director-problem-text'), ['Line 2 is not a change.']);
+});
+
+test('changes to untracked keys: read as a near key or added show as notes, ignored ones as warnings', () => {
+    const before = applyOps(emptyTracker(), parseChanges('+ hook Footing at Bluewatch — a foothold').ops, { message: 0 }).tracker;
+    const { ops } = parseChanges('~ Footing in Bluewatch — now: a room\n~ Lantern dues — now: owed\n! Harbour riot — broke out');
+    const { tracker: after, problems } = applyOps(before, ops, { message: 1 });
+    const findings = checkReply({ before, after, ops, applyProblems: problems, hadBlock: true });
+    const groups = render({ findings }).querySelectorAll('.story-director-problems');
+    assert.deepEqual(groups.map(node => node.querySelector('.story-director-problems-label').textContent), ['Warnings', 'Notes']);
+    assert.deepEqual(texts(groups[0], '.story-director-problem-kind'), ['unknown-key']);
+    assert.deepEqual(texts(groups[0], '.story-director-problem-text'), ['"Harbour riot" is not tracked; the ! line was ignored.']);
+    assert.deepEqual(texts(groups[1], '.story-director-problem-kind'), ['near-key', 'untracked-added']);
+    assert.deepEqual(texts(groups[1], '.story-director-problem-text'), [
+        '"Footing in Bluewatch" read as "Footing at Bluewatch".',
+        '"Lantern dues" was not tracked; added as a hook (write "+ kind Key" to set its kind).',
+    ]);
 });
 
 test('formatDate rewrites date parts when given', () => {

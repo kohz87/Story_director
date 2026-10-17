@@ -47,6 +47,12 @@ test('parseCapture keeps changes to tracked keys and new records, drops the rest
     assert.deepEqual(parseChanges(result.lines).errors, [], 'stored lines read back cleanly');
 });
 
+test('parseCapture keeps a change to a key that plainly means one tracked record', () => {
+    const result = parseCapture('<Director>\n~ The Senior Listener Geva — then: files the warrant\n~ Listener — then: waits\n</Director>', tracker);
+    assert.deepEqual(result.ops.map(op => op.key), ['The Senior Listener Geva']);
+    assert.deepEqual(result.dropped.map(item => item.reason), ['"Listener" is not tracked']);
+});
+
 test('parseCapture: an empty block, a cut-off think tag, fences, and no block at all', () => {
     assert.equal(parseCapture('<Director></Director>', tracker).ops.length, 0);
     const cut = parseCapture('reasoning without its opening tag</think>\n```\n~ River stranger — then: sends word\n```', tracker);

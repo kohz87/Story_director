@@ -1,4 +1,4 @@
-# Story Director v0.8.2
+# Story Director v0.8.3
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -67,6 +67,16 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 | `~ Key — label: value` | Change only these parts |
 | `- Key — reason` | Resolved (superseded when the reason says so) |
 | `! Key — what happened` | A due item happened; its `then` becomes `now` |
+
+A `~`, `!` or `-` on a key that is not tracked goes to the one active record it plainly means:
+the same words once case, punctuation, a leading *the/a/an* and small words (*in, at, of, on,
+to, for, from, and*) are set aside, or one key's words inside the other's (two words or more),
+or three quarters of the words shared; `~ Footing in Bluewatch — …` changes *Footing at
+Bluewatch*, and the Director tab notes it. Two such records are never guessed between. With
+none, a `~` that carries something becomes a new hook (a `type:` that names a kind, such as
+`type: clock`, sets that kind instead), a `-` does nothing, and any other line is ignored: a
+warning in the Director tab, and one line in the next note's `Corrections:` (`"Key" is not
+tracked: add it with "+ kind Key — …" before changing it.`), only for the latest reply.
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
@@ -293,8 +303,9 @@ call on a model of your choice (a small, fast one is enough):
 The capture call reads only that exchange (your message and the reply) with the tracker for
 context, and follows World State Alpha's capture rules: only what the exchange established,
 never plans or guesses; a claim in dialogue stays a claim, a rumour a rumour. Changes to keys
-that are not tracked are dropped, and capture never starts an arc. Its lines are written into
-the reply like the model's own, so swipes and edits behave the same.
+that are not tracked are dropped (unless the key plainly means one tracked record, as above;
+capture never adds a record from a `~`), and capture never starts an arc. Its lines are
+written into the reply like the model's own, so swipes and edits behave the same.
 
 ## Coming from World State Alpha
 

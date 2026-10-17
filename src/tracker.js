@@ -3,13 +3,25 @@
 // the chat is a replay of the entries up to it. Pure: every function returns new objects and
 // never mutates its inputs (records are copied on write, unchanged ones are shared).
 
-import { FIELDS, formatOp, lineKey, questDifficulty } from './changes.js';
+import { FIELDS, formatOp, kindOf, lineKey, questDifficulty } from './changes.js';
 
 const HISTORY_LIMIT = 20;
 const SUPERSEDED = /supersed|replac|merged/i;
 // A quest closed with one of these was not done: it ended without the work being finished.
 const FAILED = /\b(?:fail|abandon|gave up|give up|given up|forfeit|expired|missed|too late|cancel|refused|declined|botched)/i;
 const MIN_PERSON_LENGTH = 3;
+
+// Matching a key that is not tracked to the record it most likely means (v0.8.3): the words
+// that tell keys apart, without a leading article or the small words models swap freely.
+const LEADING_ARTICLES = new Set(['the', 'a', 'an']);
+const CONNECTIVES = new Set(['in', 'at', 'of', 'on', 'to', 'for', 'from', 'the', 'and']);
+// One key's words inside the other's counts only when the shorter has this many words.
+const MIN_CONTAINED_WORDS = 2;
+const MIN_WORD_OVERLAP = 0.75;
+// A `~` on a key that is not tracked, with something to say, becomes a record of this kind.
+const UNTRACKED_KIND = 'hook';
+// What the next note may say about ignored lines: at most this many, from the latest reply.
+const MAX_UNTRACKED_CORRECTIONS = 3;
 
 export function emptyTracker() {
     return { version: 1, records: [], message: -1, time: null };
@@ -34,8 +46,71 @@ function cloneRecord(record) {
     };
 }
 
-function finding(kind, severity, op, message) {
-    return { kind, severity, key: op.key ?? null, message };
+function finding(kind, severity, op, message, extra = {}) {
+    return { kind, severity, key: op.key ?? null, message, ...extra };
+}
+
+/** The words a key is matched by: lineKey's, less a leading article and small connectives. */
+export function keyWords(key) {
+    const words = lineKey(key).split(' ').filter(Boolean);
+    while (words.length && LEADING_ARTICLES.has(words[0])) words.shift();
+    return words.filter(word => !CONNECTIVES.has(word));
+}
+
+function sameWords(left, right) {
+    return left.join(' ') === right.join(' ');
+}
+
+// One word set inside the other (the shorter of at least two words), or a Jaccard overlap
+// of at least 0.75.
+function closeWords(left, right) {
+    const a = new Set(left);
+    const b = new Set(right);
+    const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+    const shared = [...small].filter(word => large.has(word)).length;
+    if (shared === small.size && small.size >= MIN_CONTAINED_WORDS) return true;
+    const union = a.size + b.size - shared;
+    return union > 0 && shared / union >= MIN_WORD_OVERLAP;
+}
+
+/**
+ * The active records a key that is not tracked may mean, as `[{ record, index }]` (index into
+ * `records`): those with the same words (case, punctuation, a leading article and small words
+ * like in/at/of ignored) or, only when there are none, those whose words contain or are
+ * contained in the key's (two words or more) or overlap by 3/4. One entry is a match; more
+ * are ambiguous and none is to be guessed.
+ */
+export function nearMatches(records, key) {
+    const words = keyWords(key);
+    if (!words.length) return [];
+    const active = (records ?? [])
+        .map((record, index) => ({ record, index, words: keyWords(record.key) }))
+        .filter(entry => entry.record.status === 'active' && entry.words.length);
+    for (const close of [sameWords, closeWords]) {
+        const found = active.filter(entry => close(words, entry.words));
+        if (found.length) return found.map(({ record, index }) => ({ record, index }));
+    }
+    return [];
+}
+
+// Whether an op has anything to write: a field, or a part, with a value.
+function hasContent(op) {
+    return [...Object.values(op.fields ?? {}), ...Object.values(op.extra ?? {})].some(value => String(value ?? '').trim());
+}
+
+// The record a `~` on a key that is not tracked becomes: a hook, unless its `type:` names a
+// kind (`type: clock`; a quest category such as `type: bounty` makes a quest of that type).
+function untrackedRecordOp(op, id) {
+    const word = lineKey(op.fields?.type ?? '');
+    const named = kindOf(word);
+    const fields = { ...op.fields };
+    // The type was the kind; only a quest's own category (bounty, contract…) stays its type.
+    if (named && (named !== 'quest' || word === 'quest' || word === 'quests')) delete fields.type;
+    return { ...op, id, kind: named || UNTRACKED_KIND, fields };
+}
+
+function withArticle(word) {
+    return `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
 }
 
 // Records whose leg changed in the op being applied; `touch` stamps when the leg was set, so
@@ -93,7 +168,9 @@ function newRecord(op, at) {
 }
 
 /**
- * Applies ops for one reply. Unknown keys are reported, never invented.
+ * Applies ops for one reply. A `~`, `-` or `!` on a key that is not tracked goes to the one
+ * active record it plainly means (nearMatches); failing that, a `~` that carries something
+ * becomes a new hook, and anything else is reported and ignored.
  * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
  */
 export function applyOps(tracker, ops, { message, time = null } = {}) {
@@ -155,15 +232,35 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
             continue;
         }
 
-        if (index === undefined) {
-            // A `-` of something never tracked does no harm, so it is only worth a note.
-            const severity = op.op === '-' ? 'info' : 'warn';
-            problems.push(finding('unknown-key', severity, op,
-                `"${op.key}" is not tracked; the ${op.op} line was ignored.`));
-            continue;
+        let target = index;
+        if (target === undefined) {
+            // A key that is not tracked: the one record it plainly means, else (for a `~` with
+            // something to say) a new record, else the line is ignored and the next note says so.
+            const near = nearMatches(records, op.key);
+            if (near.length === 1) {
+                target = near[0].index;
+                problems.push(finding('near-key', 'info', op, `"${op.key}" read as "${near[0].record.key}".`));
+            } else if (op.op === '~' && !near.length && hasContent(op)) {
+                const added = untrackedRecordOp(op, id);
+                indexById.set(id, records.length);
+                copied.add(records.length);
+                records.push(newRecord(added, at));
+                problems.push(finding('untracked-added', 'info', op,
+                    `"${op.key}" was not tracked; added as ${withArticle(added.kind)} (write "+ kind Key" to set its kind).`));
+                continue;
+            } else {
+                // A `-` of something never tracked does no harm, so it is only worth a note.
+                const severity = op.op === '-' ? 'info' : 'warn';
+                const candidates = near.map(entry => entry.record.key);
+                const could = candidates.length ? ` (it could be ${candidates.map(key => `"${key}"`).join(' or ')})` : '';
+                problems.push(finding('unknown-key', severity, op,
+                    `"${op.key}" is not tracked${could}; the ${op.op} line was ignored.`,
+                    { op: op.op, ...(candidates.length ? { candidates } : {}) }));
+                continue;
+            }
         }
 
-        const record = edit(index);
+        const record = edit(target);
         if (op.op === '~') {
             applyFields(record, op);
         } else if (op.op === '-') {
@@ -251,6 +348,31 @@ export function replay(entries, { seed = null } = {}) {
         tracker = { ...tracker, message: entry.message, time };
     }
     return { tracker, problems };
+}
+
+/**
+ * Lines for the next note's `Corrections:` from the problems of the latest reply only: each
+ * `~` or `!` line that changed nothing because its key is not tracked, once per key, at most
+ * `limit`. With `message`, only replay problems from that message count, so an older reply's
+ * lines are never corrected again. A `-` of something never tracked needs no correction.
+ */
+export function untrackedCorrections(problems, { message, limit = MAX_UNTRACKED_CORRECTIONS } = {}) {
+    const seen = new Set();
+    const lines = [];
+    for (const problem of problems ?? []) {
+        if (lines.length >= limit) break;
+        if (problem?.kind !== 'unknown-key' || (problem.op !== '~' && problem.op !== '!')) continue;
+        if (message !== undefined && problem.message !== message) continue;
+        const key = String(problem.key ?? '').trim();
+        const id = lineKey(key);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const candidates = (problem.candidates ?? []).slice(0, 2);
+        lines.push(candidates.length
+            ? `"${key}" is not tracked: use its exact key (${candidates.map(other => `"${other}"`).join(' or ')}) or add it with "+ kind ${key} — …".`
+            : `"${key}" is not tracked: add it with "+ kind ${key} — …" before changing it.`);
+    }
+    return lines;
 }
 
 /** The record with this key or id (markdown and punctuation ignored), or null. */
