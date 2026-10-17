@@ -48,7 +48,22 @@ const KIND_LINES = [
 
 const ITEM_SEPARATOR = ' · ';
 
-export function buildNote(selection, {
+// What the model is allowed for writing the change lines the instruction asks for, in tokens:
+// the two tags and about two lines of 20 to 25 tokens, a usual reply's worth. A rough
+// allowance for the reader, not a limit.
+export const DIRECTOR_OUTPUT_TOKENS = 60;
+
+export function buildNote(selection, options = {}) {
+    return joinParts(noteParts(selection, options));
+}
+
+/**
+ * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
+ * before `text`, so joining them gives buildNote exactly. Labels: Header, Arc, Due now,
+ * Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
+ * Pacing, Encounter cue, Change instruction, NPC plans only.
+ */
+export function noteParts(selection, {
     calendar,
     budgetTokens = 1000,
     corrections = [],
@@ -56,7 +71,9 @@ export function buildNote(selection, {
     npcPlansOnly = false,
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
-    if (npcPlansOnly && instruction) instruction = `${instruction}\n${NPC_PLANS_ONLY}`;
+    const asks = [];
+    if (instruction) asks.push(part('Change instruction', instruction));
+    if (npcPlansOnly && instruction) asks.push(part('NPC plans only', NPC_PLANS_ONLY));
     const due = selection?.due ?? [];
     const arriving = selection?.arriving ?? [];
     const relevant = selection?.relevant ?? [];
@@ -65,39 +82,69 @@ export function buildNote(selection, {
 
     // The model still needs to know how to add records when there are none yet.
     if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc) {
-        return instruction;
+        return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    let note = compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction });
-    while (kept > 0 && estimateTokens(note) > budgetTokens) {
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks });
+    let parts = build();
+    while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
-        note = compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction });
+        parts = build();
     }
-    return note;
+    return parts;
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction }) {
-    const lines = [header(selection, calendar)];
+/**
+ * The tokens (≈ 4 characters each) a note adds to the next reply: `input` the note's parts,
+ * `output` DIRECTOR_OUTPUT_TOKENS for the change lines while it asks for them (on its Change
+ * instruction part), 0 when it does not (a capture call writes them, and is not counted).
+ * Plain `{ input, output, parts: [{ label, input, output }] }`.
+ */
+export function noteTokens(parts, { outputTokens = DIRECTOR_OUTPUT_TOKENS } = {}) {
+    const allowance = Number(outputTokens) >= 0 ? Math.round(Number(outputTokens)) : DIRECTOR_OUTPUT_TOKENS;
+    const counted = (Array.isArray(parts) ? parts : [])
+        .filter(entry => entry && String(entry.text ?? ''))
+        .map(entry => ({
+            label: String(entry.label ?? ''),
+            input: estimateTokens(entry.text),
+            output: entry.label === 'Change instruction' ? allowance : 0,
+        }));
+    return {
+        input: counted.reduce((sum, entry) => sum + entry.input, 0),
+        output: counted.reduce((sum, entry) => sum + entry.output, 0),
+        parts: counted,
+    };
+}
+
+function part(label, text, join = '\n') {
+    return { label, text, join };
+}
+
+function joinParts(parts) {
+    return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
+}
+
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks }) {
+    const parts = [part('Header', header(selection, calendar))];
     // The arc steers: its name and what it is about, so every reply leans the same way.
     const arc = selection?.arc;
-    if (arc) lines.push(`Arc: ${arc.key}${arc.fields?.desc ? ` — ${arc.fields.desc}` : ''}`);
-    addLine(lines, 'Due now', due.map(record => withFight(dueItem(record), record)));
-    addLine(lines, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
+    if (arc) parts.push(part('Arc', `Arc: ${arc.key}${arc.fields?.desc ? ` — ${arc.fields.desc}` : ''}`));
+    addLine(parts, 'Due now', due.map(record => withFight(dueItem(record), record)));
+    addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
-        addLine(lines, label, relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record)));
+        addLine(parts, label, relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record)));
     }
     // Secrets appear by key only, so the note never states them as facts.
-    addLine(lines, 'Do not reveal', secrets.map(record => record.key), '; ');
-    addLine(lines, 'Corrections', fixes);
+    addLine(parts, 'Do not reveal', secrets.map(record => record.key), '; ');
+    addLine(parts, 'Corrections', fixes);
     if (scheduled(selection, due, arriving, relevant)) {
-        const pacing = instruction ? PACING : PACING_NO_CHANGES;
-        lines.push([...due, ...arriving].some(encounterOf) ? `${pacing} ${ENCOUNTER_CUE}` : pacing);
+        parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
+        if ([...due, ...arriving].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));
     }
     // No instruction when a capture call writes the changes instead of the model.
-    if (instruction) lines.push(instruction);
-    return lines.join('\n');
+    return [...parts, ...asks];
 }
 
 // Anything with a date or a plan behind it: an arc, something due or arriving, a beat or a
@@ -134,9 +181,9 @@ function fightPart(record) {
     return foes ? `${ITEM_SEPARATOR}fight: ${foes}` : '';
 }
 
-function addLine(lines, label, items, separator = ITEM_SEPARATOR) {
+function addLine(parts, label, items, separator = ITEM_SEPARATOR) {
     const present = items.filter(Boolean);
-    if (present.length) lines.push(`${label}: ${present.join(separator)}`);
+    if (present.length) parts.push(part(label, `${label}: ${present.join(separator)}`));
 }
 
 // "Saartje's sale (Goldwane 16)", or with what is meant to happen: "Geva — files the warrant (Goldwane 17)".

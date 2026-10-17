@@ -35,7 +35,7 @@ import { activeRecords, emptyTracker, questsDoneIn, replay } from './src/tracker
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
-import { buildNote } from './src/note.js';
+import { buildNote, noteParts, noteTokens } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
@@ -389,6 +389,30 @@ function setNote(text) {
     ctx.setExtensionPrompt(PROMPT_KEY, text, EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
 }
 
+// How the note is built for a reply: the same for the injected note and for its token count.
+function noteOptions(ctx, tracker) {
+    const cal = calendar();
+    const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
+    // With capture writing every reply's changes, the model is not asked to.
+    const instructionless = settings(ctx).capture.mode === 'always' ? { instruction: '' } : {};
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), ...instructionless };
+}
+
+/**
+ * What Story Director adds to the next ordinary reply, for Story Suite's overlay
+ * (api.manage.tokens): the note as it would be injected now, in its parts, and the allowance
+ * for the change lines it asks for. Planner and capture calls are quiet calls of their own and
+ * not counted. Nothing while the note is not sent (tracking off, no chat, no Story Block).
+ */
+function nextReplyTokens() {
+    const ctx = context();
+    if (!ctx || !chatIdOf(ctx) || !storyBlock() || !settings(ctx).enabled) return noteTokens([]);
+    const { selection, tracker } = situation('normal');
+    const substitute = typeof ctx.substituteParams === 'function' ? text => ctx.substituteParams(text) : text => text;
+    const parts = noteParts(selection, noteOptions(ctx, tracker)).map(entry => ({ ...entry, text: substitute(entry.text) }));
+    return noteTokens(parts);
+}
+
 async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'normal') {
     try {
         if (isBackground(type)) return;
@@ -398,11 +422,7 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
             return;
         }
         const { selection, tracker } = situation(type);
-        const cal = calendar();
-        const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
-        // With capture writing every reply's changes, the model is not asked to.
-        const instructionless = settings(ctx).capture.mode === 'always' ? { instruction: '' } : {};
-        const note = buildNote(selection, { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), ...instructionless });
+        const note = buildNote(selection, noteOptions(ctx, tracker));
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -504,6 +524,7 @@ const MANAGE = makeManage({
     read: () => settings(),
     save: next => applySettings(next),
     panel: () => settingsPanel,
+    tokens: () => nextReplyTokens(),
 });
 // What the suite gets as `api`: globalThis.StoryDirector plus `manage`, built once, so the
 // global stays read-only and every announcement hands over the same object.

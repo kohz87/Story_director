@@ -235,7 +235,19 @@ export const PACING, PACING_NO_CHANGES;  // the Pacing line, when something is s
 export const ENCOUNTER_CUE;       // v0.8: appended to Pacing while a due/arriving record has an encounter
 export const NPC_PLANS_ONLY;      // v0.8: 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.'
 export function buildNote(selection, { calendar, budgetTokens = 1000, corrections = [], instruction = CHANGE_INSTRUCTION, npcPlansOnly = false } = {}) → string
+export function noteParts(selection, sameOptions) → [{ label, text, join }]   // v0.8.2
+export const DIRECTOR_OUTPUT_TOKENS = 60;                                    // v0.8.2
+export function noteTokens(parts, { outputTokens = DIRECTOR_OUTPUT_TOKENS } = {}) → { input, output, parts: [{ label, input, output }] }
 ```
+
+(v0.8.2) `buildNote` is `noteParts` joined (each part's `join`, `'\n'` or `' '` for the
+Encounter cue on the Pacing line, goes before its text). Labels, in order: Header, Arc, Due
+now, Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
+Pacing, Encounter cue, Change instruction, NPC plans only. `noteTokens`: each non-empty part's
+`estimateTokens` (≈ 4 characters a token) as its `input`; the Change instruction part also
+carries `output` = `DIRECTOR_OUTPUT_TOKENS`, a rough allowance for the `<Director>` block it
+asks the model to write (two tags and about two change lines of 20–25 tokens); `input` and
+`output` are the sums.
 
 `npcPlansOnly` (Story Suite: NPC State Delta is the source of truth for `npc`) appends
 `NPC_PLANS_ONLY` as a line after a non-empty instruction; with `instruction: ''` nothing is
@@ -517,8 +529,8 @@ export const SOURCE_CHOICES;                       // ['auto', 'mine', 'theirs']
 export function sourceChoices(saved, areas) → { [area]: choice }   // unknown or missing → 'auto'
 export function suiteAnnouncement({ id, name, version, areas, settings, storyBlock, api, panel })
   → { key, provider | null }
-export function makeManage({ areas, read, save, panel = () => null })
-  → { areas, sources(), setSource(area, choice) → boolean, enabled(), setEnabled(on) }
+export function makeManage({ areas, read, save, panel = () => null, tokens = () => null })
+  → { areas, sources(), setSource(area, choice) → boolean, enabled(), setEnabled(on), tokens() }
 export function suiteOpener(suite) → (tab) => void | null
 ```
 
@@ -527,7 +539,10 @@ export function suiteOpener(suite) → (tab) => void | null
 `key 'off'`, `enabled: false`, `owns: []`. Every provider carries `settings: panel` (the
 panel's selector) and `api`. `makeManage`: `setSource` rejects an unknown area or choice
 (false, nothing changed), otherwise tells `panel().setSource` and saves the settings with that
-choice; `setEnabled` tells `panel().setEnabled` and saves `enabled`. `suiteOpener` is non-null
+choice; `setEnabled` tells `panel().setEnabled` and saves `enabled`. (v0.8.2) `tokens()`
+returns a clean copy of `tokens()`'s report (`{ input, output, parts: [{ label, input, output
+}] }`, whole numbers ≥ 0), or `{ input: 0, output: 0, parts: [] }` when it has none or throws.
+`suiteOpener` is non-null
 while two or more providers are announced (on or off) and `suite.api('story-block').openSuite`
 is a function.
 
@@ -621,7 +636,10 @@ back on; the registry's `owner`, `has` and `api` skip it as before. `api` is
 `{ ...globalThis.StoryDirector, manage }`, built once (the global itself has no `manage`);
 `manage` is `makeManage` over `settings()`, `applySettings` (the same function as the panel's
 `onChange`: store, save, announce, clear the replay cache, refresh Story Block) and the
-settings panel. `settings` names the wrapper `#story_director_settings` that
+settings panel; (v0.8.2) its `tokens` is `noteTokens` of `noteParts` for the next ordinary
+reply, built with the same options as the injected note (`noteOptions`) and with SillyTavern's
+macros filled per part. Nothing (all zeros) while the note is not sent; planner and capture
+calls are quiet calls and not counted, and with capture on *always* the output allowance is 0. `settings` names the wrapper `#story_director_settings` that
 `addSettingsPanel` creates under `#extensions_settings2` (or `#extensions_settings`), which
 the overlay moves into itself while open. One `onChange` listener only refreshes the settings'
 list of the other extensions and the *Manage all in Story Suite* line (`suiteOpener`; a click

@@ -382,7 +382,11 @@ area, so the model is not told the same thing twice.
 - **Story Suite overlay:** with Story Block 0.9 or later and another story extension installed, *Manage
   all in Story Suite* (on top of the settings) opens one overlay for all of them, with this
   panel as a tab and one Source of truth table
-  ([One place to manage them all](docs/STORY_SUITE.md#one-place-to-manage-them-all)).
+  ([One place to manage them all](docs/STORY_SUITE.md#one-place-to-manage-them-all)). The
+  overlay can also show what Story Director adds to your next reply (`api.manage.tokens()`):
+  the note as it would be sent now, per section, at about 4 characters a token, plus about 60
+  tokens of output for the `<Director>` lines it asks for (none when capture writes them on
+  *always*). Planner and capture calls are separate quiet calls and are not counted.
 
 ## For other extensions
 
