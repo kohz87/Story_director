@@ -216,7 +216,58 @@ function isEmpty(selection) {
  * Render the Director tab into `pane` (Story Block calls tab.render(pane) and leaves the
  * pane's content to us).
  */
-export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null } = {}) {
+// ---------------------------------------------------------------------------
+// Route tool (with a world pack)
+
+const MODES = ['foot', 'ride', 'wagon', 'boat', 'courier'];
+// The last route asked for survives the tab redrawing itself after every reply.
+let lastRoute = { from: '', to: '', mode: 'foot', result: '', open: false };
+
+function renderRoute({ places = [], onRoute }) {
+    const listId = 'story-director-places';
+    const datalist = el('datalist', { attrs: { id: listId } }, places.map(name => {
+        const option = el('option');
+        option.value = name;
+        return option;
+    }));
+    const field = (className, label, value) => {
+        const input = el('input', { className: `text_pole story-director-route-input ${className}`, attrs: { type: 'text', list: listId, 'aria-label': label, placeholder: label } });
+        input.value = value;
+        return input;
+    };
+    const from = field('is-from', 'From', lastRoute.from);
+    const to = field('is-to', 'To', lastRoute.to);
+    const mode = el('select', { className: 'text_pole story-director-route-mode', attrs: { 'aria-label': 'Travel by' } }, MODES.map(name => {
+        const option = el('option', { text: name });
+        option.value = name;
+        return option;
+    }));
+    mode.value = lastRoute.mode;
+    const result = el('div', { className: 'story-director-route-result', text: lastRoute.result, attrs: { 'aria-live': 'polite' } });
+    const go = button('Route', 'story-director-route-go', {
+        iconName: 'fa-route',
+        onClick: () => {
+            let answer;
+            try {
+                answer = onRoute?.(from.value.trim(), to.value.trim(), mode.value) ?? '';
+            } catch (error) {
+                answer = error instanceof Error ? error.message : String(error);
+            }
+            lastRoute = { from: from.value, to: to.value, mode: mode.value, result: String(answer), open: true };
+            result.textContent = lastRoute.result;
+        },
+    });
+    const details = fold('is-route', 'Route', 'fa-map', null, () => [
+        datalist,
+        el('div', { className: 'story-director-route-form' }, [from, to, mode, go]),
+        result,
+    ]);
+    if (lastRoute.open) details.setAttribute('open', '');
+    details.addEventListener('toggle', () => { lastRoute = { ...lastRoute, open: Boolean(details.open) }; });
+    return details;
+}
+
+export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null } = {}) {
     const root = el('div', { className: 'story-director-tab' });
     const options = { formatDate, onPin };
     const now = renderNow(timeText || '', place || selection?.place || '');
@@ -268,5 +319,6 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
 
     const problems = renderProblems(Array.isArray(findings) ? findings : []);
     if (problems) root.append(problems);
+    if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
     pane.replaceChildren(root);
 }

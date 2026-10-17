@@ -25,6 +25,7 @@ Record = {
   changed: { message, time },
   seen:    { message, time },           // last change or mention
   resolved: { message, time, reason } | null,
+  legSince: { message, time } | null,   // when the current leg was set (v0.3)
   pinned: false,
   arc: null,
   history: [{ message, op, text }],     // newest last, at most 20
@@ -235,6 +236,102 @@ and not touched by `ops`); `missed` (warn: due more than 1 day before `now` and 
 `date-in-text` (info: a calendar date inside `now`/`then`/`desc` of a record changed by `ops`);
 `long-part` (info: a field of a changed record over 12 words); `no-block` (info: `hadBlock`
 false while something was due).
+
+## `src/routes.js` (v0.3): world packs and travel maths
+
+```js
+export const ROUTE_CODES;          // { W: 'river or canal', R: 'maintained road', … }
+export const MODES = ['foot', 'ride', 'wagon', 'boat', 'ship', 'flight', 'courier'];
+export function loadWorldPack(json) → { pack: WorldPack | null, errors: [str], warnings: [str] }
+export function packSummary(pack) → '224 places · 310 routes'
+export function exitsFrom(pack, place) → [{ to, km, code, corridor }]
+export function findPlace(pack, text) → name | null        // case-insensitive, longest match inside text
+export function paceFor(pack, code, mode, { corridor = null } = {}) → { rate, low, high } | null   // null = not allowed
+export function legDays(km, rate, rules) → number          // ceil(km / rate / roundUpTo) * roundUpTo
+export function shortestPath(pack, from, to, { mode = 'foot' } = {}) → Route | null
+export function planRoute(pack, from, to, { mode = 'foot', rate = null, depart = null, calendar = null } = {}) → RoutePlan | null
+export function parseLeg(pack, text) → Leg | null
+export function validateLeg(pack, leg, { from = null, depart = null, arrive = null, calendar = null } = {}) → [Finding]
+export function formatRoute(plan, calendar = null) → string
+export function formatLeg(hop, { mode, rate, days, arrive = null, calendar = null }) → string
+```
+
+`WorldPack` (normalized from the reference format: `places`, `edges`, `pace_km_per_day`,
+`courier_multiplier`, `travel_rules`, `calendar`, `scale_km_per_unit`; also accepts the
+normalized shape itself):
+
+```js
+{ name, calendar: object | null,
+  places: { [name]: { x, y, region } },
+  edges: [{ a, b, km, code, corridor, notes }],          // undirected
+  paces: { [code]: { foot, ride, wagon, boat, upstream, downstream, ship, vessel, flight } },
+        // number | [low, high] | 'foot' (use foot pace) | null (not allowed)
+  courierMultiplier: 2,
+  rules: { roundUpTo: 0.5, restDayEvery: 6, crewedWaterRest: false, leveeRoads: [corridor names], noLevee: [corridor names] } }
+```
+
+Rules:
+
+- `ride: 'foot'` rides at foot pace on that code; `null` means not allowed (wagons on T/M/U/H).
+- W (water) is boat only, except a corridor in `leveeRoads` is also walkable/rideable/wagonable at
+  R pace; `noLevee` never is. S = ship, D = vessel, A = flight, X = foot pace range. L (local),
+  G and any code without a pace use R pace.
+- A range `[low, high]` uses the midpoint unless an explicit `rate` is given; `validateLeg`
+  accepts a stated rate inside the range (courier: inside the range × multiplier).
+- `courier` = ride pace × `courierMultiplier`, no rest days.
+- **Round-up rule:** each edge's days = `ceil(km / rate / roundUpTo) * roundUpTo`, summed.
+- **Rest days:** foot, ride and wagon add `floor((activeDays - 1e-9) / restDayEvery)`; water
+  modes none unless `crewedWaterRest`; courier none.
+
+`Route = { from, to, km, hops: [{ from, to, km, code, corridor }] }` (Dijkstra by km; edges a
+mode cannot use are skipped; between two places with several edges, the one the mode can use
+with the fewest days).
+
+`RoutePlan = Route + { mode, hops: [{ …, rate, days }], activeDays, restDays, days, depart, arrive }`
+(`depart`/`arrive` abs when `depart` is given, else null).
+
+`Leg` from `leg:` text, e.g. `Shorn → Varnhold Watch 35 B, courier 70/day → 0.5` or
+`Bluewatch Village → Auvoth 70 F, wagon 14/day → 5`, also `->`, `to`, and the legacy
+`(Shorn → Auvoth, 130 km B)`: `{ text, from, to, km, code, mode, rate, days }` (unknown pieces
+null; places resolved with `findPlace`).
+
+`validateLeg` findings (`{ kind, severity, key: null, message, correction? }`):
+
+| kind | when | severity |
+|---|---|---|
+| `leg-unknown-place` | from or to is not in the pack | warn |
+| `leg-no-edge` | no road between from and to, and no path either (`exits` listed) | error |
+| `leg-not-one-hop` | no direct road, but a path exists (`firstHop`, `path`) | error |
+| `leg-wrong-start` | `from` given and leg.from differs | error |
+| `leg-km` | km off by more than 5 % | warn |
+| `leg-mode` | the mode cannot use that road | error |
+| `leg-arrive` | `depart` and `arrive` given and they differ from the computed arrival by more than 0.5 day | warn |
+| `leg-code` | the road code differs from the actual road's | warn |
+| `leg-rate` | a stated rate outside the road's pace range for the mode | warn |
+| `leg-days` | stated days off by more than 0.5 from the computed days | warn |
+
+`leg-unknown-place` and `leg-wrong-start` are reported alone. Days, rate and arrival are
+checked only when the leg states a mode or a rate. A boat's stated rate on W may be anywhere in
+the boat, upstream and downstream ranges (the data does not say which way a hop runs).
+
+Every error/warn finding with a fixable leg carries `correction`: the corrected leg in the line
+grammar, e.g. `Shorn → Varnhold Watch 35 B, courier 70/day → 0.5 | arrive: Haywane 13, morning`.
+
+## `src/travel.js` (v0.3)
+
+```js
+export function travelFindings(tracker, { pack, calendar, previous = null, onlyChanged = false }) → [Finding & { correction?, id }]
+export function nearbyPlaces(pack, place) → [name]   // the scene place and its one-hop neighbours
+```
+
+For every active record with a `leg` (only those whose leg changed since `previous` when
+`onlyChanged`): parse it, take `from` from the record's previous leg end or the place named in
+`now`/`place`, `depart` from `record.legSince.time`, `arrive` from `fields.arrive`, and run
+`validateLeg`. Findings carry the record's key and id. The note lists each `correction` as
+`Key — leg …`.
+
+The tracker records `legSince = { message, time }` whenever an op sets a new non-empty `leg`
+(cleared with the leg).
 
 ## `src/ui/settings.js`
 

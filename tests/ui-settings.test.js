@@ -41,7 +41,7 @@ test('drawer markup, header and status line', () => {
     assert.equal(status.textContent, 'Tracking 4 records.');
     assert.equal(container.querySelectorAll('#story_director_status').length, 1);
     const heads = container.querySelectorAll('.story-director-section-head').map(node => node.textContent);
-    assert.deepEqual(heads.slice(0, 4), ['Tracking', 'Dormant', 'Calendar', 'NPC State Delta']);
+    assert.deepEqual(heads.slice(0, 5), ['Tracking', 'Dormant', 'Calendar', 'World pack', 'NPC State Delta']);
 });
 
 test('re-rendering into the same container keeps the status the runtime wrote', () => {
@@ -233,4 +233,34 @@ test('no data goes through innerHTML', () => {
     const { container } = setup({ blocks: [{ tag: '<img src=x>', name: '<b>bad</b>' }] });
     assert.ok(container.descendants().every(node => !node.html));
     assert.ok(container.querySelectorAll('#story_director_scene option').some(option => option.textContent === '<b>bad</b> <<img src=x>>'));
+});
+
+test('world pack: summary, paste import, clear, and messages', async () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const imported = [];
+    let cleared = 0;
+    const panel = renderSettings(container, {
+        settings: {},
+        packSummary: '',
+        onImportPack: async text => { imported.push(text); return { summary: '19 places · 23 routes', message: 'Imported.' }; },
+        onClearPack: async () => { cleared++; return { summary: '', message: 'Cleared.' }; },
+    });
+    const map = () => container.querySelector('.story-director-row.is-pack');
+    assert.match(map().textContent, /No world pack/);
+    assert.equal(container.querySelector('.story-director-pack-clear').disabled, true, 'nothing to clear');
+
+    container.querySelector('.story-director-pack-paste').value = '{"places":{}}';
+    container.querySelector('.story-director-pack-import').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.deepEqual(imported, ['{"places":{}}']);
+    assert.match(map().textContent, /19 places · 23 routes/);
+    assert.equal(container.querySelector('.story-director-pack-message').textContent, 'Imported.');
+
+    container.querySelector('.story-director-pack-clear').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(cleared, 1);
+    assert.match(map().textContent, /No world pack/);
+    panel.update({}, { packSummary: '1 place · 0 routes' });
+    assert.match(map().textContent, /1 place · 0 routes/);
 });

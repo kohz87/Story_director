@@ -54,6 +54,7 @@ test('+ creates a full record', () => {
         changed: { message: 4, time: 1000 },
         seen: { message: 4, time: 1000 },
         resolved: null,
+        legSince: null,
         pinned: false,
         arc: null,
         history: [{ message: 4, op: '+', text: START[0].raw }],
@@ -254,4 +255,21 @@ test('inputs are never mutated', () => {
     assert.equal(findRecord(seed, 'Hollin\'s Reach graves').status, 'active');
     assert.equal(findRecord(tracker, 'Hollin\'s Reach graves').status, 'resolved');
     assert.equal(tracker.records.length, 6);
+});
+
+test('legSince: stamped when a leg is set or changed, kept when the leg is copied, cleared with it', () => {
+    const leg = 'Shorn → Varnhold Watch 35 B, courier 70/day → 0.5';
+    const plus = { op: '+', kind: 'agenda', key: 'Courier', id: 'courier', fields: { now: 'rides south', leg }, extra: {}, reason: '', raw: '+ agenda Courier' };
+    const copy = { op: '~', kind: null, key: 'Courier', id: 'courier', fields: { leg, then: 'delivers the writ' }, extra: {}, reason: '', raw: '~ Courier' };
+    const next = { op: '~', kind: null, key: 'Courier', id: 'courier', fields: { leg: 'Varnhold Watch → Wolfmere Outpost 55 B, courier 70/day → 1' }, extra: {}, reason: '', raw: '~ Courier' };
+    const clear = { op: '~', kind: null, key: 'Courier', id: 'courier', fields: { leg: '' }, extra: {}, reason: '', raw: '~ Courier' };
+    const { tracker } = replay([
+        { message: 1, ops: [plus], text: '', time: 100 },
+        { message: 3, ops: [copy], text: '', time: 200 },
+    ]);
+    assert.deepEqual(findRecord(tracker, 'Courier').legSince, { message: 1, time: 100 }, 'a copied leg keeps its start');
+    const moved = applyOps(tracker, [next], { message: 5, time: 300 }).tracker;
+    assert.deepEqual(findRecord(moved, 'Courier').legSince, { message: 5, time: 300 });
+    const cleared = applyOps(moved, [clear], { message: 7, time: 400 }).tracker;
+    assert.equal(findRecord(cleared, 'Courier').legSince, null);
 });

@@ -180,7 +180,8 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
  * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
  * Returns `{ root, update(settings) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '' } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', packSummary = '', onImportPack = null, onClearPack = null } = {}) {
+    let summary = packSummary;
     let current = complete(settings);
 
     // Re-rendering into the same container keeps whatever the runtime last wrote into the
@@ -313,6 +314,50 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         ];
     }
 
+    // The world pack is the reader's map: it lives beside the settings, not inside them, so
+    // importing goes through its own callbacks and never through onChange.
+    function renderPack() {
+        const message = el('div', { className: 'story-director-pack-message', attrs: { 'aria-live': 'polite' } });
+        const report = result => {
+            if (!result) return;
+            // A new summary redraws the sections; the message goes into the fresh copy.
+            if (result.summary !== undefined) {
+                summary = result.summary;
+                render();
+            }
+            const target = view.querySelector?.('.story-director-pack-message') ?? message;
+            target.textContent = result.message ?? '';
+        };
+        const importText = async text => {
+            if (!onImportPack) return;
+            try {
+                report(await onImportPack(text));
+            } catch (error) {
+                message.textContent = error instanceof Error ? error.message : String(error);
+            }
+        };
+
+        const file = el('input', { className: 'story-director-pack-file', attrs: { id: 'story_director_pack_file', type: 'file', accept: '.json,application/json' } });
+        file.type = 'file';
+        file.addEventListener('change', async () => {
+            const picked = file.files?.[0];
+            if (picked) await importText(await picked.text());
+        });
+        const paste = el('textarea', { className: 'text_pole story-director-input story-director-pack-paste', attrs: { id: 'story_director_pack_paste', rows: '4', spellcheck: 'false' } });
+        paste.placeholder = 'Or paste the world pack JSON here';
+        const importButton = button('Import', 'story-director-pack-import', { iconName: 'fa-file-import', onClick: () => void importText(paste.value) });
+        const clear = button('Clear', 'story-director-pack-clear', { iconName: 'fa-trash-can', onClick: async () => report(await onClearPack?.()) });
+        if (!summary) clear.disabled = true;
+
+        return [
+            sectionHead('World pack'),
+            row('Map', summary ? `Loaded: ${summary}. Travel legs are checked, and /route works.` : 'No world pack: travel is not checked. Import places, routes and paces as JSON.', clear, { className: 'is-action is-pack' }),
+            row('Import a file', 'A world pack JSON (places, edges, pace_km_per_day, travel_rules, calendar).', file, { id: 'story_director_pack_file', wide: true }),
+            row('Or paste it', '', el('div', { className: 'story-director-pack-paste-wrap' }, [paste, importButton]), { id: 'story_director_pack_paste', wide: true }),
+            message,
+        ];
+    }
+
     function renderSeed() {
         const seed = button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() });
         return [
@@ -322,15 +367,16 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     }
 
     function render() {
-        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderMirror(), ...renderSeed());
+        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderPack(), ...renderMirror(), ...renderSeed());
     }
 
     render();
 
     return {
         root,
-        update(next) {
+        update(next, { packSummary: nextSummary } = {}) {
             current = complete(next);
+            if (nextSummary !== undefined) summary = nextSummary;
             render();
         },
     };
