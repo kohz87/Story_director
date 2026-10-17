@@ -47,7 +47,7 @@ test('+ creates a full record', () => {
         fields: {
             desc: '', now: 'District Bailiff Court', then: 'argues with magistrates',
             on: 'Haywane 12, 05:45 pm', due: '', shown: '', leg: '', arrive: '', place: '',
-            people: 'Kade, Al', type: '', giver: '', goal: '', reward: '', step: '',
+            people: 'Kade, Al', encounter: '', type: '', giver: '', goal: '', reward: '', step: '',
         },
         extra: {},
         created: { message: 4, time: 1000 },
@@ -289,4 +289,15 @@ test('arcs: one at a time, and planned records remember their arc', () => {
     const beat = findRecord(tracker, 'Council session opens');
     assert.equal(beat.arc, 'arc-1');
     assert.equal(beat.extra.arc, undefined, 'the arc is identity, not a shown part');
+});
+
+test('an encounter is a field like any other: set, changed, and closed with its record', () => {
+    const steps = [
+        { message: 0, time: 1000, text: '', ops: parseChanges('+ beat Ambush at the weir — on: Haywane 14 | encounter: 3 bandit, bandit captain (boss)').ops },
+        { message: 1, time: 1060, text: '', ops: parseChanges('~ Ambush at the weir — encounter: 4 bandit, bandit captain (boss)').ops },
+    ];
+    const { tracker } = replay(steps);
+    assert.equal(findRecord(tracker, 'Ambush at the weir').fields.encounter, '4 bandit, bandit captain (boss)');
+    const fought = replay([...steps, { message: 2, time: 1120, text: '', ops: parseChanges('- Ambush at the weir — the bandits fled').ops }]).tracker;
+    assert.equal(findRecord(fought, 'Ambush at the weir').status, 'resolved');
 });

@@ -20,13 +20,15 @@
 // - Once per arc, the planner (one model call, on the chat's model or a connection profile)
 //   turns the next arc into tracked records: an arc, dated beats, agendas, hooks, clocks and
 //   secrets. A plan waits in the tab for the reader unless they chose to skip review.
+// - Planned fights (a record with an `encounter`) are only stored, scheduled and handed over:
+//   globalThis.StoryDirector.encountersAt tells RPG Battle which ones the story has reached.
 
 import { PRESETS, makeCalendar, normalizeCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
 import { activeRecords, emptyTracker, replay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
-import { DEFAULTS, classify, estimateTokens } from './src/relevance.js';
+import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
 import { buildNote } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { renderSettings } from './src/ui/settings.js';
@@ -39,7 +41,7 @@ import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 
-const VERSION = '0.7.2';
+const VERSION = '0.8.0';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -308,12 +310,34 @@ function situation(type = 'normal') {
     const sb = storyBlock();
     const chat = ctx?.chat ?? [];
     const own = settings(ctx);
-    const cal = calendar();
     const replacing = replacesLastReply(chat, type);
     const upTo = replacing ? chat.length - 2 : chat.length - 1;
-    const { tracker } = trackerAt(upTo);
     const scene = sb?.blockForGeneration?.(own.sceneTag, type) ?? null;
-    const sceneText = scene?.text ?? '';
+    return situationAt(upTo, scene?.text ?? '');
+}
+
+// The scene block in force at message `upTo`: the newest one written at or before it.
+function sceneTextAt(upTo) {
+    const ctx = context();
+    const sb = storyBlock();
+    const chat = ctx?.chat ?? [];
+    const tag = settings(ctx).sceneTag;
+    for (let index = Math.min(upTo, chat.length - 1); index >= 0; index--) {
+        if (!isAssistant(chat[index])) continue;
+        const scene = sb?.blockInText?.(chat[index].mes, tag);
+        if (scene?.text) return scene.text;
+    }
+    return '';
+}
+
+// What the tracker says around the scene `sceneText` after message `upTo`: the same reading
+// the note uses, so another extension asking about a message sees what the note saw.
+function situationAt(upTo, sceneText) {
+    const ctx = context();
+    const chat = ctx?.chat ?? [];
+    const own = settings(ctx);
+    const cal = calendar();
+    const { tracker } = trackerAt(upTo);
     const parsed = sceneText ? cal.parse(sceneTimeText(sceneText), { reference: tracker.time }) : null;
     const now = parsed?.abs ?? tracker.time ?? null;
     const recent = chat.slice(Math.max(0, upTo - 1), upTo + 1).map(visibleText).join('\n');
@@ -396,6 +420,25 @@ globalThis.StoryDirector = Object.freeze({
             return typeof abs === 'number' && Number.isFinite(abs) ? calendar().format(abs) : '';
         } catch {
             return '';
+        }
+    },
+    /**
+     * The planned fights the story has reached at message `index`, read the way the note
+     * reads the scene there: `[{ key, id, kind, encounter, place, on, status }]`, due (or
+     * arriving) ones first as `'due'`, then those within the due-soon window as `'soon'`.
+     * Story Director only hands them over; the fight and its outcome belong to the caller
+     * and the story (the model closes the record with a `!` or `-` line when it narrates it).
+     */
+    encountersAt(index) {
+        try {
+            const chat = context()?.chat ?? [];
+            if (!storyBlock() || !chat.length || !settings().enabled) return [];
+            const at = Math.min(Number(index), chat.length - 1);
+            if (!(at >= 0)) return [];
+            const { selection, now } = situationAt(at, sceneTextAt(at));
+            return encountersIn(selection, { calendar: calendar(), now, dueSoonDays: relevanceSettings().dueSoonDays });
+        } catch {
+            return [];
         }
     },
 });

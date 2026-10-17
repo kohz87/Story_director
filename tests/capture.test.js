@@ -16,6 +16,7 @@ test('buildCaptureMessages fills the exchange, tracker, time and place; leaves {
     assert.match(system.content, /\{\{user\}\}/, 'macros SillyTavern fills stay');
     assert.match(user.content, /<Director>/);
     assert.match(DEFAULT_CAPTURE_PROMPT, /Never plans/);
+    assert.match(DEFAULT_CAPTURE_PROMPT, /people, encounter \(the foes of a fight that is coming\)/, 'the fields name the encounter');
     assert.match(buildCaptureMessages({})[0].content, /\(nothing tracked yet\)/);
 });
 

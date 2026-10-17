@@ -955,6 +955,12 @@
     opacity: 0.65;
 }
 
+/* A planned fight: the tag in the record head. */
+.story-director-tab .story-director-tag.is-fight {
+    color: var(--sd-accent);
+    opacity: 0.9;
+}
+
 /* Quests tab: deadline marks. */
 .story-director-tab .story-director-tag.is-soon {
     color: var(--sd-accent);

@@ -1,7 +1,7 @@
 // Tests for src/relevance.js: due, arriving, dormant and the priority order of classify.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, estimateTokens, dateOf, isDue, isArriving, isDormant, classify } from '../src/relevance.js';
+import { DEFAULTS, estimateTokens, dateOf, isDue, isArriving, isDormant, classify, encountersIn } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
 // tests; the real calendar.js is tested on its own.
@@ -308,4 +308,28 @@ test('quests never go dormant, are woken by their giver, and their deadline make
 
     const late = record({ key: 'Herb run', kind: 'quest', fields: { goal: 'twelve moonleaf', due: 'Haywane 12' } });
     assert.deepEqual(keys(classify(tracker([late], 50), { calendar, now, message: 50 }).due), ['Herb run']);
+});
+
+test('encountersIn: due and arriving fights first, then those within the due-soon window', () => {
+    const now = at('Haywane 13, 10:00 am');
+    const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { on: 'Haywane 13', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' } });
+    const raiders = record({ key: 'Raiders', fields: { arrive: 'Haywane 13, morning', encounter: '2 x raider rank D' } });
+    const wolves = record({ key: 'Wolves on the ridge', kind: 'beat', fields: { on: 'Haywane 16', encounter: '2 x dire wolf rank D' } });
+    const pack = record({ key: 'Wolf pack', kind: 'clock', fields: { due: 'Haywane 14, dusk', encounter: '4 wolf' } });
+    const far = record({ key: 'Troll at the ford', kind: 'beat', fields: { on: 'Haywane 25', encounter: '1 river troll (boss)' } });
+    // A quest's due is a deadline, not a fight: its foes are soon only by an on.
+    const bounty = record({ key: 'Bounty on Kettle Jack', kind: 'quest', fields: { due: 'Haywane 14', encounter: 'Kettle Jack (boss)' } });
+    const council = record({ key: 'Council session opens', kind: 'beat', fields: { on: 'Haywane 14' } });
+    const selection = classify(tracker([wolves, far, bounty, council, pack, ambush, raiders], 5), { calendar, now, message: 5 });
+
+    assert.deepEqual(encountersIn(selection, { calendar, now }), [
+        { key: 'Ambush at the weir', id: 'ambush at the weir', kind: 'beat', encounter: '3 bandit, bandit captain (boss)', place: 'Weir road', on: 'Haywane 13', status: 'due' },
+        { key: 'Raiders', id: 'raiders', kind: 'agenda', encounter: '2 x raider rank D', place: '', on: 'Haywane 13, morning', status: 'due' },
+        { key: 'Wolf pack', id: 'wolf pack', kind: 'clock', encounter: '4 wolf', place: '', on: 'Haywane 14, dusk', status: 'soon' },
+        { key: 'Wolves on the ridge', id: 'wolves on the ridge', kind: 'beat', encounter: '2 x dire wolf rank D', place: '', on: 'Haywane 16', status: 'soon' },
+    ]);
+    assert.deepEqual(encountersIn(selection, { calendar, now, dueSoonDays: 2 }).map(item => item.key), ['Ambush at the weir', 'Raiders', 'Wolf pack']);
+    // Without a calendar only what the selection already holds as due.
+    assert.deepEqual(encountersIn(selection).map(item => item.status), ['due', 'due']);
+    assert.deepEqual(encountersIn(null), []);
 });

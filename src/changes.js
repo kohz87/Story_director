@@ -38,7 +38,10 @@ const QUEST_TYPE_WORDS = Object.freeze({
 // A quest's own parts: its category (main, side, bounty, contract…), who gave it, what it
 // asks, what it pays, and the step it is at.
 export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
-export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', ...QUEST_FIELDS];
+// A planned fight: who the foes are, as free text in RPG Battle's shape (`3 bandit, bandit
+// captain (boss)`, `2 x dire wolf rank D`). Story Director only stores and schedules it; the
+// fight itself is resolved by another extension, so the text is never parsed here.
+export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', ...QUEST_FIELDS];
 
 // Only a spaced hyphen ends a key, so `Jean-Luc` and `Hall-Warden` stay whole; em and en
 // dashes never appear inside names, so they count with or without spaces.
@@ -83,6 +86,8 @@ function inferKind(fields) {
     if (QUEST_FIELDS.some(name => fields[name])) return 'quest';
     if (fields.leg || fields.now) return 'agenda';
     if (fields.due) return 'clock';
+    // Foes with nothing else to say what the record is: a planned fight is a beat.
+    if (fields.encounter) return 'beat';
     return 'event';
 }
 

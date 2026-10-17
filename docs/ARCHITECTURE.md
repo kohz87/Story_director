@@ -90,8 +90,10 @@ export const KINDS = ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secr
 export const KIND_ALIASES;    // offscreen/off-screen/npc → agenda, world → event,
                               // thread/hooks → hook, timer/clocks → clock, plan → beat, off-limits → secret
 export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
-export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', ...QUEST_FIELDS];
+export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', ...QUEST_FIELDS];
 // A quest never goes dormant (relevance.js); its `due` is a deadline; `giver` counts as a mention.
+// `encounter` (v0.8): the foes of a planned fight, free text in RPG Battle's shape
+// (`3 bandit, bandit captain (boss)`, `2 x dire wolf rank D`), stored as written, never parsed.
 export function lineKey(key) → id     // lowercase, markdown and punctuation squashed, spaces single
 export function parseChanges(text) → { ops: [Op], errors: [{ line, message }] }
 export function formatOp(op) → string // one change line; parseChanges(formatOp(op)) round-trips
@@ -114,7 +116,8 @@ Grammar, one op per line (blank lines ignored; bullets `*`/`-`/`•` *followed b
 - Parts split on ` | `. `label: value` with a label in `FIELDS` → `fields[label]`; another
   label of ≤ 3 words → `extra[label]`; an unlabeled first part → `fields.desc` for `+`/`~`,
   `reason` for `-`/`!`.
-- `+` without a kind infers one: `leg`/`now` → agenda, `due` → clock, else event.
+- `+` without a kind infers one: a quest field → quest, `leg`/`now` → agenda, `due` → clock,
+  `encounter` → beat, else event.
 
 ## `src/tracker.js`
 
@@ -180,7 +183,13 @@ export function isDue(record, { calendar, now }) → boolean       // on/due ≤
 export function isArriving(record, { calendar, now }) → boolean  // arrive ≤ now
 export function isDormant(record, { calendar, now, message, settings }) → boolean
 export function classify(tracker, { calendar, now = null, message, place = '', sceneText = '', recentText = '', settings = DEFAULTS }) → Selection
+export function encountersIn(selection, { calendar = null, now = null, dueSoonDays = 3 } = {}) → [Encounter]   // v0.8
 ```
+
+`Encounter = { key, id, kind, encounter, place, on, status: 'due' | 'soon' }`: records of the
+Selection with an `encounter`; due ones, then arriving ones (both `'due'`), then relevant ones
+whose fire date (a clock's `due`, otherwise `on`; never a quest's deadline) falls within
+`dueSoonDays`, soonest first (`'soon'`).
 
 ```js
 Selection = {
@@ -203,7 +212,9 @@ Selection = {
 ## `src/note.js`
 
 ```js
-export const CHANGE_INSTRUCTION;  // ≈120 tokens: how to write <Director> change lines
+export const CHANGE_INSTRUCTION;  // ≈135 tokens: how to write <Director> change lines
+export const PACING, PACING_NO_CHANGES;  // the Pacing line, when something is scheduled
+export const ENCOUNTER_CUE;       // v0.8: appended to Pacing while a due/arriving record has an encounter
 export function buildNote(selection, { calendar, budgetTokens = 1000, corrections = [], instruction = CHANGE_INSTRUCTION } = {}) → string
 ```
 
@@ -216,11 +227,16 @@ Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17) · …
 World: Canal Street fires — curfew in force
 Hooks: River stranger — who pulled Ren from the sump
 Clocks: Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign
-Beats: Council session opens (Goldwane 18, 09:00 am)
+Beats: Council session opens (Goldwane 18, 09:00 am) · Ambush at the weir (Goldwane 19) · fight: 3 bandit, bandit captain (boss)
 Do not reveal: who sold the weir route; Chiyo's debt
 Corrections: …
 <instruction>
 ```
+
+A due or arriving record with an `encounter` ends its item with `(fight: <encounter>)`
+(`Due now: Ambush at the weir (Goldwane 19) (fight: 3 bandit, bandit captain (boss))`), and the
+Pacing line then ends with `ENCOUNTER_CUE`: the foes appear and the reply stops at the first
+blow, since the fight is resolved outside the story.
 
 Fits `budgetTokens` by dropping the lowest-priority relevant records first; the header, Due
 now, Arriving, Do not reveal and the instruction are never dropped. Returns the instruction
@@ -365,6 +381,8 @@ SECRET: Key — what {{user}} must not learn yet
 ```
 
 3–6 BEATs, an AGENDA per NPC the arc moves, 1–3 HOOKs, 0–2 CLOCKs, a SECRET for every secret.
+A fight (v0.8) is a BEAT with `| encounter: 3 bandit, bandit captain (boss)`, only where the
+story would really come to blows, at most 1 or 2 per arc.
 Dates may be absolute in the story's calendar or relative to now.
 
 `summarizeTracker`: active records grouped by kind (`Off-screen:`, `World:`, `Hooks:`,
@@ -380,7 +398,8 @@ written.
 - Finds `<plan>…</plan>` (else uses the whole text); strips `<think>`/`<thinking>` blocks, code
   fences, bullets and `**bold**`; labels are case-insensitive (`NPC AGENDA:` = `AGENDA:`,
   `OFF-LIMITS:`/`SECRET:` = secret, `TIMER:` = clock, `EVENT:`/`SUB-EVENT:` = beat,
-  `THREAD:` = hook).
+  `THREAD:` = hook, `ENCOUNTER:`/`FIGHT:` = a beat with an `encounter`, taken from the
+  `encounter:` part, else the description, else the key).
 - After the label, the line is parsed like a change line (key, ` — `, parts split on ` | `,
   `label: value`); fields as in `FIELDS` of changes.js, plus `after` into `extra.after`.
 - **Relative dates** in `on`, `due`, `arrive` become absolute when `calendar` and `now` are
@@ -488,7 +507,8 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
 
 For Story Block's sidebar pane: **Now** (time, place); **Due now** and **Arriving**; active
 records by kind (Off-screen, World, Hooks, Clocks, Beats), each with its key and labelled rows
-(now/then/on/due/leg/arrive/desc, like Story Block's scene facts) and a pin toggle calling
+(now/then/on/due/leg/arrive/encounter/desc, like Story Block's scene facts; a record with an
+`encounter` also has a `fight` tag in its head) and a pin toggle calling
 `onPin(id, pinned)`; **Dormant** (folded `<details>` with a count); **Do not reveal** (folded,
 content added only when opened); **Resolved recently** (folded); **Problems** (findings,
 grouped by severity). Empty state: "Nothing tracked yet." plus a **Seed from World State**
@@ -500,3 +520,9 @@ Needs Story Block 0.6+ (`globalThis.StoryBlock.apiVersion >= 1`): registers the 
 transport block, reads the scene block, replays `<Director>` blocks from the chat, injects the
 note at `depth` as a system message from its generate interceptor, checks each reply, writes
 the Off-Screen mirror, registers the "Director" tab, and renders settings.
+
+`globalThis.StoryDirector` (`apiVersion: 1`, read-only): `version`, `timeAt(index)`,
+`formatTime(abs)`, and (v0.8) `encountersAt(index)`: `encountersIn` of the Selection the note
+would build for the scene at message `index` (the tracker up to it, the newest scene block at
+or before it), or `[]` on any failure. Story Director never resolves a fight: the caller (RPG
+Battle) runs it, and the model closes the record with `!` or `-` when it narrates the outcome.

@@ -1,4 +1,4 @@
-# Story Director v0.7.2
+# Story Director v0.8.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -69,9 +69,9 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 | `! Key — what happened` | A due item happened; its `then` becomes `now` |
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
-(`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`; for a quest also
-`type`, `giver`, `goal`, `reward` and `step`. Dates go only in `on`, `due` and `arrive`. The note tells
-the model all of this in about 130 tokens.
+(`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
+foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward` and `step`. Dates
+go only in `on`, `due` and `arrive`. The note tells the model all of this in about 135 tokens.
 
 ### Quests
 
@@ -100,6 +100,34 @@ pelts — …`, `+ contract …`) sets the type by itself.
   deadline is close or has passed; finished quests fold away with how they ended. The badge is
   the number of open quests. Nothing in it is hidden: quests are promises you made, not
   spoilers.
+
+### Encounters
+
+A record with an `encounter` is a planned fight. Story Director stores and schedules it and
+hands the foes over; it never resolves a fight. The RPG Battle companion extension does that
+in code, with buttons.
+
+```
++ beat Ambush at the weir — on: Haywane 14 | place: Weir road | encounter: 3 bandit, bandit captain (boss)
+```
+
+The value is free text in RPG Battle's shape: comma-separated groups of
+`[N ×|N x|N ]name[ (boss)][ rank X][ role]`, such as `3 bandit, bandit captain (boss)` or
+`2 x dire wolf rank D`. It is kept as written. It usually sits on a `beat`, but a quest (a
+bounty's target) or a clock (one that fires as an attack) can carry one too.
+
+- **When it is due** (or arriving), the note's Due line says who is coming: `Due now: Ambush at
+  the weir (Haywane 14) (fight: 3 bandit, bandit captain (boss))`, and the Pacing line adds one
+  sentence: the fight starts when the scene reaches it, the foes appear, and the reply stops at
+  the first blow, because the fight is resolved outside the story. RPG Battle then offers a
+  **Fight?** notice filled in with the foes.
+- **Before then**, the kind lines show it compactly (`Beats: Ambush at the weir (Haywane 14) ·
+  fight: 3 bandit, bandit captain (boss)`), and the Director tab shows an `encounter` row and a
+  `fight` tag.
+- **Afterwards** the model closes the record the usual way, with `!` or `-` and what happened.
+- The **arc planner** may plan one or two per arc, as a `BEAT: … | encounter: …` line (or an
+  `ENCOUNTER:` line), only where the story would really come to blows: a quest's target, or an
+  ambush an agenda sets up.
 
 ## The note
 
@@ -227,7 +255,8 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
   and place, nearby places (with a world pack), your **genre and tone**, your **Director's
   note** (a goal, a pace, a beat you want) and the previous arc.
 - **What it writes:** an arc, 3–6 dated beats, an agenda for each NPC the arc moves, hooks,
-  clocks, and a secret for every secret it creates. Relative dates ("in 2 days", "tomorrow at
+  clocks, and a secret for every secret it creates. At most one or two beats are fights (with
+  an `encounter`; see [Encounters](#encounters)). Relative dates ("in 2 days", "tomorrow at
   dusk") become dates in your calendar. Plans that act for your character are flagged.
 - **While it runs** a notice stays up ("Planning the next arc… on *profile*") until the plan is
   ready; a failure (the API refused, the answer was unusable) says why in a red notice.
@@ -326,8 +355,24 @@ The full design is in [docs/DESIGN.md](docs/DESIGN.md), the module contract in
 - `timeAt(index)`: the story time known at message `index`, in minutes on your calendar, or
   `null` when no scene block has stated one yet.
 - `formatTime(abs)`: such a time written the way your calendar writes it.
+- `encountersAt(index)`: the planned fights the story has reached at message `index`, read the
+  way the note reads the scene there. Due (or arriving) ones come first, then those whose date
+  falls within the due-soon window (3 story days by default):
 
-RPG Battle uses it to give back HP and MP as story time passes.
+  ```js
+  [
+      { key: 'Ambush at the weir', id: 'ambush at the weir', kind: 'beat',
+        encounter: '3 bandit, bandit captain (boss)', place: 'Weir road', on: 'Haywane 14', status: 'due' },
+      { key: 'Wolves on the ridge', id: 'wolves on the ridge', kind: 'beat',
+        encounter: '2 x dire wolf rank D', place: '', on: 'Haywane 16', status: 'soon' },
+  ]
+  ```
+
+  It returns `[]` when there are none, or when anything goes wrong. There is nothing to report
+  back: the model closes the record with `!` or `-` when it narrates the outcome.
+
+RPG Battle uses it to give back HP and MP as story time passes, and to offer the fights the
+story has planned.
 
 ## Development
 

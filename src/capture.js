@@ -24,7 +24,7 @@ Write one change per line, inside <Director>…</Director>:
 ~ Key — label: value                  change only what changed
 - Key — reason                        resolved
 ! Key — what happened                 something that was due happened
-Fields: now, then, on, due, leg, arrive, shown, place, people; a quest: type (main, side, bounty, contract…), giver, goal, reward, step, due (its deadline). Dates go only in on, due and arrive.
+Fields: now, then, on, due, leg, arrive, shown, place, people, encounter (the foes of a fight that is coming); a quest: type (main, side, bounty, contract…), giver, goal, reward, step, due (its deadline). Dates go only in on, due and arrive.
 
 Rules:
 - Record only what this exchange established as true. Never plans, intentions, options, guesses or hypotheticals.

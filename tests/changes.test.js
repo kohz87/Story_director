@@ -34,7 +34,7 @@ function only(text) {
 
 test('exports the kinds, fields and aliases of the contract', () => {
     assert.deepEqual(KINDS, ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc']);
-    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'type', 'giver', 'goal', 'reward', 'step']);
+    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'type', 'giver', 'goal', 'reward', 'step']);
     assert.equal(KIND_ALIASES.bounty, 'quest');
     assert.equal(KIND_ALIASES.contract, 'quest');
     assert.equal(KIND_ALIASES.offscreen, 'agenda');
@@ -262,4 +262,24 @@ test('a quest line: its own fields, kind inferred from them, and aliases', () =>
     // Written back in field order, so it reads back the same.
     assert.equal(formatOp(ops[0]), '+ quest Bounty on Kettle Jack — due: Haywane 30 | giver: Warden Hale | goal: bring him in alive | reward: 40 crowns');
     assert.deepEqual(parseChanges(formatOp(ops[0])).ops[0].fields, ops[0].fields);
+});
+
+test('an encounter: stored as written on a beat, a quest or a clock, and written back the same', () => {
+    const beat = only('+ beat Ambush at the weir — on: Haywane 14 | place: Weir road | encounter: 3 bandit, bandit captain (boss)');
+    assert.equal(beat.kind, 'beat');
+    assert.deepEqual(beat.fields, { on: 'Haywane 14', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' });
+    assert.equal(formatOp(beat), '+ beat Ambush at the weir — on: Haywane 14 | place: Weir road | encounter: 3 bandit, bandit captain (boss)');
+    assert.deepEqual(withoutRaw(only(formatOp(beat))), withoutRaw(beat));
+
+    // Never parsed beyond storing it: counts, ×, ranks and roles stay as the model wrote them.
+    for (const foes of ['2 x dire wolf rank D', '2 × dire wolf rank D, 1 alpha wolf (boss) rank C', 'Kettle Jack (boss), 3 thug healer']) {
+        assert.equal(only(`~ Ambush at the weir — encounter: ${foes}`).fields.encounter, foes);
+    }
+    const bounty = only('+ bounty Kettle Jack — goal: bring him in | encounter: Kettle Jack (boss), 2 thug');
+    assert.equal(bounty.kind, 'quest');
+    assert.equal(bounty.fields.encounter, 'Kettle Jack (boss), 2 thug');
+    assert.equal(only('+ Wolf pack — due: Haywane 20 | encounter: 4 wolf').kind, 'clock');
+    // Foes and nothing else to say what it is: a planned fight is a beat.
+    assert.equal(only('+ Ridge wolves — on: Haywane 15 | encounter: 2 x dire wolf').kind, 'beat');
+    assert.equal(only('+ Ridge wolves — encounter:2 dire wolf').fields.encounter, '2 dire wolf', 'a known field may skip the space');
 });
