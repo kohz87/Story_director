@@ -1,4 +1,4 @@
-# Story Director v0.7.0
+# Story Director v0.7.1
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -70,7 +70,7 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`; for a quest also
-`giver`, `goal`, `reward` and `step`. Dates go only in `on`, `due` and `arrive`. The note tells
+`type`, `giver`, `goal`, `reward` and `step`. Dates go only in `on`, `due` and `arrive`. The note tells
 the model all of this in about 130 tokens.
 
 ### Quests
@@ -79,10 +79,14 @@ Long-running work your character has taken on: bounties, contracts, favours owed
 Short errands that end within the scene do not need one.
 
 ```
-+ quest Bounty on Kettle Jack — giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30
++ quest Bounty on Kettle Jack — type: bounty | giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30
 ~ Bounty on Kettle Jack — step: cornered at the weir
 - Bounty on Kettle Jack — turned in, paid
 ```
+
+One kind covers them all; `type` is the category: `main`, `side`, `bounty`, `contract`,
+`mission`, `favour`, or any word you like. Writing the category as the kind (`+ bounty Wolf
+pelts — …`, `+ contract …`) sets the type by itself.
 
 - A quest starts only when your character **accepts** it; an offer not yet taken is a hook.
   The arc planner offers work as hooks and never completes a quest for you.
@@ -90,8 +94,12 @@ Short errands that end within the scene do not need one.
   reached"), and the story decides what that costs.
 - Quests **never go dormant**. A quest untouched for forty replies stays in the note, and its
   giver's name in the scene counts as a mention.
-- In the Director tab, quests have their own section (goal, step, giver, reward, deadline)
-  and stay visible while the tab is hidden: they are promises you made, not spoilers.
+- They have their own **Quests** tab in Story Block's sidebar (it appears with the first
+  quest), grouped by type: Main, Side, Bounties, Contracts, Missions, Favours, then your own
+  types. Each shows its goal, step, giver, reward, deadline and place, marked when the
+  deadline is close or has passed; finished quests fold away with how they ended. The badge is
+  the number of open quests. Nothing in it is hidden: quests are promises you made, not
+  spoilers.
 
 ## The note
 
@@ -282,7 +290,8 @@ planning, Capture, and Existing chat & compatibility.
 
 ## The Director tab
 
-What is due and arriving, every active record by kind (pin one to keep it in the note), the
+What is due and arriving, every active record by kind except quests (they have their own
+tab; pin a record to keep it in the note), the
 arc and its beats, the dormant shelf, secrets, what was resolved recently, problems with the
 last reply's changes, the places the story has been (with a map when there are coordinates),
 and the route tool.

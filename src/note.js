@@ -14,7 +14,7 @@ export const CHANGE_INSTRUCTION = [
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown; a quest (only once {{user}} accepts it): giver, goal, reward, step, due. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown; a quest (only once {{user}} accepts it): type, giver, goal, reward, step, due. Dates go only in on, due and arrive.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
@@ -131,7 +131,8 @@ function questItem(record) {
     const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${f.due}` : '']
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
-    return record.key + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '');
+    const type = String(f.type ?? '').trim();
+    return record.key + (type ? ` (${type})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '');
 }
 
 function recordItem(record) {
