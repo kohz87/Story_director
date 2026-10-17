@@ -19,7 +19,7 @@ Record = {
   id: 'senior listener geva',           // lineKey(key): identity
   kind: 'agenda' | 'event' | 'hook' | 'quest' | 'clock' | 'beat' | 'secret',
   status: 'active' | 'resolved' | 'superseded',
-  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, type, giver, goal, reward, step },  // strings, '' when unset
+  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, encounter, type, giver, goal, reward, step, difficulty },  // strings, '' when unset
   extra: { [label]: value },            // labelled parts that are not a known field
   created: { message, time },           // message index; story abs or null
   changed: { message, time },
@@ -93,9 +93,16 @@ the text.
 export const KINDS = ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'];
 export const KIND_ALIASES;    // offscreen/off-screen/npc → agenda, world → event,
                               // thread/hooks → hook, timer/clocks → clock, plan → beat, off-limits → secret
-export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
+export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step', 'difficulty'];
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', ...QUEST_FIELDS];
 // A quest never goes dormant (relevance.js); its `due` is a deadline; `giver` counts as a mention.
+export const QUEST_DIFFICULTIES = ['easy', 'normal', 'hard', 'nightmare'];
+export function questDifficulty(value) → 'easy' | 'normal' | 'hard' | 'nightmare'
+// (v0.8.2) The first word of `value` it knows (the four, or a synonym: trivial/simple/minor →
+// easy, medium/moderate/average → normal, difficult/tough/dangerous → hard,
+// deadly/impossible/extreme/lethal → nightmare), else normal; missing → normal. parseChanges
+// stores a non-empty `difficulty:` this way, so the tracker only holds the four words (an
+// empty one clears the field, which reads as normal).
 // `encounter` (v0.8): the foes of a planned fight, free text in RPG Battle's shape
 // (`3 bandit, bandit captain (boss)`, `2 x dire wolf rank D`), stored as written, never parsed.
 export function lineKey(key) → id     // lowercase, markdown and punctuation squashed, spaces single
@@ -132,6 +139,7 @@ export function markSeen(tracker, text, { message, time = null }) → Tracker
 export function replay(entries, { seed = null } = {}) → { tracker, problems: [Finding & { message }] }
 export function findRecord(tracker, keyOrId) → Record | null
 export function activeRecords(tracker, { kind = null } = {}) → [Record]
+export function questsDoneIn(tracker, message) → [{ id, name, type, difficulty, reward, giver }]
 ```
 
 All return new objects; inputs are never mutated.
@@ -150,6 +158,12 @@ All return new objects; inputs are never mutated.
 - `replay(entries)`: `entries` = `[{ message, ops: [Op] | null, text, time }]` in chat order;
   for each, `markSeen(text)` then `applyOps(ops)`; sets `tracker.message`/`tracker.time`.
   `seed` is a starting Tracker (default empty).
+- `questsDoneIn` (v0.8.2): quest records with status `resolved` whose `resolved.message` is
+  `message` and whose reason is not a failure (/fail|abandon|give up|forfeit|expired|missed|too
+  late|cancel|refused|declined|botched/i), as plain objects (`name` = key, `type`/`reward`/
+  `giver` trimmed, `difficulty` through `questDifficulty`). A quest closed in an earlier reply
+  keeps that reply's message, so it is not listed again; reopened and closed later, it is
+  listed at the later one.
 
 ## `src/seed.js`
 
@@ -216,7 +230,7 @@ Selection = {
 ## `src/note.js`
 
 ```js
-export const CHANGE_INSTRUCTION;  // ≈135 tokens: how to write <Director> change lines
+export const CHANGE_INSTRUCTION;  // ≈140 tokens: how to write <Director> change lines
 export const PACING, PACING_NO_CHANGES;  // the Pacing line, when something is scheduled
 export const ENCOUNTER_CUE;       // v0.8: appended to Pacing while a due/arriving record has an encounter
 export const NPC_PLANS_ONLY;      // v0.8: 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.'
@@ -560,6 +574,8 @@ export function renderQuests(pane, { quests, finished, formatDate, status }) →
 
 Groups by `fields.type` (main, side, bounty, contract, mission, favour, then others by name,
 untyped last); plural spellings join their singular. Never hidden by the spoiler guard.
+(v0.8.2) Every quest's head carries a `story-director-tag is-difficulty is-<difficulty>` tag
+(`questDifficulty`, so `normal` when none was written).
 
 ## `src/ui/tab.js`
 
@@ -589,7 +605,10 @@ would build for the scene at message `index` (the tracker up to it, the newest s
 or before it), or `[]` on any failure. Story Director never resolves a fight: the caller (RPG
 Battle) runs it, and the model closes the record with `!` or `-` when it narrates the outcome.
 Also (v0.8) `calendar()`: `sharedCalendar(settings.calendar)`, the Gregorian default until the
-reader sets one. Like `encountersAt`, an addition keeps `apiVersion` 1.
+reader sets one. (v0.8.2) `questsDoneAt(index)`: `questsDoneIn(trackerAt(index).tracker,
+index)` for an assistant message inside the chat, `[]` for anything else, while tracking is
+off, or on any failure. Like `encountersAt`, an addition keeps `apiVersion` 1; the suite's
+`api` spreads the same object, so it has it too.
 
 **Story Suite** (v0.8): `{ id: 'story-director', name: 'Story Director', version, owns,
 enabled, settings: '#story_director_settings', api }` (`suiteAnnouncement`) is announced while

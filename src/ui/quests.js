@@ -2,10 +2,13 @@
 //
 // Quests are promises the reader's character made, so unlike the Director tab nothing here
 // is behind the scenes: it is always shown in full. Active quests are grouped by their type
-// (main, side, bounty, contract…), each with its goal, step, giver, reward and deadline; a
-// deadline that has passed or is close is marked. Finished quests fold away underneath.
+// (main, side, bounty, contract…), each with its difficulty, goal, step, giver, reward and
+// deadline; a deadline that has passed or is close is marked. Finished quests fold away
+// underneath.
 // Everything arrives as parameters; this module only draws, and fills every node through
 // textContent (the values are written by the model).
+
+import { questDifficulty } from '../changes.js';
 
 const TYPE_ORDER = ['main', 'side', 'bounty', 'contract', 'mission', 'favour'];
 const TYPE_LABELS = { main: 'Main', side: 'Side', bounty: 'Bounties', contract: 'Contracts', mission: 'Missions', favour: 'Favours' };
@@ -70,12 +73,19 @@ function groups(quests) {
     });
 }
 
+function difficultyTag(record) {
+    const difficulty = questDifficulty(record.fields?.difficulty);
+    return el('span', { className: `story-director-tag is-difficulty is-${difficulty}`, text: difficulty, attrs: { title: 'difficulty' } });
+}
+
 function renderQuest(record, { formatDate, status }) {
     const state = status?.(record) ?? '';
     const item = el('li', { className: `story-director-record is-quest${state ? ` is-${state}` : ''}` });
     item.dataset.recordId = record.id;
     item.append(el('div', { className: 'story-director-record-head' }, [
         el('span', { className: 'story-director-record-key', text: record.key }),
+        // Every quest has one (normal unless the story said otherwise), so it is always shown.
+        difficultyTag(record),
         state === 'overdue' ? el('span', { className: 'story-director-tag is-overdue', text: 'deadline passed' }) : null,
         state === 'soon' ? el('span', { className: 'story-director-tag is-soon', text: 'deadline soon' }) : null,
     ]));

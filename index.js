@@ -21,7 +21,8 @@
 //   turns the next arc into tracked records: an arc, dated beats, agendas, hooks, clocks and
 //   secrets. A plan waits in the tab for the reader unless they chose to skip review.
 // - Planned fights (a record with an `encounter`) are only stored, scheduled and handed over:
-//   globalThis.StoryDirector.encountersAt tells RPG Battle which ones the story has reached.
+//   globalThis.StoryDirector.encountersAt tells RPG Battle which ones the story has reached,
+//   and questsDoneAt which quests a reply finished (with their difficulty).
 // - Story Suite (src/suite.js, docs/STORY_SUITE.md): while it tracks the story, Story Director
 //   announces itself for the calendar, the timeline and NPCs (switched off, it stays announced
 //   as disabled, with its settings panel and api.manage for Story Suite's overlay). When NPC
@@ -30,7 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { activeRecords, emptyTracker, replay } from './src/tracker.js';
+import { activeRecords, emptyTracker, questsDoneIn, replay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
@@ -48,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.8.1';
+const VERSION = '0.8.2';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -464,6 +465,23 @@ const API = Object.freeze({
             if (!(at >= 0)) return [];
             const { selection, now } = situationAt(at, sceneTextAt(at));
             return encountersIn(selection, { calendar: calendar(), now, dueSoonDays: relevanceSettings().dueSoonDays });
+        } catch {
+            return [];
+        }
+    },
+    /**
+     * The quests finished in the assistant reply at `index` (a `-` line there closed them, not
+     * as failed): `[{ id, name, type, difficulty, reward, giver }]`, `difficulty` one of easy,
+     * normal, hard, nightmare. Quests finished in earlier replies are not listed, so a swipe
+     * or an edit of that reply is read afresh. RPG Battle offers quest XP with it.
+     */
+    questsDoneAt(index) {
+        try {
+            const chat = context()?.chat ?? [];
+            const at = Number(index);
+            if (!storyBlock() || !settings().enabled) return [];
+            if (!Number.isInteger(at) || at < 0 || at >= chat.length || !isAssistant(chat[at])) return [];
+            return questsDoneIn(trackerAt(at).tracker, at);
         } catch {
             return [];
         }

@@ -28,7 +28,7 @@ An extension offers an area only while it actually provides it (for example Stor
 | Extension | Defers when another owns… |
 |---|---|
 | Story Block | `stats`: its Character Sheet is marked "RPG Battle owns stats" (the reader decides whether to keep it). `rolls`: the Dice block takes RPG Battle's modifier (since 0.7). |
-| Story Director | `npc`: agenda lines describe only an NPC's plan and timing, never who they are. Shares its calendar (`StoryDirector.calendar()`), story time (`timeAt`) and encounters (`encountersAt`). |
+| Story Director | `npc`: agenda lines describe only an NPC's plan and timing, never who they are. Shares its calendar (`StoryDirector.calendar()`), story time (`timeAt`), encounters (`encountersAt`) and the quests a reply finished (`questsDoneAt`, with their difficulty). |
 | NPC State Delta | `scene`: present-NPC cards leave out the live mood and current outfit that World State already gives. `calendar`: uses Story Director's months and era instead of its own. `stats`: warns when its custom fields name game stats (Level, HP, Class…) that RPG Battle keeps. Reads World State inside Story Block's hidden envelope. |
 | RPG Battle | `items` is Story Block's: reads gear, writes loot. Offers its party (`api.members()`). |
 

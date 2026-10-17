@@ -247,7 +247,18 @@ test('quests: their own line, deadline wording when due, and the instruction nam
     assert.ok(note.includes(PACING), 'a deadline is a schedule');
     const due = buildNote(selection({ due: [bounty] }), { calendar });
     assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
-    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): type, giver, goal, reward, step, due/);
+    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): type, giver, goal, reward, step, due, difficulty\./);
+});
+
+test('quest difficulty: shown with the type unless it is normal', () => {
+    const quest = (key, fields) => record({ key, kind: 'quest', fields: { goal: 'bring him in', ...fields } });
+    const note = buildNote(selection({ relevant: [
+        quest('Kettle Jack', { type: 'bounty', difficulty: 'hard' }),
+        quest('Drowned Crown', { difficulty: 'nightmare' }),
+        quest('Rat cellar', { type: 'side', difficulty: 'normal' }),
+        quest('Herb run', {}),
+    ] }), { calendar });
+    assert.ok(lines(note).includes('Quests: Kettle Jack (bounty, hard) — bring him in · Drowned Crown (nightmare) — bring him in · Rat cellar (side) — bring him in · Herb run — bring him in'));
 });
 
 test('encounters: a due fight names its foes, the kind lines show them compactly', () => {

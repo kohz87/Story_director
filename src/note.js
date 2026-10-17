@@ -5,16 +5,17 @@
 // line per kind, what not to reveal, corrections, and the instruction for writing change
 // lines. The note keeps within a token budget by dropping the least relevant records.
 
+import { questDifficulty } from './changes.js';
 import { estimateTokens } from './relevance.js';
 
-// About 135 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
+// About 140 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
     'End your reply with one <Director>…</Director> block of change lines, one per line:',
     '+ kind Key — part | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (only once {{user}} accepts it): type, giver, goal, reward, step, due. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (only once {{user}} accepts it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
@@ -163,8 +164,10 @@ function questItem(record) {
     const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${f.due}` : '']
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
-    const type = String(f.type ?? '').trim();
-    return record.key + (type ? ` (${type})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '') + fightPart(record);
+    // A normal difficulty goes without saying; a set one rides with the type: "(bounty, hard)".
+    const difficulty = questDifficulty(f.difficulty);
+    const tags = [String(f.type ?? '').trim(), difficulty === 'normal' ? '' : difficulty].filter(Boolean);
+    return record.key + (tags.length ? ` (${tags.join(', ')})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '') + fightPart(record);
 }
 
 function recordItem(record) {

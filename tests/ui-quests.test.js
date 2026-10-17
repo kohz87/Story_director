@@ -62,3 +62,19 @@ test('finished quests fold away with how they ended; empty state explains quests
     assert.match(fold.textContent, /cleared, paid 5 copper/);
     assert.match(pane.querySelector('.story-director-empty-text').textContent, /No open quests/);
 });
+
+test('every quest shows its difficulty, normal when the story gave none', () => {
+    const pane = render({ quests: [
+        quest('Kettle Jack', { type: 'bounty', difficulty: 'hard' }),
+        quest('Drowned Crown', { type: 'main', difficulty: 'nightmare' }),
+        quest('Herb run', { difficulty: 'easy' }),
+        quest('Rat cellar', {}),
+        quest('Odd one', { difficulty: 'Deadly!' }),
+    ] });
+    const tags = pane.querySelectorAll('.story-director-tag.is-difficulty');
+    assert.deepEqual(tags.map(tag => tag.textContent), ['nightmare', 'hard', 'easy', 'normal', 'nightmare']);
+    assert.ok(tags[1].classList.contains('is-hard'));
+    assert.ok(tags[0].classList.contains('is-nightmare'));
+    // In the head, next to the key, not as a row.
+    assert.ok(![...pane.querySelectorAll('dt')].some(dt => dt.textContent === 'difficulty'));
+});

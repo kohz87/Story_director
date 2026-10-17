@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2
+
+Quest difficulty, and the quests a reply finished.
+
+- **A `difficulty` quest field:** `easy`, `normal`, `hard` or `nightmare`; missing or unreadable is `normal`. Obvious other words are read as one of the four (`trivial`/`simple` → easy, `medium`/`moderate` → normal, `difficult`/`tough` → hard, `deadly`/`impossible`/`extreme` → nightmare), and stored that way: `+ bounty Kettle Jack — reward: 40 crowns | difficulty: hard`. A line with only a difficulty is a quest, like the other quest fields.
+- **The change instruction** names the field (one word; about 140 tokens now); **the capture prompt** names it with its four values. A planned offer of work (a HOOK) may carry one too and keeps it. **The note** shows a difficulty that is not normal next to the type: `Kettle Jack (bounty, hard) — …`.
+- **Quests tab:** every quest shows its difficulty in its head (`normal` when none was written; hard and nightmare stand out). The Director tab shows a `difficulty` row on a record that has one.
+- **API:** `globalThis.StoryDirector.questsDoneAt(index)` lists the quests the assistant reply at `index` finished, a `-` line in that reply closing them (not as failed, abandoned, expired or superseded), as `[{ id, name, type, difficulty, reward, giver }]` plain copies; quests finished earlier are not listed, and it is `[]` when there are none. Also in the Story Suite's api. `apiVersion` stays 1. RPG Battle uses it to offer XP for a finished quest.
+
 ## 0.8.1
 
 Story Suite overlay support ([docs/STORY_SUITE.md](docs/STORY_SUITE.md#one-place-to-manage-them-all)).

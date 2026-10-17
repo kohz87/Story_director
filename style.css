@@ -968,6 +968,18 @@
     opacity: 0.9;
 }
 
+/* Quests tab: difficulty, quiet unless it is hard or worse. */
+.story-director-tab .story-director-tag.is-difficulty.is-hard {
+    color: var(--sd-accent);
+    opacity: 0.9;
+}
+
+.story-director-tab .story-director-tag.is-difficulty.is-nightmare {
+    color: var(--warning, #e0a040);
+    font-weight: 600;
+    opacity: 1;
+}
+
 /* Quests tab: deadline marks. */
 .story-director-tab .story-director-tag.is-soon {
     color: var(--sd-accent);
