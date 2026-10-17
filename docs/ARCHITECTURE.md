@@ -52,7 +52,11 @@ export const DEFAULT_PARTS_OF_DAY;  // { dawn: 360, morning: 540, noon: 720, aft
                                     //   dusk: 1140, evening: 1140, night: 1320, midnight: 0 }
 export function normalizeCalendar(config) → CalendarConfig
 export function makeCalendar(config) → Calendar
+export function sharedCalendar(config) → { era, months: [{ name, days }] }   // v0.8: StoryDirector.calendar()
 ```
+
+`sharedCalendar` normalizes the config and returns fresh plain copies of its era and months
+(nothing else), so a caller's edit never reaches the settings.
 
 `CalendarConfig`: `{ preset: 'gregorian' | 'custom', era: '', months: [{ name, days }], daysPerMonth: 30, leapYears: false, partsOfDay }`.
 Also accepts bare month names plus `daysPerMonth`, and a world pack's
@@ -215,8 +219,13 @@ Selection = {
 export const CHANGE_INSTRUCTION;  // ≈135 tokens: how to write <Director> change lines
 export const PACING, PACING_NO_CHANGES;  // the Pacing line, when something is scheduled
 export const ENCOUNTER_CUE;       // v0.8: appended to Pacing while a due/arriving record has an encounter
-export function buildNote(selection, { calendar, budgetTokens = 1000, corrections = [], instruction = CHANGE_INSTRUCTION } = {}) → string
+export const NPC_PLANS_ONLY;      // v0.8: 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.'
+export function buildNote(selection, { calendar, budgetTokens = 1000, corrections = [], instruction = CHANGE_INSTRUCTION, npcPlansOnly = false } = {}) → string
 ```
+
+`npcPlansOnly` (Story Suite: NPC State Delta is the source of truth for `npc`) appends
+`NPC_PLANS_ONLY` as a line after a non-empty instruction; with `instruction: ''` nothing is
+added. Off by default, so the note alone is unchanged.
 
 Format (lines left out when empty):
 
@@ -356,7 +365,7 @@ The tracker records `legSince = { message, time }` whenever an op sets a new non
 ```js
 export const DEFAULT_PLANNER_PROMPT;   // system template; macros below
 export function summarizeTracker(tracker, { calendar = null } = {}) → string
-export function buildPlannerMessages({ template = DEFAULT_PLANNER_PROMPT, recent = '', trackerSummary = '', nowText = '', place = '', nearby = [], directorNote = '', genre = '', previousArc = '' } = {}) → [{ role, content }]
+export function buildPlannerMessages({ template = DEFAULT_PLANNER_PROMPT, recent = '', trackerSummary = '', nowText = '', place = '', nearby = [], directorNote = '', genre = '', previousArc = '', npcPlansOnly = false } = {}) → [{ role, content }]
 export function parsePlan(text, { calendar = null, now = null } = {}) → Plan
 export function validatePlan(plan, { calendar = null, now = null, userName = '' } = {}) → [Finding]
 export function planToOps(plan, { arcId }) → [Op]
@@ -391,7 +400,8 @@ up to 8 recently resolved (`Resolved: Key — reason`). `(nothing tracked yet)` 
 
 `buildPlannerMessages` → `[{ role: 'system', content: <template filled> }, { role: 'user',
 content: 'Plan the next arc. Answer only with the <plan> block.' }]`. Unknown macros stay as
-written.
+written. `npcPlansOnly` appends `NPC_PLANS_ONLY` (note.js) to the user turn, so a reader's own
+template gets it too.
 
 `Plan = { arc: { key, desc } | null, items: [{ kind, key, fields, extra, raw }], errors: [{ line, message }] }`:
 
@@ -426,7 +436,7 @@ current arc record or null.
 
 ```js
 export const DEFAULT_CAPTURE_PROMPT;   // macros {{tracker}}, {{now}}, {{place}}, {{exchange}}, {{user}}, {{char}}
-export function buildCaptureMessages({ template, trackerSummary, nowText, place, userText, replyText }) → [{ role, content }]
+export function buildCaptureMessages({ template, trackerSummary, nowText, place, userText, replyText, npcPlansOnly = false }) → [{ role, content }]   // npcPlansOnly: as the planner's
 export function parseCapture(text, tracker) → { ops, lines, dropped: [{ raw, reason }], errors }
 ```
 
@@ -465,6 +475,23 @@ formatTrip(trip, { map }) → "Shorn → Auvoth ≈ 219 km SE (≈ 175 km straig
 Land trips take the straight line × `roadFactor`; boats, ships and flight go straight. Days use
 `routes.js`'s `legDays` (half-day round-up) and `restDaysFor`. Pure.
 
+## `src/suite.js` (v0.8): the Story Suite handshake
+
+Shared byte for byte with Story Block, NPC State Delta and RPG Battle; the contract is
+[STORY_SUITE.md](STORY_SUITE.md). Never edited here alone.
+
+```js
+export const SUITE_VERSION = 1;
+export const AREAS;   // { scene, npc, calendar, timeline, stats, items, rolls }: owner ids, in order
+export function storySuite() → Registry          // globalThis.StorySuite, created or upgraded on first use
+export function isSourceOfTruth(myId, area, choice = 'auto', suite = storySuite()) → boolean
+// Registry: announce({ id, name, version, owns, enabled?, api? }), withdraw(id), providers(),
+//           has(id), api(id), owner(area), offering(area), onChange(listener) → unsubscribe
+```
+
+`isSourceOfTruth`: `'mine'` → true; `'theirs'` → true only when no other extension offers the
+area; `'auto'` → the suite's owner is `myId`, or nobody owns it. Alone, every choice is true.
+
 ## `src/ui/settings.js`
 
 ```js
@@ -477,6 +504,7 @@ Settings = {
   budgetTokens: 1000, dormantReplies: 15, dormantDays: 30, dueSoonDays: 3,
   mirrorOffscreen: true,
   calendar: { preset: 'custom', era: '', months: [{ name, days }], daysPerMonth: 30 },
+  sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' },   // v0.8: 'auto' | 'mine' | 'theirs'
 }
 ```
 
@@ -484,9 +512,12 @@ Inside SillyTavern's `inline-drawer` markup (header "Story Director"), a status 
 `#story_director_status`, sections **Tracking** (on/off switch; scene block select from
 `blocks` = `[{ tag, name }]`, free text when empty; depth; budget), **Dormant** (replies, story
 days, due-soon days), **Calendar** (preset; era; months textarea of `Name` or `Name | days`
-lines; days per month), **NPC State Delta** (mirror switch), and a **Seed from World State**
-button calling `onSeed()`. `onChange(next)` on every edit with a full new object; never
-mutates the input.
+lines; days per month), the Off-Screen mirror switch (for a World State that keeps an
+Off-Screen list), **Source of truth** (v0.8: one select per Story Suite area, Automatic / This
+extension / The other one, with a note naming the other extensions announced), and a **Seed
+from World State** button calling `onSeed()`. `onChange(next)` on every edit with a full new
+object; never mutates the input. `renderSettings(…, { others: [names] })` and
+`setOthers(names)` set that note in place, without redrawing.
 
 ## `src/ui/quests.js` (v0.7.1)
 
@@ -526,3 +557,16 @@ the Off-Screen mirror, registers the "Director" tab, and renders settings.
 would build for the scene at message `index` (the tracker up to it, the newest scene block at
 or before it), or `[]` on any failure. Story Director never resolves a fight: the caller (RPG
 Battle) runs it, and the model closes the record with `!` or `-` when it narrates the outcome.
+Also (v0.8) `calendar()`: `sharedCalendar(settings.calendar)`, the Gregorian default until the
+reader sets one. Like `encountersAt`, an addition keeps `apiVersion` 1.
+
+**Story Suite** (v0.8): `{ id: 'story-director', name: 'Story Director', version, owns, api:
+globalThis.StoryDirector }` is announced while `settings.enabled` is on and Story Block is
+there (at start, once Story Block links, and after every settings edit; an unchanged state is
+not announced again, since every announcement wakes every listener), and withdrawn when
+tracking is turned off. `owns` = `calendar`, `timeline`, `npc`, less any area whose
+`sourceOfTruth` choice is `'theirs'`. One `onChange` listener only refreshes the settings'
+list of the other extensions. Where it matters, `isSourceOfTruth('story-director', area,
+choice)` is asked at the moment of use: `npc` false → `npcPlansOnly` for the note, the
+planner and capture; `timeline` false → no Off-Screen mirror. Any suite failure counts as
+being the source of truth, so Story Director alone behaves exactly as before.

@@ -11,6 +11,7 @@
 // tracked is dropped (and reported), and capture never opens an arc. Pure.
 
 import { formatOp, parseChanges } from './changes.js';
+import { NPC_PLANS_ONLY } from './note.js';
 
 export const DEFAULT_CAPTURE_PROMPT = `You keep the story tracker for a roleplay between {{user}} and {{char}}. Read ONE exchange (the player's message and the narrator's reply) and write the tracker changes that exchange established. You write no story.
 
@@ -41,8 +42,11 @@ The exchange:
 const THINK_BLOCK = /<(think|thinking)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
 const FENCE = /^\s*```[\w-]*\s*$/gm;
 
-/** The messages for the capture call: [{ role: 'system', content }, { role: 'user', content }]. */
-export function buildCaptureMessages({ template = DEFAULT_CAPTURE_PROMPT, trackerSummary = '', nowText = '', place = '', userText = '', replyText = '' } = {}) {
+/**
+ * The messages for the capture call: [{ role: 'system', content }, { role: 'user', content }].
+ * `npcPlansOnly`: as in the note, one line saying agendas give only plans and timing.
+ */
+export function buildCaptureMessages({ template = DEFAULT_CAPTURE_PROMPT, trackerSummary = '', nowText = '', place = '', userText = '', replyText = '', npcPlansOnly = false } = {}) {
     const exchange = [userText ? `Player: ${userText}` : '', `Narrator: ${replyText}`].filter(Boolean).join('\n\n');
     const values = {
         tracker: trackerSummary || '(nothing tracked yet)',
@@ -54,7 +58,7 @@ export function buildCaptureMessages({ template = DEFAULT_CAPTURE_PROMPT, tracke
     const content = String(template || DEFAULT_CAPTURE_PROMPT).replace(/\{\{(\w+)\}\}/g, (whole, name) => values[name.toLowerCase()] ?? whole);
     return [
         { role: 'system', content },
-        { role: 'user', content: 'Write the tracker changes for this exchange. Answer only with the <Director> block.' },
+        { role: 'user', content: `Write the tracker changes for this exchange. Answer only with the <Director> block.${npcPlansOnly ? ` ${NPC_PLANS_ONLY}` : ''}` },
     ];
 }
 

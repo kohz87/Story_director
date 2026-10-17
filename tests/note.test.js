@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHANGE_INSTRUCTION, ENCOUNTER_CUE, PACING, PACING_NO_CHANGES, buildNote } from '../src/note.js';
+import { CHANGE_INSTRUCTION, ENCOUNTER_CUE, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -282,4 +282,24 @@ test('ENCOUNTER_CUE: short, and only while a due or arriving record carries a fi
     assert.ok(!buildNote(selection({ relevant: [later] }), { calendar }).includes(ENCOUNTER_CUE), 'a planned fight not yet due');
     assert.ok(!buildNote(selection({ due: [sale] }), { calendar }).includes(ENCOUNTER_CUE), 'a due record without foes');
     assert.match(CHANGE_INSTRUCTION, /shown, encounter;/);
+});
+
+test('npcPlansOnly: one short line after the instruction, and only where change lines are asked for', () => {
+    assert.ok(estimateTokens(NPC_PLANS_ONLY) <= 25, `${estimateTokens(NPC_PLANS_ONLY)} tokens`);
+    assert.match(NPC_PLANS_ONLY, /NPC State Delta keeps who each NPC is/);
+    assert.match(NPC_PLANS_ONLY, /what they plan and when/);
+    const scene = selection({ due: [sale], relevant: [geva, fires] });
+
+    // Alone (the default) the note is exactly as before.
+    const alone = buildNote(scene, { calendar });
+    assert.equal(buildNote(scene, { calendar, npcPlansOnly: false }), alone);
+    assert.ok(!alone.includes(NPC_PLANS_ONLY));
+
+    const deferring = buildNote(scene, { calendar, npcPlansOnly: true });
+    assert.equal(deferring, `${alone}\n${NPC_PLANS_ONLY}`);
+    assert.ok(lines(deferring).includes('Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17)'), 'the plan and its timing stay');
+    assert.equal(buildNote(selection(), { calendar, npcPlansOnly: true }), `${CHANGE_INSTRUCTION}\n${NPC_PLANS_ONLY}`);
+
+    // With capture writing the changes, the note asks for none, so there is nothing to steer.
+    assert.equal(buildNote(scene, { calendar, instruction: '', npcPlansOnly: true }), buildNote(scene, { calendar, instruction: '' }));
 });

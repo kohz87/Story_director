@@ -9,6 +9,7 @@
 // globals; the calendar is passed in.
 
 import { KINDS, formatOp, lineKey, parseChanges } from './changes.js';
+import { NPC_PLANS_ONLY } from './note.js';
 
 export const DEFAULT_PLANNER_PROMPT = `You are the showrunner of an ongoing story between {{user}} and {{char}}. Your job is to plan the NEXT ARC: what the world and its people will do over the coming days, so the story moves with purpose. You write the plan the storyteller follows, not the story.
 
@@ -199,6 +200,8 @@ function resolvedMessage(record) {
 /**
  * The planning call: the template with its macros filled as the system message, and a short
  * user turn. Unknown macros, `{{user}}` and `{{char}}` included, stay for SillyTavern.
+ * `npcPlansOnly` (NPC State Delta keeps who each NPC is) adds one line to the user turn, so
+ * it holds for the reader's own template too.
  */
 export function buildPlannerMessages({
     template = DEFAULT_PLANNER_PROMPT,
@@ -210,6 +213,7 @@ export function buildPlannerMessages({
     directorNote = '',
     genre = '',
     previousArc = '',
+    npcPlansOnly = false,
 } = {}) {
     const values = {
         recent,
@@ -231,7 +235,7 @@ export function buildPlannerMessages({
     });
     return [
         { role: 'system', content },
-        { role: 'user', content: USER_MESSAGE },
+        { role: 'user', content: npcPlansOnly ? `${USER_MESSAGE} ${NPC_PLANS_ONLY}` : USER_MESSAGE },
     ];
 }
 

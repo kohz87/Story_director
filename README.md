@@ -311,7 +311,8 @@ planning, Capture, and Existing chat & compatibility.
 | Dormant after | 15 replies or 30 story days unseen | Left out of the note until mentioned again |
 | Due soon | 3 days | Anything due this soon is never dormant |
 | Calendar | Gregorian | Or your own months and era |
-| Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for NPC State Delta (once tracking has started) |
+| Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for readers who keep that section in Story Block's World State (once tracking has started) |
+| Source of truth | Automatic | Calendar, timeline and NPCs: who keeps each when other story extensions are installed (see [Working with the other story extensions](#working-with-the-other-story-extensions)) |
 | Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |
 | World pack | none | Optional roads: places, edges, paces and travel rules, as JSON |
 | Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note, prompt |
@@ -348,9 +349,39 @@ scenes** in the settings' quick bar.
 The full design is in [docs/DESIGN.md](docs/DESIGN.md), the module contract in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Working with the other story extensions
+
+Story Director works alone. With Story Block, NPC State Delta or RPG Battle installed too, the
+extensions find each other through the **Story Suite** handshake
+([docs/STORY_SUITE.md](docs/STORY_SUITE.md)) and agree who is the source of truth for each
+area, so the model is not told the same thing twice.
+
+- While it tracks the story (the switch on, Story Block there), Story Director offers the
+  **calendar**, the **timeline** (agendas, quests, clocks, arcs) and **NPCs**, and shares the
+  same object as `globalThis.StoryDirector` (below). Turning tracking off withdraws it.
+- **NPCs** are NPC State Delta's while it is installed and on: it keeps who each NPC is.
+  Story Director's agenda lines then give only what an NPC plans and when; one short line in
+  the note, in the planner's request and in the capture call asks for that.
+- **Calendar and timeline** are Story Director's on Automatic. NPC State Delta then uses its
+  months and era (`calendar()`) instead of its own.
+- **Settings → Existing chat & compatibility → Source of truth** has a choice per area:
+  *Automatic* (the suite's order), *This extension*, or *The other one*. *The other one* stops
+  Story Director offering that area to the others (it still reads dates with its own
+  calendar); for the timeline it also stops the Off-Screen mirror while another extension
+  keeps it. With no other story extension installed, every choice works like Automatic, and
+  nothing changes.
+
 ## For other extensions
 
-`globalThis.StoryDirector` (`apiVersion: 1`) is read-only:
+`globalThis.StoryDirector` (`apiVersion: 1`) is read-only, and is also what Story Director
+shares through the Story Suite (`StorySuite.api('story-director')`):
+
+- `calendar()`: the reader's calendar, `{ era, months: [{ name, days }] }` (plain copies; the
+  Gregorian months until a calendar is set):
+
+  ```js
+  { era: 'CY', months: [{ name: 'Dawnwane', days: 30 }, { name: 'Haywane', days: 31 }, …] }
+  ```
 
 - `timeAt(index)`: the story time known at message `index`, in minutes on your calendar, or
   `null` when no scene block has stated one yet.

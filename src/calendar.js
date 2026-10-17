@@ -107,6 +107,16 @@ export function normalizeCalendar(config) {
     };
 }
 
+/**
+ * The calendar as other extensions read it (`StoryDirector.calendar()`): its era and months,
+ * plain copies of any config `normalizeCalendar` accepts, so nothing the caller changes
+ * reaches the reader's settings.
+ */
+export function sharedCalendar(config) {
+    const { era, months } = normalizeCalendar(config);
+    return { era, months: months.map(({ name, days }) => ({ name, days })) };
+}
+
 // ---------------------------------------------------------------------------------------
 // Calendar
 

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import { makeCalendar } from '../src/calendar.js';
 import { parseChanges } from '../src/changes.js';
+import { NPC_PLANS_ONLY } from '../src/note.js';
 import { replay } from '../src/tracker.js';
 import {
     DEFAULT_PLANNER_PROMPT,
@@ -366,6 +367,17 @@ test('buildPlannerMessages with the default prompt leaves only {{user}} and {{ch
     assert.deepEqual([...left].sort(), ['{{char}}', '{{user}}']);
     assert.match(system.content, /Now: Haywane 12\nPlace: Auvoth\n/);
     assert.equal(buildPlannerMessages({ template: '' })[0].content, buildPlannerMessages()[0].content);
+});
+
+test('buildPlannerMessages with npcPlansOnly asks for agendas as plans and timing, in any template', () => {
+    const alone = buildPlannerMessages({ nowText: 'Haywane 12' });
+    assert.deepEqual(buildPlannerMessages({ nowText: 'Haywane 12', npcPlansOnly: false }), alone);
+    const [system, user] = buildPlannerMessages({ nowText: 'Haywane 12', npcPlansOnly: true });
+    assert.equal(system.content, alone[0].content, 'the system prompt is untouched');
+    assert.equal(user.content, `Plan the next arc. Answer only with the <plan> block. ${NPC_PLANS_ONLY}`);
+    const custom = buildPlannerMessages({ template: 'Plan {{now}}.', nowText: 'Haywane 12', npcPlansOnly: true });
+    assert.equal(custom[0].content, 'Plan Haywane 12.');
+    assert.ok(custom[1].content.endsWith(NPC_PLANS_ONLY), 'a reader\'s own template gets it too');
 });
 
 test('the default prompt asks for the plan lines and assumes no setting', () => {

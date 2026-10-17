@@ -81,6 +81,7 @@ test('every control emits a full new object and never mutates the input', () => 
         ['#story_director_months', input => edit(input, 'One\nTwo | 12', 'input'), next => assert.deepEqual(next.calendar.months, [{ name: 'One', days: 30 }, { name: 'Two', days: 12 }])],
         ['#story_director_days_per_month', input => edit(input, '28'), next => assert.equal(next.calendar.daysPerMonth, 28)],
         ['#story_director_mirror', input => { input.checked = false; input.dispatch('change'); }, next => assert.equal(next.mirrorOffscreen, false)],
+        ['#story_director_source_npc', input => edit(input, 'mine'), next => assert.deepEqual(next.sourceOfTruth, { calendar: 'auto', timeline: 'auto', npc: 'mine' })],
     ];
     for (const [selector, act, check] of cases) {
         const { $, settings, before, changes } = setup();
@@ -342,4 +343,57 @@ test('map: north and east, km per unit and road factor, decimals kept and clampe
     factor.value = 'abc';
     factor.dispatch('change');
     assert.equal(factor.value, '3', 'not a number keeps the old value');
+});
+
+test('source of truth: a select per shared area, Automatic by default, kept with the rest', () => {
+    const { $, container, changes, settings, before } = setup();
+    const ids = ['calendar', 'timeline', 'npc'].map(area => `#story_director_source_${area}`);
+    for (const id of ids) {
+        const choice = $(id);
+        assert.ok(choice, `${id} exists`);
+        assert.ok(choice.closest('.story-director-group[data-group="chat"]'), `${id} sits under compatibility`);
+        assert.equal(choice.value, 'auto');
+        assert.deepEqual(choice.querySelectorAll('option').map(option => [option.value, option.textContent]),
+            [['auto', 'Automatic'], ['mine', 'This extension'], ['theirs', 'The other one']]);
+    }
+    const heads = container.querySelectorAll('.story-director-section-head').map(node => node.textContent);
+    assert.ok(heads.includes('Source of truth'));
+    assert.match($('.story-director-suite-note').textContent, /No other story extension is here/);
+
+    edit($('#story_director_source_calendar'), 'theirs');
+    edit($('#story_director_source_timeline'), 'mine');
+    assert.deepEqual(last(changes).sourceOfTruth, { calendar: 'theirs', timeline: 'mine', npc: 'auto' });
+    assert.equal(last(changes).depth, 1, 'the rest is carried along');
+    assert.deepEqual(settings, before, 'input untouched');
+
+    // A stored choice is shown; an unknown one reads as Automatic.
+    const stored = setup({ settings: { ...structuredClone(SETTINGS), sourceOfTruth: { npc: 'theirs', calendar: 'bogus' } } });
+    assert.equal(stored.$('#story_director_source_npc').value, 'theirs');
+    assert.equal(stored.$('#story_director_source_calendar').value, 'auto');
+    assert.equal(stored.$('#story_director_source_timeline').value, 'auto');
+});
+
+test('setOthers names the other story extensions without redrawing the panel', () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const panel = renderSettings(container, { settings: SETTINGS, others: ['NPC State Delta'], onChange() {} });
+    const note = container.querySelector('.story-director-suite-note');
+    assert.match(note.textContent, /^Also here: NPC State Delta\./);
+    const npc = container.querySelector('#story_director_source_npc');
+    panel.setOthers(['NPC State Delta', 'RPG Battle']);
+    assert.equal(container.querySelector('#story_director_source_npc'), npc, 'same controls');
+    assert.match(note.textContent, /^Also here: NPC State Delta, RPG Battle\./);
+    panel.setOthers([]);
+    assert.match(note.textContent, /every choice works like Automatic/);
+    // A redraw keeps the latest names.
+    panel.setOthers(['Story Block']);
+    panel.update(SETTINGS);
+    assert.match(container.querySelector('.story-director-suite-note').textContent, /Also here: Story Block/);
+});
+
+test('the mirror hint says what it is for, without claiming NPC State Delta reads it', () => {
+    const { $ } = setup();
+    const text = $('#story_director_mirror').closest('.story-director-row').textContent;
+    assert.match(text, /Off-Screen list/);
+    assert.ok(!text.includes('NPC State Delta'));
 });

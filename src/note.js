@@ -30,6 +30,10 @@ export const PACING_NO_CHANGES = PACING.replace(/ What cannot fit yet happens of
 // tokens. The fight is resolved in code by another extension (RPG Battle); a storyteller left
 // alone would narrate the whole fight and decide how it ends, so it stops at the first blow.
 export const ENCOUNTER_CUE = 'A due fight starts when the scene reaches it: show the foes appear and stop at the first blow; the fight is resolved outside the story.';
+// While NPC State Delta is the source of truth for who an NPC is (Story Suite, area `npc`),
+// about 20 tokens after the instruction (and in the planner's and capture's request), so an
+// agenda never restates a dossier the reader keeps there.
+export const NPC_PLANS_ONLY = 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.';
 
 // Kind lines, in the order the note shows them.
 const KIND_LINES = [
@@ -48,7 +52,10 @@ export function buildNote(selection, {
     budgetTokens = 1000,
     corrections = [],
     instruction = CHANGE_INSTRUCTION,
+    npcPlansOnly = false,
 } = {}) {
+    // Only where the model writes change lines: with none asked for, there is nothing to steer.
+    if (npcPlansOnly && instruction) instruction = `${instruction}\n${NPC_PLANS_ONLY}`;
     const due = selection?.due ?? [];
     const arriving = selection?.arriving ?? [];
     const relevant = selection?.relevant ?? [];

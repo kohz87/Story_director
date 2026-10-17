@@ -12,7 +12,7 @@
 //   arriving and relevant) as a system message at a shallow depth, so the cached history
 //   in front of it is untouched.
 // - After each reply the change lines are checked, problems shown once, and active agendas
-//   mirrored into the scene block's Off-Screen section for NPC State Delta.
+//   mirrored into the scene block's Off-Screen section, for a World State that keeps one.
 // - With a world pack (the reader's map), travel legs are checked against its roads and
 //   paces, corrections go into the next note, and /route plans a journey.
 // - Optionally, a capture call (a model of its own) writes a reply's change lines when the
@@ -22,8 +22,12 @@
 //   secrets. A plan waits in the tab for the reader unless they chose to skip review.
 // - Planned fights (a record with an `encounter`) are only stored, scheduled and handed over:
 //   globalThis.StoryDirector.encountersAt tells RPG Battle which ones the story has reached.
+// - Story Suite (src/suite.js, docs/STORY_SUITE.md): while it tracks the story, Story Director
+//   announces itself for the calendar, the timeline and NPCs. When NPC State Delta is the
+//   source of truth for who an NPC is, agenda lines are asked for plans and timing only.
+//   Alone, everything works as before.
 
-import { PRESETS, makeCalendar, normalizeCalendar } from './src/calendar.js';
+import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
 import { activeRecords, emptyTracker, replay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
@@ -40,6 +44,7 @@ import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, sum
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
+import { isSourceOfTruth, storySuite } from './src/suite.js';
 
 const VERSION = '0.8.0';
 const SETTINGS_KEY = 'storyDirector';
@@ -50,6 +55,9 @@ const QUESTS_TAB_ID = 'story-director-quests';
 const EXTENSION_PROMPT_IN_CHAT = 1;
 const EXTENSION_PROMPT_ROLE_SYSTEM = 0;
 const MIN_STORY_BLOCK_API = 1;
+// Story Suite: who we are, and the areas we can be the source of truth for.
+const SUITE = Object.freeze({ id: 'story-director', name: 'Story Director', areas: Object.freeze(['calendar', 'timeline', 'npc']) });
+const SOURCE_CHOICES = ['auto', 'mine', 'theirs'];
 
 const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
@@ -67,6 +75,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
     // How to read map coordinates: which way north and east run, km per unit, road winding.
     map: DEFAULT_MAP,
+    // Per Story Suite area: 'auto' (the suite's order), 'mine' or 'theirs'.
+    sourceOfTruth: Object.freeze({ calendar: 'auto', timeline: 'auto', npc: 'auto' }),
 });
 
 let initialized = false;
@@ -140,8 +150,14 @@ function settings(ctx = context()) {
         arc: { ...DEFAULT_SETTINGS.arc, ...(saved.arc && typeof saved.arc === 'object' ? saved.arc : {}) },
         capture: { ...DEFAULT_SETTINGS.capture, ...(saved.capture && typeof saved.capture === 'object' ? saved.capture : {}) },
         map: mapSettings(saved.map),
+        sourceOfTruth: sourceChoices(saved.sourceOfTruth),
     };
     return store[SETTINGS_KEY];
+}
+
+function sourceChoices(saved) {
+    const given = saved && typeof saved === 'object' ? saved : {};
+    return Object.fromEntries(SUITE.areas.map(area => [area, SOURCE_CHOICES.includes(given[area]) ? given[area] : 'auto']));
 }
 
 function saveSettings(ctx = context()) {
@@ -383,7 +399,7 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
         const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
         // With capture writing every reply's changes, the model is not asked to.
         const instructionless = settings(ctx).capture.mode === 'always' ? { instruction: '' } : {};
-        const note = buildNote(selection, { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, ...instructionless });
+        const note = buildNote(selection, { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), ...instructionless });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -397,10 +413,19 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
 
 globalThis.storyDirectorInterceptor = onGenerationInterceptor;
 
-// A small read-only API for other extensions (RPG Battle recovers HP with story time).
-globalThis.StoryDirector = Object.freeze({
+// A small read-only API for other extensions (RPG Battle recovers HP with story time). The
+// same object is what Story Director shares through the Story Suite.
+const API = Object.freeze({
     apiVersion: 1,
     get version() { return VERSION; },
+    /** The reader's calendar, `{ era, months: [{ name, days }] }` as plain copies (Gregorian until set). */
+    calendar() {
+        try {
+            return sharedCalendar(settings().calendar);
+        } catch {
+            return sharedCalendar(DEFAULT_SETTINGS.calendar);
+        }
+    },
     /** The story time (minutes on the reader's calendar) known at message `index`, or null. */
     timeAt(index) {
         try {
@@ -442,6 +467,64 @@ globalThis.StoryDirector = Object.freeze({
         }
     },
 });
+globalThis.StoryDirector = API;
+
+// ---------------------------------------------------------------------------
+// Story Suite: working alone and together (docs/STORY_SUITE.md)
+
+// What was last announced ('' = withdrawn), so the same state is never announced twice: every
+// announcement wakes every extension's listener.
+let announced = null;
+let suiteWatched = false;
+
+/**
+ * Offered while the story is tracked (the switch on, Story Block there): the calendar, the
+ * timeline and NPCs, except an area the reader gave to "the other one", so the others take it
+ * on Automatic. Withdrawn when tracking is off.
+ */
+function announceToSuite() {
+    try {
+        const own = settings();
+        const active = own.enabled && Boolean(storyBlock());
+        const owns = active ? SUITE.areas.filter(area => own.sourceOfTruth[area] !== 'theirs') : [];
+        const key = active ? `on:${owns.join(',')}` : '';
+        if (key === announced) return;
+        announced = key;
+        if (active) storySuite().announce({ id: SUITE.id, name: SUITE.name, version: VERSION, owns, api: API });
+        else storySuite().withdraw(SUITE.id);
+    } catch (error) {
+        console.warn('[Story Director] could not announce to the Story Suite', error);
+    }
+}
+
+/** Whether Story Director is the source of truth for `area`; true alone, and on any failure. */
+function isSource(area, own = settings()) {
+    try {
+        return isSourceOfTruth(SUITE.id, area, own.sourceOfTruth?.[area] ?? 'auto');
+    } catch {
+        return true;
+    }
+}
+
+function otherSuiteNames() {
+    try {
+        return storySuite().providers().filter(provider => provider.id !== SUITE.id && provider.enabled).map(provider => String(provider.name || provider.id));
+    } catch {
+        return [];
+    }
+}
+
+// The note, the planner and the mirror ask isSource when they run, so only the settings'
+// list of who is here needs a refresh. Nothing here announces: that would wake everyone again.
+function watchSuite() {
+    if (suiteWatched) return;
+    try {
+        storySuite().onChange(() => settingsPanel?.setOthers?.(otherSuiteNames()));
+        suiteWatched = true;
+    } catch (error) {
+        console.warn('[Story Director] could not join the Story Suite', error);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // After a reply: checks and the Off-Screen mirror
@@ -480,7 +563,8 @@ async function onReply({ messageIndex }) {
                 : serious.slice(0, 3).map(finding => finding.message).join(' · ');
             notify('warning', message);
         }
-        if (settings(ctx).mirrorOffscreen) await mirror(index, after);
+        // Not while another extension keeps the timeline: its own Off-Screen list is the truth.
+        if (settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx))) await mirror(index, after);
         // After the mirror: it rewrites the reply's scene block, which changes its signature.
         lastFindingsKey = findingsKey(index);
         if (settings(ctx).arc.trigger === 'auto') void maybePlanAutomatically(after);
@@ -713,6 +797,7 @@ async function planArc({ reason = 'manual' } = {}) {
             directorNote: own.arc.note,
             genre: own.arc.genre,
             previousArc: previous ? `${previous.key}${previous.fields?.desc ? ` — ${previous.fields.desc}` : ''}` : '',
+            npcPlansOnly: !isSource('npc', own),
         }).map(message => ({ ...message, content: subst(message.content) }));
         const answer = await sendToModel(messages, own.arc.model, Number(own.arc.maxTokens) || 1500);
         const plan = parsePlan(answer, { calendar: cal, now });
@@ -799,6 +884,7 @@ async function capture(index) {
         place: scenePlace(sceneText),
         userText: user ? visibleText(user) : '',
         replyText: visibleText(reply),
+        npcPlansOnly: !isSource('npc', own),
     }).map(message => ({ ...message, content: subst(message.content) }));
     reportStatus('Capturing the reply’s changes…');
     try {
@@ -1013,8 +1099,10 @@ function addSettingsPanel(documentRef) {
         blocks: (sb?.listBlocks?.() ?? []).filter(block => block.tag !== BLOCK.tag).map(({ tag, name }) => ({ tag, name })),
         onChange: next => {
             const ctx = context();
-            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) }, capture: { ...DEFAULT_SETTINGS.capture, ...(next.capture ?? {}) } };
+            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) }, capture: { ...DEFAULT_SETTINGS.capture, ...(next.capture ?? {}) }, sourceOfTruth: sourceChoices(next.sourceOfTruth) };
             saveSettings(ctx);
+            // The switch or a source-of-truth choice may change what we offer.
+            announceToSuite();
             // The calendar or the scene block may have changed: every cached replay is stale.
             cache = { chatId: null, entries: [] };
             storyBlock()?.refresh?.();
@@ -1029,6 +1117,7 @@ function addSettingsPanel(documentRef) {
         packSummary: worldPack() ? packSummary(worldPack()) : '',
         onImportPack: importPack,
         onClearPack: clearPack,
+        others: otherSuiteNames(),
     });
     return true;
 }
@@ -1135,6 +1224,8 @@ function registerWithStoryBlock() {
 function ensureUi() {
     const panel = addSettingsPanel(document);
     const linked = registerWithStoryBlock();
+    // Story Block may be late, and the saved settings (the switch) too.
+    announceToSuite();
     if (panel && linked) {
         if (uiRetry) clearTimeout(uiRetry);
         uiRetry = null;
@@ -1175,6 +1266,7 @@ export async function init() {
     setNote('');
     registerEvents();
     registerSlashCommand();
+    watchSuite();
     ensureUi();
     console.info(`[Story Director] v${VERSION} loaded.`);
 }

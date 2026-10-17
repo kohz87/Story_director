@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, DEFAULT_PARTS_OF_DAY, normalizeCalendar, makeCalendar } from '../src/calendar.js';
+import { PRESETS, DEFAULT_PARTS_OF_DAY, normalizeCalendar, makeCalendar, sharedCalendar } from '../src/calendar.js';
 
 const MONTHS = [
     'Dawnwane', 'Rainmoot', 'Greengale', 'Highsun', 'Goldwane', 'Haywane',
@@ -279,4 +279,28 @@ test('leap years can be switched on for a custom calendar', () => {
     assert.equal(c.daysInMonth(612, 1), 31);
     assert.equal(c.parse('Rainmoot 31, 612').day, 31);
     assert.equal(c.parse('Rainmoot 31, 611'), null);
+});
+
+test('sharedCalendar: era and months as plain copies, for StoryDirector.calendar()', () => {
+    const greg = sharedCalendar(PRESETS.gregorian);
+    assert.deepEqual(Object.keys(greg), ['era', 'months']);
+    assert.equal(greg.era, '');
+    assert.equal(greg.months.length, 12);
+    assert.deepEqual(greg.months[0], { name: 'January', days: 31 });
+    assert.deepEqual(greg.months[1], { name: 'February', days: 28 });
+    greg.months[0].name = 'Changed';
+    greg.months.push({ name: 'Extra', days: 1 });
+    assert.equal(PRESETS.gregorian.months[0].name, 'January', 'the preset is untouched');
+    assert.equal(sharedCalendar(PRESETS.gregorian).months.length, 12);
+
+    const settings = { preset: 'custom', era: ' CY ', months: [{ name: 'Dawnwane', days: 30 }, { name: 'Haywane', days: 31, extra: 'kept out' }], daysPerMonth: 30, partsOfDay: { dawn: '05:00' } };
+    const shared = sharedCalendar(settings);
+    assert.deepEqual(shared, { era: 'CY', months: [{ name: 'Dawnwane', days: 30 }, { name: 'Haywane', days: 31 }] });
+    shared.months[1].days = 2;
+    assert.equal(settings.months[1].days, 31, "the reader's settings are untouched");
+    assert.ok(!Object.isFrozen(shared.months[0]), 'plain objects the caller may change');
+
+    // A world pack's shape (bare names, days_per_month) reads the same.
+    assert.deepEqual(sharedCalendar({ era: 'AR', days_per_month: 28, months: ['Solmonth', 'Lunmonth'] }),
+        { era: 'AR', months: [{ name: 'Solmonth', days: 28 }, { name: 'Lunmonth', days: 28 }] });
 });
