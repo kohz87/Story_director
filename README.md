@@ -450,3 +450,7 @@ npm test        # node:test suites
 ## License
 
 GPL-3.0.
+
+## Credits
+
+With thanks to [Arif-salah](https://github.com/Arif-salah).
