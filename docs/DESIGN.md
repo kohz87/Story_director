@@ -1,6 +1,6 @@
 # Story Director: design
 
-Status: **draft for review** · target first release 0.1.0
+Status: **accepted** · first release 0.1.0 (see section 13 for the review decisions)
 
 Story Director is a SillyTavern extension that keeps a story's world moving consistently. It
 **tracks** off-screen agendas, world events, hooks, clocks and travel; it **checks** dates
@@ -115,8 +115,9 @@ writer_state and the Story_Tracker.
 
 ### 3.4 Dormant shelf
 
-A record goes **dormant** when it has not been relevant (see 4.2) for N replies (default 12)
-and nothing about it is due within D days (default 3). Dormant records are not injected and
+A record goes **dormant** when it has not been seen (mentioned or changed) for N replies
+(default 15) **or** for M story days (default 30), and nothing about it is due within D days
+(default 3). All three are adjustable. Dormant records are not injected and
 cost nothing. One comes back automatically when:
 
 - its key, place or people appear in the scene or the player's message;
@@ -149,7 +150,7 @@ A record is relevant when, in order of priority:
 4. its key or people appear in the scene block or the last two messages;
 5. it changed in the last few replies.
 
-Highest first until the budget is spent (default 600 tokens, about 12 records). Secrets are
+Highest first until the budget is spent (default 1000 tokens, adjustable). Secrets are
 never listed as facts; their keys only appear under "Do not reveal".
 
 ### 4.3 The note
@@ -194,6 +195,9 @@ Write changes in <Director> (+ new, ~ change, - resolve, ! fired).
 - **Stalled:** no beat is due within the next N story days (default 7) and the reader
   allows automatic replanning.
 - **Never** on an ordinary reply. Ordinary replies only track.
+
+The reader picks the trigger: **manual** (Plan arc / End arc buttons only) or **automatic**
+(at arc end and when stalled, as above, plus the buttons).
 
 ### 5.2 Model
 
@@ -310,7 +314,7 @@ needs nothing until it chooses to read Director's records.
 
 - **NPC State Delta** reads `Off-Screen` and `NPCs Present` from the World_State block. Until
   it reads Director directly, Director can mirror its active agendas as an `Off-Screen`
-  section in the stored block (setting, on by default).
+  section in the stored block (a toggle, on by default).
 - **World State Alpha:** turn it off when Director is on; the two would inject overlapping
   notes.
 - **Megumin Suite's Story Director:** turn it off; Director replaces it.
@@ -325,10 +329,11 @@ needs nothing until it chooses to read Director's records.
 | 0.4 | Arc planning: model choice, Director's note, genre, triggers, plan review |
 | 0.5 | Optional: a capture call on a chosen model for writers too weak to emit change lines; World State Alpha import |
 
-## 13. Open questions for review
+## 13. Review decisions
 
-1. **Change-line block name:** `<Director>`, or something else?
-2. **Default injection budget:** 600 tokens (about 12 records)?
-3. **Dormant thresholds:** 12 replies unseen and nothing due within 3 days?
-4. **Arc planning trigger default:** manual only, or automatic at arc end?
-5. **Mirror Off-Screen for NPC State Delta:** on by default?
+1. Change-line block: `<Director>`.
+2. Injection budget: 1000 tokens to start, adjustable.
+3. Dormant: unseen for 15 replies or 1 story month (30 days), nothing due within 3 days; all
+   adjustable.
+4. Arc planning trigger: both, the reader chooses manual or automatic.
+5. Off-Screen mirror for NPC State Delta: on by default, with a toggle.
