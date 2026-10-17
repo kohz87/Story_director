@@ -210,23 +210,38 @@ function renderNow(timeText, place) {
     return list;
 }
 
+// Notes (severity info, or one the contract does not name) are harmless: they fold away under
+// one "Notes" fold, so errors and warnings read first and alone.
+function isNote(finding) {
+    return finding.severity === 'info' || !SEVERITIES.some(group => group.severity === finding.severity);
+}
+
+function problemList(items) {
+    return el('ul', { className: 'story-director-problem-list' }, items.map(finding => el('li', { className: 'story-director-problem' }, [
+        finding.key ? el('span', { className: 'story-director-problem-key', text: finding.key }) : null,
+        el('span', { className: 'story-director-problem-text', text: finding.message ?? '' }),
+        finding.kind ? el('code', { className: 'story-director-problem-kind', text: finding.kind }) : null,
+    ])));
+}
+
 function renderProblems(findings) {
-    const groups = SEVERITIES.map(group => ({ ...group, items: findings.filter(finding => finding?.severity === group.severity) }));
-    // A severity the contract does not name still shows, with the notes.
-    const known = new Set(SEVERITIES.map(group => group.severity));
-    groups[2].items.push(...findings.filter(finding => finding && !known.has(finding.severity)));
-    const shown = groups.filter(group => group.items.length);
-    if (!shown.length) return null;
+    const present = findings.filter(Boolean);
+    const notes = present.filter(isNote);
+    const groups = SEVERITIES.filter(group => group.severity !== 'info')
+        .map(group => ({ ...group, items: present.filter(finding => finding.severity === group.severity) }))
+        .filter(group => group.items.length);
+    if (!groups.length && !notes.length) return null;
+    const serious = groups.reduce((sum, group) => sum + group.items.length, 0);
+    const notesGroup = SEVERITIES.find(group => group.severity === 'info');
     return section('is-problems', [
-        sub('Problems', 'fa-stethoscope', shown.reduce((sum, group) => sum + group.items.length, 0)),
-        ...shown.map(group => el('div', { className: `story-director-problems is-${group.severity}` }, [
+        serious ? sub('Problems', 'fa-stethoscope', serious) : null,
+        ...groups.map(group => el('div', { className: `story-director-problems is-${group.severity}` }, [
             el('div', { className: 'story-director-problems-label' }, [icon(group.icon), el('span', { text: group.label })]),
-            el('ul', { className: 'story-director-problem-list' }, group.items.map(finding => el('li', { className: 'story-director-problem' }, [
-                finding.key ? el('span', { className: 'story-director-problem-key', text: finding.key }) : null,
-                el('span', { className: 'story-director-problem-text', text: finding.message ?? '' }),
-                finding.kind ? el('code', { className: 'story-director-problem-kind', text: finding.kind }) : null,
-            ]))),
+            problemList(group.items),
         ])),
+        notes.length ? fold('is-notes', notesGroup.label, notesGroup.icon, notes.length, () => [
+            el('div', { className: 'story-director-problems is-info' }, [problemList(notes)]),
+        ]) : null,
     ]);
 }
 
@@ -446,7 +461,9 @@ function renderPlaces({ book, map = null, formatTime = null } = {}) {
 function countsOf(selection, findings) {
     const tracked = ['due', 'arriving', 'dormant'].reduce((sum, list) => sum + nonSecret(selection?.[list]).length, 0)
         + nonSecret((selection?.relevant ?? []).map(entry => entry?.record ?? entry)).length;
-    return { due: nonSecret(selection?.due).length + nonSecret(selection?.arriving).length, tracked, problems: findings.length };
+    // Notes are not problems: the lock counts errors and warnings only.
+    const problems = findings.filter(finding => finding && !isNote(finding)).length;
+    return { due: nonSecret(selection?.due).length + nonSecret(selection?.arriving).length, tracked, problems };
 }
 
 function renderLock(counts, onReveal) {

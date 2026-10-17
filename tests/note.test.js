@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote, noteParts, noteTokens } from '../src/note.js';
+import { CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NOTE_PART_WORDS, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote, notePart, noteParts, noteTokens } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -366,4 +366,52 @@ test('noteTokens: input per part at about 4 characters a token, output only for 
     assert.ok(captured.input > 0);
     assert.equal(noteTokens(parts, { outputTokens: 90 }).output, 90);
     for (const nothing of [[], null, undefined, 'x', [null, { label: 'Header', text: '' }]]) assert.deepEqual(noteTokens(nothing), { input: 0, output: 0, parts: [] });
+});
+
+// v0.8.4: long parts are trimmed in the note only.
+
+const LONG_GOAL = 'collect the bond from the widow at the mill before the river guild hears of it and sends its own collectors to the door';
+const LONG_NOW = 'waits in the back room of the Gilded Eel with two hired knives and a ledger of every debt owed';
+
+test('notePart: short parts unchanged, long ones cut at a word boundary with an ellipsis', () => {
+    assert.equal(notePart('  files the warrant ', 'then'), 'files the warrant');
+    assert.equal(notePart('', 'now'), '');
+    assert.equal(notePart(null, 'goal'), '');
+    assert.deepEqual([NOTE_PART_WORDS.now, NOTE_PART_WORDS.then, NOTE_PART_WORDS.goal, NOTE_PART_WORDS.desc], [12, 12, 16, 16]);
+    // Exactly at the limit is kept whole.
+    const twelve = 'one two three four five six seven eight nine ten eleven twelve';
+    assert.equal(notePart(twelve, 'now'), twelve);
+    assert.equal(notePart(`${twelve} thirteen`, 'now'), `${twelve}…`);
+    assert.equal(notePart(LONG_NOW, 'now'), 'waits in the back room of the Gilded Eel with two hired…');
+    assert.equal(notePart(LONG_GOAL, 'goal'), 'collect the bond from the widow at the mill before the river guild hears of it…');
+    // A field the table does not name gets 16 words.
+    assert.equal(notePart(LONG_GOAL, 'mood').split(' ').length, 16);
+    // Trailing punctuation goes before the ellipsis.
+    assert.equal(notePart('a, b, c, d, e, f, g, h, i, j, k, l, m', 'now'), 'a, b, c, d, e, f, g, h, i, j, k, l…');
+    // A cut never leaves a bracket open when words are left before it.
+    assert.equal(notePart('meets the envoy at the old bridge near the (Lord Warden of the Eastern March) tomorrow', 'now'), 'meets the envoy at the old bridge near the…');
+});
+
+test('long parts are trimmed in the note and its token count, never in the record', () => {
+    const collector = record({ key: 'Bond collector', fields: { now: LONG_NOW, then: 'calls on the widow', on: 'Goldwane 17' } });
+    const bond = record({ key: 'The bond', kind: 'quest', fields: { goal: LONG_GOAL, giver: 'Warden Hale', reward: '40 crowns', type: 'contract' } });
+    const longHook = record({ key: 'River stranger', kind: 'hook', fields: { desc: LONG_GOAL } });
+    const due = record({ key: 'Widow\'s mill', kind: 'clock', fields: { desc: LONG_GOAL, due: 'Goldwane 16' } });
+    const parts = noteParts(selection({ due: [due], relevant: [collector, bond, longHook] }), { calendar });
+    const note = parts.map(entry => entry.text).join('\n');
+    const trimmedGoal = 'collect the bond from the widow at the mill before the river guild hears of it…';
+    assert.ok(lines(note).includes('Off-screen: Bond collector — waits in the back room of the Gilded Eel with two hired… → calls on the widow (Goldwane 17)'));
+    assert.ok(lines(note).includes(`Quests: The bond (contract) — ${trimmedGoal} · for Warden Hale · 40 crowns`));
+    assert.ok(lines(note).includes(`Hooks: River stranger — ${trimmedGoal}`));
+    assert.ok(lines(note).includes(`Due now: Widow's mill — ${trimmedGoal} (Goldwane 16)`));
+    assert.ok(!note.includes('ledger of every debt'));
+    assert.ok(!note.includes('its own collectors'));
+    // The token count is the trimmed note's.
+    assert.equal(noteTokens(parts).input, parts.reduce((sum, entry) => sum + estimateTokens(entry.text), 0));
+    assert.equal(buildNote(selection({ due: [due], relevant: [collector, bond, longHook] }), { calendar }), note);
+    // The records are untouched.
+    assert.equal(collector.fields.now, LONG_NOW);
+    assert.equal(bond.fields.goal, LONG_GOAL);
+    // Short parts are written as before.
+    assert.ok(lines(buildNote(selection({ relevant: [geva] }), { calendar })).includes('Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17)'));
 });

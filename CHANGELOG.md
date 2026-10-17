@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.4
+
+Long parts trimmed in the note, notes folded. The Director tab filled with harmless `long-part` notes ("The bond: goal has 27 words (keep parts to 12)"), while the full text was repeated in the note before every reply.
+
+- **Trimmed in the note, kept in the tracker:** each record part the note writes runs to at most 12 words for what a record is doing and when (`now`, `then`, `on`, `due`, `arrive`) and 16 for what it is (`desc`, a quest's `goal`, `step`, `giver`, `reward`, a fight's foes, and any other part), then ends in "…" at a word boundary, before an unclosed bracket when words are left. The tracker, the Director and Quests tabs, `questsDoneAt`, `encountersAt`, and the planner's and capture's view of the tracker keep every word; `api.manage.tokens()` counts the trimmed note.
+- **No more `long-part` findings:** the note no longer pays for long parts, so they are not reported.
+- **Notes fold away:** in the Director tab, findings of severity info (a near key, a record added from a `~`, something still due, a date in prose, a duplicate add, a reopened record, …) sit in one closed **Notes** fold with their count; errors and warnings stay in view under **Problems**, counted alone. The hidden tab's counts and the toast after a reply name errors and warnings only (the toast already did).
+- **API (pure, `src/note.js`):** `NOTE_PART_WORDS` and `notePart(text, field)`.
+
 ## 0.8.3
 
 Changes to untracked keys are matched, added or corrected. A `~ Footing in Bluewatch — …` for a record tracked as *Footing at Bluewatch* (or never added with `+`) used to be dropped with an `unknown-key` warning the model never saw, so it kept writing it.

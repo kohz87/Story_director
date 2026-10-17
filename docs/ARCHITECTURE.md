@@ -262,7 +262,18 @@ export function buildNote(selection, { calendar, budgetTokens = 1000, correction
 export function noteParts(selection, sameOptions) → [{ label, text, join }]   // v0.8.2
 export const DIRECTOR_OUTPUT_TOKENS = 60;                                    // v0.8.2
 export function noteTokens(parts, { outputTokens = DIRECTOR_OUTPUT_TOKENS } = {}) → { input, output, parts: [{ label, input, output }] }
+export const NOTE_PART_WORDS;     // v0.8.4: { now, then, on, due, arrive: 12; desc, goal, step, reward, giver, encounter, type, shown: 16 }
+export function notePart(text, field) → string                              // v0.8.4
 ```
+
+(v0.8.4) Every record part the note writes (the Arc's desc, Due now, Arriving, the kind lines,
+quests, the `fight:` foes) goes through `notePart`: trimmed, and when it has more words
+(whitespace-separated) than `NOTE_PART_WORDS[field]` (16 for a field not listed), cut after that
+many with `…`; a cut that leaves a `(` or `[` open goes back to before that word when words are
+left, and trailing `,;:` and dashes are dropped. Keys are never cut; a `leg` is read whole (only
+its destination is shown). The records are not changed, so the tabs, `encountersAt`,
+`questsDoneAt`, `summarizeTracker` (planner and capture) keep the full text, and `noteParts` /
+`noteTokens` (`api.manage.tokens()`) count the trimmed note.
 
 (v0.8.2) `buildNote` is `noteParts` joined (each part's `join`, `'\n'` or `' '` for the
 Encounter cue on the Pacing line, goes before its text). Labels, in order: Header, Arc, Due
@@ -311,8 +322,8 @@ Kinds: `unknown-key`, `duplicate-add`, `reopened` (passed through from `applyPro
 `parse` (one per parse error, warn); `unfired` (info: due in `before`, still due in `after`
 and not touched by `ops`); `missed` (warn: due more than 1 day before `now` and untouched);
 `date-in-text` (info: a calendar date inside `now`/`then`/`desc` of a record changed by `ops`);
-`long-part` (info: a field of a changed record over 12 words); `no-block` (info: `hadBlock`
-false while something was due).
+`no-block` (info: `hadBlock` false while something was due). (`long-part` is gone in v0.8.4:
+the note trims long parts itself.)
 
 ## `src/routes.js` (v0.3): world packs and travel maths
 
@@ -645,8 +656,12 @@ records by kind (Off-screen, World, Hooks, Clocks, Beats), each with its key and
 (now/then/on/due/leg/arrive/encounter/desc, like Story Block's scene facts; a record with an
 `encounter` also has a `fight` tag in its head) and a pin toggle calling
 `onPin(id, pinned)`; **Dormant** (folded `<details>` with a count); **Do not reveal** (folded,
-content added only when opened); **Resolved recently** (folded); **Problems** (findings,
-grouped by severity). Empty state: "Nothing tracked yet." plus a **Seed from World State**
+content added only when opened); **Resolved recently** (folded); **Problems** (findings:
+errors, then warnings, each in its own box under a "Problems" heading counting them; then
+(v0.8.4) every `info` finding, and any severity the contract does not name, in one closed
+**Notes** fold, `details.story-director-fold.is-notes` with its count, remembered open for the
+session like the other folds; with only notes, the fold alone). The lock's counts name errors
+and warnings only, as does the toast after a reply. Empty state: "Nothing tracked yet." plus a **Seed from World State**
 button when `canSeed`.
 
 ## `index.js` (SillyTavern glue, written last)
