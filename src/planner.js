@@ -19,6 +19,7 @@ export const DEFAULT_PLANNER_PROMPT = `You are the showrunner of an ongoing stor
 - Build from what is already there. Pull dropped threads, unpaid debts, broken promises, rumours and characters who were mentioned but never seen back into play. Paying off what exists beats inventing something new.
 - Make consequences real. What {{user}} and others have done comes back, on a schedule.
 - Give the arc a shape: pressure that builds, a turn, and a point where it comes to a head. Leave the outcome open for {{user}} to change.
+- Leave room: beats are when the world acts, not appointments for {{user}}. Each must work without {{user}} present (heard of, or met as aftermath), and may slip.
 - Protect secrets. Write every secret you create as a SECRET line. The storyteller hints and never tells until the story earns the reveal.
 - Respect time and distance. Nobody is in two places at once, and travel takes time.
 - Match the genre and tone. Follow the reader's note when there is one.

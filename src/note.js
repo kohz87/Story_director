@@ -18,6 +18,15 @@ export const CHANGE_INSTRUCTION = [
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
+// How a schedule meets a scene, about 70 tokens; only when something is scheduled. Without
+// it a model handed "Due now: the warrant is filed" tends to stop the scene and stage it.
+export const PACING = [
+    'Pacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath.',
+    'Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later).',
+].join(' ');
+// The same, when a capture call writes the changes and the model writes none.
+export const PACING_NO_CHANGES = PACING.replace(/ What cannot fit yet happens off-screen \(!\) or slips \(~ on: later\)\./, ' What cannot fit yet can happen off-screen or later.');
+
 // Kind lines, in the order the note shows them.
 const KIND_LINES = [
     ['agenda', 'Off-screen'],
@@ -69,9 +78,17 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     // Secrets appear by key only, so the note never states them as facts.
     addLine(lines, 'Do not reveal', secrets.map(record => record.key), '; ');
     addLine(lines, 'Corrections', fixes);
+    if (scheduled(selection, due, arriving, relevant)) lines.push(instruction ? PACING : PACING_NO_CHANGES);
     // No instruction when a capture call writes the changes instead of the model.
     if (instruction) lines.push(instruction);
     return lines.join('\n');
+}
+
+// Anything with a date or a plan behind it: an arc, something due or arriving, a beat or a
+// clock, or a record with a next step.
+function scheduled(selection, due, arriving, relevant) {
+    if (selection?.arc || due.length || arriving.length) return true;
+    return relevant.some(({ record }) => record.kind === 'beat' || record.kind === 'clock' || Boolean(record.fields?.then));
 }
 
 function header(selection, calendar) {
