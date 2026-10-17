@@ -41,7 +41,7 @@ test('drawer markup, header and status line', () => {
     assert.equal(status.textContent, 'Tracking 4 records.');
     assert.equal(container.querySelectorAll('#story_director_status').length, 1);
     const groups = container.querySelectorAll('.story-director-group-summary b').map(node => node.textContent);
-    assert.deepEqual(groups, ['Tracking & note', 'Calendar', 'World pack & travel', 'Arc planning', 'Capture', 'Existing chat & compatibility']);
+    assert.deepEqual(groups, ['Tracking & note', 'Calendar', 'Map & travel', 'Arc planning', 'Capture', 'Existing chat & compatibility']);
 });
 
 test('a quick bar on top, folding groups below, only Tracking open at first', () => {
@@ -263,7 +263,7 @@ test('world pack: summary, paste import, clear, and messages', async () => {
         onClearPack: async () => { cleared++; return { summary: '', message: 'Cleared.' }; },
     });
     const map = () => container.querySelector('.story-director-row.is-pack');
-    assert.match(map().textContent, /No world pack/);
+    assert.match(map().textContent, /Roads.*None/);
     assert.equal(container.querySelector('.story-director-pack-clear').disabled, true, 'nothing to clear');
 
     container.querySelector('.story-director-pack-paste').value = '{"places":{}}';
@@ -276,7 +276,7 @@ test('world pack: summary, paste import, clear, and messages', async () => {
     container.querySelector('.story-director-pack-clear').click();
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.equal(cleared, 1);
-    assert.match(map().textContent, /No world pack/);
+    assert.match(map().textContent, /Roads.*None/);
     panel.update({}, { packSummary: '1 place · 0 routes' });
     assert.match(map().textContent, /1 place · 0 routes/);
 });
@@ -312,4 +312,34 @@ test('the spoiler switch sits in the quick bar, on by default', () => {
     guard.checked = false;
     guard.dispatch('change');
     assert.equal(changes.at(-1).spoilerGuard, false);
+});
+
+test('map: north and east, km per unit and road factor, decimals kept and clamped', () => {
+    const changes = [];
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    renderSettings(container, { settings: { map: { north: 'down', kmPerUnit: 10 } }, onChange: next => changes.push(next) });
+    const $ = selector => container.querySelector(selector);
+    assert.equal($('#story_director_map_north').value, 'down');
+    assert.equal($('#story_director_map_east').value, 'right');
+    assert.equal($('#story_director_map_scale').value, '10');
+    assert.equal($('#story_director_map_factor').value, '1.25');
+    assert.ok($('.story-director-group[data-group="pack"] #story_director_map_scale'), 'in Map & travel');
+
+    const north = $('#story_director_map_north');
+    north.value = 'up';
+    north.dispatch('change');
+    assert.equal(changes.at(-1).map.north, 'up');
+    const scale = $('#story_director_map_scale');
+    scale.value = '2.5';
+    scale.dispatch('change');
+    assert.equal(changes.at(-1).map.kmPerUnit, 2.5);
+    const factor = $('#story_director_map_factor');
+    factor.value = '9';
+    factor.dispatch('change');
+    assert.equal(changes.at(-1).map.roadFactor, 3, 'clamped');
+    assert.equal(factor.value, '3');
+    factor.value = 'abc';
+    factor.dispatch('change');
+    assert.equal(factor.value, '3', 'not a number keeps the old value');
 });

@@ -443,3 +443,30 @@ test('an opened fold stays open when the tab redraws; secrets close again', () =
     reopened.dispatch('toggle');
     assert.equal(render().querySelector('details.is-dormant').open, false);
 });
+
+test('places: a fold with a map, distances from here, and shown even while hidden', async () => {
+    const { buildPlaceBook } = await import('../src/places.js');
+    const book = buildPlaceBook([
+        { message: 1, time: 10, text: 'Shorn | Gate | [0, 0]' },
+        { message: 3, time: 20, text: 'Mill | Wheelhouse | [3, 4]' },
+    ]);
+    const places = { book, map: { kmPerUnit: 10, north: 'up' }, formatTime: time => `t${time}` };
+    const pane = render({ places });
+    const fold = pane.querySelector('details.story-director-fold.is-places');
+    assert.equal(subText(fold.querySelector('summary')), 'Places');
+    assert.equal(fold.querySelector('summary .story-director-count').textContent, '2');
+    assert.ok(fold.querySelector('.story-director-map'), 'a map');
+    assert.equal(fold.querySelectorAll('.story-director-map-dot.is-here').length, 1);
+    const items = fold.querySelectorAll('.story-director-record.is-place');
+    assert.deepEqual(items.map(item => item.querySelector('.story-director-record-key').textContent), ['Mill', 'Shorn']);
+    assert.ok(items[0].classList.contains('is-here'));
+    assert.deepEqual(facts(items[1]), [['map', '0, 0'], ['from here', '50 km SW'], ['visits', '1 · last t10'], ['spots', 'Gate']]);
+
+    const locked = render({ places, spoiler: { locked: true, onReveal() {} } });
+    assert.ok(locked.querySelector('details.is-places'), 'where the story has been is no secret');
+
+    const plain = render({ places: { book: buildPlaceBook([{ message: 1, text: 'Heron Ford | Camp' }]) } });
+    assert.equal(plain.querySelector('.story-director-map'), null);
+    assert.match(plain.querySelector('.story-director-places-hint').textContent, /No map coordinates yet/);
+    assert.equal(render({ places: { book: buildPlaceBook([]) } }).querySelector('.is-places'), null);
+});

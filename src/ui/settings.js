@@ -23,6 +23,7 @@ const DEFAULTS = {
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
     arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
     capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
+    map: { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25 },
 };
 
 // Bounds for the number fields; a value outside them is clamped, not rejected.
@@ -153,6 +154,7 @@ function complete(settings) {
     const calendar = given.calendar && typeof given.calendar === 'object' ? given.calendar : {};
     const arc = given.arc && typeof given.arc === 'object' ? given.arc : {};
     const capture = given.capture && typeof given.capture === 'object' ? given.capture : {};
+    const map = given.map && typeof given.map === 'object' ? given.map : {};
     // structuredClone so nothing the panel later changes reaches the caller's object,
     // including fields this panel does not know about (partsOfDay, a newer version's keys).
     return structuredClone({
@@ -168,6 +170,7 @@ function complete(settings) {
         },
         arc: { ...DEFAULTS.arc, ...arc, model: arc.model && typeof arc.model === 'object' ? { ...arc.model } : { ...DEFAULTS.arc.model } },
         capture: { ...DEFAULTS.capture, ...capture, model: capture.model && typeof capture.model === 'object' ? { ...capture.model } : { ...DEFAULTS.capture.model } },
+        map: { ...DEFAULTS.map, ...map },
     });
 }
 
@@ -343,6 +346,43 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
 
     // The world pack is the reader's map: it lives beside the settings, not inside them, so
     // importing goes through its own callbacks and never through onChange.
+    // How map coordinates read; with them the story's places get distances without a pack.
+    function renderMapSettings() {
+        const map = current.map;
+        const north = select('story_director_map_north', [
+            { value: 'up', label: 'Up: y grows to the north (a chart)' },
+            { value: 'down', label: 'Down: y grows to the south (an image)' },
+        ], map.north === 'down' ? 'down' : 'up');
+        north.addEventListener('change', () => commit(next => { next.map.north = north.value === 'down' ? 'down' : 'up'; }));
+        const east = select('story_director_map_east', [
+            { value: 'right', label: 'Right: x grows to the east' },
+            { value: 'left', label: 'Left: x grows to the west' },
+        ], map.east === 'left' ? 'left' : 'right');
+        east.addEventListener('change', () => commit(next => { next.map.east = east.value === 'left' ? 'left' : 'right'; }));
+        const decimal = (id, key, value, [min, max], step) => {
+            const input = el('input', { className: 'text_pole story-director-input story-director-number', attrs: { id, min: String(min), max: String(max), step: String(step), inputmode: 'decimal' } });
+            input.type = 'number';
+            input.value = String(value);
+            input.addEventListener('change', () => {
+                const number = Number(String(input.value).trim());
+                const kept = Number.isFinite(number) && String(input.value).trim() !== '' ? Math.min(max, Math.max(min, number)) : current.map[key];
+                input.value = String(kept);
+                if (kept !== current.map[key]) commit(next => { next.map[key] = kept; });
+            });
+            return input;
+        };
+        const scale = decimal('story_director_map_scale', 'kmPerUnit', map.kmPerUnit, [0.001, 100000], 'any');
+        const factor = decimal('story_director_map_factor', 'roadFactor', map.roadFactor, [1, 3], 0.05);
+        return [
+            el('p', { className: 'story-director-group-note', text: 'Places come from the scene\'s location as the story goes (Director tab → Places). When the location carries coordinates, like "Auvoth | Terrace | [59.0, 110.0]", they go on a map with distances, and /route estimates trips between them. No world pack needed.' }),
+            row('North is', 'Which way the y coordinate runs.', north, { id: 'story_director_map_north', wide: true }),
+            row('East is', 'Which way the x coordinate runs.', east, { id: 'story_director_map_east', wide: true }),
+            row('km per unit', 'How far one coordinate unit is.', scale, { id: 'story_director_map_scale' }),
+            row('Road factor', 'Roads wind: straight-line km × this for trips over land.', factor, { id: 'story_director_map_factor' }),
+            sectionHead('World pack (optional)'),
+        ];
+    }
+
     function renderPack() {
         const message = el('div', { className: 'story-director-pack-message', attrs: { 'aria-live': 'polite' } });
         const report = result => {
@@ -377,7 +417,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         if (!summary) clear.disabled = true;
 
         return [
-            row('Map', summary ? `Loaded: ${summary}. Travel legs are checked, and /route works.` : 'No world pack: travel is not checked. Import places, routes and paces as JSON.', clear, { className: 'is-action is-pack' }),
+            row('Roads', summary ? `Loaded: ${summary}. Travel legs are checked against its roads, and /route follows them.` : 'None. Only needed for real roads, paces and travel checks; import it as JSON.', clear, { className: 'is-action is-pack' }),
             row('Import a file', 'A world pack JSON (places, edges, pace_km_per_day, travel_rules, calendar).', file, { id: 'story_director_pack_file', wide: true }),
             row('Or paste it', '', el('div', { className: 'story-director-pack-paste-wrap' }, [paste, importButton]), { id: 'story_director_pack_paste', wide: true }),
             message,
@@ -522,7 +562,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             el('div', { className: 'story-director-groups' }, [
                 group('tracking', 'Tracking & note', 'Scene block, note size and the dormant shelf', [...renderTracking(), ...renderDormant()]),
                 group('calendar', 'Calendar', 'Gregorian, or your world’s months and era', renderCalendar()),
-                group('pack', 'World pack & travel', 'Your map: places, roads and paces', renderPack()),
+                group('pack', 'Map & travel', 'Places, coordinates, and an optional world pack', [...renderMapSettings(), ...renderPack()]),
                 group('arc', 'Arc planning', 'When to plan, which model, your Director’s note', renderArc()),
                 group('capture', 'Capture', 'A second model for missing change lines', renderCapture()),
                 group('chat', 'Existing chat & compatibility', 'World State Alpha import, NPC State Delta mirror', [...renderSeed(), ...renderMirror()]),

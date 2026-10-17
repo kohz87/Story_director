@@ -1,12 +1,14 @@
-# Story Director v0.5.4
+# Story Director v0.6.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
 injects a short **note** before every reply with what is due, arriving and relevant to the
 scene. The model writes only what changed; nothing it forgets to copy is ever lost.
 
-Works on top of [Story Block](https://github.com/kohz87/Story_block) (0.6 or newer). With a
-**world pack** (your map as JSON) it also checks travel: every leg against the real roads,
+Works on top of [Story Block](https://github.com/kohz87/Story_block) (0.6 or newer). It keeps
+a **place book** of everywhere the story goes, on a map when the scene's location carries
+coordinates, with distances, directions and trip estimates. With a
+**world pack** (your map as JSON, optional) it also checks travel: every leg against the real roads,
 distances and paces, with corrections in the next note and a `/route` planner. And once per
 story arc it **plans** the next arc with a model you choose, the way Megumin Suite's Story
 Director does, but the plan becomes dated, tracked beats instead of a block of prose.
@@ -92,10 +94,45 @@ what your character does, and let what cannot fit happen off-screen or slip to a
 It is injected as a system message at a shallow depth (1 by default), so the cached history in
 front of it is untouched.
 
+## Places and the map
+
+Every reply's World State says where the scene is. Story Director reads it as the story goes
+and keeps a **place book**: each place (the first part of the location, "Auvoth"), the spots
+inside it ("Seventh Seal Terrace"), how often and when the story was there. It is the
+**Places** section of the Director tab, and it is shown even while the tab is hidden: you
+were there.
+
+When the location carries **map coordinates**, like
+`**🌤 Loc:** Auvoth | Seventh Seal Terrace | [59.0, 110.0]` (many presets ask for them),
+the places go on a small map, north up, with the distance and direction of each from where
+the scene is now ("136 km NW"). Places within about 100 km count as "here" when the note
+picks what is relevant. Nobody has to write a map file for any of this.
+
+**Settings → Map & travel** says how to read the coordinates:
+
+| Setting | Default | |
+|---|---|---|
+| North is | Up | *Up*: y grows to the north (a chart). *Down*: y grows to the south (an image, where 0,0 is the top left) |
+| East is | Right | Which way x grows |
+| km per unit | 1 | How far one coordinate unit is (a world pack's `scale_km_per_unit` sets it) |
+| Road factor | 1.25 | Roads wind: straight-line km × this for trips over land |
+
+**`/route` without a world pack** estimates from the coordinates:
+
+```
+/route Shorn to Auvoth
+Shorn → Auvoth ≈ 219 km SE (≈ 175 km straight × 1.25) · foot 20/day · 12 days (1 rest) · arrive …
+```
+
+The days follow the same rules as roads: rounded up to the half day, a rest day after every six
+days on land, none for couriers; boats and flight go straight. Paces without a pack: foot 20,
+ride 35, wagon 18, boat 35, courier 70 km a day (or `rate=`).
+
 ## World packs and travel
 
-A world pack is your map as JSON: places, roads (with km and a road code), paces per road and
-mode, and travel rules. Import it under **Settings → World pack** (file or paste). If it brings
+A world pack is optional: it adds real roads. It is your map as JSON: places, roads (with km
+and a road code), paces per road and mode, and travel rules. Import it under **Settings → Map &
+travel → World pack** (file or paste); a pack's place coordinates also fill in the place book. If it brings
 a calendar, you are asked whether to use it.
 
 ```jsonc
@@ -204,7 +241,7 @@ State Alpha off afterwards; the two would inject overlapping notes.
 ## Settings
 
 The panel (Extensions → Story Director) has a quick bar (the on/off switch, **Plan arc**, **Seed
-from World State**) and folding groups: Tracking & note, Calendar, World pack & travel, Arc
+from World State**) and folding groups: Tracking & note, Calendar, Map & travel, Arc
 planning, Capture, and Existing chat & compatibility.
 
 | Setting | Default | |
@@ -217,7 +254,8 @@ planning, Capture, and Existing chat & compatibility.
 | Due soon | 3 days | Anything due this soon is never dormant |
 | Calendar | Gregorian | Or your own months and era |
 | Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for NPC State Delta (once tracking has started) |
-| World pack | none | Your map: places, roads, paces and travel rules, as JSON |
+| Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |
+| World pack | none | Optional roads: places, edges, paces and travel rules, as JSON |
 | Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note, prompt |
 | Capture | off | Off, when a reply has no `<Director>` block, or always; its model and answer length |
 
@@ -225,7 +263,8 @@ planning, Capture, and Existing chat & compatibility.
 
 What is due and arriving, every active record by kind (pin one to keep it in the note), the
 arc and its beats, the dormant shelf, secrets, what was resolved recently, problems with the
-last reply's changes, and the route tool.
+last reply's changes, the places the story has been (with a map when there are coordinates),
+and the route tool.
 
 **Settled** records (World State Alpha's facts, or any record with `settled: yes`) are true
 and going nowhere, so each section folds them into a closed **Settled** fold after its live
@@ -245,6 +284,7 @@ scenes** in the settings' quick bar.
 | 0.3 | World packs (places, routes, paces), travel legs checked and corrected, `/route` and the route tool |
 | 0.4 | Arc planning on a model you choose (a connection profile or the chat's model): manual or automatic; Director's note, genre, review |
 | 0.5 | Capture call on a model you choose (fallback or always); World State Alpha import |
+| 0.6 | Place book from the scene's location, map settings (axes, km per unit, road factor), the Places map, `/route` estimates without a world pack |
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md), the module contract in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

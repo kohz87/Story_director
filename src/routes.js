@@ -46,7 +46,7 @@ const WATER_MODES = ['boat', 'ship'];
 const PACE_KEYS = ['foot', 'ride', 'wagon', 'boat', 'upstream', 'downstream', 'ship', 'vessel', 'flight'];
 const PACE_ALIASES = { downstream_favorable: 'downstream' };
 
-const DEFAULT_RULES = Object.freeze({
+export const DEFAULT_RULES = Object.freeze({
     roundUpTo: 0.5, restDayEvery: 6, crewedWaterRest: false, leveeRoads: [], noLevee: [],
 });
 const DEFAULT_COURIER_MULTIPLIER = 2;
@@ -383,7 +383,7 @@ export function legDays(km, rate, rules = DEFAULT_RULES) {
     return tidy(Math.ceil(km / rate / step - EPSILON) * step);
 }
 
-function restDaysFor(mode, activeDays, rules = DEFAULT_RULES) {
+export function restDaysFor(mode, activeDays, rules = DEFAULT_RULES) {
     const every = rules?.restDayEvery ?? DEFAULT_RULES.restDayEvery;
     if (mode === 'courier' || !(every > 0) || !(activeDays > 0)) return 0;
     if (WATER_MODES.includes(mode) && !rules?.crewedWaterRest) return 0;
