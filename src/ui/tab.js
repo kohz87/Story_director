@@ -18,6 +18,8 @@
 // arrive) for display, e.g. "Goldwane 17 · tomorrow"; a falsy result or a throw keeps
 // the text as written.
 
+import { bearing, distanceKm } from '../places.js';
+
 const KIND_GROUPS = [
     { kind: 'agenda', label: 'Off-screen', icon: 'fa-satellite-dish' },
     { kind: 'event', label: 'World', icon: 'fa-earth-americas' },
@@ -94,8 +96,10 @@ function fold(className, label, iconName, count, fill, { lazy = false } = {}) {
         el('summary', { className: 'story-director-fold-summary' }, [sub(label, iconName, count)]),
         body,
     ]);
+    // A fill may leave gaps (null) for parts it has nothing for; append would print them.
+    const parts = () => fill().filter(Boolean);
     if (!lazy) {
-        body.append(...fill());
+        body.append(...parts());
         if (openFolds.has(className)) details.open = true;
         details.addEventListener('toggle', () => {
             if (details.open) openFolds.add(className);
@@ -103,7 +107,7 @@ function fold(className, label, iconName, count, fill, { lazy = false } = {}) {
         });
     } else {
         details.addEventListener('toggle', () => {
-            if (details.open) body.replaceChildren(...fill());
+            if (details.open) body.replaceChildren(...parts());
             else body.replaceChildren();
         });
     }
@@ -339,6 +343,102 @@ function renderRoute({ places = [], onRoute }) {
 }
 
 // ---------------------------------------------------------------------------
+// Places: where the story has been, from the scene's location, on a small map
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+function svg(tag, attrs = {}, children = []) {
+    const doc = globalThis.document;
+    const node = doc.createElementNS ? doc.createElementNS(SVG, tag) : doc.createElement(tag);
+    for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, String(value));
+    for (const child of children) if (child) node.append(child);
+    return node;
+}
+
+const tidy = value => String(Math.round(value * 100) / 100);
+
+// Coordinates turned so north is up and east is right on screen, whatever the map's own axes.
+function renderMap(places, current, map) {
+    const plotted = places.filter(place => place.coords);
+    if (!plotted.length) return null;
+    const east = map?.east === 'left' ? -1 : 1;
+    const north = map?.north === 'down' ? -1 : 1;
+    const points = plotted.map(place => ({ place, x: place.coords.x * east, y: -place.coords.y * north }));
+    const xs = points.map(point => point.x);
+    const ys = points.map(point => point.y);
+    let [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    // One place, or places in a line, still get a box to sit in.
+    const span = Math.max(maxX - minX, maxY - minY, 1);
+    const pad = span * 0.12;
+    if (maxX - minX < span * 0.3) { const mid = (minX + maxX) / 2; minX = mid - span * 0.15; maxX = mid + span * 0.15; }
+    if (maxY - minY < span * 0.3) { const mid = (minY + maxY) / 2; minY = mid - span * 0.15; maxY = mid + span * 0.15; }
+    const base = Math.max(maxX - minX + pad * 2, maxY - minY + pad * 2);
+    const font = base * 0.045;
+    const radius = base * 0.014;
+    // Room on the right for the labels, which run east of their dots.
+    const box = [minX - pad, minY - pad, maxX - minX + pad * 2 + font * 7, maxY - minY + pad * 2];
+    const visited = points.filter(point => point.place.visits);
+    const drawing = svg('svg', {
+        class: 'story-director-map',
+        viewBox: box.map(tidy).join(' '),
+        preserveAspectRatio: 'xMidYMid meet',
+        role: 'img',
+        'aria-label': `Map of ${visited.length} visited ${visited.length === 1 ? 'place' : 'places'}`,
+    });
+    // Places only a world pack knows: faint dots, no labels, behind the rest.
+    for (const point of points.filter(entry => !entry.place.visits)) {
+        drawing.append(svg('circle', { class: 'story-director-map-dot is-known', cx: tidy(point.x), cy: tidy(point.y), r: tidy(radius * 0.6) }));
+    }
+    for (const point of visited) {
+        const here = point.place.key === current;
+        const dot = svg('circle', { class: `story-director-map-dot${here ? ' is-here' : ''}`, cx: tidy(point.x), cy: tidy(point.y), r: tidy(here ? radius * 1.6 : radius) });
+        const title = svg('title');
+        title.textContent = point.place.name;
+        dot.append(title);
+        const label = svg('text', { class: 'story-director-map-label', x: tidy(point.x + radius * 2), y: tidy(point.y + font * 0.35), 'font-size': tidy(font) });
+        label.textContent = point.place.name;
+        drawing.append(dot, label);
+    }
+    const compass = svg('text', { class: 'story-director-map-north', x: tidy(box[0] + box[2] - font), y: tidy(box[1] + font * 1.2), 'font-size': tidy(font), 'text-anchor': 'middle' });
+    compass.textContent = 'N';
+    drawing.append(compass);
+    return drawing;
+}
+
+function renderPlaces({ book, map = null, formatTime = null } = {}) {
+    const places = (book?.places ?? []).filter(place => place.visits);
+    if (!places.length) return null;
+    const here = places.find(place => place.key === book.current) ?? null;
+    const away = place => {
+        if (!here || place.key === here.key) return '';
+        const km = distanceKm(here, place, map ?? undefined);
+        return km === null ? '' : `${Math.round(km)} km ${bearing(here, place, map ?? undefined)}`.trim();
+    };
+    const items = places.map(place => {
+        const item = el('li', { className: `story-director-record is-place${place.key === book.current ? ' is-here' : ''}` });
+        item.append(el('div', { className: 'story-director-record-head' }, [
+            el('span', { className: 'story-director-record-key', text: place.name }),
+            place.key === book.current ? el('span', { className: 'story-director-tag', text: 'here' }) : null,
+        ]));
+        const facts = el('dl', { className: 'story-director-facts' });
+        const add = (label, value) => { if (value) facts.append(el('dt', { text: label }), el('dd', { text: value })); };
+        add('map', place.coords ? `${tidy(place.coords.x)}, ${tidy(place.coords.y)}${place.coordsFrom === 'pack' ? ' (world pack)' : ''}` : '');
+        add('from here', away(place));
+        const last = typeof formatTime === 'function' && place.lastTime !== null ? formatTime(place.lastTime) : '';
+        add('visits', `${place.visits}${last ? ` · last ${last}` : ''}`);
+        add('spots', place.spots.slice(0, 6).join(' · '));
+        item.append(facts);
+        return item;
+    });
+    const noCoords = !(book.places ?? []).some(place => place.coords);
+    return fold('is-places', 'Places', 'fa-map-location-dot', places.length, () => [
+        renderMap(book.places ?? [], book.current, map),
+        noCoords ? el('p', { className: 'story-director-places-hint', text: 'No map coordinates yet. Ask for them in the scene\'s location (like "Auvoth | Terrace | [59.0, 110.0]") or import a world pack, and these places go on a map with distances.' }) : null,
+        el('ul', { className: 'story-director-records' }, items),
+    ]);
+}
+
+// ---------------------------------------------------------------------------
 // Spoiler guard: the tracker is the story behind the scenes, so it stays hidden until asked
 
 function countsOf(selection, findings) {
@@ -393,7 +493,7 @@ function renderArcLocked({ current = null, beats = null, draft = null, busy = fa
     return section('is-arc', children);
 }
 
-export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null, spoiler = null } = {}) {
+export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null, spoiler = null, places = null } = {}) {
     const root = el('div', { className: 'story-director-tab' });
     const options = { formatDate, onPin };
     const now = renderNow(timeText || '', place || selection?.place || '');
@@ -410,6 +510,9 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
             ]));
         }
         root.append(renderLock(countsOf(selection, list), spoiler.onReveal));
+        // Where the story has been is no secret: the reader was there.
+        const placesFold = places ? renderPlaces(places) : null;
+        if (placesFold) root.append(placesFold);
         if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
         pane.replaceChildren(root);
         return;
@@ -475,6 +578,8 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
 
     const problems = renderProblems(list);
     if (problems) root.append(problems);
+    const placesFold = places ? renderPlaces(places) : null;
+    if (placesFold) root.append(placesFold);
     if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
     pane.replaceChildren(root);
 }

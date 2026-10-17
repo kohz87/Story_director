@@ -293,6 +293,7 @@ export function installFakeDom() {
     const doc = {
         activeElement: null,
         createElement: tag => new FakeElement(doc, tag),
+        createElementNS: (namespace, tag) => new FakeElement(doc, tag),
         createTextNode: text => new FakeText(doc, text),
         querySelectorAll: selector => doc.body.querySelectorAll(selector),
         querySelector: selector => doc.body.querySelector(selector),

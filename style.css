@@ -912,3 +912,45 @@
     margin: 0;
     width: auto;
 }
+
+/* Places: a small map (north up) above the list of places the story has been. */
+.story-director-tab .story-director-map {
+    display: block;
+    width: 100%;
+    max-height: 14rem;
+    margin: 0.2rem 0 0.4rem;
+    border: 1px solid var(--sd-border);
+    border-radius: 6px;
+    background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.story-director-tab .story-director-map-dot {
+    fill: currentColor;
+    opacity: 0.75;
+}
+
+.story-director-tab .story-director-map-dot.is-known {
+    opacity: 0.25;
+}
+
+.story-director-tab .story-director-map-dot.is-here {
+    fill: var(--sd-accent);
+    opacity: 1;
+}
+
+.story-director-tab .story-director-map-label,
+.story-director-tab .story-director-map-north {
+    fill: currentColor;
+    opacity: 0.8;
+}
+
+.story-director-tab .story-director-map-north {
+    font-weight: 700;
+    opacity: 0.5;
+}
+
+.story-director-tab .story-director-places-hint {
+    margin: 0.2rem 0;
+    font-size: 0.85em;
+    opacity: 0.65;
+}

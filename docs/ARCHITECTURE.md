@@ -424,6 +424,26 @@ A `world_state_alpha_bundle`: each active record → `+ event` with key = the su
 clause (≤ 7 words, made unique), `desc` = the summary (unless it is the key), `people` = anchors,
 `extra.trend` for developments, `extra.settled: yes` for facts, `extra.since` = timeAnchor.
 
+## `src/places.js` (v0.6): the place book and map coordinates
+
+```js
+parseLocation(text) → { name, spot, parts, coords: { x, y } | null }   // "Auvoth | Terrace | [59.0, 110.0]"
+buildPlaceBook(visits, { pack }) → { places, current }
+    // visits: [{ message, time, text }] in chat order (the scene's Loc cell per reply).
+    // place: { key, name, coords, coordsFrom: 'story'|'pack'|null, visits, firstTime, lastTime, lastMessage, spots }
+    // A stay over consecutive replies is one visit; the latest coordinates win; a pack fills gaps.
+findBookPlace(book, text) → place | null
+mapSettings(map) → { north: 'up'|'down', east: 'right'|'left', kmPerUnit, roadFactor }
+distanceKm(a, b, map) → number | null            // straight line × kmPerUnit
+bearing(a, b, map) → 'N'…'NW' | ''               // axes from the map settings
+nearbyByCoords(book, place, { maxKm = 100, map }) → places, nearest first
+estimateTrip(from, to, { map, mode, rate, rules }) → { straightKm, roadKm, rate, days, restDays, direction } | null
+formatTrip(trip, { map }) → "Shorn → Auvoth ≈ 219 km SE (≈ 175 km straight × 1.25) · foot 20/day · 12 days (1 rest)"
+```
+
+Land trips take the straight line × `roadFactor`; boats, ships and flight go straight. Days use
+`routes.js`'s `legDays` (half-day round-up) and `restDaysFor`. Pure.
+
 ## `src/ui/settings.js`
 
 ```js

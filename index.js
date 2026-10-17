@@ -36,8 +36,9 @@ import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
+import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 
-const VERSION = '0.5.4';
+const VERSION = '0.6.0';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -60,6 +61,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     calendar: PRESETS.gregorian,
     arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' }),
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
+    // How to read map coordinates: which way north and east run, km per unit, road winding.
+    map: DEFAULT_MAP,
 });
 
 let initialized = false;
@@ -132,6 +135,7 @@ function settings(ctx = context()) {
         calendar: normalizeCalendar(saved.calendar ?? DEFAULT_SETTINGS.calendar),
         arc: { ...DEFAULT_SETTINGS.arc, ...(saved.arc && typeof saved.arc === 'object' ? saved.arc : {}) },
         capture: { ...DEFAULT_SETTINGS.capture, ...(saved.capture && typeof saved.capture === 'object' ? saved.capture : {}) },
+        map: mapSettings(saved.map),
     };
     return store[SETTINGS_KEY];
 }
@@ -234,6 +238,7 @@ function entryFor(message, index, sb, cal, own, reference) {
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
         entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null },
+        location: scene ? headerCell(scene.text, 'loc|location|place') : '',
         hadBlock: Boolean(block),
         parseErrors: parsed.errors,
     };
@@ -268,10 +273,25 @@ function trackerAt(upTo) {
             problems: result.problems,
             hadBlock: read.hadBlock,
             parseErrors: read.parseErrors,
+            location: read.location ? { message: index, time: read.entry.time ?? seed.time ?? null, text: read.location } : null,
         };
     }
     const at = last >= 0 ? cache.entries[last] : null;
     return { tracker: at?.tracker ?? emptyTracker(), problems: at?.problems ?? [], info: at ?? null };
+}
+
+// The place book up to message `upTo`, from the locations the replay cache already read.
+let placeCache = { key: '', book: null };
+function placeBookAt(upTo) {
+    trackerAt(upTo);
+    const last = Math.min(Number(upTo), cache.entries.length - 1);
+    const pack = worldPack();
+    const key = [cache.chatId, last, last >= 0 ? cache.entries[last]?.sig : '', pack ? packSummary(pack) : ''].join('|');
+    if (placeCache.key !== key) {
+        const visits = cache.entries.slice(0, last + 1).map(entry => entry?.location).filter(Boolean);
+        placeCache = { key, book: buildPlaceBook(visits, { pack }) };
+    }
+    return placeCache.book;
 }
 
 function withPins(tracker) {
@@ -296,8 +316,10 @@ function situation(type = 'normal') {
     const now = parsed?.abs ?? tracker.time ?? null;
     const recent = chat.slice(Math.max(0, upTo - 1), upTo + 1).map(visibleText).join('\n');
     const place = scenePlace(sceneText);
-    // With a map, places one road away count as "here" for relevance.
-    const nearby = nearbyPlaces(worldPack(), place);
+    // With a map, places one road away count as "here" for relevance; without roads, places
+    // close by on the map's coordinates.
+    const roads = nearbyPlaces(worldPack(), place);
+    const nearby = roads.length ? roads : nearbyByCoords(placeBookAt(upTo), place, { map: own.map }).map(entry => entry.name);
     const selection = classify(withPins(tracker), {
         calendar: cal,
         now,
@@ -470,6 +492,13 @@ function tabKey() {
     return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), [...pins()].join(','), lastFindingsKey, JSON.stringify(rest), pack ? packSummary(worldPack()) : '', planning, planError, draft?.key ?? '', isLocked()].join('|');
 }
 
+// Places the route tool offers: the world pack's, and any the story mapped with coordinates.
+function routePlaces(book) {
+    const names = new Set(Object.keys(worldPack()?.places ?? {}));
+    for (const place of book?.places ?? []) if (place.coords) names.add(place.name);
+    return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 function isLocked(ctx = context()) {
     return settings(ctx).spoilerGuard !== false && !revealed.has(chatIdOf(ctx));
 }
@@ -484,7 +513,8 @@ function setRevealed(show) {
 
 function renderDirectorTab(pane) {
     const cal = calendar();
-    const { selection, now, place, tracker } = situation('normal');
+    const { selection, now, place, tracker, upTo } = situation('normal');
+    const book = placeBookAt(upTo);
     const chat = context()?.chat ?? [];
     const current = lastFindingsKey === findingsKey(latestAssistantIndex(chat));
     renderTab(pane, {
@@ -495,7 +525,8 @@ function renderDirectorTab(pane) {
         canSeed: !tracker.records.length && canSeed(),
         onSeed: () => void seed(),
         onPin: (id, pinned) => setPin(id, pinned),
-        route: worldPack() ? { places: Object.keys(worldPack().places).sort(), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
+        route: routePlaces(book).length > 1 ? { places: routePlaces(book), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
+        places: { book, map: settings().map, formatTime: time => (time === null ? '' : cal.format(time)) },
         arc: arcView(selection, tracker),
         spoiler: settings().spoilerGuard !== false
             ? { locked: isLocked(), onReveal: () => setRevealed(true), onHide: () => setRevealed(false) }
@@ -782,16 +813,28 @@ async function maybePlanAutomatically(tracker) {
 /** A journey from the scene's current time: one readable line, or why there is none. */
 function routeText(fromText, toText, { mode = 'foot', rate = null } = {}) {
     const pack = worldPack();
-    if (!pack) return 'No world pack is loaded (Extensions → Story Director → World pack).';
-    const from = findPlace(pack, fromText);
-    const to = findPlace(pack, toText);
-    if (!from) return `"${fromText}" is not a place in the world pack.`;
-    if (!to) return `"${toText}" is not a place in the world pack.`;
     const travel = MODES.includes(mode) ? mode : 'foot';
-    const { now } = situation('normal');
+    const { now, upTo } = situation('normal');
     const cal = calendar();
-    const plan = planRoute(pack, from, to, { mode: travel, rate, depart: now, calendar: cal });
-    return plan ? formatRoute(plan, cal) : `No ${travel} route from ${from} to ${to}.`;
+    // Roads first: a world pack that knows both places plans by its roads.
+    const from = pack ? findPlace(pack, fromText) : null;
+    const to = pack ? findPlace(pack, toText) : null;
+    if (from && to) {
+        const plan = planRoute(pack, from, to, { mode: travel, rate, depart: now, calendar: cal });
+        if (plan) return formatRoute(plan, cal);
+    }
+    // Otherwise the map's coordinates: a straight line times the road factor.
+    const book = placeBookAt(upTo);
+    const a = findBookPlace(book, fromText);
+    const b = findBookPlace(book, toText);
+    const missing = [[a, fromText], [b, toText]].find(([place]) => !place?.coords);
+    if (missing) {
+        const known = book.places.filter(place => place.coords).length;
+        return `"${missing[1]}" has no map coordinates yet${known ? '' : ' (no place has any: coordinates come from the scene\'s location, like "[59.0, 110.0]", or a world pack)'}.`;
+    }
+    const trip = estimateTrip(a, b, { map: settings().map, mode: travel, rate, rules: pack?.rules });
+    const arrive = now !== null && trip ? ` · arrive ${cal.format(now + Math.round(trip.days * 1440))}` : '';
+    return `${formatTrip(trip, { map: settings().map })}${arrive} (estimated from the map)`;
 }
 
 // `/route Shorn to Auvoth ride`, `/route Shorn → Auvoth mode=courier`, `/route from=Shorn to=Auvoth`.
@@ -906,6 +949,11 @@ async function importPack(text) {
             own.calendar = normalizeCalendar(pack.calendar);
             adopted = ' Calendar taken from the pack.';
         }
+    }
+    // A pack's map scale is how its coordinates read.
+    if (pack.scaleKmPerUnit && pack.scaleKmPerUnit !== own.map?.kmPerUnit) {
+        own.map = mapSettings({ ...own.map, kmPerUnit: pack.scaleKmPerUnit });
+        adopted += ` Map scale set to ${pack.scaleKmPerUnit} km per unit.`;
     }
     saveSettings(ctx);
     cache = { chatId: null, entries: [] };
