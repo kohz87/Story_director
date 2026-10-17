@@ -34,7 +34,7 @@ function only(text) {
 
 test('exports the kinds, fields and aliases of the contract', () => {
     assert.deepEqual(KINDS, ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc']);
-    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'giver', 'goal', 'reward', 'step']);
+    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'type', 'giver', 'goal', 'reward', 'step']);
     assert.equal(KIND_ALIASES.bounty, 'quest');
     assert.equal(KIND_ALIASES.contract, 'quest');
     assert.equal(KIND_ALIASES.offscreen, 'agenda');
@@ -256,6 +256,8 @@ test('formatOp round-trips awkward hand-built ops', () => {
 test('a quest line: its own fields, kind inferred from them, and aliases', () => {
     const { ops } = parseChanges('+ quest Bounty on Kettle Jack — giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30\n+ Herb run — goal: twelve moonleaf | step: two found\n+ bounty Wolf pelts — reward: 2 silver each');
     assert.deepEqual(ops.map(op => op.kind), ['quest', 'quest', 'quest']);
+    assert.equal(ops[2].fields.type, 'bounty', 'the word written is its category');
+    assert.equal(ops[0].fields.type, undefined);
     assert.deepEqual(ops[0].fields, { giver: 'Warden Hale', goal: 'bring him in alive', reward: '40 crowns', due: 'Haywane 30' });
     // Written back in field order, so it reads back the same.
     assert.equal(formatOp(ops[0]), '+ quest Bounty on Kettle Jack — due: Haywane 30 | giver: Warden Hale | goal: bring him in alive | reward: 40 crowns');

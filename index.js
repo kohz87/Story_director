@@ -31,6 +31,7 @@ import { buildNote } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
+import { renderQuests } from './src/ui/quests.js';
 import { MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
@@ -38,11 +39,12 @@ import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 
-const VERSION = '0.7.0';
+const VERSION = '0.7.1';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
 const TAB_ID = 'story-director';
+const QUESTS_TAB_ID = 'story-director-quests';
 const EXTENSION_PROMPT_IN_CHAT = 1;
 const EXTENSION_PROMPT_ROLE_SYSTEM = 0;
 const MIN_STORY_BLOCK_API = 1;
@@ -881,6 +883,41 @@ function registerSlashCommand() {
     }));
 }
 
+// ---------------------------------------------------------------------------
+// The Quests tab: the work {{user}} took on, always shown (quests are no spoiler)
+
+function questRecords() {
+    const { tracker, now } = situation('normal');
+    const quests = tracker.records.filter(record => record.kind === 'quest');
+    const active = quests.filter(record => record.status === 'active');
+    const finished = quests.filter(record => record.status !== 'active')
+        .sort((a, b) => (b.resolved?.message ?? -1) - (a.resolved?.message ?? -1));
+    return { active, finished, now };
+}
+
+function questStatus(now) {
+    const cal = calendar();
+    const soonDays = Number(settings().dueSoonDays) || DEFAULTS.dueSoonDays;
+    return record => {
+        if (now === null || !record.fields?.due) return '';
+        const deadline = cal.parse(record.fields.due, { reference: now });
+        if (!deadline) return '';
+        if (deadline.abs <= now) return 'overdue';
+        return deadline.abs <= cal.addDays(now, soonDays) ? 'soon' : '';
+    };
+}
+
+function questsTabKey() {
+    const ctx = context();
+    const chat = ctx?.chat ?? [];
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar)].join('|');
+}
+
+function renderQuestsTab(pane) {
+    const { active, finished, now } = questRecords();
+    renderQuests(pane, { quests: active, finished, status: questStatus(now) });
+}
+
 function tabBadge() {
     try {
         const { selection } = situation('normal');
@@ -992,6 +1029,31 @@ function registerWithStoryBlock() {
         key: tabKey,
         badge: tabBadge,
         render: pane => renderDirectorTab(pane),
+    });
+    // Only once the story has a quest, so a chat without any is not given an empty tab.
+    sb.registerTab({
+        id: QUESTS_TAB_ID,
+        label: 'Quests',
+        icon: '📜',
+        order: 89,
+        isAvailable: () => {
+            try {
+                if (!settings().enabled) return false;
+                const { active, finished } = questRecords();
+                return active.length + finished.length > 0;
+            } catch {
+                return false;
+            }
+        },
+        key: questsTabKey,
+        badge: () => {
+            try {
+                return questRecords().active.length;
+            } catch {
+                return 0;
+            }
+        },
+        render: pane => renderQuestsTab(pane),
     });
     sb.onReply(payload => void onReply(payload));
     registered = true;

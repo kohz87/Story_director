@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- **A Quests tab of its own** in Story Block's sidebar, next to Director, appearing with the first quest. Quests are grouped by type (Main, Side, Bounties, Contracts, Missions, Favours, then any other type), each with its goal, step, giver, reward, deadline and place; a deadline that is close or has passed is marked, and finished quests fold away with how they ended. The badge counts open quests. Always shown in full: quests are not spoilers. The Director tab no longer lists them.
+- **Quest types.** A `type` field (`main`, `side`, `bounty`, `contract`…, or any word); writing the category as the kind (`+ bounty Wolf pelts — …`) sets it. The note shows it: `Wolf pelts (bounty) — …`.
+
 ## 0.7.0
 
 Quests.

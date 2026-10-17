@@ -471,14 +471,9 @@ test('places: a fold with a map, distances from here, and shown even while hidde
     assert.equal(render({ places: { book: buildPlaceBook([]) } }).querySelector('.is-places'), null);
 });
 
-test('quests: their own section with goal, step, giver and reward rows; shown while hidden', () => {
-    const BOUNTY = record('Bounty on Kettle Jack', 'quest', { goal: 'bring him in alive', step: 'cornered at the weir', giver: 'Warden Hale', reward: '40 crowns', due: 'Goldwane 30' });
+test('quests live in their own tab: the Director tab does not list them', () => {
+    const BOUNTY = record('Bounty on Kettle Jack', 'quest', { goal: 'bring him in alive' });
     const pane = render({ selection: selection({ relevant: [GEVA, BOUNTY].map((entry, index) => ({ record: entry, reason: 'test', priority: index + 1 })) }) });
-    const quests = pane.querySelector('.story-director-section.is-quest');
-    assert.equal(subText(quests.querySelector('.story-director-sub')), 'Quests');
-    assert.deepEqual(facts(quests.querySelector('.story-director-record')), [['goal', 'bring him in alive'], ['step', 'cornered at the weir'], ['giver', 'Warden Hale'], ['reward', '40 crowns'], ['due', 'Goldwane 30']]);
-
-    const locked = render({ selection: selection({ relevant: [GEVA, BOUNTY].map((entry, index) => ({ record: entry, reason: 'test', priority: index + 1 })) }), spoiler: { locked: true, onReveal() {} } });
-    assert.deepEqual(texts(locked, '.story-director-section.is-quest .story-director-record-key'), ['Bounty on Kettle Jack']);
-    assert.doesNotMatch(locked.textContent, /Bailiff Court/, 'the rest stays hidden');
+    assert.doesNotMatch(pane.textContent, /Kettle Jack/);
+    assert.match(pane.textContent, /Senior Listener Geva/);
 });

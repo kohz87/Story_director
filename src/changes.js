@@ -23,11 +23,21 @@ export const KIND_ALIASES = Object.freeze({
     bounty: 'quest',
     bounties: 'quest',
     contract: 'quest',
+    contracts: 'quest',
     mission: 'quest',
+    favour: 'quest',
+    favor: 'quest',
 });
 
-// A quest's own parts: who gave it, what it asks, what it pays, and the step it is at.
-export const QUEST_FIELDS = ['giver', 'goal', 'reward', 'step'];
+// `+ bounty Wolf pelts — …` is a quest of type bounty: the word written is its category.
+const QUEST_TYPE_WORDS = Object.freeze({
+    bounty: 'bounty', bounties: 'bounty', contract: 'contract', contracts: 'contract',
+    mission: 'mission', favour: 'favour', favor: 'favour',
+});
+
+// A quest's own parts: its category (main, side, bounty, contract…), who gave it, what it
+// asks, what it pays, and the step it is at.
+export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', ...QUEST_FIELDS];
 
 // Only a spaced hyphen ends a key, so `Jean-Luc` and `Hall-Warden` stay whole; em and en
@@ -70,7 +80,7 @@ function kindOf(word) {
 }
 
 function inferKind(fields) {
-    if (fields.goal || fields.reward || fields.giver || fields.step) return 'quest';
+    if (QUEST_FIELDS.some(name => fields[name])) return 'quest';
     if (fields.leg || fields.now) return 'agenda';
     if (fields.due) return 'clock';
     return 'event';
@@ -130,11 +140,13 @@ function parseLine(raw) {
     let body = opMatch[2].trim();
 
     let kind = null;
+    let kindWord = '';
     if (op === '+') {
         const first = body.match(/^(\S+)\s+(.*)$/s);
         // The kind word only counts when a key follows it, not a separator.
         if (first && kindOf(first[1]) && !/^(?:[—–:|]|-(?:\s|$))/.test(first[2])) {
             kind = kindOf(first[1]);
+            kindWord = first[1].toLowerCase();
             body = first[2];
         }
     }
@@ -172,6 +184,7 @@ function parseLine(raw) {
     }
 
     if (op === '+' && !kind) kind = inferKind(fields);
+    if (kind === 'quest' && !fields.type && Object.hasOwn(QUEST_TYPE_WORDS, kindWord)) fields.type = QUEST_TYPE_WORDS[kindWord];
     return { op: { op, kind, key, id, fields, extra, reason, raw: raw.trim() } };
 }
 

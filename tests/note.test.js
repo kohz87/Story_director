@@ -247,5 +247,5 @@ test('quests: their own line, deadline wording when due, and the instruction nam
     assert.ok(note.includes(PACING), 'a deadline is a schedule');
     const due = buildNote(selection({ due: [bounty] }), { calendar });
     assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
-    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): giver, goal, reward, step, due/);
+    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): type, giver, goal, reward, step, due/);
 });

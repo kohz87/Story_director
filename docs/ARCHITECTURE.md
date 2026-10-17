@@ -19,7 +19,7 @@ Record = {
   id: 'senior listener geva',           // lineKey(key): identity
   kind: 'agenda' | 'event' | 'hook' | 'quest' | 'clock' | 'beat' | 'secret',
   status: 'active' | 'resolved' | 'superseded',
-  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, giver, goal, reward, step },  // strings, '' when unset
+  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, type, giver, goal, reward, step },  // strings, '' when unset
   extra: { [label]: value },            // labelled parts that are not a known field
   created: { message, time },           // message index; story abs or null
   changed: { message, time },
@@ -89,7 +89,7 @@ the text.
 export const KINDS = ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'];
 export const KIND_ALIASES;    // offscreen/off-screen/npc → agenda, world → event,
                               // thread/hooks → hook, timer/clocks → clock, plan → beat, off-limits → secret
-export const QUEST_FIELDS = ['giver', 'goal', 'reward', 'step'];
+export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', ...QUEST_FIELDS];
 // A quest never goes dormant (relevance.js); its `due` is a deadline; `giver` counts as a mention.
 export function lineKey(key) → id     // lowercase, markdown and punctuation squashed, spaces single
@@ -468,6 +468,17 @@ days, due-soon days), **Calendar** (preset; era; months textarea of `Name` or `N
 lines; days per month), **NPC State Delta** (mirror switch), and a **Seed from World State**
 button calling `onSeed()`. `onChange(next)` on every edit with a full new object; never
 mutates the input.
+
+## `src/ui/quests.js` (v0.7.1)
+
+```js
+export function renderQuests(pane, { quests, finished, formatDate, status }) → void
+// quests: active quest records; finished: resolved ones, most recent first;
+// status(record) → 'overdue' | 'soon' | '' marks the deadline.
+```
+
+Groups by `fields.type` (main, side, bounty, contract, mission, favour, then others by name,
+untyped last); plural spellings join their singular. Never hidden by the spoiler guard.
 
 ## `src/ui/tab.js`
 

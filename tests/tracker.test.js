@@ -47,7 +47,7 @@ test('+ creates a full record', () => {
         fields: {
             desc: '', now: 'District Bailiff Court', then: 'argues with magistrates',
             on: 'Haywane 12, 05:45 pm', due: '', shown: '', leg: '', arrive: '', place: '',
-            people: 'Kade, Al', giver: '', goal: '', reward: '', step: '',
+            people: 'Kade, Al', type: '', giver: '', goal: '', reward: '', step: '',
         },
         extra: {},
         created: { message: 4, time: 1000 },
