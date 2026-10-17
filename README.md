@@ -1,4 +1,4 @@
-# Story Director v0.5.0
+# Story Director v0.5.1
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
@@ -191,6 +191,10 @@ anchors as the names to watch for. Resolved and superseded records stay behind. 
 State Alpha off afterwards; the two would inject overlapping notes.
 
 ## Settings
+
+The panel (Extensions → Story Director) has a quick bar (the on/off switch, **Plan arc**, **Seed
+from World State**) and folding groups: Tracking & note, Calendar, World pack & travel, Arc
+planning, Capture, and Existing chat & compatibility.
 
 | Setting | Default | |
 |---|---|---|

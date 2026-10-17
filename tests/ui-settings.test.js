@@ -35,13 +35,29 @@ const last = list => list[list.length - 1];
 test('drawer markup, header and status line', () => {
     const { $, container } = setup({ status: 'Tracking 4 records.' });
     assert.ok($('.story-director-settings > .inline-drawer > .inline-drawer-toggle.inline-drawer-header'));
-    assert.equal($('.inline-drawer-header b').textContent, 'Story Director');
+    assert.match($('.inline-drawer-header b').textContent, /^Story Director/);
     assert.ok($('.inline-drawer-content'));
     const status = $('#story_director_status');
     assert.equal(status.textContent, 'Tracking 4 records.');
     assert.equal(container.querySelectorAll('#story_director_status').length, 1);
-    const heads = container.querySelectorAll('.story-director-section-head').map(node => node.textContent);
-    assert.deepEqual(heads.slice(0, 7), ['Tracking', 'Dormant', 'Calendar', 'World pack', 'Arc planning', 'Capture', 'NPC State Delta']);
+    const groups = container.querySelectorAll('.story-director-group-summary b').map(node => node.textContent);
+    assert.deepEqual(groups, ['Tracking & note', 'Calendar', 'World pack & travel', 'Arc planning', 'Capture', 'Existing chat & compatibility']);
+});
+
+test('a quick bar on top, folding groups below, only Tracking open at first', () => {
+    const planned = [];
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    renderSettings(container, { settings: SETTINGS, version: 'v0.5.1', onPlanArc: () => planned.push(1), onChange() {} });
+    assert.match(container.querySelector('.inline-drawer-header b').textContent, /Story Director v0\.5\.1/);
+    const quickbar = container.querySelector('.story-director-quickbar');
+    assert.ok(quickbar.querySelector('#story_director_enabled'), 'the switch is in the quick bar');
+    quickbar.querySelector('.story-director-plan').click();
+    assert.deepEqual(planned, [1]);
+    assert.ok(quickbar.querySelector('.story-director-seed'));
+    const open = container.querySelectorAll('.story-director-group').filter(node => node.hasAttribute('open')).map(node => node.getAttribute('data-group'));
+    assert.deepEqual(open, ['tracking']);
+    assert.ok(container.querySelector('.story-director-group[data-group="arc"] #story_director_arc_trigger'), 'arc controls live in their group');
 });
 
 test('re-rendering into the same container keeps the status the runtime wrote', () => {

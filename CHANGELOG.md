@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.1
+
+- **Settings sorted like NPC State Delta's:** the version in the header; a quick bar with the on/off switch, **Plan arc** and **Seed from World State**; then folding groups with a one-line hint each: Tracking & note (with the dormant shelf), Calendar, World pack & travel, Arc planning, Capture, and Existing chat & compatibility. Only Tracking starts open, and the groups you keep open are remembered in this browser.
 ## 0.5.0
 
 Capture, and coming from World State Alpha.
