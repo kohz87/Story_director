@@ -120,6 +120,25 @@ function row(name, hint, control, { id, wide = false, className = '' } = {}) {
     ]);
 }
 
+// Which groups the reader keeps open: presentation only, remembered per browser.
+const OPEN_GROUPS_KEY = 'story_director_settings_open_groups';
+const DEFAULT_OPEN_GROUPS = ['tracking'];
+let openGroups = null;
+
+function loadOpenGroups() {
+    try {
+        const parsed = JSON.parse(globalThis.localStorage?.getItem?.(OPEN_GROUPS_KEY) ?? 'null');
+        if (Array.isArray(parsed)) return new Set(parsed.filter(item => typeof item === 'string'));
+    } catch {
+        // Private windows and blocked storage: the default is fine.
+    }
+    return new Set(DEFAULT_OPEN_GROUPS);
+}
+
+function saveOpenGroups(groups) {
+    try { globalThis.localStorage?.setItem?.(OPEN_GROUPS_KEY, JSON.stringify([...groups])); } catch { /* optional */ }
+}
+
 function sectionHead(text) {
     return el('div', { className: 'story-director-section-head' }, [el('span', { text })]);
 }
@@ -190,8 +209,9 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
  * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
  * Returns `{ root, update(settings) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null } = {}) {
     let summary = packSummary;
+    openGroups ??= loadOpenGroups();
     let current = complete(settings);
 
     // Re-rendering into the same container keeps whatever the runtime last wrote into the
@@ -202,7 +222,10 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     const root = el('div', { className: 'story-director-settings' }, [
         el('div', { className: 'inline-drawer' }, [
             el('div', { className: 'inline-drawer-toggle inline-drawer-header' }, [
-                el('b', { text: 'Story Director' }),
+                el('b', {}, [
+                    document.createTextNode('Story Director'),
+                    version ? el('span', { className: 'story-director-version', text: ` ${version}` }) : null,
+                ]),
                 el('div', { className: 'inline-drawer-icon fa-solid fa-circle-chevron-down down' }),
             ]),
             el('div', { className: 'inline-drawer-content' }, [statusNode, view]),
@@ -228,9 +251,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     }
 
     function renderTracking() {
-        const enabled = toggle('story_director_enabled', current.enabled, 'Track the story');
-        enabled.input.addEventListener('change', () => commit(next => { next.enabled = Boolean(enabled.input.checked); }));
-
         // Story Block's blocks when it lists any; otherwise the tag typed by hand.
         let scene;
         if (blocks.length) {
@@ -250,8 +270,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         bindNumber(budget, 'budgetTokens');
 
         return [
-            sectionHead('Tracking'),
-            row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled.wrapper, { id: 'story_director_enabled', className: 'is-switch' }),
             row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene', wide: true }),
             row('Note depth', 'How many messages from the end the note goes in.', depth, { id: 'story_director_depth' }),
             row('Note budget', 'Most tokens the note may use; the least relevant records go first.', budget, { id: 'story_director_budget' }),
@@ -266,7 +284,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const dueSoon = numberInput('story_director_due_soon', current.dueSoonDays, LIMITS.dueSoonDays);
         bindNumber(dueSoon, 'dueSoonDays');
         return [
-            sectionHead('Dormant'),
+            sectionHead('Dormant shelf'),
             row('After replies', 'A record not seen for this many replies rests on the shelf.', replies, { id: 'story_director_dormant_replies' }),
             row('After story days', 'Or not seen for this many days of story time.', days, { id: 'story_director_dormant_days' }),
             row('Due soon', 'Records due within this many days never go dormant.', dueSoon, { id: 'story_director_due_soon' }),
@@ -308,7 +326,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         showCustom();
 
         return [
-            sectionHead('Calendar'),
             row('Calendar', 'How dates in the story are read.', preset, { id: 'story_director_preset', wide: true }),
             row('Era', 'Written before the year, as in “CY 611”. Leave empty for none.', era, { id: 'story_director_era' }),
             ...customRows,
@@ -319,7 +336,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const mirror = toggle('story_director_mirror', current.mirrorOffscreen, 'Mirror off-screen agendas');
         mirror.input.addEventListener('change', () => commit(next => { next.mirrorOffscreen = Boolean(mirror.input.checked); }));
         return [
-            sectionHead('NPC State Delta'),
             row('Mirror off-screen agendas', 'Rewrite the scene block’s Off-Screen list from the tracker, so NPC State Delta shows them.', mirror.wrapper, { id: 'story_director_mirror', className: 'is-switch' }),
         ];
     }
@@ -360,7 +376,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         if (!summary) clear.disabled = true;
 
         return [
-            sectionHead('World pack'),
             row('Map', summary ? `Loaded: ${summary}. Travel legs are checked, and /route works.` : 'No world pack: travel is not checked. Import places, routes and paces as JSON.', clear, { className: 'is-action is-pack' }),
             row('Import a file', 'A world pack JSON (places, edges, pace_km_per_day, travel_rules, calendar).', file, { id: 'story_director_pack_file', wide: true }),
             row('Or paste it', '', el('div', { className: 'story-director-pack-paste-wrap' }, [paste, importButton]), { id: 'story_director_pack_paste', wide: true }),
@@ -412,7 +427,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         });
 
         return [
-            sectionHead('Arc planning'),
             row('When to plan', 'Planning is one model call per arc; tracking stays every reply.', trigger, { id: 'story_director_arc_trigger', wide: true }),
             row('Model', profiles === null ? 'Connection Manager is off, so plans use the chat’s own connection.' : 'A connection profile has its own API and model; a cheaper one is fine.', model, { id: 'story_director_arc_model', wide: true }),
             row('Messages to read', 'How much recent chat the planner sees.', recent, { id: 'story_director_arc_recent' }),
@@ -449,7 +463,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const tokens = numberInput('story_director_capture_tokens', capture.maxTokens, LIMITS.captureTokens);
         bindNumber(tokens, 'captureTokens', value => value.capture.maxTokens, (next, value) => { next.capture.maxTokens = value; });
         return [
-            sectionHead('Capture'),
             row('Capture changes', 'A second call reads each exchange and writes the changes, for models that skip or garble them.', mode, { id: 'story_director_capture_mode', wide: true }),
             row('Capture model', 'A small, fast model is enough.', model, { id: 'story_director_capture_model', wide: true }),
             row('Answer length', 'Most tokens a capture answer may use.', tokens, { id: 'story_director_capture_tokens' }),
@@ -457,7 +470,6 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     }
 
     function renderSeed() {
-        const seed = button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() });
         const wsaFile = el('input', { className: 'story-director-wsa-file', attrs: { id: 'story_director_wsa_file', type: 'file', accept: '.json,application/json' } });
         wsaFile.type = 'file';
         wsaFile.addEventListener('change', async () => {
@@ -466,14 +478,52 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             wsaFile.value = '';
         });
         return [
-            sectionHead('Existing chat'),
-            row('Start from the scene block', 'Turns the latest World State’s Off-Screen, World, Hooks and Clocks lines into records.', seed, { className: 'is-action' }),
             row('Import from World State Alpha', 'An exported World State Alpha bundle: its active facts and developments become World records.', wsaFile, { id: 'story_director_wsa_file', wide: true }),
         ];
     }
 
+    // The switch and the things done most often, above the groups.
+    function renderQuickbar() {
+        const enabled = toggle('story_director_enabled', current.enabled, 'Track the story');
+        enabled.input.addEventListener('change', () => commit(next => { next.enabled = Boolean(enabled.input.checked); }));
+        return el('div', { className: 'story-director-quickbar' }, [
+            row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled.wrapper, { id: 'story_director_enabled', className: 'is-switch' }),
+            el('div', { className: 'story-director-quick-actions' }, [
+                onPlanArc ? button('Plan arc', 'story-director-plan', { iconName: 'fa-wand-magic-sparkles', onClick: () => onPlanArc() }) : null,
+                button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', title: 'Turn the latest World State’s Off-Screen, World, Hooks and Clocks lines into records', onClick: () => onSeed?.() }),
+            ]),
+        ]);
+    }
+
+    function group(key, title, hint, rows) {
+        const details = el('details', { className: 'story-director-group', attrs: { 'data-group': key } }, [
+            el('summary', { className: 'story-director-group-summary' }, [
+                el('b', { text: title }),
+                hint ? el('small', { text: hint }) : null,
+            ]),
+            el('div', { className: 'story-director-group-body' }, rows),
+        ]);
+        if (openGroups.has(key)) details.setAttribute('open', '');
+        details.addEventListener('toggle', () => {
+            if (details.open) openGroups.add(key);
+            else openGroups.delete(key);
+            saveOpenGroups(openGroups);
+        });
+        return details;
+    }
+
     function render() {
-        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderPack(), ...renderArc(), ...renderCapture(), ...renderMirror(), ...renderSeed());
+        view.replaceChildren(
+            renderQuickbar(),
+            el('div', { className: 'story-director-groups' }, [
+                group('tracking', 'Tracking & note', 'Scene block, note size and the dormant shelf', [...renderTracking(), ...renderDormant()]),
+                group('calendar', 'Calendar', 'Gregorian, or your world’s months and era', renderCalendar()),
+                group('pack', 'World pack & travel', 'Your map: places, roads and paces', renderPack()),
+                group('arc', 'Arc planning', 'When to plan, which model, your Director’s note', renderArc()),
+                group('capture', 'Capture', 'A second model for missing change lines', renderCapture()),
+                group('chat', 'Existing chat & compatibility', 'World State Alpha import, NPC State Delta mirror', [...renderSeed(), ...renderMirror()]),
+            ]),
+        );
     }
 
     render();

@@ -37,7 +37,7 @@ import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, sum
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.5.1';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -830,7 +830,9 @@ function addSettingsPanel(documentRef) {
             storyBlock()?.refresh?.();
         },
         onSeed: () => void seed(),
-        status: sb ? `v${VERSION}` : `v${VERSION} · needs Story Block 0.6 or newer`,
+        onPlanArc: () => void planArc({ reason: 'manual' }),
+        version: `v${VERSION}`,
+        status: sb ? '' : 'Needs Story Block 0.6 or newer.',
         profiles: connectionProfiles(),
         defaultPlannerPrompt: DEFAULT_PLANNER_PROMPT,
         onImportWsa: text => void importWsa(text),

@@ -757,3 +757,105 @@
     font-family: var(--monoFontFamily, monospace);
     font-size: 0.85em;
 }
+
+/*
+ * Settings layout, like NPC State Delta's: a quick bar with the switch and the common
+ * actions, then folding groups with a title and a one-line hint. Only the first group starts
+ * open; which ones the reader keeps open is remembered.
+ */
+
+.story-director-settings .story-director-version {
+    font-weight: 400;
+    opacity: 0.6;
+}
+
+.story-director-settings .story-director-quickbar {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0.4rem 0 0.6rem;
+    padding: 0.35rem 0.75rem 0.6rem;
+    border: 1px solid var(--sd-border);
+    border-radius: 10px;
+    background: var(--sd-surface);
+}
+
+.story-director-settings .story-director-quickbar .story-director-row {
+    padding: 0.35rem 0;
+}
+
+.story-director-settings .story-director-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.story-director-settings .story-director-groups {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.story-director-settings .story-director-group {
+    margin: 0;
+    border: 1px solid var(--sd-border);
+    border-radius: 9px;
+    overflow: hidden;
+    background: rgba(127, 127, 127, 0.03);
+}
+
+.story-director-settings .story-director-group-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.1rem 0.5rem;
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    list-style: none;
+    background: rgba(127, 127, 127, 0.06);
+}
+
+.story-director-settings .story-director-group-summary::-webkit-details-marker {
+    display: none;
+}
+
+/* A small chevron that turns when the group opens. */
+.story-director-settings .story-director-group-summary::before {
+    content: "";
+    align-self: center;
+    width: 6px;
+    height: 6px;
+    margin-right: 0.15rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    opacity: 0.55;
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+}
+
+.story-director-settings .story-director-group[open] > .story-director-group-summary::before {
+    transform: rotate(45deg);
+}
+
+.story-director-settings .story-director-group-summary b {
+    font-size: 0.95em;
+}
+
+.story-director-settings .story-director-group-summary small {
+    font-size: 0.8em;
+    opacity: 0.6;
+}
+
+.story-director-settings .story-director-group-body {
+    display: grid;
+    padding: 0.15rem 0.75rem 0.6rem;
+    min-width: 0;
+}
+
+.story-director-settings .story-director-group-body > .story-director-section-head:first-child {
+    margin-top: 0.4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .story-director-settings .story-director-group-summary::before {
+        transition: none;
+    }
+}
