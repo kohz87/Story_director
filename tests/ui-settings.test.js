@@ -397,3 +397,78 @@ test('the mirror hint says what it is for, without claiming NPC State Delta read
     assert.match(text, /Off-Screen list/);
     assert.ok(!text.includes('NPC State Delta'));
 });
+
+test('setSource and setEnabled show a change made elsewhere, keep it for the next edit, and emit nothing', () => {
+    const { $, panel, changes } = setup();
+    const npc = $('#story_director_source_npc');
+    panel.setSource('npc', 'theirs');
+    panel.setEnabled(false);
+    assert.equal($('#story_director_source_npc'), npc, 'same control, not redrawn');
+    assert.equal(npc.value, 'theirs');
+    assert.equal($('#story_director_enabled').checked, false);
+    assert.equal(changes.length, 0, 'no onChange');
+
+    // Unknown areas and choices are ignored.
+    panel.setSource('stats', 'mine');
+    panel.setSource('calendar', 'bogus');
+    assert.equal($('#story_director_source_calendar').value, 'auto');
+
+    // The next edit in the panel carries both, so it never writes the old values back.
+    edit($('#story_director_depth'), '3');
+    assert.deepEqual(last(changes).sourceOfTruth, { calendar: 'auto', timeline: 'auto', npc: 'theirs' });
+    assert.equal(last(changes).enabled, false);
+    assert.equal(last(changes).depth, 3);
+});
+
+test('Story Suite overlay: manage.setSource and setEnabled update the panel they were given', async () => {
+    const { makeManage } = await import('../src/manage.js');
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    let saved = structuredClone(SETTINGS);
+    const save = next => { saved = next; };
+    const panel = renderSettings(container, { settings: saved, onChange: save });
+    const manage = makeManage({ areas: ['calendar', 'timeline', 'npc'], read: () => saved, save, panel: () => panel });
+    assert.equal(manage.setSource('calendar', 'theirs'), true);
+    assert.equal(container.querySelector('#story_director_source_calendar').value, 'theirs');
+    assert.equal(saved.sourceOfTruth.calendar, 'theirs');
+    manage.setEnabled(false);
+    assert.equal(container.querySelector('#story_director_enabled').checked, false);
+    assert.equal(saved.enabled, false);
+    assert.equal(manage.setSource('calendar', 'nope'), false);
+    assert.equal(container.querySelector('#story_director_source_calendar').value, 'theirs');
+    // And the panel's own switch is read back the same way.
+    const enabled = container.querySelector('#story_director_enabled');
+    enabled.checked = true;
+    enabled.dispatch('change');
+    assert.equal(manage.enabled(), true);
+    assert.deepEqual(manage.sources(), { calendar: 'theirs', timeline: 'auto', npc: 'auto' });
+});
+
+test('"Manage all in Story Suite": on top, hidden until available, opens the overlay', () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    let opened = 0;
+    const panel = renderSettings(container, { settings: SETTINGS, onChange() {}, onOpenSuite: () => { opened += 1; } });
+    const line = container.querySelector('.story-director-suite-link');
+    assert.ok(line, 'drawn');
+    assert.ok(line.hasAttribute('data-story-suite-link'), 'marked for the overlay to hide');
+    assert.equal(container.querySelector('[data-story-suite-link]'), line);
+    assert.equal(container.querySelector('.inline-drawer-content').children[0], line, 'first in the panel');
+    assert.ok(line.hasAttribute('hidden'), 'hidden by default (alone)');
+    assert.match(line.textContent, /Manage all in Story Suite/);
+
+    panel.setSuiteLink(true);
+    assert.ok(!line.hasAttribute('hidden'));
+    line.querySelector('.story-director-open-suite').click();
+    assert.equal(opened, 1);
+    panel.update(SETTINGS);
+    assert.equal(container.querySelector('.story-director-suite-link'), line, 'a redraw keeps it');
+    assert.ok(!line.hasAttribute('hidden'));
+    panel.setSuiteLink(false);
+    assert.ok(line.hasAttribute('hidden'));
+
+    const shown = doc.createElement('div');
+    doc.body.appendChild(shown);
+    renderSettings(shown, { settings: SETTINGS, onChange() {}, suiteLink: true });
+    assert.ok(!shown.querySelector('.story-director-suite-link').hasAttribute('hidden'), 'shown from the start when available');
+});

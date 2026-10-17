@@ -492,10 +492,36 @@ export function isSourceOfTruth(myId, area, choice = 'auto', suite = storySuite(
 `isSourceOfTruth`: `'mine'` → true; `'theirs'` → true only when no other extension offers the
 area; `'auto'` → the suite's owner is `myId`, or nobody owns it. Alone, every choice is true.
 
+## `src/manage.js` (v0.8.1): Story Suite's overlay
+
+What Story Director announces, and the handle Story Block's overlay uses to manage it
+([STORY_SUITE.md](STORY_SUITE.md#one-place-to-manage-them-all)). Pure: index.js passes in how
+to read, save and show the settings.
+
+```js
+export const SOURCE_CHOICES;                       // ['auto', 'mine', 'theirs']
+export function sourceChoices(saved, areas) → { [area]: choice }   // unknown or missing → 'auto'
+export function suiteAnnouncement({ id, name, version, areas, settings, storyBlock, api, panel })
+  → { key, provider | null }
+export function makeManage({ areas, read, save, panel = () => null })
+  → { areas, sources(), setSource(area, choice) → boolean, enabled(), setEnabled(on) }
+export function suiteOpener(suite) → (tab) => void | null
+```
+
+`suiteAnnouncement`: no Story Block → `{ key: '', provider: null }` (withdraw); tracking on →
+`key 'on:<owns>'`, `owns` = `areas` less any whose choice is `'theirs'`; tracking off →
+`key 'off'`, `enabled: false`, `owns: []`. Every provider carries `settings: panel` (the
+panel's selector) and `api`. `makeManage`: `setSource` rejects an unknown area or choice
+(false, nothing changed), otherwise tells `panel().setSource` and saves the settings with that
+choice; `setEnabled` tells `panel().setEnabled` and saves `enabled`. `suiteOpener` is non-null
+while two or more providers are announced (on or off) and `suite.api('story-block').openSuite`
+is a function.
+
 ## `src/ui/settings.js`
 
 ```js
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '' }) → { root, update(settings) }
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', others = [], suiteLink = false, onOpenSuite = null, … })
+  → { root, update(settings), setOthers(names), setSource(area, choice), setEnabled(on), setSuiteLink(shown) }
 ```
 
 ```js
@@ -517,7 +543,12 @@ Off-Screen list), **Source of truth** (v0.8: one select per Story Suite area, Au
 extension / The other one, with a note naming the other extensions announced), and a **Seed
 from World State** button calling `onSeed()`. `onChange(next)` on every edit with a full new
 object; never mutates the input. `renderSettings(…, { others: [names] })` and
-`setOthers(names)` set that note in place, without redrawing.
+`setOthers(names)` set that note in place, without redrawing. (v0.8.1) `setSource(area,
+choice)` and `setEnabled(on)` take a change made elsewhere (Story Suite's overlay): kept in the
+panel's copy for its next edit and shown in the select or switch, without redrawing or calling
+`onChange`. A *Manage all in Story Suite* line, first in the drawer's content and outside the
+redrawn view, calls `onOpenSuite()`; hidden unless `suiteLink` / `setSuiteLink(true)`. Its
+element carries `data-story-suite-link`, so the overlay can hide it while it holds the panel.
 
 ## `src/ui/quests.js` (v0.7.1)
 
@@ -560,13 +591,22 @@ Battle) runs it, and the model closes the record with `!` or `-` when it narrate
 Also (v0.8) `calendar()`: `sharedCalendar(settings.calendar)`, the Gregorian default until the
 reader sets one. Like `encountersAt`, an addition keeps `apiVersion` 1.
 
-**Story Suite** (v0.8): `{ id: 'story-director', name: 'Story Director', version, owns, api:
-globalThis.StoryDirector }` is announced while `settings.enabled` is on and Story Block is
-there (at start, once Story Block links, and after every settings edit; an unchanged state is
-not announced again, since every announcement wakes every listener), and withdrawn when
-tracking is turned off. `owns` = `calendar`, `timeline`, `npc`, less any area whose
-`sourceOfTruth` choice is `'theirs'`. One `onChange` listener only refreshes the settings'
-list of the other extensions. Where it matters, `isSourceOfTruth('story-director', area,
+**Story Suite** (v0.8): `{ id: 'story-director', name: 'Story Director', version, owns,
+enabled, settings: '#story_director_settings', api }` (`suiteAnnouncement`) is announced while
+Story Block is there (at start, once Story Block links, and after every settings edit; an
+unchanged state is not announced again, since every announcement wakes every listener), and
+withdrawn while it is not. `owns` = `calendar`, `timeline`, `npc`, less any area whose
+`sourceOfTruth` choice is `'theirs'`. (v0.8.1) With tracking off it is announced with
+`enabled: false` and no `owns` rather than withdrawn, so Story Suite's overlay can switch it
+back on; the registry's `owner`, `has` and `api` skip it as before. `api` is
+`{ ...globalThis.StoryDirector, manage }`, built once (the global itself has no `manage`);
+`manage` is `makeManage` over `settings()`, `applySettings` (the same function as the panel's
+`onChange`: store, save, announce, clear the replay cache, refresh Story Block) and the
+settings panel. `settings` names the wrapper `#story_director_settings` that
+`addSettingsPanel` creates under `#extensions_settings2` (or `#extensions_settings`), which
+the overlay moves into itself while open. One `onChange` listener only refreshes the settings'
+list of the other extensions and the *Manage all in Story Suite* line (`suiteOpener`; a click
+calls `openSuite('story-director')`). Where it matters, `isSourceOfTruth('story-director', area,
 choice)` is asked at the moment of use: `npc` false → `npcPlansOnly` for the note, the
 planner and capture; `timeline` false → no Off-Screen mirror. Any suite failure counts as
 being the source of truth, so Story Director alone behaves exactly as before.

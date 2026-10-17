@@ -23,9 +23,10 @@
 // - Planned fights (a record with an `encounter`) are only stored, scheduled and handed over:
 //   globalThis.StoryDirector.encountersAt tells RPG Battle which ones the story has reached.
 // - Story Suite (src/suite.js, docs/STORY_SUITE.md): while it tracks the story, Story Director
-//   announces itself for the calendar, the timeline and NPCs. When NPC State Delta is the
-//   source of truth for who an NPC is, agenda lines are asked for plans and timing only.
-//   Alone, everything works as before.
+//   announces itself for the calendar, the timeline and NPCs (switched off, it stays announced
+//   as disabled, with its settings panel and api.manage for Story Suite's overlay). When NPC
+//   State Delta is the source of truth for who an NPC is, agenda lines are asked for plans
+//   and timing only. Alone, everything works as before.
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
@@ -45,8 +46,9 @@ import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 import { isSourceOfTruth, storySuite } from './src/suite.js';
+import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.8.0';
+const VERSION = '0.8.1';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -57,7 +59,8 @@ const EXTENSION_PROMPT_ROLE_SYSTEM = 0;
 const MIN_STORY_BLOCK_API = 1;
 // Story Suite: who we are, and the areas we can be the source of truth for.
 const SUITE = Object.freeze({ id: 'story-director', name: 'Story Director', areas: Object.freeze(['calendar', 'timeline', 'npc']) });
-const SOURCE_CHOICES = ['auto', 'mine', 'theirs'];
+// The settings panel's root under #extensions_settings, which Story Suite's overlay borrows.
+const PANEL_ID = 'story_director_settings';
 
 const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
@@ -156,8 +159,7 @@ function settings(ctx = context()) {
 }
 
 function sourceChoices(saved) {
-    const given = saved && typeof saved === 'object' ? saved : {};
-    return Object.fromEntries(SUITE.areas.map(area => [area, SOURCE_CHOICES.includes(given[area]) ? given[area] : 'auto']));
+    return validSourceChoices(saved, SUITE.areas);
 }
 
 function saveSettings(ctx = context()) {
@@ -472,25 +474,35 @@ globalThis.StoryDirector = API;
 // ---------------------------------------------------------------------------
 // Story Suite: working alone and together (docs/STORY_SUITE.md)
 
-// What was last announced ('' = withdrawn), so the same state is never announced twice: every
-// announcement wakes every extension's listener.
+// What was last announced ('' = withdrawn, 'off' = switched off), so the same state is never
+// announced twice: every announcement wakes every extension's listener.
 let announced = null;
 let suiteWatched = false;
+
+// Story Suite's overlay changes the Source of truth choices and the tracking switch through
+// this, the same path as an edit in the panel (src/manage.js).
+const MANAGE = makeManage({
+    areas: SUITE.areas,
+    read: () => settings(),
+    save: next => applySettings(next),
+    panel: () => settingsPanel,
+});
+// What the suite gets as `api`: globalThis.StoryDirector plus `manage`, built once, so the
+// global stays read-only and every announcement hands over the same object.
+const SUITE_API = Object.freeze({ ...API, manage: MANAGE });
 
 /**
  * Offered while the story is tracked (the switch on, Story Block there): the calendar, the
  * timeline and NPCs, except an area the reader gave to "the other one", so the others take it
- * on Automatic. Withdrawn when tracking is off.
+ * on Automatic. Switched off, announced with `enabled: false` so Story Suite's overlay can
+ * switch it back on; withdrawn while Story Block is missing.
  */
 function announceToSuite() {
     try {
-        const own = settings();
-        const active = own.enabled && Boolean(storyBlock());
-        const owns = active ? SUITE.areas.filter(area => own.sourceOfTruth[area] !== 'theirs') : [];
-        const key = active ? `on:${owns.join(',')}` : '';
+        const { key, provider } = suiteAnnouncement({ id: SUITE.id, name: SUITE.name, version: VERSION, areas: SUITE.areas, settings: settings(), storyBlock: Boolean(storyBlock()), api: SUITE_API, panel: `#${PANEL_ID}` });
         if (key === announced) return;
         announced = key;
-        if (active) storySuite().announce({ id: SUITE.id, name: SUITE.name, version: VERSION, owns, api: API });
+        if (provider) storySuite().announce(provider);
         else storySuite().withdraw(SUITE.id);
     } catch (error) {
         console.warn('[Story Director] could not announce to the Story Suite', error);
@@ -514,12 +526,28 @@ function otherSuiteNames() {
     }
 }
 
+function suiteLinkShown() {
+    return Boolean(suiteOpener(storySuite()));
+}
+
+function openSuite() {
+    try {
+        suiteOpener(storySuite())?.(SUITE.id);
+    } catch (error) {
+        console.warn('[Story Director] could not open Story Suite', error);
+    }
+}
+
 // The note, the planner and the mirror ask isSource when they run, so only the settings'
-// list of who is here needs a refresh. Nothing here announces: that would wake everyone again.
+// list of who is here and the Story Suite link need a refresh. Nothing here announces: that
+// would wake everyone again.
 function watchSuite() {
     if (suiteWatched) return;
     try {
-        storySuite().onChange(() => settingsPanel?.setOthers?.(otherSuiteNames()));
+        storySuite().onChange(() => {
+            settingsPanel?.setOthers?.(otherSuiteNames());
+            settingsPanel?.setSuiteLink?.(suiteLinkShown());
+        });
         suiteWatched = true;
     } catch (error) {
         console.warn('[Story Director] could not join the Story Suite', error);
@@ -1087,26 +1115,17 @@ function tabBadge() {
 // Settings panel
 
 function addSettingsPanel(documentRef) {
-    if (documentRef.querySelector('#story_director_settings')) return true;
+    if (documentRef.querySelector(`#${PANEL_ID}`)) return true;
     const host = documentRef.querySelector('#extensions_settings2') ?? documentRef.querySelector('#extensions_settings');
     if (!host) return false;
     const wrapper = documentRef.createElement('div');
-    wrapper.id = 'story_director_settings';
+    wrapper.id = PANEL_ID;
     host.appendChild(wrapper);
     const sb = storyBlock();
     settingsPanel = renderSettings(wrapper, {
         settings: settings(),
         blocks: (sb?.listBlocks?.() ?? []).filter(block => block.tag !== BLOCK.tag).map(({ tag, name }) => ({ tag, name })),
-        onChange: next => {
-            const ctx = context();
-            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) }, capture: { ...DEFAULT_SETTINGS.capture, ...(next.capture ?? {}) }, sourceOfTruth: sourceChoices(next.sourceOfTruth) };
-            saveSettings(ctx);
-            // The switch or a source-of-truth choice may change what we offer.
-            announceToSuite();
-            // The calendar or the scene block may have changed: every cached replay is stale.
-            cache = { chatId: null, entries: [] };
-            storyBlock()?.refresh?.();
-        },
+        onChange: applySettings,
         onSeed: () => void seed(),
         onPlanArc: () => void planArc({ reason: 'manual' }),
         version: `v${VERSION}`,
@@ -1118,8 +1137,23 @@ function addSettingsPanel(documentRef) {
         onImportPack: importPack,
         onClearPack: clearPack,
         others: otherSuiteNames(),
+        suiteLink: suiteLinkShown(),
+        onOpenSuite: openSuite,
     });
     return true;
+}
+
+// A full new settings object, from the panel or from Story Suite's overlay (api.manage).
+function applySettings(next) {
+    const ctx = context();
+    if (!ctx?.extensionSettings) return;
+    ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) }, capture: { ...DEFAULT_SETTINGS.capture, ...(next.capture ?? {}) }, sourceOfTruth: sourceChoices(next.sourceOfTruth) };
+    saveSettings(ctx);
+    // The switch or a source-of-truth choice may change what we offer.
+    announceToSuite();
+    // The calendar or the scene block may have changed: every cached replay is stale.
+    cache = { chatId: null, entries: [] };
+    storyBlock()?.refresh?.();
 }
 
 async function importPack(text) {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.1
+
+Story Suite overlay support ([docs/STORY_SUITE.md](docs/STORY_SUITE.md#one-place-to-manage-them-all)).
+
+- **Managed from Story Suite:** Story Block's overlay can show Story Director's settings panel as a tab (the announcement names it: `settings: '#story_director_settings'`) and set its Source of truth choices and tracking switch from its Overview, through `api.manage` (`areas`, `sources()`, `setSource(area, choice)`, `enabled()`, `setEnabled(on)`). Each goes the same way as the panel's own control: saved, shown in the panel, announced again and refreshed.
+- **Switched off, still listed:** turning tracking off now announces Story Director with `enabled: false` (offering nothing) instead of withdrawing it, so the overlay can switch it back on. Who owns an area is unchanged: a switched-off extension owns nothing. Without Story Block it is still withdrawn.
+- **A *Manage all in Story Suite* line** on top of the settings while the overlay is available (two or more story extensions, and a Story Block that offers it); marked `data-story-suite-link` so the overlay can hide it while it holds the panel. Alone, nothing changes.
+- `globalThis.StoryDirector` is unchanged; `manage` is only in what the Story Suite gets.
+
 ## 0.8.0
 
 Encounters: planned fights as part of the arc, and the Story Suite handshake.
