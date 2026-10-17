@@ -1,4 +1,4 @@
-# Story Director v0.5.3
+# Story Director v0.5.4
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
@@ -80,8 +80,14 @@ World: Canal Street fires — curfew in force
 Hooks: River stranger — who pulled Ren from the sump
 Clocks: Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign
 Do not reveal: who sold the weir route
+Pacing: the world keeps its schedule and the scene keeps its flow. …
 <how to write changes>
 ```
+
+Whenever something is scheduled, a short **Pacing** line says how a schedule meets a scene:
+bring a due item in only where it fits (on-screen if your character is there, otherwise later
+as news, signs or aftermath), never cut into or bend the current scene for a beat, never decide
+what your character does, and let what cannot fit happen off-screen or slip to a later date.
 
 It is injected as a system message at a shallow depth (1 by default), so the cached history in
 front of it is untouched.
@@ -157,6 +163,11 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
 - **What it writes:** an arc, 3–6 dated beats, an agenda for each NPC the arc moves, hooks,
   clocks, and a secret for every secret it creates. Relative dates ("in 2 days", "tomorrow at
   dusk") become dates in your calendar. Plans that act for your character are flagged.
+- **While it runs** a notice stays up ("Planning the next arc… on *profile*") until the plan is
+  ready; a failure (the API refused, the answer was unusable) says why in a red notice.
+- **Beats leave room:** the planner is told that a beat's date is when the world acts, not an
+  appointment for your character. Every beat must work whether or not you are there, and may
+  slip; the note's Pacing line tells the storyteller the same every reply.
 - **Review:** the plan waits in the Director tab as editable change lines; **Accept** writes them
   into the latest reply (deleting that reply undoes the plan), **Discard** drops it, **Plan
   again** asks for another. Turn on *Use plans without review* to skip this.

@@ -37,7 +37,7 @@ import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, sum
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 
-const VERSION = '0.5.3';
+const VERSION = '0.5.4';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -95,8 +95,8 @@ function chatIdOf(ctx) {
     catch { return ctx?.chatId ?? null; }
 }
 
-function notify(level, message) {
-    globalThis.toastr?.[level]?.(message, 'Story Director');
+function notify(level, message, options) {
+    return globalThis.toastr?.[level]?.(message, 'Story Director', options);
 }
 
 function reportStatus(text) {
@@ -553,7 +553,13 @@ function connectionProfiles() {
     }
 }
 
-// The planner's one call: a connection profile (its own API and model) or the chat's own.
+// "on Fast profile" for a connection profile, nothing for the chat's own model.
+function modelLabel(model) {
+    if (model?.source !== 'profile' || !model.profileId) return '';
+    const profile = (connectionProfiles() ?? []).find(entry => entry.id === model.profileId);
+    return profile?.name ? ` on ${profile.name}` : '';
+}
+
 // One call on the chosen model: a connection profile (its own API and model) or the chat's own.
 async function sendToModel(messages, model, maxTokens) {
     const ctx = context();
@@ -577,11 +583,18 @@ function recentChat(count) {
 /** Ask the planner for the next arc; the result waits in the tab (or is used at once). */
 async function planArc({ reason = 'manual' } = {}) {
     const ctx = context();
-    if (planning || !ctx || !chatIdOf(ctx) || !storyBlock()) return;
+    if (planning) {
+        if (reason === 'manual') notify('info', 'The next arc is already being planned.');
+        return;
+    }
+    if (!ctx || !chatIdOf(ctx) || !storyBlock()) return;
     const own = settings(ctx);
     planning = true;
     planError = '';
     storyBlock()?.refresh?.();
+    // Planning reads a long stretch of chat and can take a while: a toast stays up until it
+    // is done, wherever the reader is (the tab may be closed or hidden).
+    const progress = notify('info', `Planning the next arc${modelLabel(own.arc.model)}… this can take a minute.`, { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false });
     try {
         const cal = calendar();
         const { tracker, now, place } = situation('normal');
@@ -598,13 +611,13 @@ async function planArc({ reason = 'manual' } = {}) {
             genre: own.arc.genre,
             previousArc: previous ? `${previous.key}${previous.fields?.desc ? ` — ${previous.fields.desc}` : ''}` : '',
         }).map(message => ({ ...message, content: subst(message.content) }));
-        if (reason !== 'manual') notify('info', 'Planning the next arc…');
         const answer = await sendToModel(messages, own.arc.model, Number(own.arc.maxTokens) || 1500);
         const plan = parsePlan(answer, { calendar: cal, now });
         const userName = String(ctx.name1 ?? '');
         const findings = validatePlan(plan, { calendar: cal, now, userName });
         if (findings.some(finding => finding.severity === 'error')) {
             planError = `The plan could not be used: ${findings.filter(finding => finding.severity === 'error').map(finding => finding.message).join('; ')}`;
+            notify('error', planError);
             return;
         }
         const arcId = `arc-${Date.now().toString(36)}`;
@@ -620,7 +633,9 @@ async function planArc({ reason = 'manual' } = {}) {
         const cause = error?.cause instanceof Error ? ` (${error.cause.message})` : '';
         planError = `Planning failed: ${error instanceof Error ? error.message : String(error)}${cause}`;
         console.error('[Story Director] planning failed', error);
+        notify('error', planError);
     } finally {
+        if (progress) globalThis.toastr?.clear?.(progress);
         planning = false;
         storyBlock()?.refresh?.();
     }

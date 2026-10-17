@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHANGE_INSTRUCTION, buildNote } from '../src/note.js';
+import { CHANGE_INSTRUCTION, PACING, PACING_NO_CHANGES, buildNote } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -129,7 +129,7 @@ test('Due now and Arriving lines', () => {
 test('one line per kind, in the contract order', () => {
     const thys = record({ key: 'Thys', fields: { now: 'at the gate' } });
     const note = buildNote(selection({ relevant: [council, graves, geva, stranger, fires, brant, thys] }), { calendar });
-    assert.deepEqual(lines(note).slice(1, -CHANGE_INSTRUCTION.split('\n').length), [
+    assert.deepEqual(lines(note).slice(1, -CHANGE_INSTRUCTION.split('\n').length - 1), [
         'Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17) · Brant — on the frontier road with a dray → arrives Auvoth (Goldwane 19) · Thys — at the gate',
         'World: Canal Street fires — curfew in force',
         'Hooks: River stranger — who pulled Ren from the sump',
@@ -180,8 +180,28 @@ test('a tiny budget keeps the header, due lines, Do not reveal and the instructi
         "Due now: Saartje's sale (Goldwane 16)",
         'Arriving: Courier arrives Varnhold Watch (Goldwane 16, morning)',
         "Do not reveal: Chiyo's debt",
+        PACING,
         ...CHANGE_INSTRUCTION.split('\n'),
     ]);
+});
+
+test('pacing: only when something is scheduled, in the capture wording without change lines', () => {
+    const thys = record({ key: 'Thys', fields: { now: 'at the gate' } });
+    const quiet = buildNote(selection({ relevant: [thys, fires] }), { calendar });
+    assert.ok(!quiet.includes('Pacing:'), 'nothing dated or planned: no pacing line');
+
+    const due = buildNote(selection({ due: [sale] }), { calendar });
+    assert.equal(lines(due).at(-CHANGE_INSTRUCTION.split('\n').length - 1), PACING);
+    assert.match(PACING, /Never cut into or bend the current scene for a beat/);
+    assert.match(PACING, /\{\{user\}\}/);
+    assert.ok(estimateTokens(PACING) < 100, 'short');
+
+    assert.ok(buildNote(selection({ relevant: [council] }), { calendar }).includes(PACING), 'a beat counts');
+    assert.ok(buildNote(selection({ relevant: [geva] }), { calendar }).includes(PACING), 'a next step counts');
+
+    const captured = buildNote(selection({ due: [sale] }), { calendar, instruction: '' });
+    assert.equal(lines(captured).at(-1), PACING_NO_CHANGES);
+    assert.doesNotMatch(PACING_NO_CHANGES, /~ on|\(!\)/);
 });
 
 test('no records gives the instruction alone', () => {
