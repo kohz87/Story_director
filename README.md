@@ -1,4 +1,4 @@
-# Story Director v0.5.1
+# Story Director v0.5.2
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
@@ -213,8 +213,14 @@ planning, Capture, and Existing chat & compatibility.
 ## The Director tab
 
 What is due and arriving, every active record by kind (pin one to keep it in the note), the
-dormant shelf, secrets (hidden until you open them), what was resolved recently, and any
-problems with the last reply's changes.
+arc and its beats, the dormant shelf, secrets, what was resolved recently, problems with the
+last reply's changes, and the route tool.
+
+**It starts hidden.** The tracker is the story behind the scenes, so by default the tab shows
+only the time and place, counts and what you can do (plan or end an arc, accept a waiting plan
+without reading it, seed, route). **Reveal** opens it for that chat until you **Hide** it again
+or reload; hidden text is not put on the page at all. Turn this off with **Hide behind the
+scenes** in the settings' quick bar.
 
 ## Roadmap
 

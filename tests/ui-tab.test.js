@@ -359,3 +359,48 @@ test('arc: a draft is editable, and Accept hands back the edited lines', () => {
     assert.deepEqual(accepted, ['+ arc Edited — by the reader | arc: arc-1']);
     assert.equal(discarded, 1);
 });
+
+test('spoiler guard: locked shows counts and actions, and none of the hidden text', () => {
+    const record = (key, kind, fields = {}) => ({ key, id: key.toLowerCase(), kind, status: 'active', fields: { desc: '', now: '', then: '', on: '', due: '', shown: '', leg: '', arrive: '', place: '', people: '', ...fields }, extra: {}, pinned: false, history: [] });
+    const selection = {
+        due: [record('Geva', 'agenda', { then: 'reissues the warrants' })],
+        arriving: [],
+        relevant: [{ record: record('Council session opens', 'beat', { desc: 'the legation forces a vote' }) }],
+        dormant: [record('Old feud', 'hook')],
+        secrets: [record('Kade sold the route', 'secret')],
+        resolvedRecently: [],
+    };
+    const calls = [];
+    const arc = { current: { key: 'The Weir Bullion', kind: 'arc', fields: { desc: 'who sold the weir route' } }, beats: { done: 1, total: 3 }, onPlan: () => calls.push('plan'), onEnd: () => calls.push('end') };
+    const pane = doc.createElement('div');
+    renderTab(pane, { timeText: 'Haywane 12', place: 'Auvoth', selection, findings: [{ severity: 'warn', key: 'Geva', message: 'Geva: the leg starts at Shorn' }], arc, spoiler: { locked: true, onReveal: () => calls.push('reveal') } });
+    const all = pane.textContent;
+    for (const hidden of ['reissues the warrants', 'Council session opens', 'legation', 'Old feud', 'Kade', 'The Weir Bullion', 'weir route', 'leg starts']) {
+        assert.ok(!all.includes(hidden), `"${hidden}" is not in the page`);
+    }
+    assert.match(all, /Haywane 12/, 'time and place still show');
+    assert.match(pane.querySelector('.story-director-lock-counts').textContent, /1 due · 3 tracked records · 1 problem/);
+    assert.match(pane.querySelector('.story-director-section.is-arc').textContent, /An arc is in progress \(1 of 3 beats played\)/);
+    pane.querySelector('.story-director-arc-plan').click();
+    pane.querySelector('.story-director-arc-end').click();
+    pane.querySelector('.story-director-reveal').click();
+    assert.deepEqual(calls, ['plan', 'end', 'reveal']);
+
+    const open = doc.createElement('div');
+    renderTab(open, { selection, arc, spoiler: { locked: false, onHide: () => calls.push('hide') } });
+    assert.match(open.textContent, /Council session opens/, 'revealed shows everything');
+    open.querySelector('.story-director-hide').click();
+    assert.equal(calls.at(-1), 'hide');
+});
+
+test('spoiler guard: a waiting plan can be accepted without reading it', () => {
+    const accepted = [];
+    const draft = { key: 'd2', text: '+ arc Secret Plan — spoilers | arc: arc-2' };
+    const pane = doc.createElement('div');
+    renderTab(pane, { selection: null, arc: { current: null, draft, onAccept: text => accepted.push(text), onDiscard() {} }, spoiler: { locked: true, onReveal() {} } });
+    assert.ok(!pane.textContent.includes('Secret Plan'));
+    assert.equal(pane.querySelector('.story-director-draft-text'), null, 'the plan is not in the page');
+    pane.querySelector('.story-director-draft-accept').click();
+    assert.deepEqual(accepted, ['+ arc Secret Plan — spoilers | arc: arc-2']);
+    assert.ok(pane.querySelector('.story-director-draft-review'));
+});

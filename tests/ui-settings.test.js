@@ -300,3 +300,16 @@ test('capture: mode, model and answer length go through onChange', () => {
     assert.deepEqual(last, { mode: 'fallback', model: { source: 'profile', profileId: 'p1' }, maxTokens: 600 });
     assert.ok(container.querySelector('#story_director_wsa_file'), 'the World State Alpha import is offered');
 });
+
+test('the spoiler switch sits in the quick bar, on by default', () => {
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const changes = [];
+    renderSettings(container, { settings: {}, onChange: next => changes.push(next) });
+    const guard = container.querySelector('.story-director-quickbar input#story_director_spoiler');
+    assert.ok(guard, 'in the quick bar');
+    assert.equal(guard.checked, true);
+    guard.checked = false;
+    guard.dispatch('change');
+    assert.equal(changes.at(-1).spoilerGuard, false);
+});

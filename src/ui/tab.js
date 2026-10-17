@@ -318,11 +318,88 @@ function renderRoute({ places = [], onRoute }) {
     return details;
 }
 
-export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null } = {}) {
+// ---------------------------------------------------------------------------
+// Spoiler guard: the tracker is the story behind the scenes, so it stays hidden until asked
+
+function countsOf(selection, findings) {
+    const tracked = ['due', 'arriving', 'dormant'].reduce((sum, list) => sum + nonSecret(selection?.[list]).length, 0)
+        + nonSecret((selection?.relevant ?? []).map(entry => entry?.record ?? entry)).length;
+    return { due: nonSecret(selection?.due).length + nonSecret(selection?.arriving).length, tracked, problems: findings.length };
+}
+
+function renderLock(counts, onReveal) {
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const facts = [
+        counts.due ? `${counts.due} due` : null,
+        plural(counts.tracked, 'tracked record'),
+        counts.problems ? plural(counts.problems, 'problem') : null,
+    ].filter(Boolean).join(' · ');
+    return section('is-locked', [
+        el('div', { className: 'story-director-lock' }, [
+            icon('fa-eye-slash'),
+            el('div', { className: 'story-director-lock-text' }, [
+                el('p', { className: 'story-director-lock-title', text: 'Behind the scenes' }),
+                el('p', { className: 'story-director-lock-hint', text: 'Agendas, planned beats, clocks and secrets stay hidden so the story can still surprise you.' }),
+                el('p', { className: 'story-director-lock-counts', text: facts }),
+            ]),
+        ]),
+        button('Reveal', 'story-director-reveal', { iconName: 'fa-eye', onClick: () => onReveal?.() }),
+    ]);
+}
+
+// The arc without its content: what can be done, never what was planned.
+function renderArcLocked({ current = null, beats = null, draft = null, busy = false, error = '', onPlan = null, onEnd = null, onAccept = null, onDiscard = null }, onReveal) {
+    const children = [sub('Arc', 'fa-compass')];
+    let actions;
+    if (draft) {
+        children.push(el('p', { className: 'story-director-arc-desc', text: 'A new arc plan is waiting.' }));
+        actions = [
+            button('Accept without reading', 'story-director-draft-accept', { iconName: 'fa-check', onClick: () => onAccept?.(String(draft.text ?? '')) }),
+            button('Review', 'story-director-draft-review', { iconName: 'fa-eye', onClick: () => onReveal?.() }),
+            button('Discard', 'story-director-draft-discard', { iconName: 'fa-xmark', onClick: () => onDiscard?.() }),
+        ];
+    } else {
+        const progress = beats && beats.total ? ` (${beats.done} of ${beats.total} beats played)` : '';
+        children.push(el('p', { className: 'story-director-arc-desc', text: current ? `An arc is in progress${progress}.` : 'No arc planned yet.' }));
+        actions = [
+            button(busy ? 'Planning…' : (current ? 'Plan next arc' : 'Plan arc'), 'story-director-arc-plan', { iconName: 'fa-wand-magic-sparkles', onClick: () => onPlan?.() }),
+            current ? button('End arc', 'story-director-arc-end', { iconName: 'fa-flag-checkered', onClick: () => onEnd?.() }) : null,
+        ];
+    }
+    const row = el('div', { className: 'story-director-arc-actions' }, actions);
+    if (busy && !draft) row.querySelectorAll?.('button').forEach?.(node => { node.disabled = true; });
+    children.push(row);
+    if (text(error)) children.push(el('p', { className: 'story-director-arc-error', text: error, attrs: { role: 'alert' } }));
+    return section('is-arc', children);
+}
+
+export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null, spoiler = null } = {}) {
     const root = el('div', { className: 'story-director-tab' });
     const options = { formatDate, onPin };
     const now = renderNow(timeText || '', place || selection?.place || '');
     if (now) root.append(now);
+    const list = Array.isArray(findings) ? findings : [];
+
+    // Locked: nothing hidden is put into the page at all, only counts and what can be done.
+    if (spoiler?.locked) {
+        if (arc) root.append(renderArcLocked(arc, spoiler.onReveal));
+        if (isEmpty(selection) && canSeed) {
+            root.append(el('div', { className: 'story-director-empty' }, [
+                el('p', { className: 'story-director-empty-hint', text: 'The latest World State block has lines that can start the tracker.' }),
+                button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() }),
+            ]));
+        }
+        root.append(renderLock(countsOf(selection, list), spoiler.onReveal));
+        if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
+        pane.replaceChildren(root);
+        return;
+    }
+    if (spoiler) {
+        root.append(el('div', { className: 'story-director-unlocked' }, [
+            el('span', { className: 'story-director-unlocked-text', text: 'Behind the scenes is showing.' }),
+            button('Hide', 'story-director-hide', { iconName: 'fa-eye-slash', onClick: () => spoiler.onHide?.() }),
+        ]));
+    }
     if (arc) root.append(renderArc(arc));
 
     if (isEmpty(selection)) {
@@ -369,7 +446,7 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
         }
     }
 
-    const problems = renderProblems(Array.isArray(findings) ? findings : []);
+    const problems = renderProblems(list);
     if (problems) root.append(problems);
     if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
     pane.replaceChildren(root);
