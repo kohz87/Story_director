@@ -1153,7 +1153,24 @@ function tabBadge() {
 // ---------------------------------------------------------------------------
 // Settings panel
 
+// The Story Suite's shared panel styles (src/suite.css, identical in the four extensions):
+// linked once per page, by whichever extension comes first.
+const SUITE_CSS_ID = 'story-suite-css';
+function loadSuiteCss(documentRef) {
+    try {
+        if (!documentRef?.head || documentRef.getElementById?.(SUITE_CSS_ID)) return;
+        const link = documentRef.createElement('link');
+        link.id = SUITE_CSS_ID;
+        link.rel = 'stylesheet';
+        link.href = new URL('./src/suite.css', import.meta.url).href;
+        documentRef.head.appendChild(link);
+    } catch {
+        // Unstyled is still usable.
+    }
+}
+
 function addSettingsPanel(documentRef) {
+    loadSuiteCss(documentRef);
     if (documentRef.querySelector(`#${PANEL_ID}`)) return true;
     const host = documentRef.querySelector('#extensions_settings2') ?? documentRef.querySelector('#extensions_settings');
     if (!host) return false;

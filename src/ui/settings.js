@@ -1,9 +1,11 @@
 // Story Director settings panel.
 //
-// Drawn like Story Block's panel: SillyTavern's inline-drawer, quiet uppercase section
-// heads, and two-line rows (what the setting is, then a short hint) with the control on
-// the right. Block names, tags and month names are typed by the reader, so every node is
-// built with createElement and filled through textContent / value, never innerHTML.
+// Drawn in the Story Suite's shared look (src/suite.css, docs/STORY_SUITE.md "One look for the
+// four settings panels"): SillyTavern's inline-drawer whose content is a `story-suite-panel`,
+// the Manage all line, a quick bar with the switches and main actions, then folding sections
+// of `story-suite-row`s (a bold label, a small hint, the control). Block names, tags and month
+// names are typed by the reader, so every node is built with createElement and filled through
+// textContent / value, never innerHTML.
 //
 // The panel keeps its own copy of the settings and hands a full new object to onChange
 // after every edit; the object it was given is never touched. update(settings) redraws
@@ -85,7 +87,7 @@ function button(label, className, { iconName, title, onClick } = {}) {
 }
 
 function textInput(id, value, placeholder = '') {
-    const node = el('input', { className: 'text_pole story-director-input', attrs: { id } });
+    const node = el('input', { className: 'text_pole', attrs: { id } });
     node.type = 'text';
     node.value = value ?? '';
     if (placeholder) node.placeholder = placeholder;
@@ -93,14 +95,19 @@ function textInput(id, value, placeholder = '') {
 }
 
 function numberInput(id, value, [min, max]) {
-    const node = el('input', { className: 'text_pole story-director-input story-director-number', attrs: { id, min: String(min), max: String(max), step: '1', inputmode: 'numeric' } });
+    const node = el('input', { className: 'text_pole', attrs: { id, min: String(min), max: String(max), step: '1', inputmode: 'numeric' } });
     node.type = 'number';
     node.value = String(value ?? '');
     return node;
 }
 
+/** A number with its unit after it (`story-suite-number`). */
+function withUnit(input, unit) {
+    return el('span', { className: 'story-suite-number' }, [input, unit ? el('small', { text: unit }) : null]);
+}
+
 function select(id, options, value) {
-    const node = el('select', { className: 'text_pole story-director-input story-director-select', attrs: { id } });
+    const node = el('select', { className: 'text_pole', attrs: { id } });
     for (const option of options) {
         const item = el('option', { text: option.label });
         item.value = option.value;
@@ -110,34 +117,33 @@ function select(id, options, value) {
     return node;
 }
 
-/** An on/off switch: SillyTavern's checkbox_label drawn as a track and knob by style.css. */
+/** An on/off switch: a checkbox, which suite.css shows as an Enabled/Disabled pill on its row. */
 function toggle(id, checked, label) {
     const input = el('input', { attrs: { id, role: 'switch', 'aria-label': label } });
     input.type = 'checkbox';
     input.checked = Boolean(checked);
-    const wrapper = el('label', { className: 'checkbox_label story-director-switch', attrs: { for: id } }, [input, el('span', { text: label })]);
-    return { wrapper, input };
+    return input;
 }
 
 /**
- * A two-line row: the setting's name, a quiet hint under it, and the control. `wide`
- * controls (selects, text, the months list) take a line of their own under the text,
- * so they are never squeezed beside it on a phone.
+ * A setting (`story-suite-row`): `<span><b>name</b><small>hint · status</small></span>` and the
+ * control beside it. A `label` for the control when it has an id, so the whole row is its
+ * target (a checkbox flips from anywhere on the row); a plain div otherwise. `stacked` puts a
+ * large control (a prompt with its button) on a line of its own under the text.
  */
-function row(name, hint, control, { id, wide = false, className = '' } = {}) {
-    const title = id ? el('label', { className: 'story-director-row-name', text: name, attrs: { for: id } }) : el('span', { className: 'story-director-row-name', text: name });
-    return el('div', { className: `story-director-row${wide ? ' is-wide' : ''} ${className}`.trim() }, [
-        el('div', { className: 'story-director-row-text' }, [
-            title,
-            hint ? el('small', { className: 'story-director-row-hint', text: hint }) : null,
-        ]),
-        el('div', { className: 'story-director-row-control' }, [control]),
+function row(name, hint, control, { id, status = '', stacked = false, className = '' } = {}) {
+    const small = [hint, status].filter(Boolean).join(' · ');
+    const classes = ['story-suite-row', stacked ? 'is-stacked' : '', className].filter(Boolean).join(' ');
+    return el(id ? 'label' : 'div', { className: classes, attrs: id ? { for: id } : {} }, [
+        el('span', {}, [el('b', { text: name }), small ? el('small', { text: small }) : null]),
+        control,
     ]);
 }
 
-// Which groups the reader keeps open: presentation only, remembered per browser.
+// Which sections the reader keeps open: presentation only, remembered per browser. All start
+// closed, as in every Story Suite panel.
 const OPEN_GROUPS_KEY = 'story_director_settings_open_groups';
-const DEFAULT_OPEN_GROUPS = ['tracking'];
+const DEFAULT_OPEN_GROUPS = [];
 let openGroups = null;
 
 function loadOpenGroups() {
@@ -155,7 +161,11 @@ function saveOpenGroups(groups) {
 }
 
 function sectionHead(text) {
-    return el('div', { className: 'story-director-section-head' }, [el('span', { text })]);
+    return el('div', { className: 'story-suite-subhead', text });
+}
+
+function muted(text, className = '') {
+    return el('p', { className: `story-suite-muted ${className}`.trim(), text });
 }
 
 // ---------------------------------------------------------------------------
@@ -240,11 +250,11 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     // Re-rendering into the same container keeps whatever the runtime last wrote into the
     // status line instead of blanking it until the next reply.
     const previousStatus = container.querySelector?.('#story_director_status')?.textContent ?? '';
-    const statusNode = el('div', { className: 'story-director-status', text: status || previousStatus, attrs: { id: 'story_director_status', 'aria-live': 'polite' } });
+    const statusNode = el('div', { className: 'story-suite-notice story-director-status', text: status || previousStatus, attrs: { id: 'story_director_status', 'aria-live': 'polite' } });
     const view = el('div', { className: 'story-director-view' });
     // Story Suite's overlay, while Story Block offers it; outside the view, so redraws keep it.
     // data-story-suite-link lets the overlay hide it while the panel sits inside the overlay.
-    const suiteLinkNode = el('div', { className: 'story-director-suite-link', attrs: { 'data-story-suite-link': '' } }, [
+    const suiteLinkNode = el('div', { className: 'story-suite-manage', attrs: { 'data-story-suite-link': '' } }, [
         button('Manage all in Story Suite', 'story-director-open-suite', { iconName: 'fa-layer-group', title: 'Open Story Suite: every story extension\'s settings and one Source of truth table', onClick: () => onOpenSuite?.() }),
     ]);
     const showSuiteLink = shown => {
@@ -261,7 +271,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
                 ]),
                 el('div', { className: 'inline-drawer-icon fa-solid fa-circle-chevron-down down' }),
             ]),
-            el('div', { className: 'inline-drawer-content' }, [suiteLinkNode, statusNode, view]),
+            el('div', { className: 'inline-drawer-content story-suite-panel' }, [suiteLinkNode, statusNode, view]),
         ]),
     ]);
     container.replaceChildren(root);
@@ -271,6 +281,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const next = complete(current);
         change(next);
         current = next;
+        refreshSummaries();
         onChange?.(complete(current));
     }
 
@@ -303,9 +314,9 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         bindNumber(budget, 'budgetTokens');
 
         return [
-            row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene', wide: true }),
-            row('Note depth', 'How many messages from the end the note goes in.', depth, { id: 'story_director_depth' }),
-            row('Note budget', 'Most tokens the note may use; the least relevant records go first.', budget, { id: 'story_director_budget' }),
+            row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene' }),
+            row('Note depth', 'How many messages from the end the note goes in.', withUnit(depth, 'messages'), { id: 'story_director_depth' }),
+            row('Note budget', 'Most tokens the note may use; the least relevant records go first.', withUnit(budget, 'tokens'), { id: 'story_director_budget' }),
         ];
     }
 
@@ -318,9 +329,9 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         bindNumber(dueSoon, 'dueSoonDays');
         return [
             sectionHead('Dormant shelf'),
-            row('After replies', 'A record not seen for this many replies rests on the shelf.', replies, { id: 'story_director_dormant_replies' }),
-            row('After story days', 'Or not seen for this many days of story time.', days, { id: 'story_director_dormant_days' }),
-            row('Due soon', 'Records due within this many days never go dormant.', dueSoon, { id: 'story_director_due_soon' }),
+            row('After replies', 'A record not seen for this many replies rests on the shelf.', withUnit(replies, 'replies'), { id: 'story_director_dormant_replies' }),
+            row('After story days', 'Or not seen for this many days of story time.', withUnit(days, 'days'), { id: 'story_director_dormant_days' }),
+            row('Due soon', 'Records due within this many days never go dormant.', withUnit(dueSoon, 'days'), { id: 'story_director_due_soon' }),
         ];
     }
 
@@ -330,7 +341,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const era = textInput('story_director_era', calendar.era, 'CY');
         era.addEventListener('input', () => commit(next => { next.calendar.era = era.value.trim(); }));
 
-        const months = el('textarea', { className: 'text_pole story-director-input story-director-months', attrs: { id: 'story_director_months', rows: '6', spellcheck: 'false' } });
+        const months = el('textarea', { className: 'text_pole story-director-months', attrs: { id: 'story_director_months', rows: '6', spellcheck: 'false' } });
         months.placeholder = 'Dawnwane\nHaywane | 31\nGoldwane';
         months.value = formatMonths(calendar.months, calendar.daysPerMonth);
         months.addEventListener('input', () => commit(next => { next.calendar.months = parseMonths(months.value, next.calendar.daysPerMonth); }));
@@ -345,8 +356,8 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
 
         // The month list only means something for a custom calendar.
         const customRows = [
-            row('Months', 'One per line, in order: Name, or Name | days.', months, { id: 'story_director_months', wide: true, className: 'is-custom' }),
-            row('Days per month', 'For months written without a length.', perMonth, { id: 'story_director_days_per_month', className: 'is-custom' }),
+            row('Months', 'One per line, in order: Name, or Name | days.', months, { id: 'story_director_months', className: 'is-custom' }),
+            row('Days per month', 'For months written without a length.', withUnit(perMonth, 'days'), { id: 'story_director_days_per_month', className: 'is-custom' }),
         ];
         const showCustom = () => customRows.forEach(node => {
             if (preset.value === 'gregorian') node.setAttribute('hidden', '');
@@ -359,7 +370,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         showCustom();
 
         return [
-            row('Calendar', 'How dates in the story are read.', preset, { id: 'story_director_preset', wide: true }),
+            row('Calendar', 'How dates in the story are read.', preset, { id: 'story_director_preset' }),
             row('Era', 'Written before the year, as in “CY 611”. Leave empty for none.', era, { id: 'story_director_era' }),
             ...customRows,
         ];
@@ -367,9 +378,9 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
 
     function renderMirror() {
         const mirror = toggle('story_director_mirror', current.mirrorOffscreen, 'Mirror off-screen agendas');
-        mirror.input.addEventListener('change', () => commit(next => { next.mirrorOffscreen = Boolean(mirror.input.checked); }));
+        mirror.addEventListener('change', () => commit(next => { next.mirrorOffscreen = Boolean(mirror.checked); }));
         return [
-            row('Mirror off-screen agendas', 'Rewrite the scene block’s Off-Screen list from the tracker, for a World State that keeps one.', mirror.wrapper, { id: 'story_director_mirror', className: 'is-switch' }),
+            row('Mirror off-screen agendas', 'Rewrite the scene block’s Off-Screen list from the tracker, for a World State that keeps one.', mirror, { id: 'story_director_mirror' }),
         ];
     }
 
@@ -386,11 +397,10 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             const value = SOURCE_CHOICES.some(choice => choice.value === current.sourceOfTruth[area]) ? current.sourceOfTruth[area] : 'auto';
             const choice = select(id, SOURCE_CHOICES, value);
             choice.addEventListener('change', () => commit(next => { next.sourceOfTruth[area] = choice.value; }));
-            return row(name, hint, choice, { id, wide: true });
+            return row(name, hint, choice, { id });
         });
         return [
-            sectionHead('Source of truth'),
-            el('p', { className: 'story-director-group-note story-director-suite-note', text: suiteText() }),
+            muted(suiteText(), 'story-director-suite-note'),
             ...rows,
         ];
     }
@@ -411,7 +421,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         ], map.east === 'left' ? 'left' : 'right');
         east.addEventListener('change', () => commit(next => { next.map.east = east.value === 'left' ? 'left' : 'right'; }));
         const decimal = (id, key, value, [min, max], step) => {
-            const input = el('input', { className: 'text_pole story-director-input story-director-number', attrs: { id, min: String(min), max: String(max), step: String(step), inputmode: 'decimal' } });
+            const input = el('input', { className: 'text_pole', attrs: { id, min: String(min), max: String(max), step: String(step), inputmode: 'decimal' } });
             input.type = 'number';
             input.value = String(value);
             input.addEventListener('change', () => {
@@ -425,17 +435,17 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const scale = decimal('story_director_map_scale', 'kmPerUnit', map.kmPerUnit, [0.001, 100000], 'any');
         const factor = decimal('story_director_map_factor', 'roadFactor', map.roadFactor, [1, 3], 0.05);
         return [
-            el('p', { className: 'story-director-group-note', text: 'Places come from the scene\'s location as the story goes (Director tab → Places). When the location carries coordinates, like "Auvoth | Terrace | [59.0, 110.0]", they go on a map with distances, and /route estimates trips between them. No world pack needed.' }),
-            row('North is', 'Which way the y coordinate runs.', north, { id: 'story_director_map_north', wide: true }),
-            row('East is', 'Which way the x coordinate runs.', east, { id: 'story_director_map_east', wide: true }),
-            row('km per unit', 'How far one coordinate unit is.', scale, { id: 'story_director_map_scale' }),
-            row('Road factor', 'Roads wind: straight-line km × this for trips over land.', factor, { id: 'story_director_map_factor' }),
+            muted('Places come from the scene\'s location as the story goes (Director tab → Places). When the location carries coordinates, like "Auvoth | Terrace | [59.0, 110.0]", they go on a map with distances, and /route estimates trips between them. No world pack needed.'),
+            row('North is', 'Which way the y coordinate runs.', north, { id: 'story_director_map_north' }),
+            row('East is', 'Which way the x coordinate runs.', east, { id: 'story_director_map_east' }),
+            row('Map scale', 'How far one coordinate unit is.', withUnit(scale, 'km per unit'), { id: 'story_director_map_scale' }),
+            row('Road factor', 'Roads wind: straight-line km × this for trips over land.', withUnit(factor, '×'), { id: 'story_director_map_factor' }),
             sectionHead('World pack (optional)'),
         ];
     }
 
     function renderPack() {
-        const message = el('div', { className: 'story-director-pack-message', attrs: { 'aria-live': 'polite' } });
+        const message = el('div', { className: 'story-suite-notice story-director-pack-message', attrs: { 'aria-live': 'polite' } });
         const report = result => {
             if (!result) return;
             // A new summary redraws the sections; the message goes into the fresh copy.
@@ -461,16 +471,16 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             const picked = file.files?.[0];
             if (picked) await importText(await picked.text());
         });
-        const paste = el('textarea', { className: 'text_pole story-director-input story-director-pack-paste', attrs: { id: 'story_director_pack_paste', rows: '4', spellcheck: 'false' } });
+        const paste = el('textarea', { className: 'text_pole story-director-pack-paste', attrs: { id: 'story_director_pack_paste', rows: '4', spellcheck: 'false' } });
         paste.placeholder = 'Or paste the world pack JSON here';
         const importButton = button('Import', 'story-director-pack-import', { iconName: 'fa-file-import', onClick: () => void importText(paste.value) });
         const clear = button('Clear', 'story-director-pack-clear', { iconName: 'fa-trash-can', onClick: async () => report(await onClearPack?.()) });
         if (!summary) clear.disabled = true;
 
         return [
-            row('Roads', summary ? `Loaded: ${summary}. Travel legs are checked against its roads, and /route follows them.` : 'None. Only needed for real roads, paces and travel checks; import it as JSON.', clear, { className: 'is-action is-pack' }),
-            row('Import a file', 'A world pack JSON (places, edges, pace_km_per_day, travel_rules, calendar).', file, { id: 'story_director_pack_file', wide: true }),
-            row('Or paste it', '', el('div', { className: 'story-director-pack-paste-wrap' }, [paste, importButton]), { id: 'story_director_pack_paste', wide: true }),
+            row('Roads', summary ? 'Travel legs are checked against its roads, and /route follows them.' : 'Only needed for real roads, paces and travel checks; import it as JSON.', clear, { className: 'is-pack', status: summary ? `Now: ${summary}` : 'Now: none' }),
+            row('Import a file', 'A world pack JSON (places, edges, pace_km_per_day, travel_rules, calendar).', file, { id: 'story_director_pack_file', stacked: true }),
+            row('Or paste it', '', el('div', { className: 'story-director-pack-paste-wrap' }, [paste, importButton]), { id: 'story_director_pack_paste', stacked: true }),
             message,
         ];
     }
@@ -497,16 +507,16 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const stall = numberInput('story_director_arc_stall', arc.stallDays, LIMITS.stallDays);
         bindNumber(stall, 'stallDays', value => value.arc.stallDays, (next, value) => { next.arc.stallDays = value; });
         const autoAccept = toggle('story_director_arc_accept', arc.autoAccept, 'Use new plans without review');
-        autoAccept.input.addEventListener('change', () => commit(next => { next.arc.autoAccept = Boolean(autoAccept.input.checked); }));
+        autoAccept.addEventListener('change', () => commit(next => { next.arc.autoAccept = Boolean(autoAccept.checked); }));
 
         const genre = textInput('story_director_arc_genre', arc.genre, 'Dark fantasy, political intrigue, slow burn');
         genre.addEventListener('input', () => commit(next => { next.arc.genre = genre.value; }));
-        const note = el('textarea', { className: 'text_pole story-director-input story-director-arc-note', attrs: { id: 'story_director_arc_note', rows: '3' } });
+        const note = el('textarea', { className: 'text_pole story-director-arc-note', attrs: { id: 'story_director_arc_note', rows: '3' } });
         note.placeholder = 'A goal, a pace, a beat you want: “Bring the guild into it; slow down after the fire.”';
         note.value = arc.note;
         note.addEventListener('input', () => commit(next => { next.arc.note = note.value; }));
 
-        const prompt = el('textarea', { className: 'text_pole story-director-input story-director-arc-prompt', attrs: { id: 'story_director_arc_prompt', rows: '8', spellcheck: 'false' } });
+        const prompt = el('textarea', { className: 'text_pole story-director-arc-prompt', attrs: { id: 'story_director_arc_prompt', rows: '8', spellcheck: 'false' } });
         prompt.value = arc.prompt || defaultPlannerPrompt;
         // Stored only when it differs from the built-in, so a better default reaches everyone.
         prompt.addEventListener('input', () => commit(next => { next.arc.prompt = prompt.value === defaultPlannerPrompt ? '' : prompt.value; }));
@@ -519,15 +529,15 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         });
 
         return [
-            row('When to plan', 'Planning is one model call per arc; tracking stays every reply.', trigger, { id: 'story_director_arc_trigger', wide: true }),
-            row('Model', profiles === null ? 'Connection Manager is off, so plans use the chat’s own connection.' : 'A connection profile has its own API and model; a cheaper one is fine.', model, { id: 'story_director_arc_model', wide: true }),
-            row('Messages to read', 'How much recent chat the planner sees.', recent, { id: 'story_director_arc_recent' }),
-            row('Answer length', 'Most tokens the plan may use.', maxTokens, { id: 'story_director_arc_tokens' }),
-            row('Stalled after', 'Automatic: plan again when no beat is due within this many story days.', stall, { id: 'story_director_arc_stall' }),
-            row('Use plans without review', 'Off: a new plan waits in the Director tab for you to accept.', autoAccept.wrapper, { id: 'story_director_arc_accept', className: 'is-switch' }),
-            row('Genre and tone', 'Told to the planner as written.', genre, { id: 'story_director_arc_genre', wide: true }),
-            row('Director’s note', 'Your hand on the wheel, read at every plan.', note, { id: 'story_director_arc_note', wide: true }),
-            row('Planning prompt', 'Macros: {{recent}}, {{tracker}}, {{now}}, {{place}}, {{nearby}}, {{note}}, {{genre}}, {{previous_arc}}.', el('div', { className: 'story-director-arc-prompt-wrap' }, [prompt, reset]), { id: 'story_director_arc_prompt', wide: true }),
+            row('When to plan', 'Planning is one model call per arc; tracking stays every reply.', trigger, { id: 'story_director_arc_trigger' }),
+            row('Model', profiles === null ? 'Connection Manager is off, so plans use the chat’s own connection.' : 'A connection profile has its own API and model; a cheaper one is fine.', model, { id: 'story_director_arc_model' }),
+            row('Messages to read', 'How much recent chat the planner sees.', withUnit(recent, 'messages'), { id: 'story_director_arc_recent' }),
+            row('Answer length', 'Most tokens the plan may use.', withUnit(maxTokens, 'tokens'), { id: 'story_director_arc_tokens' }),
+            row('Stalled after', 'Automatic: plan again when no beat is due within this many story days.', withUnit(stall, 'days'), { id: 'story_director_arc_stall' }),
+            row('Use plans without review', 'Off: a new plan waits in the Director tab for you to accept.', autoAccept, { id: 'story_director_arc_accept' }),
+            row('Genre and tone', 'Told to the planner as written.', genre, { id: 'story_director_arc_genre' }),
+            row('Director’s note', 'Your hand on the wheel, read at every plan.', note, { id: 'story_director_arc_note' }),
+            row('Planning prompt', 'Macros: {{recent}}, {{tracker}}, {{now}}, {{place}}, {{nearby}}, {{note}}, {{genre}}, {{previous_arc}}.', el('div', { className: 'story-director-arc-prompt-wrap' }, [prompt, reset]), { id: 'story_director_arc_prompt', stacked: true }),
         ];
     }
 
@@ -555,9 +565,9 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const tokens = numberInput('story_director_capture_tokens', capture.maxTokens, LIMITS.captureTokens);
         bindNumber(tokens, 'captureTokens', value => value.capture.maxTokens, (next, value) => { next.capture.maxTokens = value; });
         return [
-            row('Capture changes', 'A second call reads each exchange and writes the changes, for models that skip or garble them.', mode, { id: 'story_director_capture_mode', wide: true }),
-            row('Capture model', 'A small, fast model is enough.', model, { id: 'story_director_capture_model', wide: true }),
-            row('Answer length', 'Most tokens a capture answer may use.', tokens, { id: 'story_director_capture_tokens' }),
+            row('Capture changes', 'A second call reads each exchange and writes the changes, for models that skip or garble them.', mode, { id: 'story_director_capture_mode' }),
+            row('Capture model', 'A small, fast model is enough.', model, { id: 'story_director_capture_model' }),
+            row('Answer length', 'Most tokens a capture answer may use.', withUnit(tokens, 'tokens'), { id: 'story_director_capture_tokens' }),
         ];
     }
 
@@ -570,33 +580,39 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             wsaFile.value = '';
         });
         return [
-            row('Import from World State Alpha', 'An exported World State Alpha bundle: its active facts and developments become World records.', wsaFile, { id: 'story_director_wsa_file', wide: true }),
+            row('Import from World State Alpha', 'An exported World State Alpha bundle: its active facts and developments become World records.', wsaFile, { id: 'story_director_wsa_file', stacked: true }),
         ];
     }
 
     // The switch and the things done most often, above the groups.
     function renderQuickbar() {
         const enabled = toggle('story_director_enabled', current.enabled, 'Track the story');
-        enabled.input.addEventListener('change', () => commit(next => { next.enabled = Boolean(enabled.input.checked); }));
+        enabled.addEventListener('change', () => commit(next => { next.enabled = Boolean(enabled.checked); }));
         const guard = toggle('story_director_spoiler', current.spoilerGuard, 'Hide behind the scenes');
-        guard.input.addEventListener('change', () => commit(next => { next.spoilerGuard = Boolean(guard.input.checked); }));
-        return el('div', { className: 'story-director-quickbar' }, [
-            row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled.wrapper, { id: 'story_director_enabled', className: 'is-switch' }),
-            row('Hide behind the scenes', 'The Director tab keeps agendas, planned beats, clocks and secrets hidden until you press Reveal.', guard.wrapper, { id: 'story_director_spoiler', className: 'is-switch' }),
-            el('div', { className: 'story-director-quick-actions' }, [
+        guard.addEventListener('change', () => commit(next => { next.spoilerGuard = Boolean(guard.checked); }));
+        return el('div', { className: 'story-suite-quickbar' }, [
+            row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled, { id: 'story_director_enabled' }),
+            row('Hide behind the scenes', 'The Director tab keeps agendas, planned beats, clocks and secrets hidden until you press Reveal.', guard, { id: 'story_director_spoiler' }),
+            el('div', { className: 'story-suite-actions' }, [
                 onPlanArc ? button('Plan arc', 'story-director-plan', { iconName: 'fa-wand-magic-sparkles', onClick: () => onPlanArc() }) : null,
                 button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', title: 'Turn the latest World State’s Off-Screen, World, Hooks and Clocks lines into records', onClick: () => onSeed?.() }),
             ]),
         ]);
     }
 
-    function group(key, title, hint, rows) {
-        const details = el('details', { className: 'story-director-group', attrs: { 'data-group': key } }, [
-            el('summary', { className: 'story-director-group-summary' }, [
-                el('b', { text: title }),
-                hint ? el('small', { text: hint }) : null,
-            ]),
-            el('div', { className: 'story-director-group-body' }, rows),
+    // Each section's summary line says what its main setting is now, kept up to date on edits.
+    let summaries = [];
+
+    function refreshSummaries() {
+        for (const { node, summarize } of summaries) node.textContent = summarize();
+    }
+
+    function fold(key, title, summarize, rows) {
+        const small = el('small', { text: summarize() });
+        summaries.push({ node: small, summarize });
+        const details = el('details', { className: 'story-suite-fold', attrs: { 'data-fold': key } }, [
+            el('summary', {}, [el('b', { text: title }), small]),
+            el('div', { className: 'story-suite-fold-body' }, rows),
         ]);
         if (openGroups.has(key)) details.setAttribute('open', '');
         details.addEventListener('toggle', () => {
@@ -607,16 +623,39 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         return details;
     }
 
+    const CAPTURE_SHORT = { off: 'Off', fallback: 'When a reply has none', always: 'Always' };
+    const profileName = setting => {
+        if (setting?.source !== 'profile') return 'same model as chat';
+        const found = (profiles ?? []).find(profile => String(profile.id) === String(setting.profileId));
+        return found ? String(found.name ?? found.id) : 'a missing profile';
+    };
+    const summarizers = {
+        tracking: () => `<${current.sceneTag}> · depth ${current.depth} · up to ${current.budgetTokens} tokens`,
+        calendar: () => {
+            const calendar = current.calendar;
+            if (calendar.preset === 'gregorian') return `Gregorian${calendar.era ? ` · ${calendar.era}` : ''}`;
+            const count = calendar.months.length;
+            return count ? `${count} ${count === 1 ? 'month' : 'months'}${calendar.era ? ` · ${calendar.era}` : ''}` : 'Your months: none yet';
+        },
+        pack: () => `${current.map.kmPerUnit} km per unit · ${summary ? 'world pack loaded' : 'no world pack'}`,
+        arc: () => `${current.arc.trigger === 'auto' ? 'Automatic' : 'Manual'} · ${profileName(current.arc.model)}`,
+        capture: () => (current.capture.mode === 'off' || !CAPTURE_SHORT[current.capture.mode]
+            ? 'Off'
+            : `${CAPTURE_SHORT[current.capture.mode]} · ${profileName(current.capture.model)}`),
+        chat: () => `Mirror ${current.mirrorOffscreen ? 'on' : 'off'} · source of truth ${SOURCE_AREAS.every(([area]) => (current.sourceOfTruth[area] ?? 'auto') === 'auto') ? 'Automatic' : 'your choices'}`,
+    };
+
     function render() {
+        summaries = [];
         view.replaceChildren(
             renderQuickbar(),
-            el('div', { className: 'story-director-groups' }, [
-                group('tracking', 'Tracking & note', 'Scene block, note size and the dormant shelf', [...renderTracking(), ...renderDormant()]),
-                group('calendar', 'Calendar', 'Gregorian, or your world’s months and era', renderCalendar()),
-                group('pack', 'Map & travel', 'Places, coordinates, and an optional world pack', [...renderMapSettings(), ...renderPack()]),
-                group('arc', 'Arc planning', 'When to plan, which model, your Director’s note', renderArc()),
-                group('capture', 'Capture', 'A second model for missing change lines', renderCapture()),
-                group('chat', 'Existing chat & compatibility', 'World State Alpha import, Off-Screen mirror, source of truth', [...renderSeed(), ...renderMirror(), ...renderSources()]),
+            el('div', { className: 'story-suite-folds' }, [
+                fold('tracking', 'Tracking & note', summarizers.tracking, [...renderTracking(), ...renderDormant()]),
+                fold('calendar', 'Calendar', summarizers.calendar, renderCalendar()),
+                fold('pack', 'Map & travel', summarizers.pack, [...renderMapSettings(), ...renderPack()]),
+                fold('arc', 'Arc planning', summarizers.arc, renderArc()),
+                fold('capture', 'Capture', summarizers.capture, renderCapture()),
+                fold('chat', 'Existing chat & compatibility', summarizers.chat, [...renderSeed(), ...renderMirror(), sectionHead('Source of truth'), ...renderSources()]),
             ]),
         );
     }
@@ -646,6 +685,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             current.sourceOfTruth[area] = choice;
             const control = view.querySelector?.(`#story_director_source_${area}`);
             if (control) control.value = choice;
+            refreshSummaries();
         },
         /** The tracking switch flipped elsewhere: kept and shown, without onChange. */
         setEnabled(on) {

@@ -579,6 +579,23 @@ panel's copy for its next edit and shown in the select or switch, without redraw
 redrawn view, calls `onOpenSuite()`; hidden unless `suiteLink` / `setSuiteLink(true)`. Its
 element carries `data-story-suite-link`, so the overlay can hide it while it holds the panel.
 
+(v0.8.2) The markup is the Story Suite's shared panel (docs/STORY_SUITE.md, "One look for the
+four settings panels"; styled by `src/suite.css`, identical in the four extensions, which
+`index.js` links once per page as `<link id="story-suite-css">` unless an element with that id
+exists). The drawer content is `.story-suite-panel`; the Manage all line is
+`div.story-suite-manage[data-story-suite-link]` (a `menu_button` with `fa-layer-group`);
+`.story-suite-quickbar` holds the two switches and `.story-suite-actions` (Plan arc, Seed from
+World State); the sections are `details.story-suite-fold[data-fold]` (`tracking`, `calendar`,
+`pack`, `arc`, `capture`, `chat`) in `.story-suite-folds`, each `summary` a `<b>` title and a
+`<small>` summary of its main setting (refreshed on every edit), body `.story-suite-fold-body`;
+all start closed and the open ones are kept in `localStorage`
+(`story_director_settings_open_groups`, wrapped). Every setting is a `story-suite-row`
+(`label[for]` when it has a control id): `<span><b>Label</b><small>hint · Now: …</small></span>`
+and the control, a checkbox straight in the row (shown as a pill), a number in
+`.story-suite-number` with its unit; Dormant shelf, World pack and Source of truth are
+`.story-suite-subhead`s; the status line and the world pack message are `.story-suite-notice`s.
+Ids are unchanged.
+
 ## `src/ui/quests.js` (v0.7.1)
 
 ```js

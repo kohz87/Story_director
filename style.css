@@ -2,9 +2,8 @@
  * Story Director: the settings panel (src/ui/settings.js) and the "Director" tab in
  * Story Block's sidebar (src/ui/tab.js).
  *
- * Both follow Story Block's look so the extensions read as one: the settings like its
- * settings panel (quiet uppercase section heads, two-line rows, the on/off switch), the
- * tab like its World State board (a framed "now" box, small-caps section labels with an
+ * The settings use the Story Suite's shared look (src/suite.css, loaded once per page); the
+ * tab follows Story Block's World State board (a framed "now" box, small-caps section labels with an
  * icon, hairlines between entries, labelled fact rows). Colours come from SillyTavern's
  * theme variables. Everything wraps instead of scrolling sideways: the drawer and the
  * sidebar are often a 360-400 px phone column.
@@ -57,108 +56,23 @@
 }
 
 /* ------------------------------------------------------------------------- */
-/* Settings                                                                    */
+/* Settings: the shared Story Suite look is src/suite.css; only what is ours.   */
 
-.story-director-settings .story-director-status {
-    margin: 0.45rem 0;
-    opacity: 0.75;
-    overflow-wrap: anywhere;
+.story-director-settings .story-director-version {
+    font-weight: 400;
+    opacity: 0.6;
 }
 
-.story-director-settings .story-director-status:empty {
+/* The status line and the world pack message are notices, shown only when they say something. */
+.story-director-settings .story-director-status:empty,
+.story-director-settings .story-director-pack-message:empty {
     display: none;
 }
 
-/* "Manage all in Story Suite": one line on top while Story Block's overlay is available. */
-.story-director-settings .story-director-suite-link {
-    display: flex;
-    justify-content: flex-end;
-    margin: 0.45rem 0 0;
-}
-
-/* Section heads: Tracking, Dormant, Calendar, NPC State Delta, Existing chat. */
-.story-director-settings .story-director-section-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-    margin: 0.9rem 0 0.15rem;
-    font-size: 0.78em;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    opacity: 0.65;
-}
-
-.story-director-settings .story-director-view > .story-director-section-head:first-child {
-    margin-top: 0.4rem;
-}
-
-/*
- * A two-line row: the setting's name, a quiet hint under it, and the control at the
- * right. When the column is too narrow for both, the control drops under the text at
- * its own width instead of squeezing it.
- */
-.story-director-settings .story-director-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem 0.75rem;
-    padding: 0.5rem 0;
-}
-
-.story-director-settings .story-director-row + .story-director-row {
-    border-top: 1px solid var(--sd-border);
-}
-
-.story-director-settings .story-director-row-text {
-    display: flex;
-    flex: 1 1 12rem;
-    flex-direction: column;
-    gap: 0.1rem;
-}
-
-.story-director-settings .story-director-row-name {
-    margin: 0;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.story-director-settings label.story-director-row-name {
-    cursor: pointer;
-}
-
-.story-director-settings .story-director-row-hint {
-    font-size: 0.8em;
-    line-height: 1.35;
-    opacity: 0.7;
-    overflow-wrap: anywhere;
-}
-
-.story-director-settings .story-director-row-control {
-    display: flex;
-    flex: none;
-    align-items: center;
-    max-width: 100%;
-}
-
-/* Selects, the scene tag and the month list take the full width under the text. */
-.story-director-settings .story-director-row.is-wide .story-director-row-control {
-    flex: 1 1 100%;
-}
-
-.story-director-settings .story-director-input {
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-}
-
-.story-director-settings .story-director-row:not(.is-wide) .story-director-input {
-    width: 11rem;
-}
-
-.story-director-settings .story-director-row:not(.is-wide) .story-director-number {
-    width: 6.5rem;
+/* A large control (a prompt and its button) on a line of its own under the text. */
+.story-director-settings .story-suite-row.is-stacked {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 7px;
 }
 
 .story-director-settings .story-director-months {
@@ -167,63 +81,6 @@
     font-family: var(--monoFontFamily, monospace);
     font-size: 0.9em;
     line-height: 1.45;
-}
-
-/* The on/off switch: a checkbox drawn as a track and knob, as in Story Block. */
-.story-director-settings .story-director-switch {
-    position: relative;
-    display: inline-flex;
-    flex: none;
-    width: 2.4rem;
-    height: 1.35rem;
-    margin: 0;
-    cursor: pointer;
-}
-
-.story-director-settings .story-director-switch > span {
-    display: none;
-}
-
-.story-director-settings .story-director-switch input {
-    appearance: none;
-    -webkit-appearance: none;
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    border: 1px solid var(--sd-border);
-    border-radius: 999px;
-    background: rgba(127, 127, 127, 0.25);
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.story-director-settings .story-director-switch input::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 0.15rem;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 50%;
-    background: var(--SmartThemeBodyColor, #ddd);
-    transform: translateY(-50%);
-    transition: left 0.15s ease;
-}
-
-.story-director-settings .story-director-switch input:checked {
-    border-color: var(--sd-accent);
-    background: color-mix(in srgb, var(--sd-accent) 70%, transparent);
-}
-
-.story-director-settings .story-director-switch input:checked::after {
-    left: calc(100% - 1.15rem);
-}
-
-.story-director-settings .story-director-switch input:focus-visible {
-    outline: 2px solid var(--sd-accent);
-    outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -601,18 +458,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .story-director-settings .story-director-switch input,
-    .story-director-settings .story-director-switch input::after,
     .story-director-tab .story-director-fold-summary::after {
         transition: none;
     }
 }
 
 @media (forced-colors: active) {
-    .story-director-settings .story-director-switch input:checked {
-        background: Highlight;
-    }
-
     .story-director-tab .menu_button.story-director-pin.is-pinned {
         color: Highlight;
     }
@@ -620,7 +471,7 @@
 
 /* World pack (settings) */
 
-.story-director-pack-paste-wrap {
+.story-director-settings .story-director-pack-paste-wrap {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -628,19 +479,8 @@
     width: 100%;
 }
 
-.story-director-pack-paste-wrap textarea {
+.story-director-settings .story-director-pack-paste-wrap textarea {
     width: 100%;
-}
-
-.story-director-pack-message {
-    margin: 0.2rem 0 0.4rem;
-    font-size: 0.85em;
-    opacity: 0.8;
-    overflow-wrap: anywhere;
-}
-
-.story-director-pack-message:empty {
-    display: none;
 }
 
 /* Route tool (tab) */
@@ -758,7 +598,7 @@
 
 /* Arc planning prompt (settings) */
 
-.story-director-arc-prompt-wrap {
+.story-director-settings .story-director-arc-prompt-wrap {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -766,112 +606,10 @@
     width: 100%;
 }
 
-.story-director-arc-prompt-wrap textarea {
+.story-director-settings .story-director-arc-prompt-wrap textarea {
     width: 100%;
     font-family: var(--monoFontFamily, monospace);
     font-size: 0.85em;
-}
-
-/*
- * Settings layout, like NPC State Delta's: a quick bar with the switch and the common
- * actions, then folding groups with a title and a one-line hint. Only the first group starts
- * open; which ones the reader keeps open is remembered.
- */
-
-.story-director-settings .story-director-version {
-    font-weight: 400;
-    opacity: 0.6;
-}
-
-.story-director-settings .story-director-quickbar {
-    display: grid;
-    gap: 0.4rem;
-    margin: 0.4rem 0 0.6rem;
-    padding: 0.35rem 0.75rem 0.6rem;
-    border: 1px solid var(--sd-border);
-    border-radius: 10px;
-    background: var(--sd-surface);
-}
-
-.story-director-settings .story-director-quickbar .story-director-row {
-    padding: 0.35rem 0;
-}
-
-.story-director-settings .story-director-quick-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-}
-
-.story-director-settings .story-director-groups {
-    display: grid;
-    gap: 0.5rem;
-}
-
-.story-director-settings .story-director-group {
-    margin: 0;
-    border: 1px solid var(--sd-border);
-    border-radius: 9px;
-    overflow: hidden;
-    background: rgba(127, 127, 127, 0.03);
-}
-
-.story-director-settings .story-director-group-summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.1rem 0.5rem;
-    padding: 0.6rem 0.75rem;
-    cursor: pointer;
-    list-style: none;
-    background: rgba(127, 127, 127, 0.06);
-}
-
-.story-director-settings .story-director-group-summary::-webkit-details-marker {
-    display: none;
-}
-
-/* A small chevron that turns when the group opens. */
-.story-director-settings .story-director-group-summary::before {
-    content: "";
-    align-self: center;
-    width: 6px;
-    height: 6px;
-    margin-right: 0.15rem;
-    border-right: 2px solid currentColor;
-    border-bottom: 2px solid currentColor;
-    opacity: 0.55;
-    transform: rotate(-45deg);
-    transition: transform 0.15s ease;
-}
-
-.story-director-settings .story-director-group[open] > .story-director-group-summary::before {
-    transform: rotate(45deg);
-}
-
-.story-director-settings .story-director-group-summary b {
-    font-size: 0.95em;
-}
-
-.story-director-settings .story-director-group-summary small {
-    font-size: 0.8em;
-    opacity: 0.6;
-}
-
-.story-director-settings .story-director-group-body {
-    display: grid;
-    padding: 0.15rem 0.75rem 0.6rem;
-    min-width: 0;
-}
-
-.story-director-settings .story-director-group-body > .story-director-section-head:first-child {
-    margin-top: 0.4rem;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .story-director-settings .story-director-group-summary::before {
-        transition: none;
-    }
 }
 
 /* Spoiler guard (tab) */

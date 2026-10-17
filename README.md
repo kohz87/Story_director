@@ -306,9 +306,12 @@ State Alpha off afterwards; the two would inject overlapping notes.
 
 ## Settings
 
-The panel (Extensions → Story Director) has a quick bar (the on/off switch, **Plan arc**, **Seed
-from World State**) and folding groups: Tracking & note, Calendar, Map & travel, Arc
-planning, Capture, and Existing chat & compatibility.
+The panel (Extensions → Story Director) has the Story Suite's shared look, the same as the other
+story extensions': a quick bar (the **Track the story** and **Hide behind the scenes**
+switches, shown as Enabled/Disabled, then **Plan arc** and **Seed from World State**) and
+folding sections, each with a one-line summary of what it is set to: Tracking & note,
+Calendar, Map & travel, Arc planning, Capture, and Existing chat & compatibility. They start
+closed; the ones you open are remembered in this browser.
 
 | Setting | Default | |
 |---|---|---|
