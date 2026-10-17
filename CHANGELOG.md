@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+Quests.
+
+- **A `quest` kind** for long-running work your character took on: `+ quest Key — giver: … | goal: … | reward: … | step: … | due: …`. Aliases `bounty`, `contract`, `mission`; a line with a giver, goal, reward or step is a quest even without the word.
+- **Never dormant**, woken by its giver's name; `due` is the deadline, and the note says "deadline … reached" when it passes. Quests get their own line in the note (`Quests: Bounty — goal · at: step · for giver · reward · by deadline`), and a deadline counts as a schedule for the Pacing line.
+- **Director tab:** a Quests section with goal, step, giver, reward and deadline rows, also shown while the tab is hidden (quests are not spoilers).
+- **Only on acceptance:** the change instruction and the capture prompt say a quest starts when {{user}} accepts it; an offer is a hook. The arc planner presses on quests but never completes them, and a planned `QUEST:` becomes an offered hook.
+- **Seeding** reads `Quests`, `Bounties` or `Contracts` sections of the scene block.
+
 ## 0.6.0
 
 Places, without writing a map.

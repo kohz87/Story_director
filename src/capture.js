@@ -20,14 +20,15 @@ Tracked now:
 Story time: {{now}}. Place: {{place}}.
 
 Write one change per line, inside <Director>…</Director>:
-+ kind Key — part | label: value      a new record; kinds: agenda (someone off-screen with a stake), event, hook (an open tension), clock (a consequence that fires at due:), beat, secret
++ kind Key — part | label: value      a new record; kinds: agenda (someone off-screen with a stake), event, hook (an open tension), quest (work {{user}} accepted), clock (a consequence that fires at due:), beat, secret
 ~ Key — label: value                  change only what changed
 - Key — reason                        resolved
 ! Key — what happened                 something that was due happened
-Fields: now, then, on, due, leg, arrive, shown, place, people. Dates go only in on, due and arrive.
+Fields: now, then, on, due, leg, arrive, shown, place, people; a quest: giver, goal, reward, step, due (its deadline). Dates go only in on, due and arrive.
 
 Rules:
 - Record only what this exchange established as true. Never plans, intentions, options, guesses or hypotheticals.
+- A quest starts only when {{user}} accepts it in this exchange; an offer not yet taken is a hook. Move its step: as it progresses, - it when done or failed.
 - What someone claims in dialogue is their claim ("the guard says the gate is shut"), not a fact. A rumour stays a rumour.
 - Use the exact keys above for ~, - and !. A new key only for something new.
 - Off-screen people get a line only when they have a stake in {{user}} or an open hook.

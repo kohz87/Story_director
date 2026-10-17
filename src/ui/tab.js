@@ -24,13 +24,14 @@ const KIND_GROUPS = [
     { kind: 'agenda', label: 'Off-screen', icon: 'fa-satellite-dish' },
     { kind: 'event', label: 'World', icon: 'fa-earth-americas' },
     { kind: 'hook', label: 'Hooks', icon: 'fa-fire' },
+    { kind: 'quest', label: 'Quests', icon: 'fa-scroll' },
     { kind: 'clock', label: 'Clocks', icon: 'fa-hourglass-half' },
     { kind: 'beat', label: 'Beats', icon: 'fa-flag' },
 ];
 
 // Labelled rows in this order; desc heads the record as a plain line (it is what the
 // record is), and labels the tracker does not know follow as written.
-const FACT_FIELDS = ['now', 'then', 'on', 'due', 'leg', 'arrive', 'place', 'people', 'shown'];
+const FACT_FIELDS = ['goal', 'step', 'giver', 'reward', 'now', 'then', 'on', 'due', 'leg', 'arrive', 'place', 'people', 'shown'];
 const DATE_FIELDS = new Set(['on', 'due', 'arrive']);
 
 const SEVERITIES = [
@@ -441,6 +442,12 @@ function renderPlaces({ book, map = null, formatTime = null } = {}) {
 // ---------------------------------------------------------------------------
 // Spoiler guard: the tracker is the story behind the scenes, so it stays hidden until asked
 
+function activeQuests(selection) {
+    const seen = new Set();
+    return [...(selection?.due ?? []), ...(selection?.relevant ?? []).map(entry => entry?.record ?? entry), ...(selection?.dormant ?? [])]
+        .filter(record => record?.kind === 'quest' && !seen.has(record.id) && seen.add(record.id));
+}
+
 function countsOf(selection, findings) {
     const tracked = ['due', 'arriving', 'dormant'].reduce((sum, list) => sum + nonSecret(selection?.[list]).length, 0)
         + nonSecret((selection?.relevant ?? []).map(entry => entry?.record ?? entry)).length;
@@ -510,6 +517,10 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
             ]));
         }
         root.append(renderLock(countsOf(selection, list), spoiler.onReveal));
+        // Quests are promises {{user}} made, so they are no secret either; their twists live
+        // in secrets, which stay hidden.
+        const quests = activeQuests(selection);
+        if (quests.length) root.append(section('is-quest', [sub('Quests', 'fa-scroll', quests.length), recordList(quests, { formatDate })]));
         // Where the story has been is no secret: the reader was there.
         const placesFold = places ? renderPlaces(places) : null;
         if (placesFold) root.append(placesFold);

@@ -293,3 +293,19 @@ test('the current arc is shown on its own, and only its beats take priority 2', 
     assert.equal(selection.relevant.find(entry => entry.record.key === 'Council vote').priority, 2);
     assert.notEqual(selection.relevant.find(entry => entry.record.key === 'Old beat')?.priority, 2);
 });
+
+test('quests never go dormant, are woken by their giver, and their deadline makes them due', () => {
+    const now = at('Haywane 13');
+    const quiet = { message: 0, time: now - 90 * DAY };
+    const bounty = record({ key: 'Bounty on Kettle Jack', kind: 'quest', fields: { giver: 'Warden Hale', goal: 'bring him in alive' }, seen: quiet });
+    const thys = record({ key: 'Thys', fields: { now: 'at the gate' }, seen: quiet });
+    const quietOnly = classify(tracker([bounty, thys], 50), { calendar, now, message: 50 });
+    assert.deepEqual(keys(quietOnly.dormant), ['Thys']);
+    assert.deepEqual(quietOnly.relevant.map(({ record: r, reason }) => [r.key, reason]), [['Bounty on Kettle Jack', 'active']]);
+
+    const named = classify(tracker([bounty], 50), { calendar, now, message: 50, recentText: 'Warden Hale waves you over.' });
+    assert.deepEqual(named.relevant.map(({ record: r, reason }) => [r.key, reason]), [['Bounty on Kettle Jack', 'mentioned']]);
+
+    const late = record({ key: 'Herb run', kind: 'quest', fields: { goal: 'twelve moonleaf', due: 'Haywane 12' } });
+    assert.deepEqual(keys(classify(tracker([late], 50), { calendar, now, message: 50 }).due), ['Herb run']);
+});

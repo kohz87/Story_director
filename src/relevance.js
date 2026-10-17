@@ -127,7 +127,8 @@ export function classify(tracker, {
         const match = matchPriority(record, { place, text, message: current, arc });
         if (match) {
             selection.relevant.push({ record, ...match, index });
-        } else if (isDormant(record, options)) {
+        // An accepted quest never goes quiet on its own: it is a promise {{user}} made.
+        } else if (record.kind !== 'quest' && isDormant(record, options)) {
             selection.dormant.push(record);
         } else {
             selection.relevant.push({ record, reason: 'active', priority: 6, index });
@@ -173,7 +174,7 @@ function placeMatches(record, place) {
 
 function mentioned(record, text) {
     if (!text.trim()) return false;
-    const names = [record.key, ...String(record.fields?.people ?? '').split(',')]
+    const names = [record.key, ...String(record.fields?.people ?? '').split(','), ...String(record.fields?.giver ?? '').split(',')]
         .map(name => String(name ?? '').trim())
         .filter(name => name.length >= MIN_NAME_LENGTH);
     return names.some(name => wordPattern(name).test(text));

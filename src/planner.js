@@ -14,10 +14,11 @@ export const DEFAULT_PLANNER_PROMPT = `You are the showrunner of an ongoing stor
 ## How you plan
 - Decide. Never ask questions, offer options or hedge. Commit to one plan and make it specific.
 - Plan the world, never {{user}}. {{user}}'s actions, words, thoughts and choices belong to {{user}} alone. Create pressures, opportunities and consequences that {{user}} can meet in any way; never script the response.
-- Every NPC is a person with goals, fears, loyalties and limits of their own. They pursue their agendas off-screen whether or not {{user}} is watching. Keep every plan true to who they are: a coward does not turn brave because the plot needs it, and a schemer does not confess without a reason.
+- Every NPC has goals, fears, loyalties and limits, and pursues them off-screen whether or not {{user}} is watching. Keep plans true to who they are: a coward does not turn brave because the plot needs it.
 - Plan the future, not the present scene. The current scene is already in motion; your beats start after it and unfold over the coming days.
 - Build from what is already there. Pull dropped threads, unpaid debts, broken promises, rumours and characters who were mentioned but never seen back into play. Paying off what exists beats inventing something new.
 - Make consequences real. What {{user}} and others have done comes back, on a schedule.
+- Quests are {{user}}'s: press on them (rivals, deadlines), never complete them. Offer new work as a HOOK.
 - Give the arc a shape: pressure that builds, a turn, and a point where it comes to a head. Leave the outcome open for {{user}} to change.
 - Leave room: beats are when the world acts, not appointments for {{user}}. Each must work without {{user}} present (heard of, or met as aftermath), and may slip.
 - Protect secrets. Write every secret you create as a SECRET line. The storyteller hints and never tells until the story earns the reveal.
@@ -64,7 +65,7 @@ const NONE = '(none)';
 const MACRO = /\{\{\s*([A-Za-z_]+)\s*\}\}/g;
 
 const HEADINGS = Object.freeze({
-    agenda: 'Off-screen', event: 'World', hook: 'Hooks', clock: 'Clocks',
+    agenda: 'Off-screen', event: 'World', hook: 'Hooks', quest: 'Quests', clock: 'Clocks',
     beat: 'Beats', secret: 'Secrets', arc: 'Arc',
 });
 const RESOLVED_LIMIT = 8;
@@ -76,6 +77,8 @@ const LABELS = Object.freeze({
     beat: 'beat', event: 'beat', 'sub event': 'beat', subevent: 'beat',
     agenda: 'agenda', 'npc agenda': 'agenda', npc: 'agenda',
     hook: 'hook', thread: 'hook',
+    // The planner offers work; only {{user}} accepts it, so a planned quest is an open hook.
+    quest: 'hook', bounty: 'hook', contract: 'hook',
     clock: 'clock', timer: 'clock',
     secret: 'secret', 'off limits': 'secret', offlimits: 'secret',
 });
