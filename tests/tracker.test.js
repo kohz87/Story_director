@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseChanges } from '../src/changes.js';
-import { activeRecords, applyOps, emptyTracker, findRecord, markSeen, replay } from '../src/tracker.js';
+import { activeRecords, applyOps, emptyTracker, findRecord, markSeen, questsDoneIn, replay } from '../src/tracker.js';
 
 function ops(text) {
     const parsed = parseChanges(text);
@@ -47,7 +47,7 @@ test('+ creates a full record', () => {
         fields: {
             desc: '', now: 'District Bailiff Court', then: 'argues with magistrates',
             on: 'Haywane 12, 05:45 pm', due: '', shown: '', leg: '', arrive: '', place: '',
-            people: 'Kade, Al', encounter: '', type: '', giver: '', goal: '', reward: '', step: '',
+            people: 'Kade, Al', encounter: '', type: '', giver: '', goal: '', reward: '', step: '', difficulty: '',
         },
         extra: {},
         created: { message: 4, time: 1000 },
@@ -300,4 +300,57 @@ test('an encounter is a field like any other: set, changed, and closed with its 
     assert.equal(findRecord(tracker, 'Ambush at the weir').fields.encounter, '4 bandit, bandit captain (boss)');
     const fought = replay([...steps, { message: 2, time: 1120, text: '', ops: parseChanges('- Ambush at the weir — the bandits fled').ops }]).tracker;
     assert.equal(findRecord(fought, 'Ambush at the weir').status, 'resolved');
+});
+
+test('questsDoneIn: the quests a reply finished, not earlier ones, failures or other kinds', () => {
+    const steps = [
+        { message: 1, time: 1000, text: '', ops: ops([
+            '+ bounty Kettle Jack — giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | difficulty: hard',
+            '+ quest Rat cellar — giver: Old Mags | reward: 5 copper',
+            '+ quest Herb run — goal: twelve moonleaf | difficulty: easy',
+            '+ quest Lost ring — giver: Widow Pell | difficulty: tough',
+            '+ hook Stranger at the weir — who pulled Ren out',
+        ].join('\n')) },
+        { message: 3, time: 1060, text: '', ops: ops('- Herb run — twelve moonleaf delivered') },
+        { message: 5, time: 1120, text: '', ops: ops([
+            '- Kettle Jack — turned in alive, paid',
+            '- Rat cellar',
+            '- Lost ring — failed, the ring went into the river',
+            '- Stranger at the weir — he was the warden',
+        ].join('\n')) },
+        { message: 7, time: 1180, text: '', ops: ops('~ Kettle Jack — reward: 40 crowns and a pardon') },
+    ];
+    const at = upTo => replay(steps.filter(step => step.message <= upTo)).tracker;
+
+    assert.deepEqual(questsDoneIn(at(5), 5), [
+        { id: 'kettle jack', name: 'Kettle Jack', type: 'bounty', difficulty: 'hard', reward: '40 crowns', giver: 'Warden Hale' },
+        { id: 'rat cellar', name: 'Rat cellar', type: '', difficulty: 'normal', reward: '5 copper', giver: 'Old Mags' },
+    ], 'several in one reply; a failed quest and a hook are not done; no difficulty is normal');
+    assert.deepEqual(questsDoneIn(at(3), 3), [{ id: 'herb run', name: 'Herb run', type: '', difficulty: 'easy', reward: '', giver: '' }]);
+    assert.deepEqual(questsDoneIn(at(5), 3).map(quest => quest.id), ['herb run'], 'each reply keeps its own');
+    assert.deepEqual(questsDoneIn(at(5), 4), [], 'a message that finished nothing');
+    assert.deepEqual(questsDoneIn(at(7), 7), [], 'done earlier, touched later: not done again');
+    assert.deepEqual(questsDoneIn(at(1), 1), [], 'none');
+    assert.deepEqual(questsDoneIn(emptyTracker(), 0), []);
+    assert.deepEqual(questsDoneIn(null, 'x'), []);
+
+    // Plain copies: changing one changes nothing in the tracker.
+    const tracker = at(5);
+    questsDoneIn(tracker, 5)[0].name = 'changed';
+    assert.equal(findRecord(tracker, 'Kettle Jack').key, 'Kettle Jack');
+
+    // Reopened and finished again in a later reply: done in that one.
+    const again = replay([...steps,
+        { message: 9, time: 1240, text: '', ops: ops('+ quest Rat cellar — reward: 8 copper | difficulty: simple') },
+        { message: 11, time: 1300, text: '', ops: ops('- Rat cellar — cleared again') },
+    ]).tracker;
+    assert.deepEqual(questsDoneIn(again, 11).map(quest => [quest.id, quest.difficulty, quest.reward]), [['rat cellar', 'easy', '8 copper']]);
+});
+
+test('questsDoneIn: superseded or given-up quests are not done', () => {
+    const { tracker } = replay([
+        { message: 0, time: 0, text: '', ops: ops('+ quest A — goal: a\n+ quest B — goal: b\n+ quest C — goal: c') },
+        { message: 2, time: 60, text: '', ops: ops('- A — replaced by the guild contract\n- B — abandoned when the bridge fell\n- C — expired') },
+    ]);
+    assert.deepEqual(questsDoneIn(tracker, 2), []);
 });

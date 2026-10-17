@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.2
+
+Quest difficulty, and the quests a reply finished.
+
+- **A `difficulty` quest field:** `easy`, `normal`, `hard` or `nightmare`; missing or unreadable is `normal`. Obvious other words are read as one of the four (`trivial`/`simple` → easy, `medium`/`moderate` → normal, `difficult`/`tough` → hard, `deadly`/`impossible`/`extreme` → nightmare), and stored that way: `+ bounty Kettle Jack — reward: 40 crowns | difficulty: hard`. A line with only a difficulty is a quest, like the other quest fields.
+- **The change instruction** names the field (one word; about 140 tokens now); **the capture prompt** names it with its four values. A planned offer of work (a HOOK) may carry one too and keeps it. **The note** shows a difficulty that is not normal next to the type: `Kettle Jack (bounty, hard) — …`.
+- **Quests tab:** every quest shows its difficulty in its head (`normal` when none was written; hard and nightmare stand out). The Director tab shows a `difficulty` row on a record that has one.
+- **API:** `globalThis.StoryDirector.questsDoneAt(index)` lists the quests the assistant reply at `index` finished, a `-` line in that reply closing them (not as failed, abandoned, expired or superseded), as `[{ id, name, type, difficulty, reward, giver }]` plain copies; quests finished earlier are not listed, and it is `[]` when there are none. Also in the Story Suite's api. `apiVersion` stays 1. RPG Battle uses it to offer XP for a finished quest.
+- **Token estimate for Story Suite:** `api.manage.tokens()` gives what Story Director adds to the next ordinary reply, `{ input, output, parts: [{ label, input, output }] }`, at about 4 characters a token and without a model call: `input` is the note as it would be injected now, per section (Header, Arc, Due now, Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections, Pacing, Encounter cue, Change instruction, NPC plans only); `output` is a rough allowance of 60 tokens for the `<Director>` lines it asks for (0 when capture writes them on *always*). Planner and capture calls are quiet calls and not counted. All zeros while the note is not sent; it never throws. The note itself is unchanged.
+- **One look for the four settings panels:** the settings panel uses the Story Suite's shared markup and `src/suite.css` (identical in Story Block, Story Director, NPC State Delta and RPG Battle; linked once per page as `#story-suite-css`), after NPC State Delta's panel: a quick bar with the switches as Enabled/Disabled pills and the main actions, folding sections (Tracking & note, Calendar, Map & travel, Arc planning, Capture, Existing chat & compatibility) with a one-line summary of what each is set to, all closed at first and remembered when opened; numbers show their units. Story Director's own copies of these styles are gone. Setting ids are unchanged. [docs/STORY_SUITE.md](docs/STORY_SUITE.md) is the suite's shared copy.
+
 ## 0.8.1
 
 Story Suite overlay support ([docs/STORY_SUITE.md](docs/STORY_SUITE.md#one-place-to-manage-them-all)).

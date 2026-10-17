@@ -493,3 +493,9 @@ test('a planned fight: an encounter row and a fight tag in the record head', () 
     assert.deepEqual(facts(planned), [['on', 'Goldwane 19'], ['encounter', '2 x dire wolf rank D']]);
     assert.equal(itemFor(pane, 'Council session opens').querySelector('.story-director-tag.is-fight'), null, 'no foes, no tag');
 });
+
+test('an offered quest (a hook) with a difficulty shows it as a row after the reward', () => {
+    const offer = record('Wolf pelts offer', 'hook', { desc: 'the tanner wants pelts', reward: '2 silver each', difficulty: 'hard' });
+    const pane = render({ selection: selection({ relevant: [{ record: offer, reason: 'hook', priority: 1 }] }) });
+    assert.deepEqual(facts(itemFor(pane, 'Wolf pelts offer')), [['', 'the tanner wants pelts'], ['reward', '2 silver each'], ['difficulty', 'hard']]);
+});

@@ -18,6 +18,7 @@ test('buildCaptureMessages fills the exchange, tracker, time and place; leaves {
     assert.match(user.content, /<Director>/);
     assert.match(DEFAULT_CAPTURE_PROMPT, /Never plans/);
     assert.match(DEFAULT_CAPTURE_PROMPT, /people, encounter \(the foes of a fight that is coming\)/, 'the fields name the encounter');
+    assert.match(DEFAULT_CAPTURE_PROMPT, /due \(its deadline\), difficulty \(easy, normal, hard or nightmare\)\./, 'and a quest\'s difficulty');
     assert.match(buildCaptureMessages({})[0].content, /\(nothing tracked yet\)/);
 });
 
@@ -51,4 +52,11 @@ test('parseCapture: an empty block, a cut-off think tag, fences, and no block at
     const cut = parseCapture('reasoning without its opening tag</think>\n```\n~ River stranger — then: sends word\n```', tracker);
     assert.deepEqual(cut.ops.map(op => op.key), ['River stranger']);
     assert.equal(cut.errors.length, 0);
+});
+
+test('parseCapture: a captured quest keeps its difficulty as one of the four words', () => {
+    const { ops, lines } = parseCapture('<Director>\n+ bounty Wolf pelts — giver: Tanner Ole | reward: 2 silver each | difficulty: Simple\n</Director>', tracker);
+    assert.equal(ops[0].kind, 'quest');
+    assert.equal(ops[0].fields.difficulty, 'easy');
+    assert.equal(lines, '+ quest Wolf pelts — type: bounty | giver: Tanner Ole | reward: 2 silver each | difficulty: easy');
 });

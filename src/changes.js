@@ -36,8 +36,25 @@ const QUEST_TYPE_WORDS = Object.freeze({
 });
 
 // A quest's own parts: its category (main, side, bounty, contract…), who gave it, what it
-// asks, what it pays, and the step it is at.
-export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
+// asks, what it pays, the step it is at, and (v0.8.2) how hard it is.
+export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step', 'difficulty'];
+
+// A quest's difficulty is one of four words, so other extensions can scale by it (RPG Battle
+// awards quest XP by it). A missing or unreadable one is normal.
+export const QUEST_DIFFICULTIES = Object.freeze(['easy', 'normal', 'hard', 'nightmare']);
+const DIFFICULTY_WORDS = Object.freeze({
+    easy: 'easy', trivial: 'easy', simple: 'easy', minor: 'easy', light: 'easy', low: 'easy',
+    normal: 'normal', medium: 'normal', moderate: 'normal', average: 'normal', standard: 'normal', regular: 'normal',
+    hard: 'hard', difficult: 'hard', tough: 'hard', challenging: 'hard', dangerous: 'hard', high: 'hard',
+    nightmare: 'nightmare', deadly: 'nightmare', impossible: 'nightmare', extreme: 'nightmare', lethal: 'nightmare', insane: 'nightmare',
+});
+
+/** `easy | normal | hard | nightmare` for a written difficulty: the first word it knows, else normal. */
+export function questDifficulty(value) {
+    const words = stripMarkdown(value).toLowerCase().split(/[^\p{L}]+/u);
+    const known = words.find(word => Object.hasOwn(DIFFICULTY_WORDS, word));
+    return known ? DIFFICULTY_WORDS[known] : 'normal';
+}
 // A planned fight: who the foes are, as free text in RPG Battle's shape (`3 bandit, bandit
 // captain (boss)`, `2 x dire wolf rank D`). Story Director only stores and schedules it; the
 // fight itself is resolved by another extension, so the text is never parsed here.
@@ -172,6 +189,8 @@ function parseLine(raw) {
         if (!trimmed) continue;
         const labelled = splitLabel(trimmed);
         if (labelled?.field === 'desc') addText(fields, 'desc', labelled.value);
+        // Stored as one of the four words; an empty one clears it (and reads as normal).
+        else if (labelled?.field === 'difficulty') fields.difficulty = labelled.value ? questDifficulty(labelled.value) : '';
         else if (labelled?.field) fields[labelled.field] = labelled.value;
         else if (labelled && closing && labelled.label === 'reason') addText(loose, 'text', labelled.value);
         else if (labelled) extra[labelled.label] = labelled.value;

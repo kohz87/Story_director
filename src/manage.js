@@ -39,9 +39,11 @@ export function suiteAnnouncement({ id, name, version, areas, settings, storyBlo
  * api.manage: the same choices as the settings panel. `read()` gives the saved settings;
  * `save(next)` stores a full new settings object and applies it the way an edit in the panel
  * does (save, re-announce, refresh); `panel()` gives the settings panel, or null, so its
- * controls show the change.
+ * controls show the change. `tokens()` (v0.8.2) gives what Story Director adds to the next
+ * ordinary reply, `{ input, output, parts: [{ label, input, output }] }` (src/note.js
+ * noteTokens); manage.tokens() hands over a clean copy, and nothing at all on a failure.
  */
-export function makeManage({ areas, read, save, panel = () => null }) {
+export function makeManage({ areas, read, save, panel = () => null, tokens = () => null }) {
     const known = Object.freeze([...areas]);
     return Object.freeze({
         areas: known,
@@ -57,6 +59,18 @@ export function makeManage({ areas, read, save, panel = () => null }) {
         },
         /** The tracking switch ("Track the story"). */
         enabled: () => read()?.enabled !== false,
+        /**
+         * The tokens Story Director adds to the next ordinary reply (≈ 4 characters each, no
+         * model call): `input` the note as it would be injected now, `output` an allowance for
+         * the <Director> lines it asks for, `parts` per note section. Never throws.
+         */
+        tokens() {
+            try {
+                return tokenCopy(tokens());
+            } catch {
+                return tokenCopy(null);
+            }
+        },
         /** Flip the tracking switch, as the panel's own switch does. */
         setEnabled(on) {
             const enabled = Boolean(on);
@@ -65,6 +79,16 @@ export function makeManage({ areas, read, save, panel = () => null }) {
             return true;
         },
     });
+}
+
+const count = value => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.round(Number(value)) : 0);
+
+// A plain, well-formed copy: counts are whole numbers ≥ 0, anything unreadable is nothing.
+function tokenCopy(report) {
+    const parts = (Array.isArray(report?.parts) ? report.parts : [])
+        .filter(entry => entry && typeof entry === 'object')
+        .map(entry => ({ label: String(entry.label ?? ''), input: count(entry.input), output: count(entry.output) }));
+    return { input: count(report?.input), output: count(report?.output), parts };
 }
 
 /**

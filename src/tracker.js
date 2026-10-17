@@ -3,10 +3,12 @@
 // the chat is a replay of the entries up to it. Pure: every function returns new objects and
 // never mutates its inputs (records are copied on write, unchanged ones are shared).
 
-import { FIELDS, formatOp, lineKey } from './changes.js';
+import { FIELDS, formatOp, lineKey, questDifficulty } from './changes.js';
 
 const HISTORY_LIMIT = 20;
 const SUPERSEDED = /supersed|replac|merged/i;
+// A quest closed with one of these was not done: it ended without the work being finished.
+const FAILED = /\b(?:fail|abandon|gave up|give up|given up|forfeit|expired|missed|too late|cancel|refused|declined|botched)/i;
 const MIN_PERSON_LENGTH = 3;
 
 export function emptyTracker() {
@@ -260,4 +262,26 @@ export function findRecord(tracker, keyOrId) {
 
 export function activeRecords(tracker, { kind = null } = {}) {
     return tracker.records.filter(record => record.status === 'active' && (!kind || record.kind === kind));
+}
+
+/**
+ * The quests finished in the reply at `message`: closed there with a `-` line that is not a
+ * failure (failed, abandoned, expired…) or a supersession, as `[{ id, name, type, difficulty,
+ * reward, giver }]` plain copies; quests finished earlier are not listed.
+ */
+export function questsDoneIn(tracker, message) {
+    const at = Number(message);
+    if (!Number.isInteger(at)) return [];
+    const text = value => String(value ?? '').trim();
+    return (tracker?.records ?? [])
+        .filter(record => record.kind === 'quest' && record.status === 'resolved'
+            && record.resolved?.message === at && !FAILED.test(record.resolved?.reason ?? ''))
+        .map(record => ({
+            id: record.id,
+            name: record.key,
+            type: text(record.fields?.type),
+            difficulty: questDifficulty(record.fields?.difficulty),
+            reward: text(record.fields?.reward),
+            giver: text(record.fields?.giver),
+        }));
 }

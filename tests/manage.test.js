@@ -1,6 +1,6 @@
 // Tests for src/manage.js, Story Director's side of Story Suite's overlay: the announcement
 // (settings selector, enabled: false when switched off, withdrawn without Story Block), the
-// api.manage handle (sources, setSource, enabled, setEnabled) and when the overlay can be opened.
+// api.manage handle (sources, setSource, enabled, setEnabled, tokens) and when the overlay can be opened.
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -61,7 +61,7 @@ test('a switched-off announcement owns nothing in the registry, but the overlay 
     assert.equal(suite.owner('calendar'), 'story-director');
 });
 
-function fakeHost(initial = {}) {
+function fakeHost(initial = {}, tokens = undefined) {
     let saved = { enabled: true, depth: 2, sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' }, ...initial };
     const saves = [];
     const panelCalls = [];
@@ -74,6 +74,7 @@ function fakeHost(initial = {}) {
             saved = next;
         },
         panel: () => panel,
+        ...(tokens ? { tokens } : {}),
     });
     return { manage, saves, panelCalls, saved: () => saved };
 }
@@ -147,4 +148,21 @@ test('suiteOpener: only with two or more announced and Story Block sharing openS
     assert.equal(suiteOpener(suite), null, 'Story Block switched off shares nothing');
     assert.equal(suiteOpener(null), null);
     assert.equal(suiteOpener({ providers: () => { throw new Error('broken'); } }), null);
+});
+
+test('manage.tokens: a clean copy of what the next reply costs, and nothing on a failure', () => {
+    const report = { input: 212, output: 60, parts: [{ label: 'Header', input: 9, output: 0 }, { label: 'Change instruction', input: 140, output: 60 }] };
+    const { manage } = fakeHost({}, () => report);
+    const got = manage.tokens();
+    assert.deepEqual(got, report);
+    assert.notEqual(got, report);
+    assert.notEqual(got.parts[0], report.parts[0], 'a copy');
+    got.parts[0].input = 1;
+    assert.equal(report.parts[0].input, 9);
+
+    const empty = { input: 0, output: 0, parts: [] };
+    assert.deepEqual(fakeHost().manage.tokens(), empty, 'no counter given');
+    assert.deepEqual(fakeHost({}, () => { throw new Error('no chat'); }).manage.tokens(), empty, 'never throws');
+    assert.deepEqual(fakeHost({}, () => ({ input: -3, output: 'x', parts: [null, { label: 7, input: 2.6 }] })).manage.tokens(),
+        { input: 0, output: 0, parts: [{ label: '7', input: 3, output: 0 }] });
 });

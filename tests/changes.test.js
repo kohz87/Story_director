@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FIELDS, KINDS, KIND_ALIASES, formatOp, lineKey, parseChanges } from '../src/changes.js';
+import { FIELDS, KINDS, KIND_ALIASES, QUEST_DIFFICULTIES, formatOp, lineKey, parseChanges, questDifficulty } from '../src/changes.js';
 
 // Real <Director> output, including a bulleted op, a bolded op and a stray prose line.
 const REAL = [
@@ -34,7 +34,7 @@ function only(text) {
 
 test('exports the kinds, fields and aliases of the contract', () => {
     assert.deepEqual(KINDS, ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc']);
-    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'type', 'giver', 'goal', 'reward', 'step']);
+    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'type', 'giver', 'goal', 'reward', 'step', 'difficulty']);
     assert.equal(KIND_ALIASES.bounty, 'quest');
     assert.equal(KIND_ALIASES.contract, 'quest');
     assert.equal(KIND_ALIASES.offscreen, 'agenda');
@@ -282,4 +282,32 @@ test('an encounter: stored as written on a beat, a quest or a clock, and written
     // Foes and nothing else to say what it is: a planned fight is a beat.
     assert.equal(only('+ Ridge wolves — on: Haywane 15 | encounter: 2 x dire wolf').kind, 'beat');
     assert.equal(only('+ Ridge wolves — encounter:2 dire wolf').fields.encounter, '2 dire wolf', 'a known field may skip the space');
+});
+
+test('a quest difficulty: four words, synonyms, unknown or missing reads normal', () => {
+    assert.deepEqual(QUEST_DIFFICULTIES, ['easy', 'normal', 'hard', 'nightmare']);
+    const cases = {
+        easy: 'easy', Trivial: 'easy', 'simple errand': 'easy',
+        normal: 'normal', medium: 'normal', Moderate: 'normal',
+        hard: 'hard', '**Difficult**': 'hard', 'very tough': 'hard',
+        nightmare: 'nightmare', deadly: 'nightmare', 'near impossible': 'nightmare', EXTREME: 'nightmare',
+        '': 'normal', brutish: 'normal', '???': 'normal',
+    };
+    for (const [written, expected] of Object.entries(cases)) assert.equal(questDifficulty(written), expected, written);
+    assert.equal(questDifficulty(undefined), 'normal');
+    assert.equal(questDifficulty(null), 'normal');
+});
+
+test('difficulty is a quest field: stored as one of the four words, inferred, and written back', () => {
+    const op = only('+ quest Kettle Jack — giver: Warden Hale | difficulty: Deadly | reward: 40 crowns');
+    assert.equal(op.kind, 'quest');
+    assert.deepEqual(op.fields, { giver: 'Warden Hale', difficulty: 'nightmare', reward: '40 crowns' });
+    assert.equal(formatOp(op), '+ quest Kettle Jack — giver: Warden Hale | reward: 40 crowns | difficulty: nightmare');
+    assert.deepEqual(withoutRaw(only(formatOp(op))), withoutRaw(op));
+
+    assert.equal(only('+ Rat cellar — difficulty: trivial').kind, 'quest', 'the field alone makes a quest');
+    assert.equal(only('~ Kettle Jack — difficulty: medium').fields.difficulty, 'normal');
+    assert.equal(only('~ Kettle Jack — difficulty: whatever the gods decide').fields.difficulty, 'normal', 'unknown reads normal');
+    assert.equal(only('~ Kettle Jack — difficulty:').fields.difficulty, '', 'an empty one clears it');
+    assert.equal(only('~ Kettle Jack — difficulty:hard').fields.difficulty, 'hard', 'a known field may skip the space');
 });

@@ -452,3 +452,11 @@ test('summarizeTracker marks a planned fight', () => {
     const { tracker } = replay([{ message: 0, time: now, text: '', ops: parseChanges('+ beat Ambush at the weir — on: Haywane 14 | encounter: 3 bandit').ops }]);
     assert.match(summarizeTracker(tracker), /- Ambush at the weir \(Haywane 14\) · fight: 3 bandit/);
 });
+
+test('a planned offer of work keeps its difficulty as one of the four words', () => {
+    const plan = parsePlan('<plan>\nARC: Wolf winter — the packs come down\nHOOK: Wolf pelts — the tanner pays for pelts | reward: 2 silver each | difficulty: Tough\n</plan>');
+    assert.equal(plan.items[0].kind, 'hook');
+    assert.equal(plan.items[0].fields.difficulty, 'hard');
+    const [, hook] = planToOps(plan, { arcId: 'arc-1' });
+    assert.equal(hook.raw, '+ hook Wolf pelts — the tanner pays for pelts | reward: 2 silver each | difficulty: hard | arc: arc-1');
+});

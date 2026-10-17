@@ -36,28 +36,65 @@ test('drawer markup, header and status line', () => {
     const { $, container } = setup({ status: 'Tracking 4 records.' });
     assert.ok($('.story-director-settings > .inline-drawer > .inline-drawer-toggle.inline-drawer-header'));
     assert.match($('.inline-drawer-header b').textContent, /^Story Director/);
-    assert.ok($('.inline-drawer-content'));
+    assert.ok($('.inline-drawer-content.story-suite-panel'), 'the drawer content is a Story Suite panel');
     const status = $('#story_director_status');
     assert.equal(status.textContent, 'Tracking 4 records.');
+    assert.ok(status.classList.contains('story-suite-notice'));
     assert.equal(container.querySelectorAll('#story_director_status').length, 1);
-    const groups = container.querySelectorAll('.story-director-group-summary b').map(node => node.textContent);
+    const groups = container.querySelectorAll('.story-suite-folds > details.story-suite-fold > summary > b').map(node => node.textContent);
     assert.deepEqual(groups, ['Tracking & note', 'Calendar', 'Map & travel', 'Arc planning', 'Capture', 'Existing chat & compatibility']);
 });
 
-test('a quick bar on top, folding groups below, only Tracking open at first', () => {
+test('a quick bar on top, folding sections below, all closed at first', () => {
     const planned = [];
     const container = doc.createElement('div');
     doc.body.appendChild(container);
     renderSettings(container, { settings: SETTINGS, version: 'v0.5.1', onPlanArc: () => planned.push(1), onChange() {} });
     assert.match(container.querySelector('.inline-drawer-header b').textContent, /Story Director v0\.5\.1/);
-    const quickbar = container.querySelector('.story-director-quickbar');
-    assert.ok(quickbar.querySelector('#story_director_enabled'), 'the switch is in the quick bar');
-    quickbar.querySelector('.story-director-plan').click();
+    const quickbar = container.querySelector('.story-suite-quickbar');
+    assert.ok(quickbar.querySelector('label.story-suite-row > input#story_director_enabled'), 'the switch is a row in the quick bar');
+    quickbar.querySelector('.story-suite-actions .story-director-plan').click();
     assert.deepEqual(planned, [1]);
-    assert.ok(quickbar.querySelector('.story-director-seed'));
-    const open = container.querySelectorAll('.story-director-group').filter(node => node.hasAttribute('open')).map(node => node.getAttribute('data-group'));
-    assert.deepEqual(open, ['tracking']);
-    assert.ok(container.querySelector('.story-director-group[data-group="arc"] #story_director_arc_trigger'), 'arc controls live in their group');
+    assert.ok(quickbar.querySelector('.story-suite-actions .story-director-seed'));
+    const folds = container.querySelectorAll('details.story-suite-fold');
+    assert.deepEqual(folds.map(node => node.getAttribute('data-fold')), ['tracking', 'calendar', 'pack', 'arc', 'capture', 'chat']);
+    assert.deepEqual(folds.filter(node => node.hasAttribute('open')), [], 'all closed');
+    assert.ok(container.querySelector('.story-suite-fold[data-fold="arc"] > .story-suite-fold-body #story_director_arc_trigger'), 'arc controls live in their section');
+});
+
+test('section summaries say what the main setting is now, and follow edits', () => {
+    const { container, $ } = setup();
+    const summary = key => container.querySelector(`.story-suite-fold[data-fold="${key}"] > summary > small`).textContent;
+    assert.equal(summary('tracking'), '<World_State> · depth 1 · up to 1000 tokens');
+    assert.equal(summary('calendar'), '2 months · CY');
+    assert.equal(summary('pack'), '1 km per unit · no world pack');
+    assert.equal(summary('arc'), 'Manual · same model as chat');
+    assert.equal(summary('capture'), 'Off');
+    assert.equal(summary('chat'), 'Mirror on · source of truth Automatic');
+    edit($('#story_director_depth'), '4');
+    assert.equal(summary('tracking'), '<World_State> · depth 4 · up to 1000 tokens');
+    edit($('#story_director_preset'), 'gregorian');
+    assert.equal(summary('calendar'), 'Gregorian · CY');
+    edit($('#story_director_capture_mode'), 'always');
+    assert.equal(summary('capture'), 'Always · same model as chat');
+    edit($('#story_director_source_npc'), 'theirs');
+    assert.equal(summary('chat'), 'Mirror on · source of truth your choices');
+});
+
+test('every setting is a story-suite-row: a bold label, a small hint, the control; numbers carry units', () => {
+    const { $ } = setup();
+    const depthRow = $('#story_director_depth').closest('.story-suite-row');
+    assert.equal(depthRow.tagName, 'LABEL');
+    assert.equal(depthRow.getAttribute('for'), 'story_director_depth');
+    assert.equal(depthRow.querySelector('span > b').textContent, 'Note depth');
+    assert.match(depthRow.querySelector('span > small').textContent, /messages from the end/);
+    const number = $('#story_director_depth').closest('.story-suite-number');
+    assert.ok(number, 'a number with its unit');
+    assert.equal(number.querySelector('small').textContent, 'messages');
+    assert.equal($('#story_director_budget').closest('.story-suite-number').querySelector('small').textContent, 'tokens');
+    // Selects sit straight in the row, where suite.css sizes them.
+    assert.equal($('#story_director_scene').parentNode, $('#story_director_scene').closest('.story-suite-row'));
+    assert.ok($('.story-suite-fold[data-fold="tracking"] .story-suite-subhead'), 'Dormant shelf is a subhead');
 });
 
 test('re-rendering into the same container keeps the status the runtime wrote', () => {
@@ -146,7 +183,7 @@ test('bare month names follow a new days per month', () => {
 
 test('the Gregorian preset hides the custom month rows', () => {
     const { $ } = setup();
-    const row = $('#story_director_months').closest('.story-director-row');
+    const row = $('#story_director_months').closest('.story-suite-row');
     assert.equal(row.hasAttribute('hidden'), false);
     edit($('#story_director_preset'), 'gregorian');
     assert.equal(row.hasAttribute('hidden'), true);
@@ -187,7 +224,8 @@ test('tracking and mirror switches', () => {
         assert.equal(input.type, 'checkbox');
         assert.equal(input.getAttribute('role'), 'switch');
         assert.equal(input.checked, true);
-        assert.ok(input.closest('.story-director-switch.checkbox_label'));
+        assert.equal(input.parentNode.tagName, 'LABEL', 'a checkbox straight in its row, shown as a pill');
+        assert.ok(input.parentNode.classList.contains('story-suite-row'));
     }
     const mirror = $('#story_director_mirror');
     mirror.checked = false;
@@ -197,7 +235,7 @@ test('tracking and mirror switches', () => {
     mirror.dispatch('change');
     assert.equal(last(changes).mirrorOffscreen, true);
     assert.equal(last(changes).enabled, true);
-    assert.ok(mirror.closest('.story-director-row').textContent.includes('Mirror off-screen agendas'));
+    assert.ok(mirror.closest('.story-suite-row').textContent.includes('Mirror off-screen agendas'));
 });
 
 test('Seed button calls onSeed and changes nothing', () => {
@@ -263,21 +301,22 @@ test('world pack: summary, paste import, clear, and messages', async () => {
         onImportPack: async text => { imported.push(text); return { summary: '19 places · 23 routes', message: 'Imported.' }; },
         onClearPack: async () => { cleared++; return { summary: '', message: 'Cleared.' }; },
     });
-    const map = () => container.querySelector('.story-director-row.is-pack');
-    assert.match(map().textContent, /Roads.*None/);
+    const map = () => container.querySelector('.story-suite-row.is-pack');
+    assert.match(map().textContent, /Roads.*Now: none/);
     assert.equal(container.querySelector('.story-director-pack-clear').disabled, true, 'nothing to clear');
 
     container.querySelector('.story-director-pack-paste').value = '{"places":{}}';
     container.querySelector('.story-director-pack-import').click();
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.deepEqual(imported, ['{"places":{}}']);
-    assert.match(map().textContent, /19 places · 23 routes/);
-    assert.equal(container.querySelector('.story-director-pack-message').textContent, 'Imported.');
+    assert.match(map().textContent, /Now: 19 places · 23 routes/);
+    assert.match(container.querySelector('.story-suite-fold[data-fold="pack"] > summary > small').textContent, /world pack loaded/);
+    assert.equal(container.querySelector('.story-suite-notice.story-director-pack-message').textContent, 'Imported.');
 
     container.querySelector('.story-director-pack-clear').click();
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.equal(cleared, 1);
-    assert.match(map().textContent, /Roads.*None/);
+    assert.match(map().textContent, /Roads.*Now: none/);
     panel.update({}, { packSummary: '1 place · 0 routes' });
     assert.match(map().textContent, /1 place · 0 routes/);
 });
@@ -307,7 +346,7 @@ test('the spoiler switch sits in the quick bar, on by default', () => {
     doc.body.appendChild(container);
     const changes = [];
     renderSettings(container, { settings: {}, onChange: next => changes.push(next) });
-    const guard = container.querySelector('.story-director-quickbar input#story_director_spoiler');
+    const guard = container.querySelector('.story-suite-quickbar input#story_director_spoiler');
     assert.ok(guard, 'in the quick bar');
     assert.equal(guard.checked, true);
     guard.checked = false;
@@ -325,7 +364,8 @@ test('map: north and east, km per unit and road factor, decimals kept and clampe
     assert.equal($('#story_director_map_east').value, 'right');
     assert.equal($('#story_director_map_scale').value, '10');
     assert.equal($('#story_director_map_factor').value, '1.25');
-    assert.ok($('.story-director-group[data-group="pack"] #story_director_map_scale'), 'in Map & travel');
+    assert.ok($('.story-suite-fold[data-fold="pack"] #story_director_map_scale'), 'in Map & travel');
+    assert.equal($('#story_director_map_scale').closest('.story-suite-number').querySelector('small').textContent, 'km per unit');
 
     const north = $('#story_director_map_north');
     north.value = 'up';
@@ -351,13 +391,14 @@ test('source of truth: a select per shared area, Automatic by default, kept with
     for (const id of ids) {
         const choice = $(id);
         assert.ok(choice, `${id} exists`);
-        assert.ok(choice.closest('.story-director-group[data-group="chat"]'), `${id} sits under compatibility`);
+        assert.ok(choice.closest('.story-suite-fold[data-fold="chat"]'), `${id} sits under compatibility`);
         assert.equal(choice.value, 'auto');
         assert.deepEqual(choice.querySelectorAll('option').map(option => [option.value, option.textContent]),
             [['auto', 'Automatic'], ['mine', 'This extension'], ['theirs', 'The other one']]);
     }
-    const heads = container.querySelectorAll('.story-director-section-head').map(node => node.textContent);
+    const heads = container.querySelectorAll('.story-suite-subhead').map(node => node.textContent);
     assert.ok(heads.includes('Source of truth'));
+    assert.ok($('.story-director-suite-note').classList.contains('story-suite-muted'));
     assert.match($('.story-director-suite-note').textContent, /No other story extension is here/);
 
     edit($('#story_director_source_calendar'), 'theirs');
@@ -393,7 +434,7 @@ test('setOthers names the other story extensions without redrawing the panel', (
 
 test('the mirror hint says what it is for, without claiming NPC State Delta reads it', () => {
     const { $ } = setup();
-    const text = $('#story_director_mirror').closest('.story-director-row').textContent;
+    const text = $('#story_director_mirror').closest('.story-suite-row').textContent;
     assert.match(text, /Off-Screen list/);
     assert.ok(!text.includes('NPC State Delta'));
 });
@@ -449,20 +490,21 @@ test('"Manage all in Story Suite": on top, hidden until available, opens the ove
     doc.body.appendChild(container);
     let opened = 0;
     const panel = renderSettings(container, { settings: SETTINGS, onChange() {}, onOpenSuite: () => { opened += 1; } });
-    const line = container.querySelector('.story-director-suite-link');
+    const line = container.querySelector('.story-suite-manage');
     assert.ok(line, 'drawn');
     assert.ok(line.hasAttribute('data-story-suite-link'), 'marked for the overlay to hide');
     assert.equal(container.querySelector('[data-story-suite-link]'), line);
     assert.equal(container.querySelector('.inline-drawer-content').children[0], line, 'first in the panel');
     assert.ok(line.hasAttribute('hidden'), 'hidden by default (alone)');
     assert.match(line.textContent, /Manage all in Story Suite/);
+    assert.ok(line.querySelector('button.menu_button > i.fa-solid.fa-layer-group'));
 
     panel.setSuiteLink(true);
     assert.ok(!line.hasAttribute('hidden'));
     line.querySelector('.story-director-open-suite').click();
     assert.equal(opened, 1);
     panel.update(SETTINGS);
-    assert.equal(container.querySelector('.story-director-suite-link'), line, 'a redraw keeps it');
+    assert.equal(container.querySelector('.story-suite-manage'), line, 'a redraw keeps it');
     assert.ok(!line.hasAttribute('hidden'));
     panel.setSuiteLink(false);
     assert.ok(line.hasAttribute('hidden'));
@@ -470,5 +512,5 @@ test('"Manage all in Story Suite": on top, hidden until available, opens the ove
     const shown = doc.createElement('div');
     doc.body.appendChild(shown);
     renderSettings(shown, { settings: SETTINGS, onChange() {}, suiteLink: true });
-    assert.ok(!shown.querySelector('.story-director-suite-link').hasAttribute('hidden'), 'shown from the start when available');
+    assert.ok(!shown.querySelector('.story-suite-manage').hasAttribute('hidden'), 'shown from the start when available');
 });

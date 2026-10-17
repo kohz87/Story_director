@@ -1,4 +1,4 @@
-# Story Director v0.8.1
+# Story Director v0.8.2
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -70,8 +70,9 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
-foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward` and `step`. Dates
-go only in `on`, `due` and `arrive`. The note tells the model all of this in about 135 tokens.
+foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
+`difficulty`. Dates go only in `on`, `due` and `arrive`. The note tells the model all of this in
+about 140 tokens.
 
 ### Quests
 
@@ -79,7 +80,7 @@ Long-running work your character has taken on: bounties, contracts, favours owed
 Short errands that end within the scene do not need one.
 
 ```
-+ quest Bounty on Kettle Jack — type: bounty | giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30
++ quest Bounty on Kettle Jack — type: bounty | giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30 | difficulty: hard
 ~ Bounty on Kettle Jack — step: cornered at the weir
 - Bounty on Kettle Jack — turned in, paid
 ```
@@ -87,6 +88,13 @@ Short errands that end within the scene do not need one.
 One kind covers them all; `type` is the category: `main`, `side`, `bounty`, `contract`,
 `mission`, `favour`, or any word you like. Writing the category as the kind (`+ bounty Wolf
 pelts — …`, `+ contract …`) sets the type by itself.
+
+`difficulty` is one of `easy`, `normal`, `hard` or `nightmare`; a quest without one is
+`normal`. The obvious other words are read as one of the four (`trivial`, `simple` → easy;
+`medium`, `moderate` → normal; `difficult`, `tough` → hard; `deadly`, `impossible`, `extreme` →
+nightmare), and anything else as normal. The note mentions it next to the type when it is not
+normal (`Bounty on Kettle Jack (bounty, hard) — …`). Other extensions can scale by it: RPG
+Battle offers quest XP by difficulty when a quest is finished.
 
 - A quest starts only when your character **accepts** it; an offer not yet taken is a hook.
   The arc planner offers work as hooks and never completes a quest for you.
@@ -96,7 +104,7 @@ pelts — …`, `+ contract …`) sets the type by itself.
   giver's name in the scene counts as a mention.
 - They have their own **Quests** tab in Story Block's sidebar (it appears with the first
   quest), grouped by type: Main, Side, Bounties, Contracts, Missions, Favours, then your own
-  types. Each shows its goal, step, giver, reward, deadline and place, marked when the
+  types. Each shows its difficulty, goal, step, giver, reward, deadline and place, marked when the
   deadline is close or has passed; finished quests fold away with how they ended. The badge is
   the number of open quests. Nothing in it is hidden: quests are promises you made, not
   spoilers.
@@ -298,9 +306,12 @@ State Alpha off afterwards; the two would inject overlapping notes.
 
 ## Settings
 
-The panel (Extensions → Story Director) has a quick bar (the on/off switch, **Plan arc**, **Seed
-from World State**) and folding groups: Tracking & note, Calendar, Map & travel, Arc
-planning, Capture, and Existing chat & compatibility.
+The panel (Extensions → Story Director) has the Story Suite's shared look, the same as the other
+story extensions': a quick bar (the **Track the story** and **Hide behind the scenes**
+switches, shown as Enabled/Disabled, then **Plan arc** and **Seed from World State**) and
+folding sections, each with a one-line summary of what it is set to: Tracking & note,
+Calendar, Map & travel, Arc planning, Capture, and Existing chat & compatibility. They start
+closed; the ones you open are remembered in this browser.
 
 | Setting | Default | |
 |---|---|---|
@@ -374,7 +385,11 @@ area, so the model is not told the same thing twice.
 - **Story Suite overlay:** with Story Block 0.9 or later and another story extension installed, *Manage
   all in Story Suite* (on top of the settings) opens one overlay for all of them, with this
   panel as a tab and one Source of truth table
-  ([One place to manage them all](docs/STORY_SUITE.md#one-place-to-manage-them-all)).
+  ([One place to manage them all](docs/STORY_SUITE.md#one-place-to-manage-them-all)). The
+  overlay can also show what Story Director adds to your next reply (`api.manage.tokens()`):
+  the note as it would be sent now, per section, at about 4 characters a token, plus about 60
+  tokens of output for the `<Director>` lines it asks for (none when capture writes them on
+  *always*). Planner and capture calls are separate quiet calls and are not counted.
 
 ## For other extensions
 
@@ -406,9 +421,22 @@ shares through the Story Suite (`StorySuite.api('story-director')`):
 
   It returns `[]` when there are none, or when anything goes wrong. There is nothing to report
   back: the model closes the record with `!` or `-` when it narrates the outcome.
+- `questsDoneAt(index)`: the quests the assistant reply at message `index` finished (a `-` line
+  in that reply closed them, not as failed, abandoned, expired or superseded); quests finished
+  in earlier replies are not listed, so a swipe is read afresh. `difficulty` is always one of
+  `easy`, `normal`, `hard`, `nightmare`:
 
-RPG Battle uses it to give back HP and MP as story time passes, and to offer the fights the
-story has planned.
+  ```js
+  [
+      { id: 'bounty on kettle jack', name: 'Bounty on Kettle Jack', type: 'bounty',
+        difficulty: 'hard', reward: '40 crowns', giver: 'Warden Hale' },
+  ]
+  ```
+
+  Plain copies; `[]` when there are none, while tracking is off, or when anything goes wrong.
+
+RPG Battle uses it to give back HP and MP as story time passes, to offer the fights the story
+has planned, and to offer XP for a finished quest.
 
 ## Development
 

@@ -19,7 +19,7 @@ Record = {
   id: 'senior listener geva',           // lineKey(key): identity
   kind: 'agenda' | 'event' | 'hook' | 'quest' | 'clock' | 'beat' | 'secret',
   status: 'active' | 'resolved' | 'superseded',
-  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, type, giver, goal, reward, step },  // strings, '' when unset
+  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, encounter, type, giver, goal, reward, step, difficulty },  // strings, '' when unset
   extra: { [label]: value },            // labelled parts that are not a known field
   created: { message, time },           // message index; story abs or null
   changed: { message, time },
@@ -93,9 +93,16 @@ the text.
 export const KINDS = ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'];
 export const KIND_ALIASES;    // offscreen/off-screen/npc → agenda, world → event,
                               // thread/hooks → hook, timer/clocks → clock, plan → beat, off-limits → secret
-export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step'];
+export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step', 'difficulty'];
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', ...QUEST_FIELDS];
 // A quest never goes dormant (relevance.js); its `due` is a deadline; `giver` counts as a mention.
+export const QUEST_DIFFICULTIES = ['easy', 'normal', 'hard', 'nightmare'];
+export function questDifficulty(value) → 'easy' | 'normal' | 'hard' | 'nightmare'
+// (v0.8.2) The first word of `value` it knows (the four, or a synonym: trivial/simple/minor →
+// easy, medium/moderate/average → normal, difficult/tough/dangerous → hard,
+// deadly/impossible/extreme/lethal → nightmare), else normal; missing → normal. parseChanges
+// stores a non-empty `difficulty:` this way, so the tracker only holds the four words (an
+// empty one clears the field, which reads as normal).
 // `encounter` (v0.8): the foes of a planned fight, free text in RPG Battle's shape
 // (`3 bandit, bandit captain (boss)`, `2 x dire wolf rank D`), stored as written, never parsed.
 export function lineKey(key) → id     // lowercase, markdown and punctuation squashed, spaces single
@@ -132,6 +139,7 @@ export function markSeen(tracker, text, { message, time = null }) → Tracker
 export function replay(entries, { seed = null } = {}) → { tracker, problems: [Finding & { message }] }
 export function findRecord(tracker, keyOrId) → Record | null
 export function activeRecords(tracker, { kind = null } = {}) → [Record]
+export function questsDoneIn(tracker, message) → [{ id, name, type, difficulty, reward, giver }]
 ```
 
 All return new objects; inputs are never mutated.
@@ -150,6 +158,12 @@ All return new objects; inputs are never mutated.
 - `replay(entries)`: `entries` = `[{ message, ops: [Op] | null, text, time }]` in chat order;
   for each, `markSeen(text)` then `applyOps(ops)`; sets `tracker.message`/`tracker.time`.
   `seed` is a starting Tracker (default empty).
+- `questsDoneIn` (v0.8.2): quest records with status `resolved` whose `resolved.message` is
+  `message` and whose reason is not a failure (/fail|abandon|give up|forfeit|expired|missed|too
+  late|cancel|refused|declined|botched/i), as plain objects (`name` = key, `type`/`reward`/
+  `giver` trimmed, `difficulty` through `questDifficulty`). A quest closed in an earlier reply
+  keeps that reply's message, so it is not listed again; reopened and closed later, it is
+  listed at the later one.
 
 ## `src/seed.js`
 
@@ -216,12 +230,24 @@ Selection = {
 ## `src/note.js`
 
 ```js
-export const CHANGE_INSTRUCTION;  // ≈135 tokens: how to write <Director> change lines
+export const CHANGE_INSTRUCTION;  // ≈140 tokens: how to write <Director> change lines
 export const PACING, PACING_NO_CHANGES;  // the Pacing line, when something is scheduled
 export const ENCOUNTER_CUE;       // v0.8: appended to Pacing while a due/arriving record has an encounter
 export const NPC_PLANS_ONLY;      // v0.8: 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.'
 export function buildNote(selection, { calendar, budgetTokens = 1000, corrections = [], instruction = CHANGE_INSTRUCTION, npcPlansOnly = false } = {}) → string
+export function noteParts(selection, sameOptions) → [{ label, text, join }]   // v0.8.2
+export const DIRECTOR_OUTPUT_TOKENS = 60;                                    // v0.8.2
+export function noteTokens(parts, { outputTokens = DIRECTOR_OUTPUT_TOKENS } = {}) → { input, output, parts: [{ label, input, output }] }
 ```
+
+(v0.8.2) `buildNote` is `noteParts` joined (each part's `join`, `'\n'` or `' '` for the
+Encounter cue on the Pacing line, goes before its text). Labels, in order: Header, Arc, Due
+now, Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
+Pacing, Encounter cue, Change instruction, NPC plans only. `noteTokens`: each non-empty part's
+`estimateTokens` (≈ 4 characters a token) as its `input`; the Change instruction part also
+carries `output` = `DIRECTOR_OUTPUT_TOKENS`, a rough allowance for the `<Director>` block it
+asks the model to write (two tags and about two change lines of 20–25 tokens); `input` and
+`output` are the sums.
 
 `npcPlansOnly` (Story Suite: NPC State Delta is the source of truth for `npc`) appends
 `NPC_PLANS_ONLY` as a line after a non-empty instruction; with `instruction: ''` nothing is
@@ -503,8 +529,8 @@ export const SOURCE_CHOICES;                       // ['auto', 'mine', 'theirs']
 export function sourceChoices(saved, areas) → { [area]: choice }   // unknown or missing → 'auto'
 export function suiteAnnouncement({ id, name, version, areas, settings, storyBlock, api, panel })
   → { key, provider | null }
-export function makeManage({ areas, read, save, panel = () => null })
-  → { areas, sources(), setSource(area, choice) → boolean, enabled(), setEnabled(on) }
+export function makeManage({ areas, read, save, panel = () => null, tokens = () => null })
+  → { areas, sources(), setSource(area, choice) → boolean, enabled(), setEnabled(on), tokens() }
 export function suiteOpener(suite) → (tab) => void | null
 ```
 
@@ -513,7 +539,10 @@ export function suiteOpener(suite) → (tab) => void | null
 `key 'off'`, `enabled: false`, `owns: []`. Every provider carries `settings: panel` (the
 panel's selector) and `api`. `makeManage`: `setSource` rejects an unknown area or choice
 (false, nothing changed), otherwise tells `panel().setSource` and saves the settings with that
-choice; `setEnabled` tells `panel().setEnabled` and saves `enabled`. `suiteOpener` is non-null
+choice; `setEnabled` tells `panel().setEnabled` and saves `enabled`. (v0.8.2) `tokens()`
+returns a clean copy of `tokens()`'s report (`{ input, output, parts: [{ label, input, output
+}] }`, whole numbers ≥ 0), or `{ input: 0, output: 0, parts: [] }` when it has none or throws.
+`suiteOpener` is non-null
 while two or more providers are announced (on or off) and `suite.api('story-block').openSuite`
 is a function.
 
@@ -550,6 +579,23 @@ panel's copy for its next edit and shown in the select or switch, without redraw
 redrawn view, calls `onOpenSuite()`; hidden unless `suiteLink` / `setSuiteLink(true)`. Its
 element carries `data-story-suite-link`, so the overlay can hide it while it holds the panel.
 
+(v0.8.2) The markup is the Story Suite's shared panel (docs/STORY_SUITE.md, "One look for the
+four settings panels"; styled by `src/suite.css`, identical in the four extensions, which
+`index.js` links once per page as `<link id="story-suite-css">` unless an element with that id
+exists). The drawer content is `.story-suite-panel`; the Manage all line is
+`div.story-suite-manage[data-story-suite-link]` (a `menu_button` with `fa-layer-group`);
+`.story-suite-quickbar` holds the two switches and `.story-suite-actions` (Plan arc, Seed from
+World State); the sections are `details.story-suite-fold[data-fold]` (`tracking`, `calendar`,
+`pack`, `arc`, `capture`, `chat`) in `.story-suite-folds`, each `summary` a `<b>` title and a
+`<small>` summary of its main setting (refreshed on every edit), body `.story-suite-fold-body`;
+all start closed and the open ones are kept in `localStorage`
+(`story_director_settings_open_groups`, wrapped). Every setting is a `story-suite-row`
+(`label[for]` when it has a control id): `<span><b>Label</b><small>hint · Now: …</small></span>`
+and the control, a checkbox straight in the row (shown as a pill), a number in
+`.story-suite-number` with its unit; Dormant shelf, World pack and Source of truth are
+`.story-suite-subhead`s; the status line and the world pack message are `.story-suite-notice`s.
+Ids are unchanged.
+
 ## `src/ui/quests.js` (v0.7.1)
 
 ```js
@@ -560,6 +606,8 @@ export function renderQuests(pane, { quests, finished, formatDate, status }) →
 
 Groups by `fields.type` (main, side, bounty, contract, mission, favour, then others by name,
 untyped last); plural spellings join their singular. Never hidden by the spoiler guard.
+(v0.8.2) Every quest's head carries a `story-director-tag is-difficulty is-<difficulty>` tag
+(`questDifficulty`, so `normal` when none was written).
 
 ## `src/ui/tab.js`
 
@@ -589,7 +637,10 @@ would build for the scene at message `index` (the tracker up to it, the newest s
 or before it), or `[]` on any failure. Story Director never resolves a fight: the caller (RPG
 Battle) runs it, and the model closes the record with `!` or `-` when it narrates the outcome.
 Also (v0.8) `calendar()`: `sharedCalendar(settings.calendar)`, the Gregorian default until the
-reader sets one. Like `encountersAt`, an addition keeps `apiVersion` 1.
+reader sets one. (v0.8.2) `questsDoneAt(index)`: `questsDoneIn(trackerAt(index).tracker,
+index)` for an assistant message inside the chat, `[]` for anything else, while tracking is
+off, or on any failure. Like `encountersAt`, an addition keeps `apiVersion` 1; the suite's
+`api` spreads the same object, so it has it too.
 
 **Story Suite** (v0.8): `{ id: 'story-director', name: 'Story Director', version, owns,
 enabled, settings: '#story_director_settings', api }` (`suiteAnnouncement`) is announced while
@@ -602,7 +653,10 @@ back on; the registry's `owner`, `has` and `api` skip it as before. `api` is
 `{ ...globalThis.StoryDirector, manage }`, built once (the global itself has no `manage`);
 `manage` is `makeManage` over `settings()`, `applySettings` (the same function as the panel's
 `onChange`: store, save, announce, clear the replay cache, refresh Story Block) and the
-settings panel. `settings` names the wrapper `#story_director_settings` that
+settings panel; (v0.8.2) its `tokens` is `noteTokens` of `noteParts` for the next ordinary
+reply, built with the same options as the injected note (`noteOptions`) and with SillyTavern's
+macros filled per part. Nothing (all zeros) while the note is not sent; planner and capture
+calls are quiet calls and not counted, and with capture on *always* the output allowance is 0. `settings` names the wrapper `#story_director_settings` that
 `addSettingsPanel` creates under `#extensions_settings2` (or `#extensions_settings`), which
 the overlay moves into itself while open. One `onChange` listener only refreshes the settings'
 list of the other extensions and the *Manage all in Story Suite* line (`suiteOpener`; a click

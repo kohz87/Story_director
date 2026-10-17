@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHANGE_INSTRUCTION, ENCOUNTER_CUE, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote } from '../src/note.js';
+import { CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote, noteParts, noteTokens } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -247,7 +247,18 @@ test('quests: their own line, deadline wording when due, and the instruction nam
     assert.ok(note.includes(PACING), 'a deadline is a schedule');
     const due = buildNote(selection({ due: [bounty] }), { calendar });
     assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
-    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): type, giver, goal, reward, step, due/);
+    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): type, giver, goal, reward, step, due, difficulty\./);
+});
+
+test('quest difficulty: shown with the type unless it is normal', () => {
+    const quest = (key, fields) => record({ key, kind: 'quest', fields: { goal: 'bring him in', ...fields } });
+    const note = buildNote(selection({ relevant: [
+        quest('Kettle Jack', { type: 'bounty', difficulty: 'hard' }),
+        quest('Drowned Crown', { difficulty: 'nightmare' }),
+        quest('Rat cellar', { type: 'side', difficulty: 'normal' }),
+        quest('Herb run', {}),
+    ] }), { calendar });
+    assert.ok(lines(note).includes('Quests: Kettle Jack (bounty, hard) — bring him in · Drowned Crown (nightmare) — bring him in · Rat cellar (side) — bring him in · Herb run — bring him in'));
 });
 
 test('encounters: a due fight names its foes, the kind lines show them compactly', () => {
@@ -302,4 +313,42 @@ test('npcPlansOnly: one short line after the instruction, and only where change 
 
     // With capture writing the changes, the note asks for none, so there is nothing to steer.
     assert.equal(buildNote(scene, { calendar, instruction: '', npcPlansOnly: true }), buildNote(scene, { calendar, instruction: '' }));
+});
+
+const joined = parts => parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
+
+test('noteParts: the note in labelled sections that join back into buildNote exactly', () => {
+    const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { on: 'Goldwane 16', encounter: '3 bandit' } });
+    const bounty = record({ key: 'Kettle Jack', kind: 'quest', fields: { goal: 'bring him in', difficulty: 'hard' } });
+    const sel = { ...selection({ due: [ambush], arriving: [brant], relevant: [geva, fires, stranger, bounty, graves, council], secrets: [record({ key: 'The heir', kind: 'secret' })] }), arc: { key: 'Wolf winter', fields: { desc: 'the packs come down' } } };
+    const options = { calendar, corrections: ['Brant cannot be in two places.'], npcPlansOnly: true };
+    const parts = noteParts(sel, options);
+    assert.deepEqual(parts.map(entry => entry.label), ['Header', 'Arc', 'Due now', 'Arriving', 'Off-screen', 'World', 'Hooks', 'Quests', 'Clocks', 'Beats',
+        'Do not reveal', 'Corrections', 'Pacing', 'Encounter cue', 'Change instruction', 'NPC plans only']);
+    assert.equal(joined(parts), buildNote(sel, options));
+    assert.equal(parts.find(entry => entry.label === 'Encounter cue').join, ' ', 'the cue rides on the Pacing line');
+
+    // Nothing tracked: the instruction alone; with capture writing the changes, nothing.
+    assert.deepEqual(noteParts(selection(), { calendar }).map(entry => entry.label), ['Change instruction']);
+    assert.deepEqual(noteParts(selection(), { calendar, instruction: '', npcPlansOnly: true }), []);
+    // The budget still cuts the least relevant records.
+    const small = noteParts(selection({ relevant: [geva, fires, stranger] }), { calendar, budgetTokens: 150 });
+    assert.equal(joined(small), buildNote(selection({ relevant: [geva, fires, stranger] }), { calendar, budgetTokens: 150 }));
+});
+
+test('noteTokens: input per part at about 4 characters a token, output only for the change lines asked for', () => {
+    assert.equal(DIRECTOR_OUTPUT_TOKENS, 60);
+    const parts = noteParts(selection({ relevant: [geva] }), { calendar, npcPlansOnly: true });
+    const report = noteTokens(parts);
+    assert.deepEqual(report.parts.map(entry => entry.label), ['Header', 'Off-screen', 'Pacing', 'Change instruction', 'NPC plans only']);
+    assert.deepEqual(report.parts.find(entry => entry.label === 'Change instruction'), { label: 'Change instruction', input: estimateTokens(CHANGE_INSTRUCTION), output: 60 });
+    assert.equal(report.input, report.parts.reduce((sum, entry) => sum + entry.input, 0));
+    assert.equal(report.output, 60);
+    assert.ok(Math.abs(report.input - estimateTokens(buildNote(selection({ relevant: [geva] }), { calendar, npcPlansOnly: true }))) <= report.parts.length);
+
+    const captured = noteTokens(noteParts(selection({ relevant: [geva] }), { calendar, instruction: '' }));
+    assert.equal(captured.output, 0, 'capture writes the changes in a quiet call of its own');
+    assert.ok(captured.input > 0);
+    assert.equal(noteTokens(parts, { outputTokens: 90 }).output, 90);
+    for (const nothing of [[], null, undefined, 'x', [null, { label: 'Header', text: '' }]]) assert.deepEqual(noteTokens(nothing), { input: 0, output: 0, parts: [] });
 });
