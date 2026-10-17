@@ -404,3 +404,42 @@ test('spoiler guard: a waiting plan can be accepted without reading it', () => {
     assert.deepEqual(accepted, ['+ arc Secret Plan — spoilers | arc: arc-2']);
     assert.ok(pane.querySelector('.story-director-draft-review'));
 });
+
+test('settled records fold away at the end of their section, without a "settled" row', () => {
+    const FACT = record('Ditch tax', 'event', { desc: 'Armed men demand a raised ditch tax' }, { extra: { settled: 'yes', since: 'Haywane 2' } });
+    const pane = render({ selection: selection({ relevant: [FIRES, FACT, GEVA].map((entry, index) => ({ record: entry, reason: 'test', priority: index + 1 })) }) });
+    const world = pane.querySelector('.story-director-section.is-event');
+    assert.deepEqual(texts(world, ':scope > .story-director-records > .story-director-record > .story-director-record-head .story-director-record-key'), ['Canal Street fires']);
+    const fold = world.querySelector('details.story-director-fold.is-settled');
+    assert.equal(fold.open, false);
+    assert.equal(subText(fold.querySelector('summary')), 'Settled');
+    assert.equal(fold.querySelector('summary .story-director-count').textContent, '1');
+    const item = fold.querySelector('.story-director-record');
+    assert.equal(item.querySelector('.story-director-record-key').textContent, 'Ditch tax');
+    assert.deepEqual(facts(item), [['', 'Armed men demand a raised ditch tax'], ['since', 'Haywane 2']]);
+    // Off-screen has nothing settled: no fold there.
+    assert.equal(pane.querySelector('.story-director-section.is-agenda .is-settled'), null);
+
+    // A section with only settled records still shows its heading, then the fold.
+    const only = render({ selection: selection({ relevant: [{ record: FACT, reason: 'test', priority: 1 }] }) });
+    assert.ok(only.querySelector('.story-director-section.is-event details.is-settled'));
+    assert.equal(only.querySelector('.story-director-section.is-event > .story-director-records'), null);
+});
+
+test('an opened fold stays open when the tab redraws; secrets close again', () => {
+    const pane = render();
+    const dormant = pane.querySelector('details.is-dormant');
+    dormant.open = true;
+    dormant.dispatch('toggle');
+    const secrets = pane.querySelector('details.is-secrets');
+    secrets.open = true;
+    secrets.dispatch('toggle');
+    const again = render();
+    assert.equal(again.querySelector('details.is-dormant').open, true);
+    assert.equal(again.querySelector('details.is-secrets').open, false);
+    assert.doesNotMatch(again.textContent, /weir route/);
+    const reopened = again.querySelector('details.is-dormant');
+    reopened.open = false;
+    reopened.dispatch('toggle');
+    assert.equal(render().querySelector('details.is-dormant').open, false);
+});

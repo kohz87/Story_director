@@ -1,4 +1,4 @@
-# Story Director v0.5.2
+# Story Director v0.5.3
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
@@ -186,7 +186,7 @@ the reply like the model's own, so swipes and edits behave the same.
 
 **Settings → Existing chat → Import from World State Alpha** takes an exported World State
 Alpha bundle. Its active facts and developments become **World** records (developments keep
-their trend; facts are marked settled), keyed by the first words of their summary, with their
+their trend; facts are marked settled and fold away in the tab), keyed by the first words of their summary, with their
 anchors as the names to watch for. Resolved and superseded records stay behind. Turn World
 State Alpha off afterwards; the two would inject overlapping notes.
 
@@ -215,6 +215,10 @@ planning, Capture, and Existing chat & compatibility.
 What is due and arriving, every active record by kind (pin one to keep it in the note), the
 arc and its beats, the dormant shelf, secrets, what was resolved recently, problems with the
 last reply's changes, and the route tool.
+
+**Settled** records (World State Alpha's facts, or any record with `settled: yes`) are true
+and going nowhere, so each section folds them into a closed **Settled** fold after its live
+records. Folds you open stay open while you play; only *Do not reveal* closes again.
 
 **It starts hidden.** The tracker is the story behind the scenes, so by default the tab shows
 only the time and place, counts and what you can do (plan or end an arc, accept a waiting plan
