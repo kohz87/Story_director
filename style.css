@@ -1,0 +1,605 @@
+/*
+ * Story Director: the settings panel (src/ui/settings.js) and the "Director" tab in
+ * Story Block's sidebar (src/ui/tab.js).
+ *
+ * Both follow Story Block's look so the extensions read as one: the settings like its
+ * settings panel (quiet uppercase section heads, two-line rows, the on/off switch), the
+ * tab like its World State board (a framed "now" box, small-caps section labels with an
+ * icon, hairlines between entries, labelled fact rows). Colours come from SillyTavern's
+ * theme variables. Everything wraps instead of scrolling sideways: the drawer and the
+ * sidebar are often a 360-400 px phone column.
+ */
+
+.story-director-settings,
+.story-director-tab {
+    --sd-border: var(--SmartThemeBorderColor, rgba(127, 127, 127, 0.28));
+    --sd-accent: var(--SmartThemeQuoteColor, #e18a24);
+    --sd-surface: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, 0.15));
+    --sd-hover-bg: rgba(127, 127, 127, 0.14);
+    /* Severity colours, the same as Story Block's change marks. */
+    --sd-error: #d46a6a;
+    --sd-warn: #d9a441;
+    --sd-info: #6b9fd6;
+    color: var(--SmartThemeBodyColor, inherit);
+    min-width: 0;
+    max-width: 100%;
+}
+
+.story-director-settings *,
+.story-director-settings *::before,
+.story-director-settings *::after,
+.story-director-tab *,
+.story-director-tab *::before,
+.story-director-tab *::after {
+    box-sizing: border-box;
+}
+
+/* Long keys and values wrap anywhere, so nothing pushes the sidebar pane wider. */
+.story-director-tab * {
+    min-width: 0;
+}
+
+.story-director-settings [hidden],
+.story-director-tab [hidden] {
+    display: none !important;
+}
+
+.story-director-settings .menu_button,
+.story-director-tab .menu_button {
+    margin: 0;
+    width: auto;
+    white-space: nowrap;
+}
+
+.story-director-settings .menu_button > i + span,
+.story-director-tab .menu_button > i + span {
+    margin-left: 0.35em;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Settings                                                                    */
+
+.story-director-settings .story-director-status {
+    margin: 0.45rem 0;
+    opacity: 0.75;
+    overflow-wrap: anywhere;
+}
+
+.story-director-settings .story-director-status:empty {
+    display: none;
+}
+
+/* Section heads: Tracking, Dormant, Calendar, NPC State Delta, Existing chat. */
+.story-director-settings .story-director-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0.9rem 0 0.15rem;
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.65;
+}
+
+.story-director-settings .story-director-view > .story-director-section-head:first-child {
+    margin-top: 0.4rem;
+}
+
+/*
+ * A two-line row: the setting's name, a quiet hint under it, and the control at the
+ * right. When the column is too narrow for both, the control drops under the text at
+ * its own width instead of squeezing it.
+ */
+.story-director-settings .story-director-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.story-director-settings .story-director-row + .story-director-row {
+    border-top: 1px solid var(--sd-border);
+}
+
+.story-director-settings .story-director-row-text {
+    display: flex;
+    flex: 1 1 12rem;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.story-director-settings .story-director-row-name {
+    margin: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.story-director-settings label.story-director-row-name {
+    cursor: pointer;
+}
+
+.story-director-settings .story-director-row-hint {
+    font-size: 0.8em;
+    line-height: 1.35;
+    opacity: 0.7;
+    overflow-wrap: anywhere;
+}
+
+.story-director-settings .story-director-row-control {
+    display: flex;
+    flex: none;
+    align-items: center;
+    max-width: 100%;
+}
+
+/* Selects, the scene tag and the month list take the full width under the text. */
+.story-director-settings .story-director-row.is-wide .story-director-row-control {
+    flex: 1 1 100%;
+}
+
+.story-director-settings .story-director-input {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+}
+
+.story-director-settings .story-director-row:not(.is-wide) .story-director-input {
+    width: 11rem;
+}
+
+.story-director-settings .story-director-row:not(.is-wide) .story-director-number {
+    width: 6.5rem;
+}
+
+.story-director-settings .story-director-months {
+    min-height: 8rem;
+    resize: vertical;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: 0.9em;
+    line-height: 1.45;
+}
+
+/* The on/off switch: a checkbox drawn as a track and knob, as in Story Block. */
+.story-director-settings .story-director-switch {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    width: 2.4rem;
+    height: 1.35rem;
+    margin: 0;
+    cursor: pointer;
+}
+
+.story-director-settings .story-director-switch > span {
+    display: none;
+}
+
+.story-director-settings .story-director-switch input {
+    appearance: none;
+    -webkit-appearance: none;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border: 1px solid var(--sd-border);
+    border-radius: 999px;
+    background: rgba(127, 127, 127, 0.25);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.story-director-settings .story-director-switch input::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0.15rem;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: var(--SmartThemeBodyColor, #ddd);
+    transform: translateY(-50%);
+    transition: left 0.15s ease;
+}
+
+.story-director-settings .story-director-switch input:checked {
+    border-color: var(--sd-accent);
+    background: color-mix(in srgb, var(--sd-accent) 70%, transparent);
+}
+
+.story-director-settings .story-director-switch input:checked::after {
+    left: calc(100% - 1.15rem);
+}
+
+.story-director-settings .story-director-switch input:focus-visible {
+    outline: 2px solid var(--sd-accent);
+    outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Director tab                                                                */
+
+.story-director-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.45rem 0.7rem 0.7rem;
+    line-height: 1.4;
+}
+
+.story-director-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* Now: time and place, in the framed box the World State board uses for its chips. */
+.story-director-tab .story-director-now {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0.5rem 0.65rem;
+    list-style: none;
+    border: 1px solid var(--sd-border);
+    border-radius: 8px;
+    background: var(--sd-surface);
+}
+
+.story-director-tab .story-director-now-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.92em;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.story-director-tab .story-director-now-item > i {
+    flex: none;
+    width: 1.1em;
+    color: var(--sd-accent);
+    font-size: 0.9em;
+    text-align: center;
+}
+
+/* Sections and their quiet labels */
+
+.story-director-tab .story-director-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.story-director-tab .story-director-sub {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.65;
+}
+
+.story-director-tab .story-director-count {
+    padding: 0 0.4rem;
+    border: 1px solid var(--sd-border);
+    border-radius: 999px;
+    font-size: 0.95em;
+    letter-spacing: 0;
+    line-height: 1.35;
+}
+
+/* Due now and Arriving: the label carries the accent, nothing louder. */
+.story-director-tab .story-director-section.is-due > .story-director-sub,
+.story-director-tab .story-director-section.is-arriving > .story-director-sub {
+    color: var(--sd-accent);
+    opacity: 0.9;
+}
+
+/* Records: the key on its own line, its facts under it, a hairline between. */
+.story-director-tab .story-director-records {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.story-director-tab .story-director-record {
+    padding: 0.45rem 0;
+    font-size: 0.92em;
+    overflow-wrap: anywhere;
+}
+
+.story-director-tab .story-director-record:first-child {
+    padding-top: 0.15rem;
+}
+
+.story-director-tab .story-director-record + .story-director-record {
+    border-top: 1px solid var(--sd-border);
+}
+
+.story-director-tab .story-director-record-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.1rem 0.45rem;
+}
+
+.story-director-tab .story-director-record-key {
+    flex: 0 1 auto;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.story-director-tab .story-director-tag {
+    font-size: 0.78em;
+    letter-spacing: 0.03em;
+    opacity: 0.6;
+    overflow-wrap: anywhere;
+}
+
+/* The pin: a quiet icon at the end of the key line, the accent when pinned. */
+.story-director-tab .menu_button.story-director-pin {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    align-self: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    margin-left: auto;
+    padding: 0.2rem;
+    border: 0;
+    background: none;
+    font-size: 0.85em;
+    opacity: 0.4;
+}
+
+.story-director-tab .menu_button.story-director-pin:hover,
+.story-director-tab .menu_button.story-director-pin:focus-visible {
+    background: var(--sd-hover-bg);
+    opacity: 0.85;
+}
+
+.story-director-tab .menu_button.story-director-pin.is-pinned {
+    color: var(--sd-accent);
+    opacity: 1;
+}
+
+/* Unpinned, the tack leans over, as pins do in most apps. */
+.story-director-tab .menu_button.story-director-pin:not(.is-pinned) > i {
+    transform: rotate(30deg);
+}
+
+/* `now X | then: Y | on: Z`, drawn as short labelled rows. */
+.story-director-tab .story-director-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.1rem 0.6rem;
+    margin: 0.1rem 0 0;
+    line-height: 1.4;
+}
+
+.story-director-tab .story-director-facts dt {
+    padding-top: 0.15em;
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    opacity: 0.55;
+}
+
+.story-director-tab .story-director-facts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.story-director-tab .story-director-facts dd.is-plain {
+    grid-column: 1 / -1;
+}
+
+/* Folds: Dormant, Do not reveal, Resolved recently. */
+.story-director-tab .story-director-fold {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--sd-border);
+}
+
+.story-director-tab .story-director-fold-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 2rem;
+    list-style: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.story-director-tab .story-director-fold-summary::-webkit-details-marker {
+    display: none;
+}
+
+.story-director-tab .story-director-fold-summary:focus-visible {
+    outline: 2px solid var(--sd-accent);
+    outline-offset: 2px;
+}
+
+/* A chevron drawn with borders, so it needs no icon font in a pseudo-element. */
+.story-director-tab .story-director-fold-summary::after {
+    content: "";
+    flex: none;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-right: 0.3rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    opacity: 0.5;
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+}
+
+.story-director-tab .story-director-fold[open] > .story-director-fold-summary::after {
+    transform: rotate(45deg);
+}
+
+.story-director-tab .story-director-fold-body {
+    padding-top: 0.2rem;
+}
+
+.story-director-tab .story-director-fold.is-dormant .story-director-record,
+.story-director-tab .story-director-fold.is-resolved .story-director-record {
+    opacity: 0.8;
+}
+
+/* Secrets: italic, under a dashed rule like the board's secret. */
+.story-director-tab .story-director-fold.is-secrets[open] > .story-director-fold-body {
+    margin-top: 0.2rem;
+    border-top: 1px dashed var(--sd-border);
+}
+
+.story-director-tab .story-director-fold.is-secrets .story-director-facts dd {
+    font-style: italic;
+}
+
+/* Problems from the last reply, by severity. */
+.story-director-tab .story-director-section.is-problems {
+    gap: 0.4rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--sd-border);
+}
+
+.story-director-tab .story-director-problems {
+    --sd-severity: var(--sd-info);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid color-mix(in srgb, var(--sd-severity) 45%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--sd-severity) 10%, transparent);
+}
+
+.story-director-tab .story-director-problems.is-error {
+    --sd-severity: var(--sd-error);
+}
+
+.story-director-tab .story-director-problems.is-warn {
+    --sd-severity: var(--sd-warn);
+}
+
+.story-director-tab .story-director-problems-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.story-director-tab .story-director-problems-label > i {
+    color: var(--sd-severity);
+}
+
+.story-director-tab .story-director-problem-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.story-director-tab .story-director-problem {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.1rem 0.4rem;
+    font-size: 0.88em;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.story-director-tab .story-director-problem-key {
+    font-weight: 600;
+}
+
+.story-director-tab .story-director-problem-kind {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-family: var(--monoFontFamily, monospace);
+    font-size: 0.85em;
+    opacity: 0.55;
+}
+
+/* Empty state */
+
+.story-director-tab .story-director-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+}
+
+.story-director-tab .story-director-empty p {
+    margin: 0;
+}
+
+.story-director-tab .story-director-empty-text {
+    opacity: 0.7;
+}
+
+.story-director-tab .story-director-empty-hint {
+    font-size: 0.85em;
+    opacity: 0.6;
+    overflow-wrap: anywhere;
+}
+
+.story-director-tab .story-director-empty .menu_button {
+    max-width: 100%;
+    white-space: normal;
+}
+
+/* Touch screens get thumb-sized targets for the pins and folds. */
+@media (any-pointer: coarse) {
+    .story-director-tab .menu_button.story-director-pin,
+    .story-director-tab .story-director-fold-summary {
+        min-height: 2.5rem;
+    }
+
+    .story-director-tab .menu_button.story-director-pin {
+        min-width: 2.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .story-director-settings .story-director-switch input,
+    .story-director-settings .story-director-switch input::after,
+    .story-director-tab .story-director-fold-summary::after {
+        transition: none;
+    }
+}
+
+@media (forced-colors: active) {
+    .story-director-settings .story-director-switch input:checked {
+        background: Highlight;
+    }
+
+    .story-director-tab .menu_button.story-director-pin.is-pinned {
+        color: Highlight;
+    }
+}

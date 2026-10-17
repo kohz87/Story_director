@@ -1,0 +1,337 @@
+// Story Director settings panel.
+//
+// Drawn like Story Block's panel: SillyTavern's inline-drawer, quiet uppercase section
+// heads, and two-line rows (what the setting is, then a short hint) with the control on
+// the right. Block names, tags and month names are typed by the reader, so every node is
+// built with createElement and filled through textContent / value, never innerHTML.
+//
+// The panel keeps its own copy of the settings and hands a full new object to onChange
+// after every edit; the object it was given is never touched. update(settings) redraws
+// the sections for settings changed elsewhere, leaving the drawer and the status line as
+// they are (rebuilding the drawer would fold it shut).
+
+const DEFAULTS = {
+    enabled: true,
+    sceneTag: 'World_State',
+    depth: 1,
+    budgetTokens: 1000,
+    dormantReplies: 15,
+    dormantDays: 30,
+    dueSoonDays: 3,
+    mirrorOffscreen: true,
+    calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
+};
+
+// Bounds for the number fields; a value outside them is clamped, not rejected.
+const LIMITS = {
+    depth: [0, 100],
+    budgetTokens: [100, 20000],
+    dormantReplies: [1, 1000],
+    dormantDays: [1, 3650],
+    dueSoonDays: [0, 365],
+    daysPerMonth: [1, 1000],
+};
+
+const PRESET_LABELS = { custom: 'Custom (your months)', gregorian: 'Gregorian (real months, leap years)' };
+
+// ---------------------------------------------------------------------------
+// DOM helpers (the same shapes as Story Block's editor.js)
+
+function el(tag, { className, text, title, attrs } = {}, children = []) {
+    const node = globalThis.document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = String(text);
+    if (title) {
+        node.title = title;
+        node.setAttribute('aria-label', title);
+    }
+    for (const [name, value] of Object.entries(attrs ?? {})) node.setAttribute(name, value);
+    for (const child of children) if (child) node.append(child);
+    return node;
+}
+
+function icon(name) {
+    return el('i', { className: `fa-solid ${name}`, attrs: { 'aria-hidden': 'true' } });
+}
+
+function button(label, className, { iconName, title, onClick } = {}) {
+    const node = el('button', { className: `menu_button ${className}`, title });
+    node.type = 'button';
+    if (iconName) node.append(icon(iconName));
+    if (label) node.append(el('span', { text: label }));
+    if (onClick) node.addEventListener('click', onClick);
+    return node;
+}
+
+function textInput(id, value, placeholder = '') {
+    const node = el('input', { className: 'text_pole story-director-input', attrs: { id } });
+    node.type = 'text';
+    node.value = value ?? '';
+    if (placeholder) node.placeholder = placeholder;
+    return node;
+}
+
+function numberInput(id, value, [min, max]) {
+    const node = el('input', { className: 'text_pole story-director-input story-director-number', attrs: { id, min: String(min), max: String(max), step: '1', inputmode: 'numeric' } });
+    node.type = 'number';
+    node.value = String(value ?? '');
+    return node;
+}
+
+function select(id, options, value) {
+    const node = el('select', { className: 'text_pole story-director-input story-director-select', attrs: { id } });
+    for (const option of options) {
+        const item = el('option', { text: option.label });
+        item.value = option.value;
+        node.append(item);
+    }
+    node.value = String(value);
+    return node;
+}
+
+/** An on/off switch: SillyTavern's checkbox_label drawn as a track and knob by style.css. */
+function toggle(id, checked, label) {
+    const input = el('input', { attrs: { id, role: 'switch', 'aria-label': label } });
+    input.type = 'checkbox';
+    input.checked = Boolean(checked);
+    const wrapper = el('label', { className: 'checkbox_label story-director-switch', attrs: { for: id } }, [input, el('span', { text: label })]);
+    return { wrapper, input };
+}
+
+/**
+ * A two-line row: the setting's name, a quiet hint under it, and the control. `wide`
+ * controls (selects, text, the months list) take a line of their own under the text,
+ * so they are never squeezed beside it on a phone.
+ */
+function row(name, hint, control, { id, wide = false, className = '' } = {}) {
+    const title = id ? el('label', { className: 'story-director-row-name', text: name, attrs: { for: id } }) : el('span', { className: 'story-director-row-name', text: name });
+    return el('div', { className: `story-director-row${wide ? ' is-wide' : ''} ${className}`.trim() }, [
+        el('div', { className: 'story-director-row-text' }, [
+            title,
+            hint ? el('small', { className: 'story-director-row-hint', text: hint }) : null,
+        ]),
+        el('div', { className: 'story-director-row-control' }, [control]),
+    ]);
+}
+
+function sectionHead(text) {
+    return el('div', { className: 'story-director-section-head' }, [el('span', { text })]);
+}
+
+// ---------------------------------------------------------------------------
+// Values
+
+/** The settings with every field present, as a fresh object the panel may change. */
+function complete(settings) {
+    const given = settings && typeof settings === 'object' ? settings : {};
+    const calendar = given.calendar && typeof given.calendar === 'object' ? given.calendar : {};
+    // structuredClone so nothing the panel later changes reaches the caller's object,
+    // including fields this panel does not know about (partsOfDay, a newer version's keys).
+    return structuredClone({
+        ...DEFAULTS,
+        ...given,
+        calendar: {
+            ...DEFAULTS.calendar,
+            ...calendar,
+            // Bare month names (a world pack's shape) become { name, days } like the rest.
+            months: (Array.isArray(calendar.months) ? calendar.months : [])
+                .map(month => (typeof month === 'string' ? { name: month, days: calendar.daysPerMonth ?? DEFAULTS.calendar.daysPerMonth } : month))
+                .filter(month => month && typeof month === 'object'),
+        },
+    });
+}
+
+function clampInt(text, [min, max], fallback) {
+    const value = Math.round(Number(String(text).trim()));
+    if (String(text).trim() === '' || !Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Months textarea -> [{ name, days }]. One month per line, `Name` or `Name | days`; a bare
+ * name (or a day count that is not a positive number) takes the calendar's days per month.
+ */
+export function parseMonths(text, daysPerMonth = DEFAULTS.calendar.daysPerMonth) {
+    const months = [];
+    for (const line of String(text ?? '').split(/\r?\n/)) {
+        const [rawName, rawDays = ''] = line.split('|');
+        const name = rawName.trim();
+        if (!name) continue;
+        const days = Math.round(Number(rawDays.trim()));
+        months.push({ name, days: rawDays.trim() && days > 0 ? Math.min(days, LIMITS.daysPerMonth[1]) : daysPerMonth });
+    }
+    return months;
+}
+
+/** The reverse: months with the default length are written as a bare name. */
+export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMonth) {
+    return (months ?? [])
+        .map(month => (typeof month === 'string' ? { name: month, days: daysPerMonth } : month))
+        .filter(month => month?.name)
+        .map(month => (month.days && month.days !== daysPerMonth ? `${month.name} | ${month.days}` : month.name))
+        .join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Settings panel
+
+/**
+ * Render the Story Director settings into `container`.
+ * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
+ * Returns `{ root, update(settings) }`.
+ */
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '' } = {}) {
+    let current = complete(settings);
+
+    // Re-rendering into the same container keeps whatever the runtime last wrote into the
+    // status line instead of blanking it until the next reply.
+    const previousStatus = container.querySelector?.('#story_director_status')?.textContent ?? '';
+    const statusNode = el('div', { className: 'story-director-status', text: status || previousStatus, attrs: { id: 'story_director_status', 'aria-live': 'polite' } });
+    const view = el('div', { className: 'story-director-view' });
+    const root = el('div', { className: 'story-director-settings' }, [
+        el('div', { className: 'inline-drawer' }, [
+            el('div', { className: 'inline-drawer-toggle inline-drawer-header' }, [
+                el('b', { text: 'Story Director' }),
+                el('div', { className: 'inline-drawer-icon fa-solid fa-circle-chevron-down down' }),
+            ]),
+            el('div', { className: 'inline-drawer-content' }, [statusNode, view]),
+        ]),
+    ]);
+    container.replaceChildren(root);
+
+    // Every edit goes through here: a fresh copy, changed, handed on whole.
+    function commit(change) {
+        const next = complete(current);
+        change(next);
+        current = next;
+        onChange?.(complete(current));
+    }
+
+    function bindNumber(input, key, read = settingsValue => settingsValue[key], write = (next, value) => { next[key] = value; }) {
+        input.addEventListener('change', () => {
+            const value = clampInt(input.value, LIMITS[key], read(current));
+            // Show what was kept: a clamped number, or the old one for text that is not a number.
+            input.value = String(value);
+            if (value !== read(current)) commit(next => write(next, value));
+        });
+    }
+
+    function renderTracking() {
+        const enabled = toggle('story_director_enabled', current.enabled, 'Track the story');
+        enabled.input.addEventListener('change', () => commit(next => { next.enabled = Boolean(enabled.input.checked); }));
+
+        // Story Block's blocks when it lists any; otherwise the tag typed by hand.
+        let scene;
+        if (blocks.length) {
+            const options = blocks.map(block => ({ value: String(block.tag), label: block.name && block.name !== block.tag ? `${block.name} <${block.tag}>` : `<${block.tag}>` }));
+            // A tag Story Block no longer lists stays selectable, so opening the panel never changes it.
+            if (!options.some(option => option.value === current.sceneTag)) options.unshift({ value: current.sceneTag, label: `<${current.sceneTag}> (not found)` });
+            scene = select('story_director_scene', options, current.sceneTag);
+            scene.addEventListener('change', () => commit(next => { next.sceneTag = scene.value; }));
+        } else {
+            scene = textInput('story_director_scene', current.sceneTag, DEFAULTS.sceneTag);
+            scene.addEventListener('input', () => commit(next => { next.sceneTag = scene.value.trim() || DEFAULTS.sceneTag; }));
+        }
+
+        const depth = numberInput('story_director_depth', current.depth, LIMITS.depth);
+        bindNumber(depth, 'depth');
+        const budget = numberInput('story_director_budget', current.budgetTokens, LIMITS.budgetTokens);
+        bindNumber(budget, 'budgetTokens');
+
+        return [
+            sectionHead('Tracking'),
+            row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled.wrapper, { id: 'story_director_enabled', className: 'is-switch' }),
+            row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene', wide: true }),
+            row('Note depth', 'How many messages from the end the note goes in.', depth, { id: 'story_director_depth' }),
+            row('Note budget', 'Most tokens the note may use; the least relevant records go first.', budget, { id: 'story_director_budget' }),
+        ];
+    }
+
+    function renderDormant() {
+        const replies = numberInput('story_director_dormant_replies', current.dormantReplies, LIMITS.dormantReplies);
+        bindNumber(replies, 'dormantReplies');
+        const days = numberInput('story_director_dormant_days', current.dormantDays, LIMITS.dormantDays);
+        bindNumber(days, 'dormantDays');
+        const dueSoon = numberInput('story_director_due_soon', current.dueSoonDays, LIMITS.dueSoonDays);
+        bindNumber(dueSoon, 'dueSoonDays');
+        return [
+            sectionHead('Dormant'),
+            row('After replies', 'A record not seen for this many replies rests on the shelf.', replies, { id: 'story_director_dormant_replies' }),
+            row('After story days', 'Or not seen for this many days of story time.', days, { id: 'story_director_dormant_days' }),
+            row('Due soon', 'Records due within this many days never go dormant.', dueSoon, { id: 'story_director_due_soon' }),
+        ];
+    }
+
+    function renderCalendar() {
+        const calendar = current.calendar;
+        const preset = select('story_director_preset', Object.entries(PRESET_LABELS).map(([value, label]) => ({ value, label })), calendar.preset === 'gregorian' ? 'gregorian' : 'custom');
+        const era = textInput('story_director_era', calendar.era, 'CY');
+        era.addEventListener('input', () => commit(next => { next.calendar.era = era.value.trim(); }));
+
+        const months = el('textarea', { className: 'text_pole story-director-input story-director-months', attrs: { id: 'story_director_months', rows: '6', spellcheck: 'false' } });
+        months.placeholder = 'Dawnwane\nHaywane | 31\nGoldwane';
+        months.value = formatMonths(calendar.months, calendar.daysPerMonth);
+        months.addEventListener('input', () => commit(next => { next.calendar.months = parseMonths(months.value, next.calendar.daysPerMonth); }));
+
+        const perMonth = numberInput('story_director_days_per_month', calendar.daysPerMonth, LIMITS.daysPerMonth);
+        bindNumber(perMonth, 'daysPerMonth', settingsValue => settingsValue.calendar.daysPerMonth, (next, value) => {
+            // Months written as a bare name follow the default length, as the textarea shows them.
+            const before = next.calendar.daysPerMonth;
+            next.calendar.months = next.calendar.months.map(month => (month.days === before ? { ...month, days: value } : month));
+            next.calendar.daysPerMonth = value;
+        });
+
+        // The month list only means something for a custom calendar.
+        const customRows = [
+            row('Months', 'One per line, in order: Name, or Name | days.', months, { id: 'story_director_months', wide: true, className: 'is-custom' }),
+            row('Days per month', 'For months written without a length.', perMonth, { id: 'story_director_days_per_month', className: 'is-custom' }),
+        ];
+        const showCustom = () => customRows.forEach(node => {
+            if (preset.value === 'gregorian') node.setAttribute('hidden', '');
+            else node.removeAttribute('hidden');
+        });
+        preset.addEventListener('change', () => {
+            commit(next => { next.calendar.preset = preset.value === 'gregorian' ? 'gregorian' : 'custom'; });
+            showCustom();
+        });
+        showCustom();
+
+        return [
+            sectionHead('Calendar'),
+            row('Calendar', 'How dates in the story are read.', preset, { id: 'story_director_preset', wide: true }),
+            row('Era', 'Written before the year, as in “CY 611”. Leave empty for none.', era, { id: 'story_director_era' }),
+            ...customRows,
+        ];
+    }
+
+    function renderMirror() {
+        const mirror = toggle('story_director_mirror', current.mirrorOffscreen, 'Mirror off-screen agendas');
+        mirror.input.addEventListener('change', () => commit(next => { next.mirrorOffscreen = Boolean(mirror.input.checked); }));
+        return [
+            sectionHead('NPC State Delta'),
+            row('Mirror off-screen agendas', 'Rewrite the scene block’s Off-Screen list from the tracker, so NPC State Delta shows them.', mirror.wrapper, { id: 'story_director_mirror', className: 'is-switch' }),
+        ];
+    }
+
+    function renderSeed() {
+        const seed = button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() });
+        return [
+            sectionHead('Existing chat'),
+            row('Start from the scene block', 'Turns the latest World State’s Off-Screen, World, Hooks and Clocks lines into records.', seed, { className: 'is-action' }),
+        ];
+    }
+
+    function render() {
+        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderMirror(), ...renderSeed());
+    }
+
+    render();
+
+    return {
+        root,
+        update(next) {
+            current = complete(next);
+            render();
+        },
+    };
+}
