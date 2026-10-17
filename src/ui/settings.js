@@ -21,6 +21,7 @@ const DEFAULTS = {
     mirrorOffscreen: true,
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
     arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
+    capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
 };
 
 // Bounds for the number fields; a value outside them is clamped, not rejected.
@@ -34,6 +35,7 @@ const LIMITS = {
     recent: [4, 400],
     maxTokens: [200, 16000],
     stallDays: [1, 365],
+    captureTokens: [100, 8000],
 };
 
 const PRESET_LABELS = { custom: 'Custom (your months)', gregorian: 'Gregorian (real months, leap years)' };
@@ -130,6 +132,7 @@ function complete(settings) {
     const given = settings && typeof settings === 'object' ? settings : {};
     const calendar = given.calendar && typeof given.calendar === 'object' ? given.calendar : {};
     const arc = given.arc && typeof given.arc === 'object' ? given.arc : {};
+    const capture = given.capture && typeof given.capture === 'object' ? given.capture : {};
     // structuredClone so nothing the panel later changes reaches the caller's object,
     // including fields this panel does not know about (partsOfDay, a newer version's keys).
     return structuredClone({
@@ -144,6 +147,7 @@ function complete(settings) {
                 .filter(month => month && typeof month === 'object'),
         },
         arc: { ...DEFAULTS.arc, ...arc, model: arc.model && typeof arc.model === 'object' ? { ...arc.model } : { ...DEFAULTS.arc.model } },
+        capture: { ...DEFAULTS.capture, ...capture, model: capture.model && typeof capture.model === 'object' ? { ...capture.model } : { ...DEFAULTS.capture.model } },
     });
 }
 
@@ -186,7 +190,7 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
  * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
  * Returns `{ root, update(settings) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '' } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null } = {}) {
     let summary = packSummary;
     let current = complete(settings);
 
@@ -374,10 +378,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         trigger.addEventListener('change', () => commit(next => { next.arc.trigger = trigger.value === 'auto' ? 'auto' : 'manual'; }));
 
         // Connection profiles carry their own API and model; null means Connection Manager is off.
-        const options = [{ value: '', label: 'Same as chat' }, ...(profiles ?? []).map(profile => ({ value: String(profile.id), label: String(profile.name ?? profile.id) }))];
-        const selected = arc.model?.source === 'profile' ? String(arc.model.profileId ?? '') : '';
-        if (selected && !options.some(option => option.value === selected)) options.push({ value: selected, label: '(missing profile)' });
-        const model = select('story_director_arc_model', options, selected);
+        const model = modelSelect('story_director_arc_model', arc.model);
         model.addEventListener('change', () => commit(next => {
             next.arc.model = model.value ? { source: 'profile', profileId: model.value } : { source: 'chat' };
         }));
@@ -424,16 +425,55 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         ];
     }
 
+    // A model picker shared by planning and capture: the chat's own model or a profile.
+    function modelSelect(id, setting) {
+        const options = [{ value: '', label: 'Same as chat' }, ...(profiles ?? []).map(profile => ({ value: String(profile.id), label: String(profile.name ?? profile.id) }))];
+        const selected = setting?.source === 'profile' ? String(setting.profileId ?? '') : '';
+        if (selected && !options.some(option => option.value === selected)) options.push({ value: selected, label: '(missing profile)' });
+        return select(id, options, selected);
+    }
+
+    // Capture: a second call writes the change lines, for models that do not write them well.
+    function renderCapture() {
+        const capture = current.capture;
+        const mode = select('story_director_capture_mode', [
+            { value: 'off', label: 'Off (the model writes its own changes)' },
+            { value: 'fallback', label: 'When a reply has no <Director> block' },
+            { value: 'always', label: 'Always (the model is not asked to write changes)' },
+        ], ['fallback', 'always'].includes(capture.mode) ? capture.mode : 'off');
+        mode.addEventListener('change', () => commit(next => { next.capture.mode = mode.value; }));
+        const model = modelSelect('story_director_capture_model', capture.model);
+        model.addEventListener('change', () => commit(next => {
+            next.capture.model = model.value ? { source: 'profile', profileId: model.value } : { source: 'chat' };
+        }));
+        const tokens = numberInput('story_director_capture_tokens', capture.maxTokens, LIMITS.captureTokens);
+        bindNumber(tokens, 'captureTokens', value => value.capture.maxTokens, (next, value) => { next.capture.maxTokens = value; });
+        return [
+            sectionHead('Capture'),
+            row('Capture changes', 'A second call reads each exchange and writes the changes, for models that skip or garble them.', mode, { id: 'story_director_capture_mode', wide: true }),
+            row('Capture model', 'A small, fast model is enough.', model, { id: 'story_director_capture_model', wide: true }),
+            row('Answer length', 'Most tokens a capture answer may use.', tokens, { id: 'story_director_capture_tokens' }),
+        ];
+    }
+
     function renderSeed() {
         const seed = button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() });
+        const wsaFile = el('input', { className: 'story-director-wsa-file', attrs: { id: 'story_director_wsa_file', type: 'file', accept: '.json,application/json' } });
+        wsaFile.type = 'file';
+        wsaFile.addEventListener('change', async () => {
+            const picked = wsaFile.files?.[0];
+            if (picked) onImportWsa?.(await picked.text());
+            wsaFile.value = '';
+        });
         return [
             sectionHead('Existing chat'),
             row('Start from the scene block', 'Turns the latest World State’s Off-Screen, World, Hooks and Clocks lines into records.', seed, { className: 'is-action' }),
+            row('Import from World State Alpha', 'An exported World State Alpha bundle: its active facts and developments become World records.', wsaFile, { id: 'story_director_wsa_file', wide: true }),
         ];
     }
 
     function render() {
-        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderPack(), ...renderArc(), ...renderMirror(), ...renderSeed());
+        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderPack(), ...renderArc(), ...renderCapture(), ...renderMirror(), ...renderSeed());
     }
 
     render();
