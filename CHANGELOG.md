@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5
+
+- **Placeholders are not text.** A model sometimes copies the format's own word as the text: `- Sheep-killer — part` resolved the record with the reason "part". A part that is only `part`, `summary`, `reason`, `what happened` or `label: value` is now ignored, so the record resolves with no reason (or a new one gets no description).
+- **The format copied word for word.** `+ kind hook — Guild post crisis | label: The desk is insolvent` made a World record keyed "kind hook" with a *label* row. A `kind` (or `kind:`) written before the kind word is now skipped, so this reads as the hook *Guild post crisis*; and a part labelled `label:` or `field:` is plain text (the description). The tracker is replayed from the replies, so records already made this way are read again correctly.
+- **Clearer format line:** the instruction and the capture prompt say `+ kind Key — summary | label: value` instead of `— part`, the same length.
+
 ## 0.8.4
 
 Long parts trimmed in the note, notes folded. The Director tab filled with harmless `long-part` notes ("The bond: goal has 27 words (keep parts to 12)"), while the full text was repeated in the note before every reply.

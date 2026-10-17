@@ -23,7 +23,7 @@ Tracked now:
 Story time: {{now}}. Place: {{place}}.
 
 Write one change per line, inside <Director>…</Director>:
-+ kind Key — part | label: value      a new record; kinds: agenda (someone off-screen with a stake), event, hook (an open tension), quest (work {{user}} accepted), clock (a consequence that fires at due:), beat, secret
++ kind Key — summary | label: value      a new record; kinds: agenda (someone off-screen with a stake), event, hook (an open tension), quest (work {{user}} accepted), clock (a consequence that fires at due:), beat, secret
 ~ Key — label: value                  change only what changed
 - Key — reason                        resolved
 ! Key — what happened                 something that was due happened
