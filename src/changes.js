@@ -3,7 +3,7 @@
 // bullets, either dash, a colon instead of a dash); a line that is not an op becomes an
 // error entry, never an exception. Pure: no DOM, no globals.
 
-export const KINDS = ['agenda', 'event', 'hook', 'clock', 'beat', 'secret'];
+export const KINDS = ['agenda', 'event', 'hook', 'clock', 'beat', 'secret', 'arc'];
 
 // The old World_State list names and Megumin's blueprint names, so a model that writes the
 // list it remembers still lands on the right kind.
@@ -18,6 +18,7 @@ export const KIND_ALIASES = Object.freeze({
     clocks: 'clock',
     plan: 'beat',
     'off-limits': 'secret',
+    'story arc': 'arc',
 });
 
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people'];

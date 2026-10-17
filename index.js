@@ -15,6 +15,9 @@
 //   mirrored into the scene block's Off-Screen section for NPC State Delta.
 // - With a world pack (the reader's map), travel legs are checked against its roads and
 //   paces, corrections go into the next note, and /route plans a journey.
+// - Once per arc, the planner (one model call, on the chat's model or a connection profile)
+//   turns the next arc into tracked records: an arc, dated beats, agendas, hooks, clocks and
+//   secrets. A plan waits in the tab for the reader unless they chose to skip review.
 
 import { PRESETS, makeCalendar, normalizeCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
@@ -28,8 +31,9 @@ import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
 import { MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
+import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -48,6 +52,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     dueSoonDays: DEFAULTS.dueSoonDays,
     mirrorOffscreen: true,
     calendar: PRESETS.gregorian,
+    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' }),
 });
 
 let initialized = false;
@@ -60,6 +65,9 @@ let cache = { chatId: null, entries: [] };
 // The loaded world pack, rebuilt only when the stored JSON object changes.
 let packCache = { source: null, pack: null };
 let settingsPanel = null;
+// Arc planning: one call at a time, and its last error for the tab.
+let planning = false;
+let planError = '';
 
 // ---------------------------------------------------------------------------
 // SillyTavern and Story Block access
@@ -109,7 +117,12 @@ function settings(ctx = context()) {
     const store = ctx?.extensionSettings;
     if (!store) return { ...DEFAULT_SETTINGS };
     const saved = store[SETTINGS_KEY] && typeof store[SETTINGS_KEY] === 'object' ? store[SETTINGS_KEY] : {};
-    store[SETTINGS_KEY] = { ...DEFAULT_SETTINGS, ...saved, calendar: normalizeCalendar(saved.calendar ?? DEFAULT_SETTINGS.calendar) };
+    store[SETTINGS_KEY] = {
+        ...DEFAULT_SETTINGS,
+        ...saved,
+        calendar: normalizeCalendar(saved.calendar ?? DEFAULT_SETTINGS.calendar),
+        arc: { ...DEFAULT_SETTINGS.arc, ...(saved.arc && typeof saved.arc === 'object' ? saved.arc : {}) },
+    };
     return store[SETTINGS_KEY];
 }
 
@@ -356,6 +369,7 @@ async function onReply({ messageIndex }) {
         if (settings(ctx).mirrorOffscreen) await mirror(index, after);
         // After the mirror: it rewrites the reply's scene block, which changes its signature.
         lastFindingsKey = findingsKey(index);
+        if (settings(ctx).arc.trigger === 'auto') void maybePlanAutomatically(after);
     } catch (error) {
         console.error('[Story Director] reply check failed', error);
     }
@@ -430,7 +444,10 @@ async function seed() {
 function tabKey() {
     const ctx = context();
     const chat = ctx?.chat ?? [];
-    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), [...pins()].join(','), lastFindingsKey, JSON.stringify(settings())].join('|');
+    // The world pack can be large and only changes with its summary.
+    const { worldPack: pack, ...rest } = settings();
+    const draft = arcDraft();
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), [...pins()].join(','), lastFindingsKey, JSON.stringify(rest), pack ? packSummary(worldPack()) : '', planning, planError, draft?.key ?? ''].join('|');
 }
 
 function renderDirectorTab(pane) {
@@ -447,7 +464,203 @@ function renderDirectorTab(pane) {
         onSeed: () => void seed(),
         onPin: (id, pinned) => setPin(id, pinned),
         route: worldPack() ? { places: Object.keys(worldPack().places).sort(), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
+        arc: arcView(selection, tracker),
     });
+}
+
+// ---------------------------------------------------------------------------
+// Arc planning (once per arc)
+
+function arcDraft(ctx = context()) {
+    const draft = chatMeta(ctx)?.[SETTINGS_KEY]?.draft;
+    return draft && typeof draft === 'object' && draft.chatId === chatIdOf(ctx) ? draft : null;
+}
+
+function setArcDraft(draft) {
+    const ctx = context();
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), draft: draft ?? null };
+    ctx.saveMetadataDebounced?.();
+}
+
+function arcBeats(tracker, arc) {
+    const beats = tracker.records.filter(record => record.kind === 'beat' && arc && record.arc === arc.arc);
+    return { done: beats.filter(record => record.status !== 'active').length, total: beats.length, active: beats.filter(record => record.status === 'active') };
+}
+
+function arcView(selection, tracker) {
+    const current = selection.arc ?? null;
+    const draft = arcDraft();
+    return {
+        current,
+        beats: current ? arcBeats(tracker, current) : null,
+        draft: draft ? { key: draft.key, text: draft.text, findings: draft.findings ?? [] } : null,
+        busy: planning,
+        error: planError,
+        onPlan: () => void planArc({ reason: 'manual' }),
+        onEnd: () => void endArc(),
+        onAccept: text => void acceptDraft(text),
+        onDiscard: () => {
+            setArcDraft(null);
+            storyBlock()?.refresh?.();
+        },
+    };
+}
+
+function connectionProfiles() {
+    const service = context()?.ConnectionManagerRequestService;
+    try {
+        return service?.getSupportedProfiles ? service.getSupportedProfiles().map(profile => ({ id: profile.id, name: profile.name })) : null;
+    } catch {
+        // Connection Manager switched off.
+        return null;
+    }
+}
+
+// The planner's one call: a connection profile (its own API and model) or the chat's own.
+async function sendToPlanner(messages, own) {
+    const ctx = context();
+    const maxTokens = Number(own.arc.maxTokens) || 1500;
+    if (own.arc.model?.source === 'profile' && own.arc.model.profileId) {
+        const service = ctx.ConnectionManagerRequestService;
+        if (!service?.sendRequest) throw new Error('Connection Manager is not available; choose "Same as chat".');
+        // A missing profile fails loudly; it never falls back to another model.
+        const result = await service.sendRequest(own.arc.model.profileId, messages, maxTokens);
+        return typeof result === 'string' ? result : String(result?.content ?? '');
+    }
+    if (typeof ctx.generateRaw !== 'function') throw new Error('This SillyTavern cannot run a raw generation.');
+    return String(await ctx.generateRaw({ systemPrompt: messages[0].content, prompt: messages[1].content, responseLength: maxTokens }) ?? '');
+}
+
+function recentChat(count) {
+    const ctx = context();
+    const chat = (ctx?.chat ?? []).filter(message => !message.is_system);
+    return chat.slice(-Math.max(1, count)).map(message => `${message.name || (message.is_user ? 'User' : 'Narrator')}: ${visibleText(message)}`).join('\n\n');
+}
+
+/** Ask the planner for the next arc; the result waits in the tab (or is used at once). */
+async function planArc({ reason = 'manual' } = {}) {
+    const ctx = context();
+    if (planning || !ctx || !chatIdOf(ctx) || !storyBlock()) return;
+    const own = settings(ctx);
+    planning = true;
+    planError = '';
+    storyBlock()?.refresh?.();
+    try {
+        const cal = calendar();
+        const { tracker, now, place } = situation('normal');
+        const previous = tracker.records.filter(record => record.kind === 'arc' && record.status !== 'active').at(-1);
+        const subst = text => (typeof ctx.substituteParams === 'function' ? ctx.substituteParams(text) : text);
+        const messages = buildPlannerMessages({
+            template: own.arc.prompt || DEFAULT_PLANNER_PROMPT,
+            recent: recentChat(Number(own.arc.recent) || 60),
+            trackerSummary: summarizeTracker(tracker, { calendar: cal }),
+            nowText: now === null ? '' : cal.format(now),
+            place,
+            nearby: nearbyPlaces(worldPack(), place).slice(1),
+            directorNote: own.arc.note,
+            genre: own.arc.genre,
+            previousArc: previous ? `${previous.key}${previous.fields?.desc ? ` — ${previous.fields.desc}` : ''}` : '',
+        }).map(message => ({ ...message, content: subst(message.content) }));
+        if (reason !== 'manual') notify('info', 'Planning the next arc…');
+        const answer = await sendToPlanner(messages, own);
+        const plan = parsePlan(answer, { calendar: cal, now });
+        const userName = String(ctx.name1 ?? '');
+        const findings = validatePlan(plan, { calendar: cal, now, userName });
+        if (findings.some(finding => finding.severity === 'error')) {
+            planError = `The plan could not be used: ${findings.filter(finding => finding.severity === 'error').map(finding => finding.message).join('; ')}`;
+            return;
+        }
+        const arcId = `arc-${Date.now().toString(36)}`;
+        const text = planToOps(plan, { arcId }).map(formatOp).join('\n');
+        const draft = { key: arcId, chatId: chatIdOf(ctx), text, findings, reason };
+        if (own.arc.autoAccept) {
+            await acceptDraft(text, draft);
+        } else {
+            setArcDraft(draft);
+            notify('info', 'A new arc plan is ready in the Director tab.');
+        }
+    } catch (error) {
+        const cause = error?.cause instanceof Error ? ` (${error.cause.message})` : '';
+        planError = `Planning failed: ${error instanceof Error ? error.message : String(error)}${cause}`;
+        console.error('[Story Director] planning failed', error);
+    } finally {
+        planning = false;
+        storyBlock()?.refresh?.();
+    }
+}
+
+// Accepted lines are written into the latest reply's <Director> block, like a seed: deleting
+// that reply undoes the plan, and replay picks it up everywhere else.
+async function appendDirectorLines(lines) {
+    const ctx = context();
+    const sb = storyBlock();
+    const target = latestAssistantIndex(ctx?.chat ?? []);
+    if (target < 0) throw new Error('There is no reply to attach the plan to yet.');
+    const existing = sb.blockInText(ctx.chat[target].mes, BLOCK.tag)?.text ?? '';
+    await sb.setBlockText(target, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
+}
+
+async function acceptDraft(text, draft = arcDraft()) {
+    const lines = String(text ?? draft?.text ?? '').trim();
+    if (!lines) return;
+    const { errors } = parseChanges(lines);
+    if (errors.length) {
+        planError = `Line ${errors[0].line} of the plan cannot be read: ${errors[0].message}`;
+        storyBlock()?.refresh?.();
+        return;
+    }
+    try {
+        await appendDirectorLines(lines);
+        setArcDraft(null);
+        planError = '';
+        notify('success', 'The new arc is being tracked.');
+    } catch (error) {
+        planError = error instanceof Error ? error.message : String(error);
+    }
+    storyBlock()?.refresh?.();
+}
+
+async function endArc() {
+    const { selection } = situation('normal');
+    if (!selection.arc) return;
+    try {
+        await appendDirectorLines(`- ${selection.arc.key} — the arc ended`);
+    } catch (error) {
+        planError = error instanceof Error ? error.message : String(error);
+        storyBlock()?.refresh?.();
+        return;
+    }
+    if (settings().arc.trigger === 'auto') await planArc({ reason: 'arc-end' });
+}
+
+// Automatic: plan when there is no arc, when every beat of the arc is done, or when no beat
+// is due within the stall window. Never while a plan waits for review.
+async function maybePlanAutomatically(tracker) {
+    if (planning || arcDraft()) return;
+    const own = settings();
+    const cal = calendar();
+    const { selection, now } = situation('normal');
+    const arc = selection.arc;
+    if (!arc) {
+        // Only once the story has something to plan from.
+        if (tracker.records.length) await planArc({ reason: 'no-arc' });
+        return;
+    }
+    const { total, active } = arcBeats(tracker, arc);
+    if (total && !active.length) {
+        await appendDirectorLines(`- ${arc.key} — every beat played out`).catch(() => {});
+        await planArc({ reason: 'arc-end' });
+        return;
+    }
+    if (now === null || !active.length) return;
+    const horizon = cal.addDays(now, Number(own.arc.stallDays) || 7);
+    const upcoming = active.some(beat => {
+        const date = beat.fields.on ? cal.parse(beat.fields.on, { reference: now }) : null;
+        return !date || date.abs <= horizon;
+    });
+    if (!upcoming) await planArc({ reason: 'stalled' });
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +750,7 @@ function addSettingsPanel(documentRef) {
         blocks: (sb?.listBlocks?.() ?? []).filter(block => block.tag !== BLOCK.tag).map(({ tag, name }) => ({ tag, name })),
         onChange: next => {
             const ctx = context();
-            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar) };
+            ctx.extensionSettings[SETTINGS_KEY] = { ...settings(ctx), ...next, calendar: normalizeCalendar(next.calendar), arc: { ...DEFAULT_SETTINGS.arc, ...(next.arc ?? {}) } };
             saveSettings(ctx);
             // The calendar or the scene block may have changed: every cached replay is stale.
             cache = { chatId: null, entries: [] };
@@ -545,6 +758,8 @@ function addSettingsPanel(documentRef) {
         },
         onSeed: () => void seed(),
         status: sb ? `v${VERSION}` : `v${VERSION} · needs Story Block 0.6 or newer`,
+        profiles: connectionProfiles(),
+        defaultPlannerPrompt: DEFAULT_PLANNER_PROMPT,
         packSummary: worldPack() ? packSummary(worldPack()) : '',
         onImportPack: importPack,
         onClearPack: clearPack,

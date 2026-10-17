@@ -1,4 +1,4 @@
-# Story Director v0.3.0
+# Story Director v0.4.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
@@ -7,8 +7,9 @@ scene. The model writes only what changed; nothing it forgets to copy is ever lo
 
 Works on top of [Story Block](https://github.com/kohz87/Story_block) (0.6 or newer). With a
 **world pack** (your map as JSON) it also checks travel: every leg against the real roads,
-distances and paces, with corrections in the next note and a `/route` planner. Arc planning
-with a model of your choice follows (see [Roadmap](#roadmap)).
+distances and paces, with corrections in the next note and a `/route` planner. And once per
+story arc it **plans** the next arc with a model you choose, the way Megumin Suite's Story
+Director does, but the plan becomes dated, tracked beats instead of a block of prose.
 
 ## Why
 
@@ -140,6 +141,31 @@ Shorn → Varnhold Watch 35 B → Wolfmere Outpost 55 B → Auvoth 130 B = 220 k
 
 The Director tab has the same tool under **Route**.
 
+## Arc planning
+
+Tracking and the note happen every reply, in code. **Planning is one model call per arc.**
+
+- **When:** *Manual* (the **Plan arc** / **End arc** buttons in the Director tab), or
+  *Automatic*: when there is no arc yet, when every beat of the arc has played out, or when no
+  beat is due within the stall window (7 story days by default). The buttons work in both.
+- **Model:** *Same as chat*, or any SillyTavern **connection profile** (its own API and model; a
+  cheaper or faster one is fine). A missing profile fails with a message; it never falls back
+  to another model.
+- **What the planner reads:** the last messages (60 by default), the tracker, the current time
+  and place, nearby places (with a world pack), your **genre and tone**, your **Director's
+  note** (a goal, a pace, a beat you want) and the previous arc.
+- **What it writes:** an arc, 3–6 dated beats, an agenda for each NPC the arc moves, hooks,
+  clocks, and a secret for every secret it creates. Relative dates ("in 2 days", "tomorrow at
+  dusk") become dates in your calendar. Plans that act for your character are flagged.
+- **Review:** the plan waits in the Director tab as editable change lines; **Accept** writes them
+  into the latest reply (deleting that reply undoes the plan), **Discard** drops it, **Plan
+  again** asks for another. Turn on *Use plans without review* to skip this.
+
+From then on the note opens with `Arc: …`, lists the arc's next beats first, and keeps its
+secrets under "Do not reveal". The planning prompt is editable (with reset); its macros are
+`{{recent}}`, `{{tracker}}`, `{{now}}`, `{{place}}`, `{{nearby}}`, `{{note}}`, `{{genre}}`,
+`{{previous_arc}}`, `{{user}}` and `{{char}}`.
+
 ## Settings
 
 | Setting | Default | |
@@ -153,6 +179,7 @@ The Director tab has the same tool under **Route**.
 | Calendar | Gregorian | Or your own months and era |
 | Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for NPC State Delta (once tracking has started) |
 | World pack | none | Your map: places, roads, paces and travel rules, as JSON |
+| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note, prompt |
 
 ## The Director tab
 
@@ -166,7 +193,7 @@ problems with the last reply's changes.
 |---|---|
 | 0.1 | Tracker, change lines, calendar, Due now, relevance and budget, dormant shelf, checks, the tab, seeding, Off-Screen mirror |
 | 0.3 | World packs (places, routes, paces), travel legs checked and corrected, `/route` and the route tool |
-| 0.4 | Arc planning on a model you choose (a connection profile or the chat's model): manual or automatic at arc end; Director's note and genre |
+| 0.4 | Arc planning on a model you choose (a connection profile or the chat's model): manual or automatic; Director's note, genre, review |
 | 0.5 | Optional capture call for models too weak to write change lines; World State Alpha import |
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md), the module contract in

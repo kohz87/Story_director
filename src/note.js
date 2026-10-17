@@ -42,7 +42,7 @@ export function buildNote(selection, {
     const fixes = (corrections ?? []).map(item => typeof item === 'string' ? item : item?.message ?? '').filter(Boolean);
 
     // The model still needs to know how to add records when there are none yet.
-    if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length) {
+    if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc) {
         return instruction;
     }
 
@@ -58,6 +58,9 @@ export function buildNote(selection, {
 
 function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction }) {
     const lines = [header(selection, calendar)];
+    // The arc steers: its name and what it is about, so every reply leans the same way.
+    const arc = selection?.arc;
+    if (arc) lines.push(`Arc: ${arc.key}${arc.fields?.desc ? ` — ${arc.fields.desc}` : ''}`);
     addLine(lines, 'Due now', due.map(dueItem));
     addLine(lines, 'Arriving', arriving.map(arrivalItem));
     for (const [kind, label] of KIND_LINES) {
