@@ -235,45 +235,67 @@ test('resolved recently: folded, with the reason', () => {
     assert.deepEqual(texts(resolved, '.story-director-tag'), ['found in the archive', 'superseded']);
 });
 
-test('problems grouped by severity, errors first', () => {
+test('problems grouped by severity, errors first; notes folded away', () => {
     const findings = [
         { kind: 'unfired', severity: 'info', key: 'Courier', message: 'Still due.' },
         { kind: 'parse', severity: 'warn', key: null, message: 'Line 2 is not a change.' },
         { kind: 'unknown-key', severity: 'error', key: 'Nobody', message: 'No such record.' },
         { kind: 'missed', severity: 'warn', key: 'Geva', message: 'Missed by two days.' },
+        { kind: 'odd', severity: 'debug', key: null, message: 'An unnamed severity.' },
     ];
     const pane = render({ findings });
     const section = pane.querySelector('.story-director-section.is-problems');
     assert.equal(subText(section), 'Problems');
-    assert.equal(section.querySelector('.story-director-sub .story-director-count').textContent, '4');
-    const groups = section.querySelectorAll('.story-director-problems');
-    assert.deepEqual(groups.map(node => node.querySelector('.story-director-problems-label').textContent), ['Errors', 'Warnings', 'Notes']);
-    assert.deepEqual(groups.map(node => node.classList.contains(`is-${['error', 'warn', 'info'][groups.indexOf(node)]}`)), [true, true, true]);
+    // The count is errors and warnings; notes count in their own fold.
+    assert.equal(section.querySelector('.story-director-sub .story-director-count').textContent, '3');
+    const groups = section.querySelectorAll('.story-director-problems-label').map(label => label.parentNode);
+    assert.deepEqual(groups.map(node => node.querySelector('.story-director-problems-label').textContent), ['Errors', 'Warnings']);
+    assert.deepEqual(groups.map(node => node.classList.contains(`is-${['error', 'warn'][groups.indexOf(node)]}`)), [true, true]);
     assert.deepEqual(texts(groups[1], '.story-director-problem-text'), ['Line 2 is not a change.', 'Missed by two days.']);
     assert.deepEqual(texts(groups[1], '.story-director-problem-key'), ['Geva']);
     assert.deepEqual(texts(groups[0], '.story-director-problem-kind'), ['unknown-key']);
 
+    // Notes, and a severity the contract does not name, sit in one closed fold.
+    const notes = section.querySelector('details.story-director-fold.is-notes');
+    assert.equal(notes.open, false);
+    assert.match(notes.querySelector('summary').textContent, /Notes/);
+    assert.equal(notes.querySelector('summary .story-director-count').textContent, '2');
+    assert.deepEqual(texts(notes, '.story-director-problem-text'), ['Still due.', 'An unnamed severity.']);
+    assert.ok(notes.querySelector('.story-director-problems.is-info'));
+
     assert.equal(render({ findings: [] }).querySelector('.is-problems'), null);
+    // Only notes: the fold alone, no Problems heading.
+    const quiet = render({ findings: [findings[0]] }).querySelector('.story-director-section.is-problems');
+    assert.equal(quiet.querySelector('.story-director-problems-label'), null);
+    assert.equal(quiet.querySelector(':scope > .story-director-sub'), null);
+    assert.ok(quiet.querySelector('details.is-notes'));
     // Problems still show when nothing is tracked yet.
     const empty = render({ selection: EMPTY, findings: [findings[1]] });
     assert.ok(empty.querySelector('.story-director-empty'));
     assert.deepEqual(texts(empty, '.story-director-problem-text'), ['Line 2 is not a change.']);
 });
 
-test('changes to untracked keys: read as a near key or added show as notes, ignored ones as warnings', () => {
+test('changes to untracked keys: read as a near key or added are notes, ignored ones warnings', () => {
     const before = applyOps(emptyTracker(), parseChanges('+ hook Footing at Bluewatch — a foothold').ops, { message: 0 }).tracker;
     const { ops } = parseChanges('~ Footing in Bluewatch — now: a room\n~ Lantern dues — now: owed\n! Harbour riot — broke out');
     const { tracker: after, problems } = applyOps(before, ops, { message: 1 });
     const findings = checkReply({ before, after, ops, applyProblems: problems, hadBlock: true });
-    const groups = render({ findings }).querySelectorAll('.story-director-problems');
-    assert.deepEqual(groups.map(node => node.querySelector('.story-director-problems-label').textContent), ['Warnings', 'Notes']);
-    assert.deepEqual(texts(groups[0], '.story-director-problem-kind'), ['unknown-key']);
-    assert.deepEqual(texts(groups[0], '.story-director-problem-text'), ['"Harbour riot" is not tracked; the ! line was ignored.']);
-    assert.deepEqual(texts(groups[1], '.story-director-problem-kind'), ['near-key', 'untracked-added']);
-    assert.deepEqual(texts(groups[1], '.story-director-problem-text'), [
+    const section = render({ findings }).querySelector('.story-director-section.is-problems');
+    const warnings = section.querySelector('.story-director-problems.is-warn');
+    assert.deepEqual(texts(warnings, '.story-director-problem-kind'), ['unknown-key']);
+    assert.deepEqual(texts(warnings, '.story-director-problem-text'), ['"Harbour riot" is not tracked; the ! line was ignored.']);
+    const notes = section.querySelector('details.is-notes');
+    assert.deepEqual(texts(notes, '.story-director-problem-kind'), ['near-key', 'untracked-added']);
+    assert.deepEqual(texts(notes, '.story-director-problem-text'), [
         '"Footing in Bluewatch" read as "Footing at Bluewatch".',
         '"Lantern dues" was not tracked; added as a hook (write "+ kind Key" to set its kind).',
     ]);
+});
+
+test('a long part shows in full in the tab (the note trims it, not the tracker)', () => {
+    const now = 'waits in the back room of the Gilded Eel with two hired knives and a ledger of every debt owed';
+    const pane = render({ selection: selection({ relevant: [record('Bond collector', 'agenda', { now })] }) });
+    assert.ok(texts(pane, '.story-director-facts dd').includes(now));
 });
 
 test('formatDate rewrites date parts when given', () => {

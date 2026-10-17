@@ -3,15 +3,14 @@
 // Compares the tracker before and after a reply's change lines and reports what the model
 // got wrong or left undone: problems from applying ops, lines that did not parse, due items
 // it did not fire (and ones overdue long enough to count as missed), dates written into
-// prose fields, parts too long to survive summarising, and a missing <Director> block.
+// prose fields, and a missing <Director> block. (Long parts are no longer reported: since
+// v0.8.4 the note trims them, and the tracker keeps every word.)
 
 import { isDue } from './relevance.js';
 
 const DAY_MINUTES = 1440;
 // Past due by more than a day, an unfired item counts as missed.
 const MISSED_AFTER_MINUTES = DAY_MINUTES;
-// Parts longer than this get summarised away by models.
-const MAX_PART_WORDS = 12;
 // Prose fields where a date does not belong (it belongs in on/due/arrive).
 const PROSE_FIELDS = ['now', 'then', 'desc'];
 
@@ -54,12 +53,6 @@ export function checkReply({
                 if (hasCalendarDate(fields[field], calendar, now)) {
                     findings.push(finding('date-in-text', 'info', record.key, `${record.key}: a date is written in ${field}; dates go in on, due or arrive`));
                 }
-            }
-        }
-        for (const [field, value] of Object.entries(fields)) {
-            const words = wordCount(value);
-            if (words > MAX_PART_WORDS) {
-                findings.push(finding('long-part', 'info', record.key, `${record.key}: ${field} has ${words} words (keep parts to ${MAX_PART_WORDS})`));
             }
         }
     }
@@ -120,9 +113,4 @@ function hasCalendarDate(text, calendar, now) {
     const partsOfDay = new Set(Object.keys(calendar.config?.partsOfDay ?? {}).map(name => name.toLowerCase()));
     const words = String(parsed.text ?? text).toLowerCase().match(/[\p{L}]+/gu) ?? [];
     return words.some(word => word.length >= 3 && !partsOfDay.has(word) && months.some(name => name.startsWith(word)));
-}
-
-function wordCount(value) {
-    if (typeof value !== 'string') return 0;
-    return value.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length;
 }

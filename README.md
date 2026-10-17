@@ -1,4 +1,4 @@
-# Story Director v0.8.3
+# Story Director v0.8.4
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -165,6 +165,13 @@ Whenever something is scheduled, a short **Pacing** line says how a schedule mee
 bring a due item in only where it fits (on-screen if your character is there, otherwise later
 as news, signs or aftermath), never cut into or bend the current scene for a beat, never decide
 what your character does, and let what cannot fit happen off-screen or slip to a later date.
+
+**Long parts are trimmed in the note only.** A part runs to at most 12 words for what a record
+is doing and when (`now`, `then`, `on`, `due`, `arrive`) and 16 for what it is (`desc`, a
+quest's `goal`, `step`, `giver` and `reward`, a fight's foes), then ends in "…" at a word
+boundary (before an unclosed bracket, when it can). The tracker keeps every word: the Director
+and Quests tabs, the API and the capture and planner calls see the full text, so a long part is
+no longer reported as a problem.
 
 It is injected as a system message at a shallow depth (1 by default), so the cached history in
 front of it is untouched.
@@ -347,6 +354,12 @@ tab; pin a record to keep it in the note), the
 arc and its beats, the dormant shelf, secrets, what was resolved recently, problems with the
 last reply's changes, the places the story has been (with a map when there are coordinates),
 and the route tool.
+
+**Problems** with the last reply's changes are listed by severity: errors and warnings (a
+missed date, a line on a key that is not tracked, a travel leg that does not add up) stay in
+view; harmless **notes** (a key read as a near one, a record added from a `~`, something still
+due, a date written in prose) fold into one closed **Notes** fold with their count. Only
+warnings and errors raise the toast after a reply.
 
 **Settled** records (World State Alpha's facts, or any record with `settled: yes`) are true
 and going nowhere, so each section folds them into a closed **Settled** fold after its live

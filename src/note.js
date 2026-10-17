@@ -3,7 +3,8 @@
 // Turns a relevance Selection into the short system note injected before each reply: a
 // header with the story time and place, what is due and arriving, the relevant records one
 // line per kind, what not to reveal, corrections, and the instruction for writing change
-// lines. The note keeps within a token budget by dropping the least relevant records.
+// lines. The note keeps within a token budget by dropping the least relevant records, and
+// writes no part longer than NOTE_PART_WORDS (the tracker keeps the whole text).
 
 import { questDifficulty } from './changes.js';
 import { estimateTokens } from './relevance.js';
@@ -47,6 +48,41 @@ const KIND_LINES = [
 ];
 
 const ITEM_SEPARATOR = ' · ';
+
+// The most words of one part the note writes (v0.8.4): what a record is doing and when in 12,
+// what it is (desc, a quest's goal, step, giver and reward, the foes of a fight) in 16. A longer
+// part ends in "…" in the note only; the tracker, the tabs and the API keep every word.
+export const NOTE_PART_WORDS = Object.freeze({
+    now: 12, then: 12, on: 12, due: 12, arrive: 12,
+    desc: 16, goal: 16, step: 16, reward: 16, giver: 16, encounter: 16, type: 16, shown: 16,
+});
+const DEFAULT_PART_WORDS = 16;
+const ELLIPSIS = '…';
+
+/**
+ * `text` as the note writes it for `field`: trimmed, and cut after the field's word limit at a
+ * word boundary with "…". A cut that would leave a bracket open goes back to before it, when
+ * words are left; trailing commas, semicolons and dashes go.
+ */
+export function notePart(text, field) {
+    const value = String(text ?? '').trim();
+    const limit = NOTE_PART_WORDS[field] ?? DEFAULT_PART_WORDS;
+    const words = value.split(/\s+/).filter(Boolean);
+    if (words.length <= limit) return value;
+    let kept = words.slice(0, limit);
+    const open = kept.reduce((last, word, index) => {
+        const opens = (word.match(/[([]/g) ?? []).length;
+        const closes = (word.match(/[)\]]/g) ?? []).length;
+        return opens > closes ? index : closes > opens ? -1 : last;
+    }, -1);
+    if (open > 0) kept = kept.slice(0, open);
+    return `${kept.join(' ').replace(/[\s,;:—–-]+$/u, '')}${ELLIPSIS}`;
+}
+
+// A record's field as the note writes it.
+function fieldOf(record, field) {
+    return notePart(record?.fields?.[field], field);
+}
 
 // What the model is allowed for writing the change lines the instruction asks for, in tokens:
 // the two tags and about two lines of 20 to 25 tokens, a usual reply's worth. A rough
@@ -130,7 +166,8 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     const parts = [part('Header', header(selection, calendar))];
     // The arc steers: its name and what it is about, so every reply leans the same way.
     const arc = selection?.arc;
-    if (arc) parts.push(part('Arc', `Arc: ${arc.key}${arc.fields?.desc ? ` — ${arc.fields.desc}` : ''}`));
+    const arcDesc = fieldOf(arc, 'desc');
+    if (arc) parts.push(part('Arc', `Arc: ${arc.key}${arcDesc ? ` — ${arcDesc}` : ''}`));
     addLine(parts, 'Due now', due.map(record => withFight(dueItem(record), record)));
     addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
@@ -165,7 +202,7 @@ function header(selection, calendar) {
 
 // The foes of a planned fight, as written ('' for a record that is not one).
 function encounterOf(record) {
-    return String(record?.fields?.encounter ?? '').trim();
+    return fieldOf(record, 'encounter');
 }
 
 // "Ambush at the weir (Haywane 14) (fight: 3 bandit, bandit captain (boss))": a due fight
@@ -186,9 +223,16 @@ function addLine(parts, label, items, separator = ITEM_SEPARATOR) {
     if (present.length) parts.push(part(label, `${label}: ${present.join(separator)}`));
 }
 
+// The record's fields as the note writes them, each within its word limit. The leg stays
+// whole: only its destination is shown, and it is read from the full text.
+function noteFields(record) {
+    const fields = record?.fields ?? {};
+    return Object.fromEntries(Object.entries(fields).map(([name, value]) => [name, name === 'leg' ? value : notePart(value, name)]));
+}
+
 // "Saartje's sale (Goldwane 16)", or with what is meant to happen: "Geva — files the warrant (Goldwane 17)".
 function dueItem(record) {
-    const f = record.fields ?? {};
+    const f = noteFields(record);
     // A quest's due is its deadline: reaching it means time ran out.
     if (record.kind === 'quest') return `${record.key} — deadline${f.due ? ` ${f.due}` : ''} reached${f.goal ? ` (${f.goal})` : ''}`;
     const when = record.kind === 'clock' ? f.due || f.on : f.on || f.due;
@@ -198,7 +242,7 @@ function dueItem(record) {
 
 // "Courier arrives Varnhold Watch (Goldwane 16, morning)".
 function arrivalItem(record) {
-    const f = record.fields ?? {};
+    const f = noteFields(record);
     const where = destination(f.leg);
     return `${record.key} arrives${where ? ` ${where}` : ''}${f.arrive ? ` (${f.arrive})` : ''}`;
 }
@@ -207,7 +251,7 @@ function arrivalItem(record) {
 // "Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign".
 // "Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Haywane 30".
 function questItem(record) {
-    const f = record.fields ?? {};
+    const f = noteFields(record);
     const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${f.due}` : '']
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
@@ -219,7 +263,7 @@ function questItem(record) {
 
 function recordItem(record) {
     if (record.kind === 'quest') return questItem(record);
-    const f = record.fields ?? {};
+    const f = noteFields(record);
     const body = [];
     const state = f.now || f.desc;
     if (state) body.push(state);

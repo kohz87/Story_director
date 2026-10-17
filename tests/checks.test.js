@@ -147,12 +147,10 @@ test('date-in-text: a calendar date in now/then/desc of a changed record', () =>
     assert.deepEqual(check({ after }), []);
 });
 
-test('long-part: a field of a changed record over 12 words', () => {
+test('a long part is not a finding: the note trims it (v0.8.4)', () => {
     const text = 'rides south from Shorn along the old canal road with the sealed writ in a satchel';
     const courier = record({ key: 'Courier', fields: { now: text, then: 'delivers the writ' } });
-    const findings = check({ after: tracker([courier], 6), ops: [op('+', 'Courier', { now: text })] });
-    assert.deepEqual(findings.map(f => [f.kind, f.severity, f.key]), [['long-part', 'info', 'Courier']]);
-    assert.match(findings[0].message, /now has 16 words/);
+    assert.deepEqual(check({ after: tracker([courier], 6), ops: [op('+', 'Courier', { now: text })] }), []);
 });
 
 test('no-block: no <Director> block while something was due', () => {
