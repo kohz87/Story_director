@@ -19,6 +19,7 @@ const DEFAULTS = {
     dormantDays: 30,
     dueSoonDays: 3,
     mirrorOffscreen: true,
+    spoilerGuard: true,
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
     arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
     capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
@@ -486,8 +487,11 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     function renderQuickbar() {
         const enabled = toggle('story_director_enabled', current.enabled, 'Track the story');
         enabled.input.addEventListener('change', () => commit(next => { next.enabled = Boolean(enabled.input.checked); }));
+        const guard = toggle('story_director_spoiler', current.spoilerGuard, 'Hide behind the scenes');
+        guard.input.addEventListener('change', () => commit(next => { next.spoilerGuard = Boolean(guard.input.checked); }));
         return el('div', { className: 'story-director-quickbar' }, [
             row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled.wrapper, { id: 'story_director_enabled', className: 'is-switch' }),
+            row('Hide behind the scenes', 'The Director tab keeps agendas, planned beats, clocks and secrets hidden until you press Reveal.', guard.wrapper, { id: 'story_director_spoiler', className: 'is-switch' }),
             el('div', { className: 'story-director-quick-actions' }, [
                 onPlanArc ? button('Plan arc', 'story-director-plan', { iconName: 'fa-wand-magic-sparkles', onClick: () => onPlanArc() }) : null,
                 button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', title: 'Turn the latest World State’s Off-Screen, World, Hooks and Clocks lines into records', onClick: () => onSeed?.() }),

@@ -859,3 +859,49 @@
         transition: none;
     }
 }
+
+/* Spoiler guard (tab) */
+
+.story-director-tab .story-director-lock {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-bottom: 0.45rem;
+}
+
+.story-director-tab .story-director-lock > i {
+    margin-top: 0.2rem;
+    opacity: 0.6;
+}
+
+.story-director-tab .story-director-lock-text p {
+    margin: 0 0 0.2rem;
+    line-height: 1.4;
+}
+
+.story-director-tab .story-director-lock-title {
+    font-weight: 600;
+}
+
+.story-director-tab .story-director-lock-hint,
+.story-director-tab .story-director-lock-counts {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.story-director-tab .story-director-unlocked {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem 0.6rem;
+    margin: 0.2rem 0 0.4rem;
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+.story-director-tab .story-director-unlocked .menu_button,
+.story-director-tab .story-director-section.is-locked .menu_button {
+    margin: 0;
+    width: auto;
+}

@@ -37,7 +37,7 @@ import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, sum
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 
-const VERSION = '0.5.1';
+const VERSION = '0.5.2';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -55,6 +55,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     dormantDays: DEFAULTS.dormantDays,
     dueSoonDays: DEFAULTS.dueSoonDays,
     mirrorOffscreen: true,
+    // The tracker is the story behind the scenes: hidden in the tab until the reader asks.
+    spoilerGuard: true,
     calendar: PRESETS.gregorian,
     arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' }),
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
@@ -73,6 +75,8 @@ let settingsPanel = null;
 // Arc planning: one call at a time, and its last error for the tab.
 let planning = false;
 let planError = '';
+// Chats whose behind-the-scenes view the reader opened this session.
+const revealed = new Set();
 
 // ---------------------------------------------------------------------------
 // SillyTavern and Story Block access
@@ -375,7 +379,13 @@ async function onReply({ messageIndex }) {
         // Legs the reply wrote or changed, against the map.
         lastFindings.push(...travelFindings(after, { pack: worldPack(), calendar: calendar(), previous: before, onlyChanged: true }));
         const serious = lastFindings.filter(finding => finding.severity !== 'info');
-        if (serious.length) notify('warning', serious.slice(0, 3).map(finding => finding.message).join(' · '));
+        if (serious.length) {
+            // A problem's wording names agendas and plans; while hidden, only say there is one.
+            const message = isLocked()
+                ? `${serious.length} ${serious.length === 1 ? 'problem' : 'problems'} with the last reply's changes (see the Director tab).`
+                : serious.slice(0, 3).map(finding => finding.message).join(' · ');
+            notify('warning', message);
+        }
         if (settings(ctx).mirrorOffscreen) await mirror(index, after);
         // After the mirror: it rewrites the reply's scene block, which changes its signature.
         lastFindingsKey = findingsKey(index);
@@ -457,7 +467,19 @@ function tabKey() {
     // The world pack can be large and only changes with its summary.
     const { worldPack: pack, ...rest } = settings();
     const draft = arcDraft();
-    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), [...pins()].join(','), lastFindingsKey, JSON.stringify(rest), pack ? packSummary(worldPack()) : '', planning, planError, draft?.key ?? ''].join('|');
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), [...pins()].join(','), lastFindingsKey, JSON.stringify(rest), pack ? packSummary(worldPack()) : '', planning, planError, draft?.key ?? '', isLocked()].join('|');
+}
+
+function isLocked(ctx = context()) {
+    return settings(ctx).spoilerGuard !== false && !revealed.has(chatIdOf(ctx));
+}
+
+function setRevealed(show) {
+    const chatId = chatIdOf(context());
+    if (!chatId) return;
+    if (show) revealed.add(chatId);
+    else revealed.delete(chatId);
+    storyBlock()?.refresh?.();
 }
 
 function renderDirectorTab(pane) {
@@ -475,6 +497,9 @@ function renderDirectorTab(pane) {
         onPin: (id, pinned) => setPin(id, pinned),
         route: worldPack() ? { places: Object.keys(worldPack().places).sort(), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
         arc: arcView(selection, tracker),
+        spoiler: settings().spoilerGuard !== false
+            ? { locked: isLocked(), onReveal: () => setRevealed(true), onHide: () => setRevealed(false) }
+            : null,
     });
 }
 
