@@ -203,3 +203,10 @@ test('CHANGE_INSTRUCTION: about 120 tokens, the four ops, kinds, fields and the 
     assert.match(CHANGE_INSTRUCTION, /never the whole list/);
     assert.ok(CHANGE_INSTRUCTION.includes('Never write actions for {{user}}'));
 });
+
+test('the current arc gets its own line under the header', () => {
+    const arc = { key: 'The Weir Bullion', kind: 'arc', status: 'active', fields: { desc: 'who sold the weir route' } };
+    const note = buildNote({ now: null, place: '', arc, due: [], arriving: [], relevant: [], dormant: [], secrets: [], resolvedRecently: [] }, { calendar: null });
+    const lines = note.split('\n');
+    assert.equal(lines[1], 'Arc: The Weir Bullion — who sold the weir route');
+});

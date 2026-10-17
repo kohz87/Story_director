@@ -280,3 +280,16 @@ test('classify does not mutate its input', () => {
     classify(input, { calendar, now, message: 30, place: 'Auvoth', sceneText: 'Thys' });
     assert.deepEqual(input, copy);
 });
+
+test('the current arc is shown on its own, and only its beats take priority 2', () => {
+    const arcOld = record({ key: 'Old Arc', kind: 'arc', status: 'superseded', arc: 'arc-1' });
+    const arcNow = record({ key: 'The Weir Bullion', kind: 'arc', arc: 'arc-2', created: { message: 5, time: null } });
+    const ownBeat = record({ key: 'Council vote', kind: 'beat', arc: 'arc-2' });
+    const oldBeat = record({ key: 'Old beat', kind: 'beat', arc: 'arc-1', seen: { message: 1, time: null }, changed: { message: 1, time: null } });
+    const tracker = { version: 1, records: [arcOld, arcNow, ownBeat, oldBeat], message: 10, time: null };
+    const selection = classify(tracker, { calendar, now: null, message: 10, settings: { dormantReplies: 1000, dormantDays: 1000, dueSoonDays: 0, budgetTokens: 1000 } });
+    assert.equal(selection.arc.key, 'The Weir Bullion');
+    assert.ok(!selection.relevant.some(entry => entry.record.kind === 'arc'), 'arcs are not listed as records');
+    assert.equal(selection.relevant.find(entry => entry.record.key === 'Council vote').priority, 2);
+    assert.notEqual(selection.relevant.find(entry => entry.record.key === 'Old beat')?.priority, 2);
+});

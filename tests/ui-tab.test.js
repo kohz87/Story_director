@@ -306,3 +306,56 @@ test('route tool: shown with a world pack, asks onRoute, keeps its last answer a
     renderTab(none, { selection: null });
     assert.equal(none.querySelector('.story-director-fold.is-route'), null, 'no pack, no tool');
 });
+
+test('arc: current arc with beat progress, plan and end buttons', () => {
+    const calls = [];
+    const pane = doc.createElement('div');
+    renderTab(pane, {
+        selection: null,
+        arc: {
+            current: { key: 'The Weir Bullion', kind: 'arc', fields: { desc: 'who sold the weir route' } },
+            beats: { done: 1, total: 4 },
+            onPlan: () => calls.push('plan'),
+            onEnd: () => calls.push('end'),
+        },
+    });
+    const section = pane.querySelector('.story-director-section.is-arc');
+    assert.ok(section, 'an arc section');
+    assert.equal(section.querySelector('.story-director-arc-name').textContent, 'The Weir Bullion');
+    assert.equal(section.querySelector('.story-director-arc-progress').textContent, '1 of 4 beats');
+    section.querySelector('.story-director-arc-plan').click();
+    section.querySelector('.story-director-arc-end').click();
+    assert.deepEqual(calls, ['plan', 'end']);
+
+    const empty = doc.createElement('div');
+    renderTab(empty, { selection: null, arc: { current: null, busy: true } });
+    assert.match(empty.querySelector('.story-director-arc-desc').textContent, /No arc/);
+    assert.equal(empty.querySelector('.story-director-arc-end'), null, 'nothing to end');
+    assert.equal(empty.querySelector('.story-director-arc-plan').disabled, true, 'busy while planning');
+});
+
+test('arc: a draft is editable, and Accept hands back the edited lines', () => {
+    const accepted = [];
+    let discarded = 0;
+    const arc = {
+        current: null,
+        draft: { key: 'd1', text: '+ arc The Weir Bullion — who sold the route | arc: arc-1', findings: [{ severity: 'warn', message: 'A date is in the past.' }] },
+        onAccept: text => accepted.push(text),
+        onDiscard: () => { discarded++; },
+    };
+    const pane = doc.createElement('div');
+    renderTab(pane, { selection: null, arc });
+    const area = pane.querySelector('.story-director-draft-text');
+    assert.match(area.value, /The Weir Bullion/);
+    assert.equal(pane.querySelector('.story-director-draft-finding').textContent, 'A date is in the past.');
+    area.value = '+ arc Edited — by the reader | arc: arc-1';
+    area.dispatch('input');
+    // A redraw keeps what the reader typed.
+    const again = doc.createElement('div');
+    renderTab(again, { selection: null, arc });
+    assert.equal(again.querySelector('.story-director-draft-text').value, '+ arc Edited — by the reader | arc: arc-1');
+    again.querySelector('.story-director-draft-accept').click();
+    again.querySelector('.story-director-draft-discard').click();
+    assert.deepEqual(accepted, ['+ arc Edited — by the reader | arc: arc-1']);
+    assert.equal(discarded, 1);
+});

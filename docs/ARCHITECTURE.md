@@ -333,6 +333,74 @@ For every active record with a `leg` (only those whose leg changed since `previo
 The tracker records `legSince = { message, time }` whenever an op sets a new non-empty `leg`
 (cleared with the leg).
 
+## `src/planner.js` (v0.4): arc planning
+
+```js
+export const DEFAULT_PLANNER_PROMPT;   // system template; macros below
+export function summarizeTracker(tracker, { calendar = null } = {}) → string
+export function buildPlannerMessages({ template = DEFAULT_PLANNER_PROMPT, recent = '', trackerSummary = '', nowText = '', place = '', nearby = [], directorNote = '', genre = '', previousArc = '' } = {}) → [{ role, content }]
+export function parsePlan(text, { calendar = null, now = null } = {}) → Plan
+export function validatePlan(plan, { calendar = null, now = null, userName = '' } = {}) → [Finding]
+export function planToOps(plan, { arcId }) → [Op]
+```
+
+`DEFAULT_PLANNER_PROMPT`: general for any story (no setting assumed). The planner is the
+story's showrunner for the **next arc**: it decides (never asks), plans the world and the NPCs,
+never {{user}}'s actions, thoughts or words, keeps NPC plans true to their personalities, pulls
+dropped threads and mentioned-but-unseen characters forward, and protects every secret it
+creates. Macros: `{{recent}}` (the last messages, `Name: text`), `{{tracker}}`
+(`summarizeTracker`), `{{now}}`, `{{place}}`, `{{nearby}}`, `{{note}}` (the reader's Director's
+note), `{{genre}}`, `{{previous_arc}}`, `{{user}}`, `{{char}}` (left for SillyTavern to fill).
+It asks for **only** these lines, one per line, inside `<plan>…</plan>`:
+
+```
+ARC: Name — what the arc is about and where it is heading
+BEAT: Key — what happens | on: DATE or "in 2 days" | place: Place | after: Other beat
+AGENDA: Name — now: … | then: … | on: DATE
+HOOK: Key — the tension; what would settle it | then: … | on: DATE
+CLOCK: Key — cause → consequence | due: DATE | shown: none
+SECRET: Key — what {{user}} must not learn yet
+```
+
+3–6 BEATs, an AGENDA per NPC the arc moves, 1–3 HOOKs, 0–2 CLOCKs, a SECRET for every secret.
+Dates may be absolute in the story's calendar or relative to now.
+
+`summarizeTracker`: active records grouped by kind (`Off-screen:`, `World:`, `Hooks:`,
+`Clocks:`, `Beats:`, `Secrets:`, `Arc:`), one line each (`Key — now/desc → then (on/due)`), then
+up to 8 recently resolved (`Resolved: Key — reason`). `(nothing tracked yet)` when empty.
+
+`buildPlannerMessages` → `[{ role: 'system', content: <template filled> }, { role: 'user',
+content: 'Plan the next arc. Answer only with the <plan> block.' }]`. Unknown macros stay as
+written.
+
+`Plan = { arc: { key, desc } | null, items: [{ kind, key, fields, extra, raw }], errors: [{ line, message }] }`:
+
+- Finds `<plan>…</plan>` (else uses the whole text); strips `<think>`/`<thinking>` blocks, code
+  fences, bullets and `**bold**`; labels are case-insensitive (`NPC AGENDA:` = `AGENDA:`,
+  `OFF-LIMITS:`/`SECRET:` = secret, `TIMER:` = clock, `EVENT:`/`SUB-EVENT:` = beat,
+  `THREAD:` = hook).
+- After the label, the line is parsed like a change line (key, ` — `, parts split on ` | `,
+  `label: value`); fields as in `FIELDS` of changes.js, plus `after` into `extra.after`.
+- **Relative dates** in `on`, `due`, `arrive` become absolute when `calendar` and `now` are
+  given, written with `calendar.format(abs, { era: false })`: `in N days|hours|weeks`,
+  `tomorrow`, `the next day`, `next morning|evening|night`, `the day after tomorrow`, optionally
+  `… at dawn|noon|dusk|… or HH:MM am`. Absolute dates stay as written.
+- Lines it cannot read go to `errors`; nothing is invented.
+
+`validatePlan` findings (`{ kind, severity, key, message }`): `plan-no-arc` (error, no ARC
+line), `plan-empty` (error, no items), `plan-bad-date` (warn, an on/due that does not parse),
+`plan-past-date` (warn, before now), `plan-user-action` (warn, an item whose key or `then`
+starts with `userName`), `plan-unread` (info, per parse error).
+
+`planToOps(plan, { arcId })` → `+ arc` op for the ARC (`key`, `desc`, `extra: { arc: arcId }`),
+then a `+ <kind>` op per item with `extra.arc = arcId` (beats keep `extra.after`); ops have
+`raw` set via `formatOp`.
+
+Tracker support (v0.4): kind `arc` (one active arc at a time); an op whose `extra.arc` is set
+stores it in `record.arc` (not in `extra`). Relevance: the current arc is the newest active
+`arc` record; priority 2 = beats with `record.arc === currentArc.arc`; `Selection.arc` = the
+current arc record or null.
+
 ## `src/ui/settings.js`
 
 ```js

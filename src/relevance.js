@@ -84,9 +84,15 @@ export function classify(tracker, {
     const options = { calendar, now, message: current, settings: { ...DEFAULTS, ...settings } };
     const text = `${sceneText ?? ''}\n${recentText ?? ''}`;
 
+    // The current arc: the newest active one. Its beats come first; it is shown on its own.
+    const arc = records
+        .filter(record => isActive(record) && record.kind === 'arc')
+        .sort((a, b) => (b.created?.message ?? -1) - (a.created?.message ?? -1))[0] ?? null;
+
     const selection = {
         now,
         place,
+        arc,
         due: [],
         arriving: [],
         relevant: [],
@@ -103,6 +109,7 @@ export function classify(tracker, {
             }
             return;
         }
+        if (record.kind === 'arc') return;
         // Secrets are guarded, never listed as facts.
         if (record.kind === 'secret') {
             selection.secrets.push(record);
@@ -117,7 +124,7 @@ export function classify(tracker, {
 
         // Priorities 1-5 also wake a dormant record (the scene mentions it, it is at this
         // place, ...); only "everything else" stays on the shelf.
-        const match = matchPriority(record, { place, text, message: current });
+        const match = matchPriority(record, { place, text, message: current, arc });
         if (match) {
             selection.relevant.push({ record, ...match, index });
         } else if (isDormant(record, options)) {
@@ -136,13 +143,13 @@ export function classify(tracker, {
     return selection;
 }
 
-function matchPriority(record, { place, text, message }) {
+function matchPriority(record, { place, text, message, arc = null }) {
     const fields = record.fields ?? {};
     if (record.kind === 'clock' && /sign|warning/i.test(fields.shown ?? '')) {
         return { reason: 'shown', priority: 1 };
     }
-    // v0.1 has no arc plan yet, so every active beat counts as the current arc's.
-    if (record.kind === 'beat') return { reason: 'beat', priority: 2 };
+    // The current arc's beats; with no planned arc, every active beat counts as current.
+    if (record.kind === 'beat' && (!arc || !record.arc || record.arc === arc.arc)) return { reason: 'beat', priority: 2 };
     if (placeMatches(record, place)) return { reason: 'place', priority: 3 };
     if (mentioned(record, text)) return { reason: 'mentioned', priority: 4 };
     const changed = record.changed?.message;

@@ -217,6 +217,57 @@ function isEmpty(selection) {
  * pane's content to us).
  */
 // ---------------------------------------------------------------------------
+// Arc (v0.4): the current arc, its beats, and a new plan waiting for review
+
+// The draft text the reader is editing survives the tab redrawing itself.
+let draftEdit = { key: '', text: '' };
+
+function renderArc({ current = null, beats = null, draft = null, busy = false, error = '', onPlan = null, onEnd = null, onAccept = null, onDiscard = null }) {
+    const children = [sub('Arc', 'fa-compass')];
+    if (current) {
+        const head = el('div', { className: 'story-director-arc-head' }, [
+            el('span', { className: 'story-director-arc-name', text: current.key }),
+            beats && beats.total ? el('span', { className: 'story-director-arc-progress', text: `${beats.done} of ${beats.total} beats` }) : null,
+        ]);
+        children.push(head);
+        if (text(current.fields?.desc)) children.push(el('p', { className: 'story-director-arc-desc', text: current.fields.desc }));
+    } else {
+        children.push(el('p', { className: 'story-director-arc-desc is-empty', text: 'No arc planned yet.' }));
+    }
+
+    if (draft) {
+        const key = String(draft.key ?? draft.text ?? '');
+        if (draftEdit.key !== key) draftEdit = { key, text: String(draft.text ?? '') };
+        const area = el('textarea', { className: 'text_pole story-director-draft-text', attrs: { rows: '8', spellcheck: 'false', 'aria-label': 'New arc plan' } });
+        area.value = draftEdit.text;
+        area.addEventListener('input', () => { draftEdit = { key, text: area.value }; });
+        const findings = Array.isArray(draft.findings) ? draft.findings : [];
+        children.push(el('div', { className: 'story-director-draft' }, [
+            el('div', { className: 'story-director-draft-label', text: 'New plan — edit, then accept' }),
+            area,
+            findings.length ? el('ul', { className: 'story-director-draft-findings' }, findings.map(finding => el('li', {
+                className: `story-director-draft-finding is-${finding.severity ?? 'info'}`,
+                text: finding.message ?? '',
+            }))) : null,
+            el('div', { className: 'story-director-arc-actions' }, [
+                button('Accept', 'story-director-draft-accept', { iconName: 'fa-check', onClick: () => onAccept?.(draftEdit.text) }),
+                button('Discard', 'story-director-draft-discard', { iconName: 'fa-xmark', onClick: () => onDiscard?.() }),
+                button('Plan again', 'story-director-draft-replan', { iconName: 'fa-rotate', onClick: () => onPlan?.() }),
+            ]),
+        ]));
+    } else {
+        const actions = el('div', { className: 'story-director-arc-actions' }, [
+            button(busy ? 'Planning…' : (current ? 'Plan next arc' : 'Plan arc'), 'story-director-arc-plan', { iconName: 'fa-wand-magic-sparkles', onClick: () => onPlan?.() }),
+            current ? button('End arc', 'story-director-arc-end', { iconName: 'fa-flag-checkered', onClick: () => onEnd?.() }) : null,
+        ]);
+        actions.querySelectorAll?.('button').forEach?.(node => { node.disabled = Boolean(busy); });
+        children.push(actions);
+    }
+    if (text(error)) children.push(el('p', { className: 'story-director-arc-error', text: error, attrs: { role: 'alert' } }));
+    return section('is-arc', children);
+}
+
+// ---------------------------------------------------------------------------
 // Route tool (with a world pack)
 
 const MODES = ['foot', 'ride', 'wagon', 'boat', 'courier'];
@@ -267,11 +318,12 @@ function renderRoute({ places = [], onRoute }) {
     return details;
 }
 
-export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null } = {}) {
+export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null } = {}) {
     const root = el('div', { className: 'story-director-tab' });
     const options = { formatDate, onPin };
     const now = renderNow(timeText || '', place || selection?.place || '');
     if (now) root.append(now);
+    if (arc) root.append(renderArc(arc));
 
     if (isEmpty(selection)) {
         const empty = el('div', { className: 'story-director-empty' }, [el('p', { className: 'story-director-empty-text', text: 'Nothing tracked yet.' })]);

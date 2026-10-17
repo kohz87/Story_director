@@ -41,7 +41,7 @@ test('drawer markup, header and status line', () => {
     assert.equal(status.textContent, 'Tracking 4 records.');
     assert.equal(container.querySelectorAll('#story_director_status').length, 1);
     const heads = container.querySelectorAll('.story-director-section-head').map(node => node.textContent);
-    assert.deepEqual(heads.slice(0, 5), ['Tracking', 'Dormant', 'Calendar', 'World pack', 'NPC State Delta']);
+    assert.deepEqual(heads.slice(0, 6), ['Tracking', 'Dormant', 'Calendar', 'World pack', 'Arc planning', 'NPC State Delta']);
 });
 
 test('re-rendering into the same container keeps the status the runtime wrote', () => {

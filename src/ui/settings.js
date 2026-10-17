@@ -20,6 +20,7 @@ const DEFAULTS = {
     dueSoonDays: 3,
     mirrorOffscreen: true,
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
+    arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
 };
 
 // Bounds for the number fields; a value outside them is clamped, not rejected.
@@ -30,6 +31,9 @@ const LIMITS = {
     dormantDays: [1, 3650],
     dueSoonDays: [0, 365],
     daysPerMonth: [1, 1000],
+    recent: [4, 400],
+    maxTokens: [200, 16000],
+    stallDays: [1, 365],
 };
 
 const PRESET_LABELS = { custom: 'Custom (your months)', gregorian: 'Gregorian (real months, leap years)' };
@@ -125,6 +129,7 @@ function sectionHead(text) {
 function complete(settings) {
     const given = settings && typeof settings === 'object' ? settings : {};
     const calendar = given.calendar && typeof given.calendar === 'object' ? given.calendar : {};
+    const arc = given.arc && typeof given.arc === 'object' ? given.arc : {};
     // structuredClone so nothing the panel later changes reaches the caller's object,
     // including fields this panel does not know about (partsOfDay, a newer version's keys).
     return structuredClone({
@@ -138,6 +143,7 @@ function complete(settings) {
                 .map(month => (typeof month === 'string' ? { name: month, days: calendar.daysPerMonth ?? DEFAULTS.calendar.daysPerMonth } : month))
                 .filter(month => month && typeof month === 'object'),
         },
+        arc: { ...DEFAULTS.arc, ...arc, model: arc.model && typeof arc.model === 'object' ? { ...arc.model } : { ...DEFAULTS.arc.model } },
     });
 }
 
@@ -180,7 +186,7 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
  * `blocks` = [{ tag, name }]: the scene blocks Story Block knows, for the scene select.
  * Returns `{ root, update(settings) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', packSummary = '', onImportPack = null, onClearPack = null } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '' } = {}) {
     let summary = packSummary;
     let current = complete(settings);
 
@@ -358,6 +364,66 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         ];
     }
 
+    // Arc planning: one model call per arc, on the chat's model or a connection profile.
+    function renderArc() {
+        const arc = current.arc;
+        const trigger = select('story_director_arc_trigger', [
+            { value: 'manual', label: 'Manual (Plan arc / End arc)' },
+            { value: 'auto', label: 'Automatic (at arc end or when stalled)' },
+        ], arc.trigger === 'auto' ? 'auto' : 'manual');
+        trigger.addEventListener('change', () => commit(next => { next.arc.trigger = trigger.value === 'auto' ? 'auto' : 'manual'; }));
+
+        // Connection profiles carry their own API and model; null means Connection Manager is off.
+        const options = [{ value: '', label: 'Same as chat' }, ...(profiles ?? []).map(profile => ({ value: String(profile.id), label: String(profile.name ?? profile.id) }))];
+        const selected = arc.model?.source === 'profile' ? String(arc.model.profileId ?? '') : '';
+        if (selected && !options.some(option => option.value === selected)) options.push({ value: selected, label: '(missing profile)' });
+        const model = select('story_director_arc_model', options, selected);
+        model.addEventListener('change', () => commit(next => {
+            next.arc.model = model.value ? { source: 'profile', profileId: model.value } : { source: 'chat' };
+        }));
+
+        const recent = numberInput('story_director_arc_recent', arc.recent, LIMITS.recent);
+        bindNumber(recent, 'recent', value => value.arc.recent, (next, value) => { next.arc.recent = value; });
+        const maxTokens = numberInput('story_director_arc_tokens', arc.maxTokens, LIMITS.maxTokens);
+        bindNumber(maxTokens, 'maxTokens', value => value.arc.maxTokens, (next, value) => { next.arc.maxTokens = value; });
+        const stall = numberInput('story_director_arc_stall', arc.stallDays, LIMITS.stallDays);
+        bindNumber(stall, 'stallDays', value => value.arc.stallDays, (next, value) => { next.arc.stallDays = value; });
+        const autoAccept = toggle('story_director_arc_accept', arc.autoAccept, 'Use new plans without review');
+        autoAccept.input.addEventListener('change', () => commit(next => { next.arc.autoAccept = Boolean(autoAccept.input.checked); }));
+
+        const genre = textInput('story_director_arc_genre', arc.genre, 'Dark fantasy, political intrigue, slow burn');
+        genre.addEventListener('input', () => commit(next => { next.arc.genre = genre.value; }));
+        const note = el('textarea', { className: 'text_pole story-director-input story-director-arc-note', attrs: { id: 'story_director_arc_note', rows: '3' } });
+        note.placeholder = 'A goal, a pace, a beat you want: “Bring the guild into it; slow down after the fire.”';
+        note.value = arc.note;
+        note.addEventListener('input', () => commit(next => { next.arc.note = note.value; }));
+
+        const prompt = el('textarea', { className: 'text_pole story-director-input story-director-arc-prompt', attrs: { id: 'story_director_arc_prompt', rows: '8', spellcheck: 'false' } });
+        prompt.value = arc.prompt || defaultPlannerPrompt;
+        // Stored only when it differs from the built-in, so a better default reaches everyone.
+        prompt.addEventListener('input', () => commit(next => { next.arc.prompt = prompt.value === defaultPlannerPrompt ? '' : prompt.value; }));
+        const reset = button('Reset prompt', 'story-director-arc-reset', {
+            iconName: 'fa-rotate-left',
+            onClick: () => {
+                prompt.value = defaultPlannerPrompt;
+                commit(next => { next.arc.prompt = ''; });
+            },
+        });
+
+        return [
+            sectionHead('Arc planning'),
+            row('When to plan', 'Planning is one model call per arc; tracking stays every reply.', trigger, { id: 'story_director_arc_trigger', wide: true }),
+            row('Model', profiles === null ? 'Connection Manager is off, so plans use the chat’s own connection.' : 'A connection profile has its own API and model; a cheaper one is fine.', model, { id: 'story_director_arc_model', wide: true }),
+            row('Messages to read', 'How much recent chat the planner sees.', recent, { id: 'story_director_arc_recent' }),
+            row('Answer length', 'Most tokens the plan may use.', maxTokens, { id: 'story_director_arc_tokens' }),
+            row('Stalled after', 'Automatic: plan again when no beat is due within this many story days.', stall, { id: 'story_director_arc_stall' }),
+            row('Use plans without review', 'Off: a new plan waits in the Director tab for you to accept.', autoAccept.wrapper, { id: 'story_director_arc_accept', className: 'is-switch' }),
+            row('Genre and tone', 'Told to the planner as written.', genre, { id: 'story_director_arc_genre', wide: true }),
+            row('Director’s note', 'Your hand on the wheel, read at every plan.', note, { id: 'story_director_arc_note', wide: true }),
+            row('Planning prompt', 'Macros: {{recent}}, {{tracker}}, {{now}}, {{place}}, {{nearby}}, {{note}}, {{genre}}, {{previous_arc}}.', el('div', { className: 'story-director-arc-prompt-wrap' }, [prompt, reset]), { id: 'story_director_arc_prompt', wide: true }),
+        ];
+    }
+
     function renderSeed() {
         const seed = button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() });
         return [
@@ -367,7 +433,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
     }
 
     function render() {
-        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderPack(), ...renderMirror(), ...renderSeed());
+        view.replaceChildren(...renderTracking(), ...renderDormant(), ...renderCalendar(), ...renderPack(), ...renderArc(), ...renderMirror(), ...renderSeed());
     }
 
     render();

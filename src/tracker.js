@@ -46,7 +46,9 @@ function applyFields(record, op) {
         if (FIELDS.includes(name)) record.fields[name] = String(value ?? '');
     }
     for (const [label, value] of Object.entries(op.extra ?? {})) {
-        record.extra[label] = String(value ?? '');
+        // The arc a planned record belongs to is identity, not a part to show.
+        if (label === 'arc') record.arc = String(value ?? '') || null;
+        else record.extra[label] = String(value ?? '');
     }
     if (record.fields.leg !== legBefore) legChanged.add(record);
 }
@@ -114,6 +116,16 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
         const index = indexById.get(id);
 
         if (op.op === '+') {
+            // One arc at a time: a new arc closes the one before it.
+            if ((op.kind === 'arc') && (index === undefined || records[index].status !== 'active')) {
+                records.forEach((other, otherIndex) => {
+                    if (other.kind !== 'arc' || other.status !== 'active' || otherIndex === index) return;
+                    const closed = edit(otherIndex);
+                    closed.status = 'superseded';
+                    closed.resolved = { ...at, reason: 'a new arc began' };
+                    touch(closed, { ...op, op: '-', raw: `- ${closed.key} — a new arc began` }, at);
+                });
+            }
             if (index === undefined) {
                 indexById.set(id, records.length);
                 copied.add(records.length);

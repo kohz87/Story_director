@@ -273,3 +273,20 @@ test('legSince: stamped when a leg is set or changed, kept when the leg is copie
     const cleared = applyOps(moved, [clear], { message: 7, time: 400 }).tracker;
     assert.equal(findRecord(cleared, 'Courier').legSince, null);
 });
+
+test('arcs: one at a time, and planned records remember their arc', () => {
+    const lines = text => parseChanges(text).ops;
+    const { tracker } = replay([
+        { message: 1, text: '', time: 10, ops: lines('+ arc The Weir Bullion — who sold the weir route | arc: arc-1\n+ beat Council session opens | on: Goldwane 18 | arc: arc-1') },
+        { message: 3, text: '', time: 20, ops: lines('+ arc The Long Winter — the passes close | arc: arc-2') },
+    ]);
+    const first = findRecord(tracker, 'The Weir Bullion');
+    const second = findRecord(tracker, 'The Long Winter');
+    assert.equal(first.status, 'superseded', 'a new arc closes the old one');
+    assert.equal(first.resolved.reason, 'a new arc began');
+    assert.equal(second.status, 'active');
+    assert.equal(second.arc, 'arc-2');
+    const beat = findRecord(tracker, 'Council session opens');
+    assert.equal(beat.arc, 'arc-1');
+    assert.equal(beat.extra.arc, undefined, 'the arc is identity, not a shown part');
+});
