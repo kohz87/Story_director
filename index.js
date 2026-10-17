@@ -37,7 +37,7 @@ import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, sum
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 
-const VERSION = '0.5.2';
+const VERSION = '0.5.3';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };

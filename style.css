@@ -409,7 +409,7 @@
     grid-column: 1 / -1;
 }
 
-/* Folds: Dormant, Do not reveal, Resolved recently. */
+/* Folds: Dormant, Do not reveal, Resolved recently, and Settled inside a section. */
 .story-director-tab .story-director-fold {
     padding-top: 0.5rem;
     border-top: 1px solid var(--sd-border);
@@ -457,7 +457,14 @@
     padding-top: 0.2rem;
 }
 
+/* Settled records fold inside their own section, so a quieter rule and label. */
+.story-director-tab .story-director-section .story-director-fold.is-settled {
+    padding-top: 0.25rem;
+    border-top: 1px dashed var(--sd-border);
+}
+
 .story-director-tab .story-director-fold.is-dormant .story-director-record,
+.story-director-tab .story-director-fold.is-settled .story-director-record,
 .story-director-tab .story-director-fold.is-resolved .story-director-record {
     opacity: 0.8;
 }

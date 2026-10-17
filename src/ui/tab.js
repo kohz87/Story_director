@@ -10,6 +10,10 @@
 // textContent. Secrets are something the reader's character does not know: they are not
 // in the DOM at all until their fold is opened, and leave it again when it closes.
 //
+// Settled records (World State Alpha's facts, or any record with `settled: yes`) are true
+// and going nowhere: nothing due, nothing moving. They fold away at the end of their
+// section, so the live ones read first.
+//
 // `formatDate(value, { record, field })`, when given, rewrites the date parts (on, due,
 // arrive) for display, e.g. "Goldwane 17 · tomorrow"; a falsy result or a throw keeps
 // the text as written.
@@ -75,6 +79,10 @@ function section(className, children) {
     return el('section', { className: `story-director-section ${className}` }, children);
 }
 
+// Which folds are open, by class name. The tab redraws on every chat event; a fold that
+// snapped shut each time would be no use. Secrets are not remembered: they close again.
+const openFolds = new Set();
+
 /**
  * A folded section: `<details>` whose summary carries the label and a count. `fill`
  * builds the content; with `lazy` it runs only while the fold is open, and the content
@@ -86,8 +94,14 @@ function fold(className, label, iconName, count, fill, { lazy = false } = {}) {
         el('summary', { className: 'story-director-fold-summary' }, [sub(label, iconName, count)]),
         body,
     ]);
-    if (!lazy) body.append(...fill());
-    else {
+    if (!lazy) {
+        body.append(...fill());
+        if (openFolds.has(className)) details.open = true;
+        details.addEventListener('toggle', () => {
+            if (details.open) openFolds.add(className);
+            else openFolds.delete(className);
+        });
+    } else {
         details.addEventListener('toggle', () => {
             if (details.open) body.replaceChildren(...fill());
             else body.replaceChildren();
@@ -100,6 +114,8 @@ function fold(className, label, iconName, count, fill, { lazy = false } = {}) {
 // Records
 
 const text = value => String(value ?? '').trim();
+
+const isSettled = record => /^(?:yes|true|y)$/i.test(text(record?.extra?.settled));
 
 function dateText(value, record, field, formatDate) {
     if (typeof formatDate !== 'function' || !DATE_FIELDS.has(field)) return value;
@@ -115,7 +131,11 @@ function dateText(value, record, field, formatDate) {
 function factsOf(record, formatDate) {
     const fields = record.fields ?? {};
     const facts = FACT_FIELDS.filter(field => text(fields[field])).map(field => ({ label: field, value: dateText(text(fields[field]), record, field, formatDate) }));
-    for (const [label, value] of Object.entries(record.extra ?? {})) if (text(value)) facts.push({ label, value: text(value) });
+    for (const [label, value] of Object.entries(record.extra ?? {})) {
+        // The fold a settled record sits in already says so.
+        if (label === 'settled' && isSettled(record)) continue;
+        if (text(value)) facts.push({ label, value: text(value) });
+    }
     return facts;
 }
 
@@ -425,7 +445,14 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
         const relevant = nonSecret((selection.relevant ?? []).map(entry => entry?.record ?? entry));
         for (const group of KIND_GROUPS) {
             const records = relevant.filter(record => record.kind === group.kind);
-            if (records.length) root.append(section(`is-${group.kind}`, [sub(group.label, group.icon), recordList(records, options)]));
+            if (!records.length) continue;
+            const live = records.filter(record => !isSettled(record));
+            const settled = records.filter(isSettled);
+            root.append(section(`is-${group.kind}`, [
+                sub(group.label, group.icon),
+                live.length ? recordList(live, options) : null,
+                settled.length ? fold(`is-settled is-${group.kind}-settled`, 'Settled', 'fa-check', settled.length, () => [recordList(settled, options)]) : null,
+            ]));
         }
 
         const dormant = nonSecret(selection.dormant);
