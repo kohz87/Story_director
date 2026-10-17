@@ -1,7 +1,7 @@
-# Story Director v0.6.0
+# Story Director v0.7.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
-off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
+off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
 injects a short **note** before every reply with what is due, arriving and relevant to the
 scene. The model writes only what changed; nothing it forgets to copy is ever lost.
 
@@ -63,14 +63,35 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 
 | Op | Meaning |
 |---|---|
-| `+ kind Key — part \| label: value` | New record. Kinds: `agenda` (someone off-screen), `event`, `hook`, `clock`, `beat`, `secret` |
+| `+ kind Key — part \| label: value` | New record. Kinds: `agenda` (someone off-screen), `event`, `hook`, `quest`, `clock`, `beat`, `secret` |
 | `~ Key — label: value` | Change only these parts |
 | `- Key — reason` | Resolved (superseded when the reason says so) |
 | `! Key — what happened` | A due item happened; its `then` becomes `now` |
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
-(`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`. Dates go only in
-`on`, `due` and `arrive`. The note tells the model all of this in about 120 tokens.
+(`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`; for a quest also
+`giver`, `goal`, `reward` and `step`. Dates go only in `on`, `due` and `arrive`. The note tells
+the model all of this in about 130 tokens.
+
+### Quests
+
+Long-running work your character has taken on: bounties, contracts, favours owed, a hunt.
+Short errands that end within the scene do not need one.
+
+```
++ quest Bounty on Kettle Jack — giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30
+~ Bounty on Kettle Jack — step: cornered at the weir
+- Bounty on Kettle Jack — turned in, paid
+```
+
+- A quest starts only when your character **accepts** it; an offer not yet taken is a hook.
+  The arc planner offers work as hooks and never completes a quest for you.
+- `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30
+  reached"), and the story decides what that costs.
+- Quests **never go dormant**. A quest untouched for forty replies stays in the note, and its
+  giver's name in the scene counts as a mention.
+- In the Director tab, quests have their own section (goal, step, giver, reward, deadline)
+  and stay visible while the tab is hidden: they are promises you made, not spoilers.
 
 ## The note
 

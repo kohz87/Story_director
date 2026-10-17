@@ -239,3 +239,13 @@ test('with capture writing the changes, the note carries no instruction', () => 
     assert.ok(!/<Director>/.test(note));
     assert.ok(!note.endsWith('\n'));
 });
+
+test('quests: their own line, deadline wording when due, and the instruction names them', () => {
+    const bounty = record({ key: 'Bounty on Kettle Jack', kind: 'quest', fields: { giver: 'Warden Hale', goal: 'bring him in alive', reward: '40 crowns', step: 'cornered at the weir', due: 'Goldwane 30' } });
+    const note = buildNote(selection({ relevant: [bounty] }), { calendar });
+    assert.ok(lines(note).includes('Quests: Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Goldwane 30'));
+    assert.ok(note.includes(PACING), 'a deadline is a schedule');
+    const due = buildNote(selection({ due: [bounty] }), { calendar });
+    assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
+    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it\): giver, goal, reward, step, due/);
+});

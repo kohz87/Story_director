@@ -19,6 +19,10 @@ const SECTION_KINDS = Object.freeze({
     clocks: 'clock',
     consequencetimers: 'clock',
     timers: 'clock',
+    quests: 'quest',
+    activequests: 'quest',
+    bounties: 'quest',
+    contracts: 'quest',
 });
 
 const BULLET = /^\s*[*•-]\s+(.*)$/s;
@@ -83,7 +87,7 @@ function isNone(item) {
 /** `+` ops for every item of the block's list sections, with a count per kind. */
 export function seedFromWorldState(text) {
     const ops = [];
-    const counts = { agenda: 0, event: 0, hook: 0, clock: 0 };
+    const counts = { agenda: 0, event: 0, hook: 0, quest: 0, clock: 0 };
     let kind = null;
 
     const take = item => {

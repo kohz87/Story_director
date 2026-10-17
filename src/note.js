@@ -10,11 +10,11 @@ import { estimateTokens } from './relevance.js';
 // About 120 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
     'End your reply with one <Director>…</Director> block of change lines, one per line:',
-    '+ kind Key — part | label: value (new; kind: agenda, event, hook, clock, beat or secret)',
+    '+ kind Key — part | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown; a quest (only once {{user}} accepts it): giver, goal, reward, step, due. Dates go only in on, due and arrive.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
@@ -32,6 +32,7 @@ const KIND_LINES = [
     ['agenda', 'Off-screen'],
     ['event', 'World'],
     ['hook', 'Hooks'],
+    ['quest', 'Quests'],
     ['clock', 'Clocks'],
     ['beat', 'Beats'],
 ];
@@ -88,7 +89,8 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
 // clock, or a record with a next step.
 function scheduled(selection, due, arriving, relevant) {
     if (selection?.arc || due.length || arriving.length) return true;
-    return relevant.some(({ record }) => record.kind === 'beat' || record.kind === 'clock' || Boolean(record.fields?.then));
+    return relevant.some(({ record }) => record.kind === 'beat' || record.kind === 'clock' || Boolean(record.fields?.then)
+        || (record.kind === 'quest' && Boolean(record.fields?.due)));
 }
 
 function header(selection, calendar) {
@@ -107,6 +109,8 @@ function addLine(lines, label, items, separator = ITEM_SEPARATOR) {
 // "Saartje's sale (Goldwane 16)", or with what is meant to happen: "Geva — files the warrant (Goldwane 17)".
 function dueItem(record) {
     const f = record.fields ?? {};
+    // A quest's due is its deadline: reaching it means time ran out.
+    if (record.kind === 'quest') return `${record.key} — deadline${f.due ? ` ${f.due}` : ''} reached${f.goal ? ` (${f.goal})` : ''}`;
     const when = record.kind === 'clock' ? f.due || f.on : f.on || f.due;
     const what = f.then || (record.kind === 'clock' ? f.desc : '');
     return `${record.key}${what ? ` — ${what}` : ''}${when ? ` (${when})` : ''}`;
@@ -121,7 +125,17 @@ function arrivalItem(record) {
 
 // "Geva — Bailiff Court → files the warrant (Goldwane 17)",
 // "Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign".
+// "Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Haywane 30".
+function questItem(record) {
+    const f = record.fields ?? {};
+    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${f.due}` : '']
+        .map(part => String(part ?? '').trim())
+        .filter(Boolean);
+    return record.key + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '');
+}
+
 function recordItem(record) {
+    if (record.kind === 'quest') return questItem(record);
     const f = record.fields ?? {};
     const body = [];
     const state = f.now || f.desc;

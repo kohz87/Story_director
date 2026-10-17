@@ -31,7 +31,7 @@ const WORLD_STATE = `**📅 Time:** CY 611, Haywane 12, 05:35 pm | **🌤 Loc:**
 
 test('seeds the real block: 3 agendas, 1 event, 1 hook, 1 clock', () => {
     const { ops, counts } = seedFromWorldState(WORLD_STATE);
-    assert.deepEqual(counts, { agenda: 3, event: 1, hook: 1, clock: 1 });
+    assert.deepEqual(counts, { agenda: 3, event: 1, hook: 1, quest: 0, clock: 1 });
     assert.deepEqual(ops.map(op => [op.op, op.kind, op.key]), [
         ['+', 'agenda', 'Senior Listener Geva'],
         ['+', 'agenda', 'Master Giertnow'],
@@ -87,7 +87,7 @@ test('reads plain and inline headings, other section names and None items', () =
         '* Not a clock — due: Haywane 20',
     ].join('\r\n');
     const { ops, counts } = seedFromWorldState(block);
-    assert.deepEqual(counts, { agenda: 2, event: 0, hook: 2, clock: 1 });
+    assert.deepEqual(counts, { agenda: 2, event: 0, hook: 2, quest: 0, clock: 1 });
     assert.deepEqual(ops.map(op => [op.kind, op.key]), [
         ['agenda', 'Kade'],
         ['agenda', 'Thys'],
@@ -100,7 +100,7 @@ test('reads plain and inline headings, other section names and None items', () =
 });
 
 test('an empty or list-less block seeds nothing', () => {
-    const none = { ops: [], counts: { agenda: 0, event: 0, hook: 0, clock: 0 } };
+    const none = { ops: [], counts: { agenda: 0, event: 0, hook: 0, quest: 0, clock: 0 } };
     assert.deepEqual(seedFromWorldState(''), none);
     assert.deepEqual(seedFromWorldState(null), none);
     assert.deepEqual(seedFromWorldState('**📅 Time:** CY 611, Haywane 12\n* stray bullet'), none);

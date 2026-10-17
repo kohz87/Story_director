@@ -3,7 +3,7 @@
 // bullets, either dash, a colon instead of a dash); a line that is not an op becomes an
 // error entry, never an exception. Pure: no DOM, no globals.
 
-export const KINDS = ['agenda', 'event', 'hook', 'clock', 'beat', 'secret', 'arc'];
+export const KINDS = ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'];
 
 // The old World_State list names and Megumin's blueprint names, so a model that writes the
 // list it remembers still lands on the right kind.
@@ -19,9 +19,16 @@ export const KIND_ALIASES = Object.freeze({
     plan: 'beat',
     'off-limits': 'secret',
     'story arc': 'arc',
+    quests: 'quest',
+    bounty: 'quest',
+    bounties: 'quest',
+    contract: 'quest',
+    mission: 'quest',
 });
 
-export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people'];
+// A quest's own parts: who gave it, what it asks, what it pays, and the step it is at.
+export const QUEST_FIELDS = ['giver', 'goal', 'reward', 'step'];
+export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', ...QUEST_FIELDS];
 
 // Only a spaced hyphen ends a key, so `Jean-Luc` and `Hall-Warden` stay whole; em and en
 // dashes never appear inside names, so they count with or without spaces.
@@ -63,6 +70,7 @@ function kindOf(word) {
 }
 
 function inferKind(fields) {
+    if (fields.goal || fields.reward || fields.giver || fields.step) return 'quest';
     if (fields.leg || fields.now) return 'agenda';
     if (fields.due) return 'clock';
     return 'event';

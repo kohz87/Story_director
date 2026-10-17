@@ -17,9 +17,9 @@ top-of-file comment per module; `textContent` only in the UI (never `innerHTML` 
 Record = {
   key: 'Senior Listener Geva',          // display key, markdown stripped
   id: 'senior listener geva',           // lineKey(key): identity
-  kind: 'agenda' | 'event' | 'hook' | 'clock' | 'beat' | 'secret',
+  kind: 'agenda' | 'event' | 'hook' | 'quest' | 'clock' | 'beat' | 'secret',
   status: 'active' | 'resolved' | 'superseded',
-  fields: { desc, now, then, on, due, shown, leg, arrive, place, people },  // strings, '' when unset
+  fields: { desc, now, then, on, due, shown, leg, arrive, place, people, giver, goal, reward, step },  // strings, '' when unset
   extra: { [label]: value },            // labelled parts that are not a known field
   created: { message, time },           // message index; story abs or null
   changed: { message, time },
@@ -86,10 +86,12 @@ the text.
 ## `src/changes.js`: change lines
 
 ```js
-export const KINDS = ['agenda', 'event', 'hook', 'clock', 'beat', 'secret'];
+export const KINDS = ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'];
 export const KIND_ALIASES;    // offscreen/off-screen/npc → agenda, world → event,
                               // thread/hooks → hook, timer/clocks → clock, plan → beat, off-limits → secret
-export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people'];
+export const QUEST_FIELDS = ['giver', 'goal', 'reward', 'step'];
+export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', ...QUEST_FIELDS];
+// A quest never goes dormant (relevance.js); its `due` is a deadline; `giver` counts as a mention.
 export function lineKey(key) → id     // lowercase, markdown and punctuation squashed, spaces single
 export function parseChanges(text) → { ops: [Op], errors: [{ line, message }] }
 export function formatOp(op) → string // one change line; parseChanges(formatOp(op)) round-trips

@@ -33,8 +33,10 @@ function only(text) {
 }
 
 test('exports the kinds, fields and aliases of the contract', () => {
-    assert.deepEqual(KINDS, ['agenda', 'event', 'hook', 'clock', 'beat', 'secret', 'arc']);
-    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people']);
+    assert.deepEqual(KINDS, ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc']);
+    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'giver', 'goal', 'reward', 'step']);
+    assert.equal(KIND_ALIASES.bounty, 'quest');
+    assert.equal(KIND_ALIASES.contract, 'quest');
     assert.equal(KIND_ALIASES.offscreen, 'agenda');
     assert.equal(KIND_ALIASES['off-screen'], 'agenda');
     assert.equal(KIND_ALIASES.npc, 'agenda');
@@ -249,4 +251,13 @@ test('formatOp round-trips awkward hand-built ops', () => {
     // A `+` with no kind writes the inferred one.
     const bare = { op: '+', kind: null, key: 'World Bank', id: 'world bank', fields: { due: 'Goldwane 28' }, extra: {}, reason: '' };
     assert.equal(formatOp(bare), '+ clock World Bank — due: Goldwane 28');
+});
+
+test('a quest line: its own fields, kind inferred from them, and aliases', () => {
+    const { ops } = parseChanges('+ quest Bounty on Kettle Jack — giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30\n+ Herb run — goal: twelve moonleaf | step: two found\n+ bounty Wolf pelts — reward: 2 silver each');
+    assert.deepEqual(ops.map(op => op.kind), ['quest', 'quest', 'quest']);
+    assert.deepEqual(ops[0].fields, { giver: 'Warden Hale', goal: 'bring him in alive', reward: '40 crowns', due: 'Haywane 30' });
+    // Written back in field order, so it reads back the same.
+    assert.equal(formatOp(ops[0]), '+ quest Bounty on Kettle Jack — due: Haywane 30 | giver: Warden Hale | goal: bring him in alive | reward: 40 crowns');
+    assert.deepEqual(parseChanges(formatOp(ops[0])).ops[0].fields, ops[0].fields);
 });
