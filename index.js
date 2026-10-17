@@ -39,7 +39,7 @@ import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 
-const VERSION = '0.7.1';
+const VERSION = '0.7.2';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -372,6 +372,33 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
 }
 
 globalThis.storyDirectorInterceptor = onGenerationInterceptor;
+
+// A small read-only API for other extensions (RPG Battle recovers HP with story time).
+globalThis.StoryDirector = Object.freeze({
+    apiVersion: 1,
+    get version() { return VERSION; },
+    /** The story time (minutes on the reader's calendar) known at message `index`, or null. */
+    timeAt(index) {
+        try {
+            const chat = context()?.chat ?? [];
+            if (!storyBlock() || !chat.length) return null;
+            const at = Math.min(Number(index), chat.length - 1);
+            if (!(at >= 0)) return null;
+            const time = trackerAt(at).tracker.time;
+            return typeof time === 'number' && Number.isFinite(time) ? time : null;
+        } catch {
+            return null;
+        }
+    },
+    /** A story time as the calendar writes it ("CY 611, Haywane 12, 05:35 pm"). */
+    formatTime(abs) {
+        try {
+            return typeof abs === 'number' && Number.isFinite(abs) ? calendar().format(abs) : '';
+        } catch {
+            return '';
+        }
+    },
+});
 
 // ---------------------------------------------------------------------------
 // After a reply: checks and the Off-Screen mirror

@@ -1,4 +1,4 @@
-# Story Director v0.7.1
+# Story Director v0.7.2
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -318,6 +318,16 @@ scenes** in the settings' quick bar.
 
 The full design is in [docs/DESIGN.md](docs/DESIGN.md), the module contract in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## For other extensions
+
+`globalThis.StoryDirector` (`apiVersion: 1`) is read-only:
+
+- `timeAt(index)`: the story time known at message `index`, in minutes on your calendar, or
+  `null` when no scene block has stated one yet.
+- `formatTime(abs)`: such a time written the way your calendar writes it.
+
+RPG Battle uses it to give back HP and MP as story time passes.
 
 ## Development
 
