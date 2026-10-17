@@ -1,6 +1,6 @@
 # Story Director: design
 
-Status: **accepted** · first release 0.1.0 (see section 13 for the review decisions)
+Status: **accepted** · 0.1.0 (tracker) and 0.3.0 (world packs and travel) released (see section 13 for the review decisions)
 
 Story Director is a SillyTavern extension that keeps a story's world moving consistently. It
 **tracks** off-screen agendas, world events, hooks, clocks and travel; it **checks** dates

@@ -1,0 +1,502 @@
+{
+ "source": "Subset of a world pack (one region), for tests",
+ "scale_km_per_unit": 10,
+ "calendar": {
+  "era": "CY",
+  "days_per_month": 30,
+  "months": [
+   "Dawnwane",
+   "Rainmoot",
+   "Greengale",
+   "Highsun",
+   "Goldwane",
+   "Haywane",
+   "Emberwane",
+   "Nightfall",
+   "Frostfall",
+   "Deepwinter",
+   "Icewane",
+   "Yearsend"
+  ],
+  "time_format": "CY 611, Goldwane 13, 05:50 am"
+ },
+ "pace_km_per_day": {
+  "R": {
+   "foot": 24,
+   "ride": 40,
+   "wagon": 22
+  },
+  "B": {
+   "foot": 20,
+   "ride": 35,
+   "wagon": 18
+  },
+  "F": {
+   "foot": 16,
+   "ride": 28,
+   "wagon": 14
+  },
+  "C": {
+   "foot": 20,
+   "ride": 34,
+   "wagon": 18
+  },
+  "T": {
+   "foot": [
+    14,
+    22
+   ],
+   "ride": "foot",
+   "wagon": null
+  },
+  "M": {
+   "foot": [
+    12,
+    20
+   ],
+   "ride": "foot",
+   "wagon": null
+  },
+  "U": {
+   "foot": [
+    12,
+    20
+   ],
+   "ride": "foot",
+   "wagon": null
+  },
+  "H": {
+   "foot": [
+    8,
+    15
+   ],
+   "ride": "foot",
+   "wagon": null
+  },
+  "X": {
+   "foot": [
+    8,
+    15
+   ],
+   "ride": "foot",
+   "wagon": null,
+   "note": "staging and weather windows"
+  },
+  "W": {
+   "boat": [
+    30,
+    45
+   ],
+   "upstream": [
+    20,
+    30
+   ],
+   "downstream_favorable": [
+    50,
+    60
+   ],
+   "note": "by boat; walkable only where a levee road is named"
+  },
+  "S": {
+   "ship": [
+    80,
+    140
+   ],
+   "unit": "per underway day"
+  },
+  "D": {
+   "vessel": [
+    25,
+    50
+   ]
+  },
+  "A": {
+   "flight": [
+    100,
+    160
+   ],
+   "note": "established sustained flight only"
+  },
+  "L": {
+   "note": "local basis"
+  },
+  "G": {
+   "note": "dungeon access, stated mode"
+  }
+ },
+ "courier_multiplier": 2,
+ "travel_rules": {
+  "active_hours_per_land_day": [
+   8,
+   10
+  ],
+  "round_edge_up_to_days": 0.5,
+  "rest_day_every_active_days": 6,
+  "crewed_water_rest_days": false,
+  "levee_roads": [
+   "Grand Vein River",
+   "Ledger River Trunk",
+   "Glassdock Channel",
+   "Confederacy Estuary",
+   "Wheatwake Canal",
+   "Pearlbank Canal",
+   "Marshledger Channel"
+  ],
+  "no_levee": [
+   "Bluewatch Branch",
+   "Belis River"
+  ]
+ },
+ "places": {
+  "Shorn": {
+   "x": 50,
+   "y": 95,
+   "region": "Shornmarch"
+  },
+  "Varnhold Watch": {
+   "x": 52,
+   "y": 97,
+   "region": "Shornmarch"
+  },
+  "Wolfmere Outpost": {
+   "x": 55,
+   "y": 100,
+   "region": "Shornmarch"
+  },
+  "Hollin's Reach": {
+   "x": 58,
+   "y": 104,
+   "region": "Shornmarch"
+  },
+  "Auvoth": {
+   "x": 59,
+   "y": 110,
+   "region": "Auvoth Compact"
+  },
+  "Bluewatch Village": {
+   "x": 64,
+   "y": 110,
+   "region": "River Confederacy: core cities"
+  },
+  "Glassdock": {
+   "x": 62,
+   "y": 72,
+   "region": "River Confederacy: core cities"
+  },
+  "Brightwater Lock": {
+   "x": 45,
+   "y": 75,
+   "region": "River Confederacy: locks/connectors"
+  },
+  "Frostgate": {
+   "x": 50,
+   "y": 90,
+   "region": "Shornmarch"
+  },
+  "Northledger Depot": {
+   "x": 50,
+   "y": 84,
+   "region": "Shornmarch"
+  },
+  "Ledgerford": {
+   "x": 50,
+   "y": 80,
+   "region": "River Confederacy: core cities"
+  },
+  "Northbarge": {
+   "x": 50,
+   "y": 78,
+   "region": "River Confederacy: locks/connectors"
+  },
+  "Siltbarrow": {
+   "x": 55,
+   "y": 63,
+   "region": "River Confederacy: locks/connectors"
+  },
+  "Lockswell": {
+   "x": 47,
+   "y": 70,
+   "region": "River Confederacy: locks/connectors"
+  },
+  "Crowpine Town": {
+   "x": 49,
+   "y": 92,
+   "region": "Shornmarch"
+  },
+  "Hearthmere": {
+   "x": 52,
+   "y": 92,
+   "region": "Shornmarch"
+  },
+  "Rimebridge": {
+   "x": 53,
+   "y": 86,
+   "region": "Shornmarch"
+  },
+  "Old Lantern Post": {
+   "x": 48,
+   "y": 91,
+   "region": "Shornmarch"
+  },
+  "Greyvein Camp": {
+   "x": 49,
+   "y": 95,
+   "region": "Shornmarch"
+  }
+ },
+ "edges": [
+  {
+   "a": "Lockswell",
+   "b": "Brightwater Lock",
+   "km": 60,
+   "code": "W",
+   "corridor": "Ledger River Trunk",
+   "corridor_id": "ledger-trunk",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Brightwater Lock",
+   "b": "Northbarge",
+   "km": 65,
+   "code": "W",
+   "corridor": "Ledger River Trunk",
+   "corridor_id": "ledger-trunk",
+   "bearing": "NE/SW",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Northbarge",
+   "b": "Ledgerford",
+   "km": 25,
+   "code": "W",
+   "corridor": "Ledger River Trunk",
+   "corridor_id": "ledger-trunk",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Brightwater Lock",
+   "b": "Glassdock",
+   "km": 200,
+   "code": "W",
+   "corridor": "Glassdock Channel",
+   "corridor_id": "glassdock-channel",
+   "bearing": "E/W",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Glassdock",
+   "b": "Bluewatch Village",
+   "km": 440,
+   "code": "W",
+   "corridor": "Bluewatch Branch",
+   "corridor_id": "bluewatch-branch",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": "Does not pass through Shornmarch. Northbound is upstream."
+  },
+  {
+   "a": "Ledgerford",
+   "b": "Northledger Depot",
+   "km": 55,
+   "code": "W",
+   "corridor": "Upper Ledger",
+   "corridor_id": "upper-ledger",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": "Northbound is upstream. Frostgate's lock is the head of navigation; beyond it, sledge or road to Shorn. Ices over in deep winter; sledges then run the Bastion Road."
+  },
+  {
+   "a": "Northledger Depot",
+   "b": "Frostgate",
+   "km": 80,
+   "code": "W",
+   "corridor": "Upper Ledger",
+   "corridor_id": "upper-ledger",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": "Northbound is upstream. Frostgate's lock is the head of navigation; beyond it, sledge or road to Shorn. Ices over in deep winter; sledges then run the Bastion Road."
+  },
+  {
+   "a": "Ledgerford",
+   "b": "Northledger Depot",
+   "km": 50,
+   "code": "B",
+   "corridor": "Ledgerford–Shorn Bastion Road",
+   "corridor_id": "ledgerford-shorn",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Northledger Depot",
+   "b": "Frostgate",
+   "km": 75,
+   "code": "B",
+   "corridor": "Ledgerford–Shorn Bastion Road",
+   "corridor_id": "ledgerford-shorn",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Frostgate",
+   "b": "Shorn",
+   "km": 60,
+   "code": "B",
+   "corridor": "Ledgerford–Shorn Bastion Road",
+   "corridor_id": "ledgerford-shorn",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Shorn",
+   "b": "Varnhold Watch",
+   "km": 35,
+   "code": "B",
+   "corridor": "Shorn–Auvoth Bastion Road",
+   "corridor_id": "shorn-auvoth",
+   "bearing": "NE/SW",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Varnhold Watch",
+   "b": "Wolfmere Outpost",
+   "km": 55,
+   "code": "B",
+   "corridor": "Shorn–Auvoth Bastion Road",
+   "corridor_id": "shorn-auvoth",
+   "bearing": "NE/SW",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Wolfmere Outpost",
+   "b": "Auvoth",
+   "km": 130,
+   "code": "B",
+   "corridor": "Shorn–Auvoth Bastion Road",
+   "corridor_id": "shorn-auvoth",
+   "bearing": "N/S",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Auvoth",
+   "b": "Bluewatch Village",
+   "km": 70,
+   "code": "F",
+   "corridor": "Bluewatch–Auvoth Frontier Road",
+   "corridor_id": "bluewatch-auvoth",
+   "bearing": "E/W",
+   "source": "trunk",
+   "notes": null
+  },
+  {
+   "a": "Siltbarrow",
+   "b": "Glassdock",
+   "km": 130,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "NE/SW",
+   "source": "[MAP/ROUTE/LOCAL] River Confederacy: locks/connectors",
+   "notes": null
+  },
+  {
+   "a": "Siltbarrow",
+   "b": "Lockswell",
+   "km": 120,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "NW/SE",
+   "source": "[MAP/ROUTE/LOCAL] River Confederacy: locks/connectors",
+   "notes": null
+  },
+  {
+   "a": "Bluewatch Village",
+   "b": "Hollin's Reach",
+   "km": 100,
+   "code": "F",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "SW/NE",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  },
+  {
+   "a": "Northledger Depot",
+   "b": "Rimebridge",
+   "km": 45,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "NE/SW",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  },
+  {
+   "a": "Crowpine Town",
+   "b": "Frostgate",
+   "km": 30,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "SE/NW",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  },
+  {
+   "a": "Greyvein Camp",
+   "b": "Shorn",
+   "km": 10,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "E/W",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  },
+  {
+   "a": "Hearthmere",
+   "b": "Frostgate",
+   "km": 35,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "SW/NE",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  },
+  {
+   "a": "Hollin's Reach",
+   "b": "Wolfmere Outpost",
+   "km": 60,
+   "code": "F",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "SW/NE",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  },
+  {
+   "a": "Old Lantern Post",
+   "b": "Frostgate",
+   "km": 30,
+   "code": "L",
+   "corridor": null,
+   "corridor_id": null,
+   "bearing": "SE/NW",
+   "source": "[MAP/ROUTE/LOCAL] Shornmarch",
+   "notes": null
+  }
+ ]
+}

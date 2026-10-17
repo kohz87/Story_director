@@ -26,6 +26,7 @@ function cloneRecord(record) {
         changed: { ...record.changed },
         seen: { ...record.seen },
         resolved: record.resolved ? { ...record.resolved } : null,
+        legSince: record.legSince ? { ...record.legSince } : null,
         // History entries are never edited, only appended, so they can be shared.
         history: [...record.history],
     };
@@ -35,17 +36,29 @@ function finding(kind, severity, op, message) {
     return { kind, severity, key: op.key ?? null, message };
 }
 
+// Records whose leg changed in the op being applied; `touch` stamps when the leg was set, so
+// an arrival can be checked against the pace from that moment (a copied leg keeps its time).
+const legChanged = new WeakSet();
+
 function applyFields(record, op) {
+    const legBefore = record.fields.leg;
     for (const [name, value] of Object.entries(op.fields ?? {})) {
         if (FIELDS.includes(name)) record.fields[name] = String(value ?? '');
     }
     for (const [label, value] of Object.entries(op.extra ?? {})) {
         record.extra[label] = String(value ?? '');
     }
+    if (record.fields.leg !== legBefore) legChanged.add(record);
 }
 
 // Every applied op counts as the record being seen, and leaves a trace of the line itself.
 function touch(record, op, at) {
+    if (legChanged.has(record)) {
+        legChanged.delete(record);
+        record.legSince = record.fields.leg ? { ...at } : null;
+    } else if (!record.fields.leg) {
+        record.legSince = null;
+    }
     record.changed = { ...at };
     record.seen = { ...at };
     const text = op.raw || formatOp(op);
@@ -65,6 +78,7 @@ function newRecord(op, at) {
         changed: { ...at },
         seen: { ...at },
         resolved: null,
+        legSince: null,
         pinned: false,
         arc: null,
         history: [],

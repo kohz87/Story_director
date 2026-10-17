@@ -282,3 +282,27 @@ test('model text is never parsed as markup', () => {
     assert.ok(pane.descendants().every(node => !node.html));
     assert.equal(itemFor(pane, '<img src=x onerror=alert(1)>').querySelector('.is-plain').textContent, '<b>bold</b>');
 });
+
+test('route tool: shown with a world pack, asks onRoute, keeps its last answer across redraws', () => {
+    const asked = [];
+    const route = { places: ['Shorn', 'Auvoth'], onRoute: (from, to, mode) => { asked.push([from, to, mode]); return `${from} → ${to} by ${mode}`; } };
+    const pane = doc.createElement('div');
+    renderTab(pane, { selection: null, route });
+    const tool = pane.querySelector('.story-director-fold.is-route');
+    assert.ok(tool, 'a route fold');
+    pane.querySelector('.story-director-route-input.is-from').value = 'Shorn';
+    pane.querySelector('.story-director-route-input.is-to').value = 'Auvoth';
+    pane.querySelector('.story-director-route-mode').value = 'ride';
+    pane.querySelector('.story-director-route-go').click();
+    assert.deepEqual(asked, [['Shorn', 'Auvoth', 'ride']]);
+    assert.equal(pane.querySelector('.story-director-route-result').textContent, 'Shorn → Auvoth by ride');
+
+    const again = doc.createElement('div');
+    renderTab(again, { selection: null, route });
+    assert.equal(again.querySelector('.story-director-route-result').textContent, 'Shorn → Auvoth by ride', 'kept across a redraw');
+    assert.equal(again.querySelector('.story-director-route-input.is-from').value, 'Shorn');
+
+    const none = doc.createElement('div');
+    renderTab(none, { selection: null });
+    assert.equal(none.querySelector('.story-director-fold.is-route'), null, 'no pack, no tool');
+});

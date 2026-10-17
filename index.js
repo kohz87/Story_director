@@ -13,6 +13,8 @@
 //   in front of it is untouched.
 // - After each reply the change lines are checked, problems shown once, and active agendas
 //   mirrored into the scene block's Off-Screen section for NPC State Delta.
+// - With a world pack (the reader's map), travel legs are checked against its roads and
+//   paces, corrections go into the next note, and /route plans a journey.
 
 import { PRESETS, makeCalendar, normalizeCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
@@ -24,8 +26,10 @@ import { buildNote } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
+import { MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
+import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.3.0';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -53,6 +57,9 @@ let lastFindings = [];
 let lastFindingsKey = '';
 // Replay cache: one entry per message of the active chat, { sig, tracker, problems, … }.
 let cache = { chatId: null, entries: [] };
+// The loaded world pack, rebuilt only when the stored JSON object changes.
+let packCache = { source: null, pack: null };
+let settingsPanel = null;
 
 // ---------------------------------------------------------------------------
 // SillyTavern and Story Block access
@@ -121,6 +128,15 @@ function relevanceSettings(own = settings()) {
         dormantDays: Number(own.dormantDays) || DEFAULTS.dormantDays,
         dueSoonDays: Number(own.dueSoonDays) >= 0 ? Number(own.dueSoonDays) : DEFAULTS.dueSoonDays,
     };
+}
+
+// The reader's map, stored raw in the settings and normalized once.
+function worldPack() {
+    const source = settings().worldPack ?? null;
+    if (source !== packCache.source) {
+        packCache = { source, pack: source ? loadWorldPack(source).pack : null };
+    }
+    return packCache.pack;
 }
 
 // Pins are the reader's, not the story's: kept per chat, laid over the replayed records.
@@ -257,15 +273,19 @@ function situation(type = 'normal') {
     const now = parsed?.abs ?? tracker.time ?? null;
     const recent = chat.slice(Math.max(0, upTo - 1), upTo + 1).map(visibleText).join('\n');
     const place = scenePlace(sceneText);
+    // With a map, places one road away count as "here" for relevance.
+    const nearby = nearbyPlaces(worldPack(), place);
     const selection = classify(withPins(tracker), {
         calendar: cal,
         now,
         message: Math.max(upTo, 0),
-        place,
+        place: [place, ...nearby].filter(Boolean).join(' | '),
         sceneText,
         recentText: recent,
         settings: relevanceSettings(own),
     });
+    // The neighbours only widen relevance; the note's header names the scene's own place.
+    selection.place = place;
     return { tracker, selection, now, place, sceneText, upTo };
 }
 
@@ -287,8 +307,10 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
             setNote('');
             return;
         }
-        const { selection } = situation(type);
-        const note = buildNote(selection, { calendar: calendar(), budgetTokens: relevanceSettings().budgetTokens });
+        const { selection, tracker } = situation(type);
+        const cal = calendar();
+        const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
+        const note = buildNote(selection, { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -327,6 +349,8 @@ async function onReply({ messageIndex }) {
             now: after.time ?? before.time ?? null,
             hadBlock: Boolean(block),
         });
+        // Legs the reply wrote or changed, against the map.
+        lastFindings.push(...travelFindings(after, { pack: worldPack(), calendar: calendar(), previous: before, onlyChanged: true }));
         const serious = lastFindings.filter(finding => finding.severity !== 'info');
         if (serious.length) notify('warning', serious.slice(0, 3).map(finding => finding.message).join(' · '));
         if (settings(ctx).mirrorOffscreen) await mirror(index, after);
@@ -422,7 +446,70 @@ function renderDirectorTab(pane) {
         canSeed: !tracker.records.length && canSeed(),
         onSeed: () => void seed(),
         onPin: (id, pinned) => setPin(id, pinned),
+        route: worldPack() ? { places: Object.keys(worldPack().places).sort(), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
     });
+}
+
+// ---------------------------------------------------------------------------
+// Routes: the tab's route tool and /route
+
+/** A journey from the scene's current time: one readable line, or why there is none. */
+function routeText(fromText, toText, { mode = 'foot', rate = null } = {}) {
+    const pack = worldPack();
+    if (!pack) return 'No world pack is loaded (Extensions → Story Director → World pack).';
+    const from = findPlace(pack, fromText);
+    const to = findPlace(pack, toText);
+    if (!from) return `"${fromText}" is not a place in the world pack.`;
+    if (!to) return `"${toText}" is not a place in the world pack.`;
+    const travel = MODES.includes(mode) ? mode : 'foot';
+    const { now } = situation('normal');
+    const cal = calendar();
+    const plan = planRoute(pack, from, to, { mode: travel, rate, depart: now, calendar: cal });
+    return plan ? formatRoute(plan, cal) : `No ${travel} route from ${from} to ${to}.`;
+}
+
+// `/route Shorn to Auvoth ride`, `/route Shorn → Auvoth mode=courier`, `/route from=Shorn to=Auvoth`.
+function parseRouteArgs(named, unnamed) {
+    let text = String(unnamed ?? '').trim();
+    let mode = String(named?.mode ?? '').trim().toLowerCase();
+    const lastWord = /\s+(\w+)$/.exec(text);
+    if (!mode && lastWord && MODES.includes(lastWord[1].toLowerCase())) {
+        mode = lastWord[1].toLowerCase();
+        text = text.slice(0, lastWord.index);
+    }
+    const [from, to] = named?.from && named?.to
+        ? [named.from, named.to]
+        : text.split(/\s+(?:to|→|->)\s+/i);
+    const rate = Number(named?.rate);
+    return { from: String(from ?? '').trim(), to: String(to ?? '').trim(), mode: mode || 'foot', rate: Number.isFinite(rate) && rate > 0 ? rate : null };
+}
+
+function registerSlashCommand() {
+    const ctx = context();
+    const { SlashCommandParser, SlashCommand, SlashCommandArgument, SlashCommandNamedArgument, ARGUMENT_TYPE } = ctx ?? {};
+    if (!SlashCommandParser?.addCommandObject || !SlashCommand?.fromProps) return;
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'route',
+        returns: 'the route, its days and arrival',
+        callback: (named, unnamed) => {
+            const args = parseRouteArgs(named, unnamed);
+            const answer = args.from && args.to
+                ? routeText(args.from, args.to, args)
+                : 'Usage: /route FROM to TO [foot|ride|wagon|boat|courier] [rate=N]';
+            globalThis.toastr?.info?.(answer, 'Route', { timeOut: 20000, extendedTimeOut: 10000 });
+            return answer;
+        },
+        namedArgumentList: [
+            SlashCommandNamedArgument.fromProps({ name: 'mode', description: 'foot, ride, wagon, boat or courier', typeList: [ARGUMENT_TYPE.STRING], enumList: MODES }),
+            SlashCommandNamedArgument.fromProps({ name: 'rate', description: 'km per day, overriding the pace', typeList: [ARGUMENT_TYPE.NUMBER] }),
+            SlashCommandNamedArgument.fromProps({ name: 'from', description: 'start place', typeList: [ARGUMENT_TYPE.STRING] }),
+            SlashCommandNamedArgument.fromProps({ name: 'to', description: 'destination', typeList: [ARGUMENT_TYPE.STRING] }),
+        ],
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({ description: 'FROM to TO [mode]', typeList: [ARGUMENT_TYPE.STRING] }),
+        ],
+        helpString: 'Plans a journey over the Story Director world pack: hops, km, pace, days (each road rounded up to a half day, rest days on land) and the arrival from the scene\'s current time.',
+    }));
 }
 
 function tabBadge() {
@@ -445,7 +532,7 @@ function addSettingsPanel(documentRef) {
     wrapper.id = 'story_director_settings';
     host.appendChild(wrapper);
     const sb = storyBlock();
-    renderSettings(wrapper, {
+    settingsPanel = renderSettings(wrapper, {
         settings: settings(),
         blocks: (sb?.listBlocks?.() ?? []).filter(block => block.tag !== BLOCK.tag).map(({ tag, name }) => ({ tag, name })),
         onChange: next => {
@@ -458,8 +545,53 @@ function addSettingsPanel(documentRef) {
         },
         onSeed: () => void seed(),
         status: sb ? `v${VERSION}` : `v${VERSION} · needs Story Block 0.6 or newer`,
+        packSummary: worldPack() ? packSummary(worldPack()) : '',
+        onImportPack: importPack,
+        onClearPack: clearPack,
     });
     return true;
+}
+
+async function importPack(text) {
+    const ctx = context();
+    let json;
+    try {
+        json = JSON.parse(String(text ?? ''));
+    } catch {
+        return { message: 'That is not valid JSON.' };
+    }
+    const { pack, errors, warnings } = loadWorldPack(json);
+    if (!pack) return { message: `Not imported: ${errors.join('; ') || 'not a world pack'}.` };
+    const own = settings(ctx);
+    own.worldPack = json;
+    let adopted = '';
+    // A pack that brings its calendar offers it; the reader's own calendar is never replaced silently.
+    if (pack.calendar) {
+        const question = 'This world pack has its own calendar. Use it for reading dates?';
+        const yes = typeof ctx.callGenericPopup === 'function'
+            ? await ctx.callGenericPopup(question, ctx.POPUP_TYPE?.CONFIRM ?? 2)
+            : globalThis.confirm?.(question);
+        if (yes) {
+            own.calendar = normalizeCalendar(pack.calendar);
+            adopted = ' Calendar taken from the pack.';
+        }
+    }
+    saveSettings(ctx);
+    cache = { chatId: null, entries: [] };
+    // The panel holds its own copy of the settings; give it the adopted calendar so its next
+    // edit does not write the old one back.
+    if (adopted) settingsPanel?.update(settings(ctx), { packSummary: packSummary(pack) });
+    storyBlock()?.refresh?.();
+    const note = warnings.length ? ` ${warnings.length} ${warnings.length === 1 ? 'note' : 'notes'} (e.g. ${warnings[0]}).` : '';
+    return { summary: packSummary(pack), message: `Imported ${packSummary(pack)}.${adopted}${note}` };
+}
+
+async function clearPack() {
+    const ctx = context();
+    delete settings(ctx).worldPack;
+    saveSettings(ctx);
+    storyBlock()?.refresh?.();
+    return { summary: '', message: 'World pack cleared.' };
 }
 
 function registerWithStoryBlock() {
@@ -531,6 +663,7 @@ export async function init() {
     initialized = true;
     setNote('');
     registerEvents();
+    registerSlashCommand();
     ensureUi();
     console.info(`[Story Director] v${VERSION} loaded.`);
 }

@@ -1,13 +1,14 @@
-# Story Director v0.1.0
+# Story Director v0.3.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks and clocks, works out in code what is **due**, and
 injects a short **note** before every reply with what is due, arriving and relevant to the
 scene. The model writes only what changed; nothing it forgets to copy is ever lost.
 
-Works on top of [Story Block](https://github.com/kohz87/Story_block) (0.6 or newer). Arc
-planning with a model of your choice, travel routes and world packs follow in later versions
-(see [Roadmap](#roadmap)).
+Works on top of [Story Block](https://github.com/kohz87/Story_block) (0.6 or newer). With a
+**world pack** (your map as JSON) it also checks travel: every leg against the real roads,
+distances and paces, with corrections in the next note and a `/route` planner. Arc planning
+with a model of your choice follows (see [Roadmap](#roadmap)).
 
 ## Why
 
@@ -84,6 +85,61 @@ Do not reveal: who sold the weir route
 It is injected as a system message at a shallow depth (1 by default), so the cached history in
 front of it is untouched.
 
+## World packs and travel
+
+A world pack is your map as JSON: places, roads (with km and a road code), paces per road and
+mode, and travel rules. Import it under **Settings → World pack** (file or paste). If it brings
+a calendar, you are asked whether to use it.
+
+```jsonc
+{
+  "calendar": { "era": "CY", "days_per_month": 30, "months": ["Dawnwane", "…"] },
+  "pace_km_per_day": { "B": { "foot": 20, "ride": 35, "wagon": 18 }, "F": { "foot": 16, "ride": 28, "wagon": 14 },
+                       "W": { "boat": [30, 45] }, "T": { "foot": [14, 22], "ride": "foot", "wagon": null } },
+  "courier_multiplier": 2,
+  "travel_rules": { "round_edge_up_to_days": 0.5, "rest_day_every_active_days": 6,
+                    "crewed_water_rest_days": false, "levee_roads": ["Grand Vein River"], "no_levee": ["Bluewatch Branch"] },
+  "places": { "Shorn": { "x": 50, "y": 95, "region": "Shornmarch" }, "…": {} },
+  "edges": [ { "a": "Shorn", "b": "Varnhold Watch", "km": 35, "code": "B", "corridor": "Shorn–Auvoth Bastion Road" } ]
+}
+```
+
+**How travel is worked out:**
+
+- The shortest road by km that the mode may use: wagons stay off trails, mountains, tunnels and
+  hidden paths (`null`); riders go at foot pace where a code says `"ride": "foot"`; water is by
+  boat only unless the corridor is a levee road.
+- **Each road rounds up to the next half day** (`round_edge_up_to_days`), and the days add up.
+- One rest day after every 6 travel days on land; none for couriers (relays) or crewed boats.
+- Couriers ride at the ride pace × `courier_multiplier`. A range `[low, high]` uses its middle
+  unless a rate is given; a leg's stated rate inside the range is accepted.
+
+**What is checked** for every leg a reply writes or changes (`leg: FROM → TO KM CODE, MODE
+RATE/day → DAYS`, `arrive:` its arrival):
+
+| Problem | Example |
+|---|---|
+| Not one road | `Shorn → Auvoth 130 B` is three roads; the first is `Shorn → Varnhold Watch 35 B` |
+| A road that does not exist | `Bluewatch Village → Siltbarrow`; the real exits are listed |
+| Wrong start | A new leg must start where the last one ended |
+| Wrong km | More than 5 % off the road's length |
+| A mode the road does not allow | A wagon on a mountain road |
+| Wrong arrival | More than half a day off what the pace gives, counted from when the leg was set |
+
+Each problem comes with the corrected leg, which goes into the next note under
+`Corrections:`. With a map, places one road away from the scene also count as "here" when
+the note picks what is relevant.
+
+**`/route FROM to TO [mode] [rate=N]`** (also `from=` / `to=` / `mode=`) prints the roads,
+km, pace, days and the arrival from the scene's current time, for example:
+
+```
+/route Shorn to Auvoth courier
+Shorn → Varnhold Watch 35 B → Wolfmere Outpost 55 B → Auvoth 130 B = 220 km · courier 70/day · 3.5 days · arrive …
+```
+
+The Director tab has the same tool under **Route**.
+
 ## Settings
 
 | Setting | Default | |
@@ -95,7 +151,8 @@ front of it is untouched.
 | Dormant after | 15 replies or 30 story days unseen | Left out of the note until mentioned again |
 | Due soon | 3 days | Anything due this soon is never dormant |
 | Calendar | Gregorian | Or your own months and era |
-| Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for NPC State Delta |
+| Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for NPC State Delta (once tracking has started) |
+| World pack | none | Your map: places, roads, paces and travel rules, as JSON |
 
 ## The Director tab
 
@@ -108,7 +165,7 @@ problems with the last reply's changes.
 | Version | Adds |
 |---|---|
 | 0.1 | Tracker, change lines, calendar, Due now, relevance and budget, dormant shelf, checks, the tab, seeding, Off-Screen mirror |
-| 0.3 | World packs (places, routes, paces), travel legs checked and corrected, `/route` |
+| 0.3 | World packs (places, routes, paces), travel legs checked and corrected, `/route` and the route tool |
 | 0.4 | Arc planning on a model you choose (a connection profile or the chat's model): manual or automatic at arc end; Director's note and genre |
 | 0.5 | Optional capture call for models too weak to write change lines; World State Alpha import |
 
