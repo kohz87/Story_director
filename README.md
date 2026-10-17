@@ -1,4 +1,4 @@
-# Story Director v0.8.4
+# Story Director v0.8.5
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -63,7 +63,7 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 
 | Op | Meaning |
 |---|---|
-| `+ kind Key — part \| label: value` | New record. Kinds: `agenda` (someone off-screen), `event`, `hook`, `quest`, `clock`, `beat`, `secret` |
+| `+ kind Key — summary \| label: value` | New record. Kinds: `agenda` (someone off-screen), `event`, `hook`, `quest`, `clock`, `beat`, `secret` |
 | `~ Key — label: value` | Change only these parts |
 | `- Key — reason` | Resolved (superseded when the reason says so) |
 | `! Key — what happened` | A due item happened; its `then` becomes `now` |

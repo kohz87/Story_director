@@ -12,7 +12,7 @@ import { estimateTokens } from './relevance.js';
 // About 140 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
     'End your reply with one <Director>…</Director> block of change lines, one per line:',
-    '+ kind Key — part | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
+    '+ kind Key — summary | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',

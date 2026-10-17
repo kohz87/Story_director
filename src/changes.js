@@ -109,6 +109,9 @@ function inferKind(fields) {
     return 'event';
 }
 
+// The format's own words (CHANGE_INSTRUCTION, the capture prompt), copied as if they were text.
+const PLACEHOLDER = /^(?:part|summary|reason|what happened|(?:label|field):\s*value)$/i;
+
 /** `{ field, value }`, `{ label, value }` (extra) or null for an unlabeled part. */
 function splitLabel(part) {
     const match = part.match(LABELLED);
@@ -165,12 +168,21 @@ function parseLine(raw) {
     let kind = null;
     let kindWord = '';
     if (op === '+') {
-        const first = body.match(/^(\S+)\s+(.*)$/s);
-        // The kind word only counts when a key follows it, not a separator.
-        if (first && kindOf(first[1]) && !/^(?:[—–:|]|-(?:\s|$))/.test(first[2])) {
-            kind = kindOf(first[1]);
-            kindWord = first[1].toLowerCase();
-            body = first[2];
+        // `+ kind hook …`, the format's own word copied in front of the kind.
+        const copied = body.match(/^kind\s*:?\s+(\S+)\s+(.*)$/is);
+        if (copied && kindOf(copied[1])) {
+            kind = kindOf(copied[1]);
+            kindWord = copied[1].toLowerCase();
+            // The kind is certain here, so a separator after it only means the key comes next.
+            body = copied[2].replace(/^(?:[—–:|]|-(?=\s))\s*/, '');
+        } else {
+            const first = body.match(/^(\S+)\s+(.*)$/s);
+            // The kind word only counts when a key follows it, not a separator.
+            if (first && kindOf(first[1]) && !/^(?:[—–:|]|-(?:\s|$))/.test(first[2])) {
+                kind = kindOf(first[1]);
+                kindWord = first[1].toLowerCase();
+                body = first[2];
+            }
         }
     }
 
@@ -187,13 +199,16 @@ function parseLine(raw) {
     const loose = { text: '' };
     for (const part of parts) {
         const trimmed = part.trim();
-        if (!trimmed) continue;
+        // A placeholder copied from the format (`- Key — part`) says nothing.
+        if (!trimmed || PLACEHOLDER.test(trimmed)) continue;
         const labelled = splitLabel(trimmed);
         if (labelled?.field === 'desc') addText(fields, 'desc', labelled.value);
         // Stored as one of the four words; an empty one clears it (and reads as normal).
         else if (labelled?.field === 'difficulty') fields.difficulty = labelled.value ? questDifficulty(labelled.value) : '';
         else if (labelled?.field) fields[labelled.field] = labelled.value;
         else if (labelled && closing && labelled.label === 'reason') addText(loose, 'text', labelled.value);
+        // `label: …` or `field: …` copied from the format: the value is plain text.
+        else if (labelled && (labelled.label === 'label' || labelled.label === 'field')) addText(loose, 'text', labelled.value);
         else if (labelled) extra[labelled.label] = labelled.value;
         else addText(loose, 'text', trimmed);
     }

@@ -228,7 +228,7 @@ test('CHANGE_INSTRUCTION: about 120 tokens, the four ops, kinds, fields and the 
     const tokens = estimateTokens(CHANGE_INSTRUCTION);
     assert.ok(tokens >= 100 && tokens <= 140, `${tokens} tokens`);
     assert.match(CHANGE_INSTRUCTION, /<Director>/);
-    assert.match(CHANGE_INSTRUCTION, /^\+ kind Key — part \| label: value/m);
+    assert.match(CHANGE_INSTRUCTION, /^\+ kind Key — summary \| label: value/m);
     assert.match(CHANGE_INSTRUCTION, /^~ Key — label: value/m);
     assert.match(CHANGE_INSTRUCTION, /^- Key — reason/m);
     assert.match(CHANGE_INSTRUCTION, /^! Key — what happened/m);

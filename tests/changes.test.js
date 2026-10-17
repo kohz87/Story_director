@@ -311,3 +311,35 @@ test('difficulty is a quest field: stored as one of the four words, inferred, an
     assert.equal(only('~ Kettle Jack — difficulty:').fields.difficulty, '', 'an empty one clears it');
     assert.equal(only('~ Kettle Jack — difficulty:hard').fields.difficulty, 'hard', 'a known field may skip the space');
 });
+
+test('a placeholder copied from the format is no text', () => {
+    const { ops, errors } = parseChanges([
+        '- Sheep-killer — part',
+        '! Bell — what happened',
+        '+ hook Post-Rent — summary | now: the rent is due',
+        '- Toll — Reason',
+        '- Gate — partly flooded',
+    ].join('\n'));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(ops.map(op => op.reason), ['', '', '', '', 'partly flooded']);
+    assert.equal(ops[2].fields.desc, undefined);
+    assert.equal(ops[2].fields.now, 'the rent is due');
+});
+
+test('the format copied word for word still reads as the record it means', () => {
+    const { ops, errors } = parseChanges([
+        '+ kind hook — Guild post crisis | label: The frontier desk is insolvent',
+        '+ kind: quest Wolf bounty — goal: kill the sheep-killer',
+        '+ kind Hook Watch — the Watch is hiring',
+        '~ Road to Auvoth — label: notice at the Stray Oar',
+    ].join('\n'));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(ops.map(op => [op.kind, op.key]), [['hook', 'Guild post crisis'], ['quest', 'Wolf bounty'], ['hook', 'Watch'], [null, 'Road to Auvoth']]);
+    assert.equal(ops[0].fields.desc, 'The frontier desk is insolvent');
+    assert.deepEqual(ops[0].extra, {});
+    assert.equal(ops[1].fields.goal, 'kill the sheep-killer');
+    assert.equal(ops[2].fields.desc, 'the Watch is hiring');
+    assert.equal(ops[3].fields.desc, 'notice at the Stray Oar');
+    // A record really keyed "Kind" is still read as before.
+    assert.equal(parseChanges('+ hook Kind — a gentle stranger').ops[0].key, 'Kind');
+});
