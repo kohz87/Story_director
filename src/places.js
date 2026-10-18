@@ -15,12 +15,16 @@
 // times a road factor (roads wind), counted with the same round-up and rest-day rules as a
 // world pack's roads. Pure.
 
-import { DEFAULT_RULES, legDays, restDaysFor } from './routes.js';
+import { DEFAULT_RULES, MODERN_RULES, durationText, legDays, overnights, restDaysFor } from './routes.js';
 
-export const DEFAULT_MAP = Object.freeze({ north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25 });
+export const DEFAULT_MAP = Object.freeze({ north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25, era: 'pre-modern' });
 
 // Paces without a world pack, km per day.
 export const DEFAULT_PACES = Object.freeze({ foot: 20, ride: 35, wagon: 18, boat: 35, ship: 110, flight: 130, courier: 70 });
+// Modern paces without a world pack (0.9.0), km an hour door to door, and the hours spent boarding.
+export const MODERN_PACES = Object.freeze({ foot: 5, bike: 15, car: 70, motorbike: 70, bus: 50, train: 90, metro: 30, ferry: 30, ship: 35, plane: 750 });
+const MODERN_BOARD_HOURS = { train: 0.25, ferry: 0.5, ship: 1, plane: 2 };
+const STRAIGHT_MODES = ['boat', 'ship', 'flight', 'ferry', 'plane'];
 
 const COORDS = /[[(]\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*[\])]/;
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -42,6 +46,7 @@ export function mapSettings(map = {}) {
         east: given.east === 'left' ? 'left' : 'right',
         kmPerUnit: km > 0 ? km : DEFAULT_MAP.kmPerUnit,
         roadFactor: factor >= 1 ? factor : DEFAULT_MAP.roadFactor,
+        era: given.era === 'modern' ? 'modern' : 'pre-modern',
     };
 }
 
@@ -167,22 +172,30 @@ export function nearbyByCoords(book, place, { maxKm = 100, map = DEFAULT_MAP } =
 
 /**
  * A trip estimated from coordinates: { from, to, straightKm, roadKm, mode, rate, days,
- * restDays, direction } or null without coordinates. Road km is the straight line times the
- * road factor; days round up like a road (to the half day) and add a rest day after every
- * six days on land, except for couriers.
+ * restDays, unit, stops, direction } or null without coordinates. Road km is the straight
+ * line times the road factor; days round up like a road (to the half day) and add a rest day
+ * after every six days on land, except for couriers. A modern map (`map.era`) counts in km an
+ * hour to the quarter hour, adds boarding, and stops for the night on long drives.
  */
-export function estimateTrip(from, to, { map = DEFAULT_MAP, mode = 'foot', rate = null, rules = DEFAULT_RULES } = {}) {
+export function estimateTrip(from, to, { map = DEFAULT_MAP, mode = 'foot', rate = null, rules = null } = {}) {
     const straightKm = distanceKm(from, to, map);
     if (straightKm === null) return null;
     const settings = mapSettings(map);
-    const travel = Object.hasOwn(DEFAULT_PACES, mode) ? mode : 'foot';
-    const pace = rate > 0 ? rate : DEFAULT_PACES[travel];
+    const modern = settings.era === 'modern';
+    const paces = modern ? MODERN_PACES : DEFAULT_PACES;
+    const travel = Object.hasOwn(paces, mode) ? mode : modern && mode === 'flight' ? 'plane' : 'foot';
+    const pace = rate > 0 ? rate : paces[travel];
+    const use = modern ? (rules?.unit === 'hour' ? rules : MODERN_RULES) : (rules?.unit === 'hour' ? DEFAULT_RULES : rules ?? DEFAULT_RULES);
     // Water and air go straight; roads wind.
-    const winding = ['boat', 'ship', 'flight'].includes(travel) ? 1 : settings.roadFactor;
+    const winding = STRAIGHT_MODES.includes(travel) ? 1 : settings.roadFactor;
     const roadKm = straightKm * winding;
-    const active = legDays(roadKm, pace, rules) ?? 0;
-    const restDays = restDaysFor(travel, active, rules);
-    return { from, to, straightKm, roadKm, mode: travel, rate: pace, days: active + restDays, restDays, direction: bearing(from, to, map) };
+    const board = modern ? (MODERN_BOARD_HOURS[travel] ?? 0) / 24 : 0;
+    const active = (legDays(roadKm, pace, use) ?? 0) + board;
+    const restDays = restDaysFor(travel, active, use);
+    return {
+        from, to, straightKm, roadKm, mode: travel, rate: pace, days: active + restDays, restDays,
+        unit: modern ? 'hour' : 'day', stops: modern ? overnights(travel, active, use) : 0, direction: bearing(from, to, map),
+    };
 }
 
 const round = (value, digits = 0) => {
@@ -194,10 +207,14 @@ const round = (value, digits = 0) => {
 export function formatTrip(trip, { map = DEFAULT_MAP } = {}) {
     if (!trip) return '';
     const settings = mapSettings(map);
-    const straight = ['boat', 'ship', 'flight'].includes(trip.mode);
+    const straight = STRAIGHT_MODES.includes(trip.mode);
     const distance = straight
         ? `${round(trip.straightKm)} km ${trip.direction}`.trim()
         : `≈ ${round(trip.roadKm)} km ${trip.direction} (≈ ${round(trip.straightKm)} km straight × ${settings.roadFactor})`.replace(/ {2,}/g, ' ');
+    if (trip.unit === 'hour') {
+        const nights = trip.stops ? ` (${trip.stops} ${trip.stops === 1 ? 'night' : 'nights'} on the way)` : '';
+        return `${trip.from.name} → ${trip.to.name} ${distance} · ${trip.mode} ${round(trip.rate, 1)} km/h · ${durationText(trip.days, 'hour')}${nights}`;
+    }
     const rest = trip.restDays ? ` (${trip.restDays} rest)` : '';
     return `${trip.from.name} → ${trip.to.name} ${distance} · ${trip.mode} ${round(trip.rate, 1)}/day · ${trip.days} ${trip.days === 1 ? 'day' : 'days'}${rest}`;
 }

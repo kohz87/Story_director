@@ -312,10 +312,13 @@ function renderArc({ current = null, beats = null, draft = null, busy = false, e
 // Route tool (with a world pack)
 
 const MODES = ['foot', 'ride', 'wagon', 'boat', 'courier'];
+// A modern map's modes (0.9.0).
+const MODERN_MODES = ['foot', 'bike', 'car', 'bus', 'train', 'ferry', 'plane'];
 // The last route asked for survives the tab redrawing itself after every reply.
 let lastRoute = { from: '', to: '', mode: 'foot', result: '', open: false };
 
-function renderRoute({ places = [], onRoute }) {
+function renderRoute({ places = [], onRoute, era = 'pre-modern' }) {
+    const modes = era === 'modern' ? MODERN_MODES : MODES;
     const listId = 'story-director-places';
     const datalist = el('datalist', { attrs: { id: listId } }, places.map(name => {
         const option = el('option');
@@ -329,12 +332,12 @@ function renderRoute({ places = [], onRoute }) {
     };
     const from = field('is-from', 'From', lastRoute.from);
     const to = field('is-to', 'To', lastRoute.to);
-    const mode = el('select', { className: 'text_pole story-director-route-mode', attrs: { 'aria-label': 'Travel by' } }, MODES.map(name => {
+    const mode = el('select', { className: 'text_pole story-director-route-mode', attrs: { 'aria-label': 'Travel by' } }, modes.map(name => {
         const option = el('option', { text: name });
         option.value = name;
         return option;
     }));
-    mode.value = lastRoute.mode;
+    mode.value = modes.includes(lastRoute.mode) ? lastRoute.mode : modes[0];
     const result = el('div', { className: 'story-director-route-result', text: lastRoute.result, attrs: { 'aria-live': 'polite' } });
     const go = button('Route', 'story-director-route-go', {
         iconName: 'fa-route',
