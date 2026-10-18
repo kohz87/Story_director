@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.4
+
+- **Bounties and contracts are quests again.** 0.9.2 stopped a `step` alone from turning a hook into a quest, but the arc planner offers jobs as hooks that already carry their pay (`+ hook Wolf pelts — … | reward: 2 silver each | type: bounty`), and taking one on is usually written as progress (`~ Wolf pelts — step: tracking the pack`), so offered bounties and contracts stayed hooks and left the Quests tab. A hook or event that is a job (it has, or the change gives it, a giver, a reward or a quest category) now becomes a quest when a `~` moves it on (giver, reward, goal, step or difficulty); a plain thread's step still does not, and beats never do. An event given a reward is a quest again, as before 0.9.2. The tracker is replayed from the replies, so the quests come back on their own.
+- **An untracked job is a quest:** a `~` on a key that is not tracked, with a giver or a reward, adds a quest instead of a hook.
+
 ## 0.9.3
 
 One home for each thing, so the model is not steered from several places at once.

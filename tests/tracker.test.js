@@ -573,13 +573,33 @@ test('a quest closed without a - line: step done, status completed, a ! that say
     assert.equal(findRecord(applyOps(agenda, ops('~ Geva — now: done.'), { message: 2 }).tracker, 'Geva').status, 'active');
 });
 
-test('progress on a hook or a beat is not a quest: only a giver, a reward or a quest type makes one (0.9.2)', () => {
-    const start = applyOps(emptyTracker(), ops('+ hook River stranger — who pulled Ren out\n+ beat Toll riders — reach the ford | on: Goldwane 19\n+ event Market day — stalls on the green'), { message: 1 }).tracker;
+test('progress on a plain thread or a beat is not a quest; progress on an offered job is (0.9.2, 0.9.4)', () => {
+    const start = applyOps(emptyTracker(), ops([
+        '+ hook River stranger — who pulled Ren out',
+        '+ beat Toll riders — reach the ford | on: Goldwane 19',
+        '+ event Market day — stalls on the green',
+        '+ hook Wolf pelts — the tanner pays for pelts | reward: 2 silver each | difficulty: hard',
+        '+ hook Courier run — a sealed letter for Brightwater | type: contract',
+    ].join('\n')), { message: 1 }).tracker;
     const after = line => applyOps(start, ops(line), { message: 2 }).tracker;
+    // A plain thread: progress is not taking on a job.
     assert.equal(findRecord(after('~ River stranger — step: asked around at the inn'), 'River stranger').kind, 'hook');
     assert.equal(findRecord(after('~ River stranger — goal: find her | difficulty: hard'), 'River stranger').kind, 'hook');
-    assert.equal(findRecord(after('~ Toll riders — giver: the Reeve | reward: 5 silver'), 'Toll riders').kind, 'beat', 'beats are the world\'s');
-    assert.equal(findRecord(after('~ Market day — reward: a free pie'), 'Market day').kind, 'event');
+    assert.equal(findRecord(after('~ River stranger — shown: wet footprints'), 'River stranger').kind, 'hook');
+    // Beats are the world's.
+    assert.equal(findRecord(after('~ Toll riders — giver: the Reeve | reward: 5 silver'), 'Toll riders').kind, 'beat');
+    // An offered job moved on: the planner's bounty with its reward, a contract by its type.
+    const pelts = findRecord(after('~ Wolf pelts — step: tracking the pack'), 'Wolf pelts');
+    assert.equal(pelts.kind, 'quest');
+    assert.equal(pelts.fields.reward, '2 silver each', 'its parts are kept');
+    assert.equal(findRecord(after('~ Courier run — step: on the road north'), 'Courier run').kind, 'quest');
+    assert.equal(findRecord(after('~ Wolf pelts — shown: a pelt hung at the tannery'), 'Wolf pelts').kind, 'hook', 'a change that does not move it on');
+    // Taking on with a giver or reward, or naming it a quest, as before.
     assert.equal(findRecord(after('~ River stranger — giver: Lyra | reward: a favour owed'), 'River stranger').kind, 'quest');
+    assert.equal(findRecord(after('~ Market day — reward: a free pie'), 'Market day').kind, 'quest');
     assert.equal(findRecord(after('~ Market day — type: bounty'), 'Market day').kind, 'quest');
+    // An untracked key written with a giver or reward is a quest, not a hook.
+    const untracked = applyOps(start, ops('~ Kettle Jack bounty — giver: Warden Hale | reward: 40 crowns'), { message: 2 }).tracker;
+    assert.equal(findRecord(untracked, 'Kettle Jack bounty').kind, 'quest');
+    assert.equal(findRecord(applyOps(start, ops('~ Odd lights — now: over the marsh'), { message: 2 }).tracker, 'Odd lights').kind, 'hook');
 });
