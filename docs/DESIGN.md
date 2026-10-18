@@ -158,7 +158,7 @@ never listed as facts; their keys only appear under "Do not reveal".
 ```
 [Story Director · CY 611, Goldwane 16, 09:00 am · Auvoth]
 Due now: Saartje's sale (Goldwane 16) · Courier arrives Varnhold Watch (Goldwane 16, morning)
-Arc: The Weir Bullion · next beats: Council vote (Goldwane 18); Thys watches the gate (ongoing)
+Beats — The Weir Bullion: Council vote (Goldwane 18) · Thys watches the gate (ongoing)
 Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17) · Brant — on the frontier road with a dray → arrives Auvoth (Goldwane 19)
 World: Canal Street fires — curfew in force
 Hooks: River stranger — who pulled Ren from the sump

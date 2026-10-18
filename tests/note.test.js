@@ -240,11 +240,27 @@ test('CHANGE_INSTRUCTION: about 155 tokens, the four ops, kinds, fields and the 
     assert.ok(CHANGE_INSTRUCTION.includes('Never write actions for {{user}}'));
 });
 
-test('the current arc gets its own line under the header', () => {
+test('the current arc heads its beats, with no line of its own (0.9.3)', () => {
     const arc = { key: 'The Weir Bullion', kind: 'arc', status: 'active', fields: { desc: 'who sold the weir route' } };
-    const note = buildNote({ now: null, place: '', arc, due: [], arriving: [], relevant: [], dormant: [], secrets: [], resolvedRecently: [] }, { calendar: null });
-    const lines = note.split('\n');
-    assert.equal(lines[1], 'Arc: The Weir Bullion — who sold the weir route');
+    const empty = { now: null, place: '', arc, due: [], arriving: [], relevant: [], dormant: [], secrets: [], resolvedRecently: [] };
+    const alone = buildNote(empty, { calendar: null }).split('\n');
+    assert.equal(alone[1], 'Beats — The Weir Bullion (who sold the weir route)', 'every beat due or none left: the arc alone');
+    assert.ok(!alone.some(line => line.startsWith('Arc:')));
+    const riders = { key: 'Toll riders', kind: 'beat', status: 'active', fields: { desc: 'reach the ford', on: 'Goldwane 19' } };
+    const withBeat = buildNote({ ...empty, relevant: [{ record: riders, reason: 'beat', priority: 2 }] }, { calendar: null }).split('\n');
+    assert.equal(withBeat[1], 'Beats — The Weir Bullion (who sold the weir route): Toll riders — reach the ford (Goldwane 19)');
+    // No arc: the beats line as before.
+    assert.equal(buildNote({ ...empty, arc: null, relevant: [{ record: riders, reason: 'beat', priority: 2 }] }, { calendar: null }).split('\n')[1], 'Beats: Toll riders — reach the ford (Goldwane 19)');
+});
+
+test('with the agendas in the scene block\'s Off-Screen, the note leaves its Off-screen line out (0.9.3)', () => {
+    const geva = { key: 'Geva', kind: 'agenda', status: 'active', fields: { now: 'Bailiff Court', then: 'files the warrant', on: 'Goldwane 17' } };
+    const brant = { key: 'Brant', kind: 'agenda', status: 'active', fields: { now: 'on the road', arrive: 'Goldwane 16' } };
+    const sel = { now: null, place: '', arc: null, due: [], arriving: [brant], relevant: [{ record: geva, reason: 'active', priority: 6 }], dormant: [], secrets: [], resolvedRecently: [] };
+    assert.ok(buildNote(sel, { calendar: null }).split('\n').some(line => line.startsWith('Off-screen: Geva')));
+    const lines = buildNote(sel, { calendar: null, offscreenInBlock: true }).split('\n');
+    assert.ok(!lines.some(line => line.startsWith('Off-screen:')));
+    assert.ok(lines.some(line => line.startsWith('Arriving: Brant')), 'arriving still told');
 });
 
 test('with capture writing the changes, the note carries no instruction', () => {
@@ -339,7 +355,7 @@ test('noteParts: the note in labelled sections that join back into buildNote exa
     const sel = { ...selection({ due: [ambush], arriving: [brant], relevant: [geva, fires, stranger, bounty, graves, council], secrets: [record({ key: 'The heir', kind: 'secret' })] }), arc: { key: 'Wolf winter', fields: { desc: 'the packs come down' } } };
     const options = { calendar, corrections: ['Brant cannot be in two places.'], npcPlansOnly: true };
     const parts = noteParts(sel, options);
-    assert.deepEqual(parts.map(entry => entry.label), ['Header', 'Arc', 'Due now', 'Arriving', 'Off-screen', 'World', 'Hooks', 'Quests', 'Clocks', 'Beats',
+    assert.deepEqual(parts.map(entry => entry.label), ['Header', 'Due now', 'Arriving', 'Off-screen', 'World', 'Hooks', 'Quests', 'Clocks', 'Beats',
         'Do not reveal', 'Corrections', 'Pacing', 'Encounter cue', 'Change instruction', 'NPC plans only']);
     assert.equal(joined(parts), buildNote(sel, options));
     assert.equal(parts.find(entry => entry.label === 'Encounter cue').join, ' ', 'the cue rides on the Pacing line');

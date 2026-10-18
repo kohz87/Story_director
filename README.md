@@ -1,4 +1,4 @@
-# Story Director v0.9.2
+# Story Director v0.9.3
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -114,6 +114,8 @@ nightmare), and anything else as normal. The note mentions it next to the type w
 normal (`Bounty on Kettle Jack (bounty, hard) — …`). Other extensions can scale by it: RPG
 Battle offers quest XP by difficulty when a quest is finished.
 
+- A new line with no kind is a quest only with a `giver`, a `reward` or a quest `type` (since
+  0.9.3); a `goal`, `step` or `difficulty` alone makes it a hook.
 - A quest starts only when your character **accepts** it, and only for a job that outlasts the
   scene, not an errand; an offer not yet taken is a hook. When you take on a hook that is
   already tracked (register for the bounty, agree to the job), `~ Sheep-killer — giver: Hobb |
@@ -180,10 +182,20 @@ Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17)
 World: Canal Street fires — curfew in force
 Hooks: River stranger — who pulled Ren from the sump
 Clocks: Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign
+Beats — The Weir Debt (who sold the route, and what it costs Ren): Toll riders reach the ford (Goldwane 19)
 Do not reveal: who sold the weir route
 Pacing: the world keeps its schedule and the scene keeps its flow. …
 <how to write changes>
 ```
+
+**One home for each thing (0.9.3).** The current arc has no line of its own: its name and what it
+is about head the **Beats** line, so the arc is carried by its beats, and a beat that comes due
+moves to *Due now* like anything else. While Story Director keeps the timeline and writes the
+agendas into your World State's **Off-Screen** section (*Mirror Off-Screen*, on by default), the
+note leaves its *Off-screen* line out, since that section already shows every agenda; one that
+is due or arriving is still on *Due now* or *Arriving*. With Story Block 0.9.5 or later, the
+World State itself then leaves out Unresolved Threads, Planted Seeds, Consequence Timers and Arc
+Phase: hooks, clocks and the arc are Story Director's, so the model gets them from one place.
 
 Whenever something is scheduled, a short **Pacing** line says how a schedule meets a scene:
 bring a due item in only where it fits (on-screen if your character is there, otherwise later
@@ -535,8 +547,8 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
   the plan keeps it, and so does editing the note while the plan waits. Turn on *Keep the note
   for every plan* to keep it for good.
 
-From then on the note opens with `Arc: …`, lists the arc's next beats first, and keeps its
-secrets under "Do not reveal". The planning prompt is editable (with reset); its macros are
+From then on the arc's name heads the note's Beats line with its next beats, and its secrets
+are kept under "Do not reveal". The planning prompt is editable (with reset); its macros are
 `{{recent}}`, `{{tracker}}`, `{{now}}`, `{{place}}`, `{{nearby}}`, `{{note}}`, `{{genre}}`,
 `{{previous_arc}}`, `{{user}}` and `{{char}}`.
 

@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.2';
+const VERSION = '0.9.3';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -409,7 +409,9 @@ function noteOptions(ctx, tracker, upTo) {
     const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
     // The last reply's `~`/`!` lines on keys that are not tracked, while the model writes them.
     if (asks) fixes.push(...latestReplyCorrections(upTo));
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), ...instructionless };
+    // (0.9.3) While the scene block's Off-Screen carries the agendas, the note does not repeat them.
+    const offscreenInBlock = Boolean(settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx)) && storyBlock()?.getBlock?.(settings(ctx).sceneTag)?.text);
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, ...instructionless };
 }
 
 /**

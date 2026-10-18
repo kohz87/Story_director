@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.3
+
+One home for each thing, so the model is not steered from several places at once.
+
+- **The arc rides on its beats.** The note's separate `Arc:` line is gone: the arc's name and what it is about head the Beats line (`Beats — The Weir Debt (who sold the route): Toll riders reach the ford (Goldwane 19)`), and with every beat due or none left, that line is the arc alone. A beat that comes due is on *Due now* as before.
+- **Off-screen said once.** While Story Director keeps the timeline, mirrors the agendas into the scene block's Off-Screen section (*Mirror Off-Screen*, on by default) and the chat has that block, the note leaves its *Off-screen* line out: the section already shows every active agenda. An agenda due or arriving is still on *Due now* / *Arriving*. The token readout follows.
+- **Quests: the last loose rule.** A new line with no kind (`+ Herb run — goal: twelve moonleaf | step: two found`) was a quest for any quest field; it is a quest only with a `giver`, a `reward` or a quest `type` now, and a hook otherwise.
+- Goes with **Story Block 0.9.5**, whose World State leaves out Unresolved Threads, Planted Seeds, Consequence Timers and Arc Phase while Story Director keeps the timeline.
+
 ## 0.9.2
 
 - **Not every task is a quest.** Since 0.8.6 a `~` that gave a hook, event or beat a `step`, `goal` or `difficulty` turned it into a quest, and models write `step:` for any progress ("asked around at the inn"), so open threads and even arc beats filled the Quests tab. Now only a hook given a `giver` or a `reward`, or a hook or event named a quest (`type: quest` or a category such as bounty), becomes one; beats never do. The tracker is replayed from the replies, so threads turned into quests this way are threads again.

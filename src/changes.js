@@ -100,8 +100,12 @@ export function kindOf(word) {
     return Object.hasOwn(KIND_ALIASES, lower) ? KIND_ALIASES[lower] : null;
 }
 
+// A quest only with who it is for, what it pays or a quest type (0.9.3); a goal, step or
+// difficulty alone is an open thread, a hook.
 function inferKind(fields) {
-    if (QUEST_FIELDS.some(name => fields[name])) return 'quest';
+    const type = String(fields.type ?? '').trim().toLowerCase();
+    if (fields.giver || fields.reward || type === 'quest' || type === 'quests' || Object.hasOwn(QUEST_TYPE_WORDS, type)) return 'quest';
+    if (fields.goal || fields.step || fields.difficulty) return 'hook';
     if (fields.leg || fields.now) return 'agenda';
     if (fields.due) return 'clock';
     // Foes with nothing else to say what the record is: a planned fight is a beat.
