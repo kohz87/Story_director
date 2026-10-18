@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.1
+
+Quests that never finished. A quest closed only on a `- Key — reason` line, and nothing told the model that this is how a quest ends, so models wrote `~ Sheep-killer — step: done` or `! Sheep-killer — the wolf is slain, reward paid`, and the quest stayed open (and RPG Battle never offered its XP).
+
+- **The instruction says it:** quests, "done or failed: - it" (about 5 tokens; the instruction is about 155).
+- **Read as finished:** a `~` whose quest `step:` or `now:`, or any record's `status:`, `state:`, `outcome:`, `result:` or `progress:`, is just *done*, *completed*, *finished*, *fulfilled*, *failed*, *abandoned*, *expired*… (alone or before punctuation, so `step: complete the hunt at dawn` stays a step), and a `!` on a quest that says it was completed, finished, done, turned in, rewarded or failed, close the record as its `-` would. The Director tab notes it (`closed-by-change`). A failure is closed but not a quest done.
+- **Done and Failed in the Quests tab:** each open quest has both (asking twice); the `-` line is written into the latest reply, so the tracker, RPG Battle's quest XP and a swipe or delete all follow it.
+
 ## 0.9.0
 
 Modern travel. Roads, paces and rest days were all pre-modern (bastion roads, wagons, a rest day every six days), so a story set now could not use world packs or `/route`.

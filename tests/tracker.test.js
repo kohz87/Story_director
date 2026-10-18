@@ -541,3 +541,34 @@ test('a hook taken on becomes a quest: ~ with its own parts (0.8.6)', () => {
     assert.equal(findRecord(plain, 'Sheep-killer').kind, 'hook');
     assert.equal(findRecord(plain, 'Marrit').kind, 'agenda');
 });
+
+test('a quest closed without a - line: step done, status completed, a ! that says so (0.9.1)', () => {
+    const start = applyOps(emptyTracker(), ops('+ quest Sheep-killer — kill the wolf | giver: Garrow | step: track it to the den | reward: 2 silver'), { message: 1 }).tracker;
+    const after = (line, message = 2) => applyOps(start, ops(line), { message });
+    for (const line of [
+        '~ Sheep-killer — step: done',
+        '~ Sheep-killer — status: completed',
+        '~ Sheep-killer — step: completed — the wolf is dead, Garrow paid',
+        '! Sheep-killer — the wolf is slain and the reward paid',
+        '! Sheep-killer — quest completed',
+    ]) {
+        const { tracker, problems } = after(line);
+        const quest = findRecord(tracker, 'Sheep-killer');
+        assert.equal(quest.status, 'resolved', line);
+        assert.equal(problems[0].kind, 'closed-by-change', line);
+        assert.equal(questsDoneIn(tracker, 2).length, 1, `${line}: counts as done for RPG Battle`);
+    }
+    // Failure closes it too, but is not a quest done.
+    const failed = after('~ Sheep-killer — outcome: failed — the flock is lost').tracker;
+    assert.equal(findRecord(failed, 'Sheep-killer').status, 'resolved');
+    assert.deepEqual(questsDoneIn(failed, 2), []);
+    // A step still to do, or a ! that only moves it on, keeps it open.
+    for (const line of ['~ Sheep-killer — step: complete the hunt at dawn', '~ Sheep-killer — step: done tracking, now the den', '! Sheep-killer — tracks found by the river']) {
+        assert.equal(findRecord(after(line).tracker, 'Sheep-killer').status, 'active', line);
+    }
+    // Other kinds close on a status, not on their now.
+    const hook = applyOps(emptyTracker(), ops('+ hook River stranger — who pulled Ren out'), { message: 1 }).tracker;
+    assert.equal(findRecord(applyOps(hook, ops('~ River stranger — status: resolved'), { message: 2 }).tracker, 'River stranger').status, 'resolved');
+    const agenda = applyOps(emptyTracker(), ops('+ agenda Geva — plots | now: waiting'), { message: 1 }).tracker;
+    assert.equal(findRecord(applyOps(agenda, ops('~ Geva — now: done.'), { message: 2 }).tracker, 'Geva').status, 'active');
+});
