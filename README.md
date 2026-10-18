@@ -1,4 +1,4 @@
-# Story Director v0.8.6
+# Story Director v0.8.7
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -304,6 +304,10 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
 - **Review:** the plan waits in the Director tab as editable change lines; **Accept** writes them
   into the latest reply (deleting that reply undoes the plan), **Discard** drops it, **Plan
   again** asks for another. Turn on *Use plans without review* to skip this.
+- **The Director's note is used once:** when the arc it shaped is accepted (by you or without
+  review), the note is cleared, so a goal you forgot about cannot steer later arcs. Discarding
+  the plan keeps it, and so does editing the note while the plan waits. Turn on *Keep the note
+  for every plan* to keep it for good.
 
 From then on the note opens with `Arc: …`, lists the arc's next beats first, and keeps its
 secrets under "Do not reveal". The planning prompt is editable (with reset); its macros are
@@ -357,7 +361,7 @@ closed; the ones you open are remembered in this browser.
 | Source of truth | Automatic | Calendar, timeline and NPCs: who keeps each when other story extensions are installed (see [Working with the other story extensions](#working-with-the-other-story-extensions)) |
 | Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |
 | World pack | none | Optional roads: places, edges, paces and travel rules, as JSON |
-| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note, prompt |
+| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note (used once, or kept), prompt |
 | Capture | off | Off, when a reply has no `<Director>` block, or always; its model and answer length |
 
 ## The Director tab

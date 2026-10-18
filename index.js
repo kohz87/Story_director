@@ -42,14 +42,14 @@ import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
 import { MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
-import { DEFAULT_PLANNER_PROMPT, buildPlannerMessages, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
+import { buildPlannerMessages, DEFAULT_PLANNER_PROMPT, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.8.6';
+const VERSION = '0.8.7';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -75,7 +75,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     // The tracker is the story behind the scenes: hidden in the tab until the reader asks.
     spoilerGuard: true,
     calendar: PRESETS.gregorian,
-    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' }),
+    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
     // How to read map coordinates: which way north and east run, km per unit, road winding.
     map: DEFAULT_MAP,
@@ -891,7 +891,8 @@ async function planArc({ reason = 'manual' } = {}) {
         }
         const arcId = `arc-${Date.now().toString(36)}`;
         const text = planToOps(plan, { arcId }).map(formatOp).join('\n');
-        const draft = { key: arcId, chatId: chatIdOf(ctx), text, findings, reason };
+        // The note it was planned with: cleared once this arc is accepted (noteAfterAccept).
+        const draft = { key: arcId, chatId: chatIdOf(ctx), text, findings, reason, note: String(own.arc.note ?? '') };
         if (own.arc.autoAccept) {
             await acceptDraft(text, draft);
         } else {
@@ -921,6 +922,22 @@ async function appendDirectorLines(lines) {
     await sb.setBlockText(target, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
 }
 
+/**
+ * The Director's note is used once (0.8.7): once the arc it shaped is accepted it is cleared,
+ * so a note written for one arc does not steer every later one (in every chat) unnoticed.
+ * Kept with "Keep the note for every plan", or when it was changed after the plan was made.
+ */
+function spendNote(draft) {
+    const ctx = context();
+    const own = settings(ctx);
+    const next = noteAfterAccept(own.arc.note, draft?.note, { keep: own.arc.keepNote === true });
+    if (next === own.arc.note) return;
+    own.arc.note = next;
+    saveSettings(ctx);
+    settingsPanel?.update(settings(ctx));
+    notify('info', 'The Director’s note shaped this arc and is now cleared, so it will not steer the next one.');
+}
+
 async function acceptDraft(text, draft = arcDraft()) {
     const lines = String(text ?? draft?.text ?? '').trim();
     if (!lines) return;
@@ -935,6 +952,7 @@ async function acceptDraft(text, draft = arcDraft()) {
         setArcDraft(null);
         planError = '';
         notify('success', 'The new arc is being tracked.');
+        spendNote(draft);
     } catch (error) {
         planError = error instanceof Error ? error.message : String(error);
     }

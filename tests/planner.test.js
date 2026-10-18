@@ -12,6 +12,7 @@ import { replay } from '../src/tracker.js';
 import {
     DEFAULT_PLANNER_PROMPT,
     buildPlannerMessages,
+    noteAfterAccept,
     parsePlan,
     planToOps,
     summarizeTracker,
@@ -459,4 +460,15 @@ test('a planned offer of work keeps its difficulty as one of the four words', ()
     assert.equal(plan.items[0].fields.difficulty, 'hard');
     const [, hook] = planToOps(plan, { arcId: 'arc-1' });
     assert.equal(hook.raw, '+ hook Wolf pelts — the tanner pays for pelts | reward: 2 silver each | difficulty: hard | arc: arc-1');
+});
+
+test('the Director\'s note is spent once the arc it shaped is accepted', () => {
+    assert.equal(noteAfterAccept('Bring the twins home.', 'Bring the twins home.'), '');
+    assert.equal(noteAfterAccept('  Bring the twins home. ', 'Bring the twins home.'), '');
+    // kept when asked, when edited after the plan was made, or when no note was used
+    assert.equal(noteAfterAccept('Bring the twins home.', 'Bring the twins home.', { keep: true }), 'Bring the twins home.');
+    assert.equal(noteAfterAccept('Slow down for a while.', 'Bring the twins home.'), 'Slow down for a while.');
+    assert.equal(noteAfterAccept('Slow down for a while.', ''), 'Slow down for a while.');
+    assert.equal(noteAfterAccept('', ''), '');
+    assert.equal(noteAfterAccept(undefined, 'x'), '');
 });
