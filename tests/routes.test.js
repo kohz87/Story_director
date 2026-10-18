@@ -64,6 +64,18 @@ test('the fixture loads cleanly and summarises its counts', () => {
     assert.deepEqual(result.pack.paces.L, {});
 });
 
+test('a pack that contradicts its own map is warned about', () => {
+    const places = { Mill: { x: 0, y: 0 }, Ford: { x: 3, y: -4 }, Keep: { x: 10, y: 0 } };
+    const paces = { R: { foot: 20 } };
+    const short = loadWorldPack({ scale_km_per_unit: 10, places, paces, edges: [{ a: 'Mill', b: 'Ford', km: 30, code: 'R', bearing: 'SE/NW' }] });
+    assert.deepEqual(short.warnings, ['Mill – Ford is 30 km, but the places are 50 km apart in a straight line.']);
+    const wrong = loadWorldPack({ places, paces, edges: [{ a: 'Mill', b: 'Ford', km: 60, code: 'R', bearing: 'E/W' }, { a: 'Mill', b: 'Keep', km: 120, code: 'R', bearing: 'ENE/WSW' }] });
+    assert.deepEqual(wrong.warnings, ['Mill – Ford says Ford lies E of Mill, but the coordinates put it SE.'], 'ENE for due east is within a step');
+    // Every bearing fits y growing south: one hint instead of a warning per road.
+    const image = loadWorldPack({ places, paces, edges: [{ a: 'Mill', b: 'Ford', km: 60, code: 'R', bearing: 'NE/SW' }, { a: 'Ford', b: 'Keep', km: 90, code: 'R', bearing: 'SE' }] });
+    assert.deepEqual(image.warnings, ['The roads\' bearings fit a map whose y grows southwards (an image): set Map & travel → North is to Down.']);
+});
+
 test('the object form and the normalized shape load too', () => {
     const fromObject = loadWorldPack(JSON.parse(FIXTURE));
     assert.equal(packSummary(fromObject.pack), '19 places · 23 routes');

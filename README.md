@@ -1,4 +1,4 @@
-# Story Director v0.8.7
+# Story Director v0.8.8
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -227,8 +227,12 @@ ride 35, wagon 18, boat 35, courier 70 km a day (or `rate=`).
 
 A world pack is optional: it adds real roads. It is your map as JSON: places, roads (with km
 and a road code), paces per road and mode, and travel rules. Import it under **Settings → Map &
-travel → World pack** (file or paste); a pack's place coordinates also fill in the place book. If it brings
-a calendar, you are asked whether to use it.
+travel → World pack** (file or paste). See [Making a world pack](#making-a-world-pack) for a prompt
+that writes one from your lorebook or map. A pack's place coordinates also fill in the place book,
+and they **win over the coordinates a reply writes**: the pack is your map, while the model's
+numbers drift. When a reply's coordinates for a place differ from the pack's by more than one map
+unit, the Places section says so ("the story wrote 70, 104"), and distances and directions use the
+pack's. If it brings a calendar, you are asked whether to use it.
 
 ```jsonc
 {
@@ -278,6 +282,105 @@ Shorn → Varnhold Watch 35 B → Wolfmere Outpost 55 B → Auvoth 130 B = 220 k
 ```
 
 The Director tab has the same tool under **Route**.
+
+### Making a world pack
+
+You do not need to write the JSON by hand. Give a model your world, and the prompt below has it
+write the pack; then import it and read the notes the import gives back.
+
+**What to give it:** whatever you have of your map, such as a lorebook's places and travel
+times, a description of the regions, or the place names and coordinates your preset already
+writes in the scene's location (`Auvoth | Terrace | [59.0, 110.0]`). For a map image, describe it
+or let a model that reads images look at it. The more distances and directions you give it, the
+less it has to invent.
+
+**What it must get right** (the import checks the first four and lists what is wrong):
+
+- **Every road's two places are in `places`**, spelled the same.
+- **Roads join neighbours only:** one road per stretch between two places, never a long trip
+  through other places as one road. Routes are found by chaining roads.
+- **`km` is the road's length** and never shorter than the straight line between its places
+  (coordinates × `scale_km_per_unit`); roads wind, so 1.1 to 1.4 × the straight line is normal.
+- **`y` grows to the north** (a chart). If the coordinates come from an image, where y grows
+  downwards, keep them and set **North is** to *Down* after importing; a pack whose `bearing`s
+  fit that gets one note saying so.
+- **Every road code it uses has a pace** in `pace_km_per_day` (at least `R`; codes without land
+  paces go at the `R` pace).
+
+| Code | Road | Code | Road |
+|---|---|---|---|
+| `R` | maintained road | `W` | river or canal (boats; levee roads also on foot) |
+| `B` | bastion road | `S` | sea (ships) |
+| `F` | frontier road | `D` | deep sea (`vessel` pace) |
+| `C` | caravan | `A` | aerial (`flight` pace) |
+| `L` | local | `T` | trail |
+| `G` | dungeon approach | `M` | mountain |
+| `X` | seasonal or expedition | `U` | tunnel |
+| | | `H` | hidden |
+
+A pace is km a day: a number, a range `[low, high]`, `"foot"` (riders go at foot pace there) or
+`null` (that mode cannot use the road; wagons stay off trails and mountains this way).
+
+**The prompt** (paste it into any capable model, followed by your material):
+
+````text
+You are converting a fictional world into a world pack: one JSON object, and nothing else
+(no comments, no code fence, no explanation). Use only what the material below says or clearly
+implies; where you must invent a distance or position, keep it consistent with the rest.
+
+Shape:
+{
+  "source": "<world name>",
+  "scale_km_per_unit": <km per coordinate unit, e.g. 10>,
+  "pace_km_per_day": {
+    "R": { "foot": 20, "ride": 35, "wagon": 18 },
+    "F": { "foot": 16, "ride": 28, "wagon": 14 },
+    "T": { "foot": [14, 22], "ride": "foot", "wagon": null },
+    "M": { "foot": [10, 15], "ride": "foot", "wagon": null },
+    "W": { "boat": [30, 45], "upstream": [20, 30], "downstream_favorable": [50, 60] },
+    "S": { "ship": 110 }
+  },
+  "courier_multiplier": 2,
+  "travel_rules": { "round_edge_up_to_days": 0.5, "rest_day_every_active_days": 6, "crewed_water_rest_days": false },
+  "places": {
+    "<Place name>": { "x": <number>, "y": <number>, "region": "<region>" }
+  },
+  "edges": [
+    { "a": "<Place>", "b": "<Place>", "km": <number>, "code": "<road code>", "corridor": "<road or river name, or null>", "bearing": "<compass of b from a>/<compass of a from b>" }
+  ]
+}
+
+Rules:
+- Places: every town, village, fort, crossing, camp and landmark a traveller stops at. Names
+  exactly as the material spells them. One coordinate system for all; y grows to the NORTH, x to
+  the east. The coordinate distance between two places × scale_km_per_unit is the straight-line
+  distance in km.
+- Edges: only between neighbouring places, one edge per stretch of road, river or sea lane.
+  A trip that passes through a place is two edges. Both ends must be in "places".
+- km: the length of that stretch, 1.1 to 1.4 × the straight-line distance (never less).
+- bearing: an 8-point compass pair, e.g. "SW/NE" when b lies south-west of a. It must match the
+  coordinates.
+- code: R maintained road, B bastion road, F frontier road, C caravan, L local, G dungeon
+  approach, X seasonal or expedition, T trail, M mountain, U tunnel, H hidden, W river or canal,
+  S sea, D deep sea, A aerial. Every code you use needs an entry in pace_km_per_day (W, S, D, A
+  use boat/upstream/downstream_favorable, ship, vessel and flight).
+- Paces are km per day: a number, [low, high], "foot" (that mode goes at foot pace) or null
+  (that mode cannot use it). Adjust the example paces to the world.
+- Optional: "calendar": { "era": "<era>", "days_per_month": 30, "months": ["<month>", ...] }
+  when the material names its months; "levee_roads" / "no_levee" in travel_rules for rivers
+  with or without a towpath road.
+
+Before answering, check every edge: both places exist, km ≥ straight-line distance, and the
+bearing agrees with the coordinates.
+
+Material:
+````
+
+**After importing**, the message lists notes such as `Bluewatch Village – Hollin's Reach is 40
+km, but the places are 85 km apart in a straight line` or `… says Hollin's Reach lies E of
+Bluewatch Village, but the coordinates put it SW`. Fix those in the JSON (or ask the model to)
+and import again. Then try `/route` between two places you know, and look at the map in the
+Places section: if it is upside down, change **North is**.
 
 ## Arc planning
 

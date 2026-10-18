@@ -5,7 +5,9 @@
 // many presets add map coordinates ("[59.0, 110.0]"). Replayed in order, those make a place
 // book without anyone writing a world pack: each place (the first part of the location),
 // the spots inside it (the rest), how often and when the story was there, and its latest
-// coordinates. A world pack's places add coordinates for places the story has not reached.
+// coordinates. A world pack's places add coordinates for places the story has not reached,
+// and win over the story's for places it knows (0.8.8): the pack is the reader's own map, while
+// a reply's coordinates are the model's and drift; a disagreement is kept so it can be shown.
 //
 // The map settings say how to read coordinates: which way north and east run (a picture's
 // y grows downwards, a chart's upwards) and how many km one unit is. From those come
@@ -24,7 +26,10 @@ const COORDS = /[[(]\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*[\])]/;
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const EPSILON = 1e-9;
 
-const keyOf = name => String(name ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+// Apostrophes are dropped, so "Hollins Reach" in a reply is the pack's "Hollin's Reach".
+const keyOf = name => String(name ?? '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// How far (map units) a reply's coordinates may sit from the pack's before it counts as a disagreement.
+const COORDS_SLACK = 1;
 const finite = value => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 /** The map settings, completed and bounded. */
@@ -58,8 +63,9 @@ export function parseLocation(text) {
 /**
  * The place book from the scene's locations, in chat order:
  * visits = [{ message, time, text }] → { places, current }.
- * A place: { key, name, coords, coordsFrom: 'story' | 'pack' | null, visits, firstTime,
- * lastTime, lastMessage, spots: [latest first] }. `places` is most recently visited first;
+ * A place: { key, name, coords, coordsFrom: 'story' | 'pack' | null, storyCoords, visits,
+ * firstTime, lastTime, lastMessage, spots: [latest first] }. The pack's coordinates win;
+ * `storyCoords` is the reply's latest when it is more than a map unit away from them, else null. `places` is most recently visited first;
  * places only a world pack knows (`visits: 0`) come last.
  */
 export function buildPlaceBook(visits, { pack = null } = {}) {
@@ -72,7 +78,7 @@ export function buildPlaceBook(visits, { pack = null } = {}) {
         const key = keyOf(location.name);
         let place = byKey.get(key);
         if (!place) {
-            place = { key, name: location.name, coords: null, coordsFrom: null, visits: 0, firstTime: null, lastTime: null, lastMessage: null, spots: [] };
+            place = { key, name: location.name, coords: null, coordsFrom: null, storyCoords: null, visits: 0, firstTime: null, lastTime: null, lastMessage: null, spots: [] };
             byKey.set(key, place);
         }
         // A stay over several replies is one visit.
@@ -93,7 +99,8 @@ export function buildPlaceBook(visits, { pack = null } = {}) {
             place.spots = [location.spot, ...place.spots.filter(spot => keyOf(spot) !== keyOf(location.spot))];
         }
     }
-    // A world pack fills in coordinates the story never wrote, and adds the rest of the map.
+    // A world pack's coordinates win over the story's, fill in the ones it never wrote, and add
+    // the rest of the map.
     for (const [name, info] of Object.entries(pack?.places ?? {})) {
         const x = finite(info?.x);
         const y = finite(info?.y);
@@ -101,12 +108,13 @@ export function buildPlaceBook(visits, { pack = null } = {}) {
         const key = keyOf(name);
         const place = byKey.get(key);
         if (place) {
-            if (!place.coords) {
-                place.coords = { x, y };
-                place.coordsFrom = 'pack';
-            }
+            const story = place.coords;
+            place.name = name;   // the pack's spelling
+            place.coords = { x, y };
+            place.coordsFrom = 'pack';
+            place.storyCoords = story && Math.hypot(story.x - x, story.y - y) > COORDS_SLACK ? story : null;
         } else {
-            byKey.set(key, { key, name, coords: { x, y }, coordsFrom: 'pack', visits: 0, firstTime: null, lastTime: null, lastMessage: null, spots: [] });
+            byKey.set(key, { key, name, coords: { x, y }, coordsFrom: 'pack', storyCoords: null, visits: 0, firstTime: null, lastTime: null, lastMessage: null, spots: [] });
         }
     }
     const places = [...byKey.values()].sort((a, b) => {

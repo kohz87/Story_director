@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.8
+
+- **Your world pack's coordinates win.** A reply's coordinates (`Hollin's Reach | … | [70, 104]`) used to win over the pack's for any place the story had been, so one wrong number from the model made the Places section and `/route` give the wrong distance and direction (Hollin's Reach "east" when the pack puts it south-west of Bluewatch). Now the pack's coordinates are used for every place it knows. When a reply's coordinates differ by more than one map unit, the place says "(world pack; the story wrote 70, 104)" and the Places section names it. Places the pack does not know keep the story's coordinates.
+- **Apostrophes don't split places:** "Hollins Reach" in a reply is the pack's "Hollin's Reach", and a place the pack knows is shown with the pack's spelling.
+- **A pack that contradicts itself is noted on import:** a road shorter than the straight line between its places (with `scale_km_per_unit`), and a road whose `bearing` (`"SW/NE"`) its coordinates do not give. When every bearing fits a map whose y grows southwards, one note says to set **North is** to *Down* instead. The import message now shows the first five notes in full (it showed one).
+- **README: Making a world pack**, with what a pack must get right, the road codes, and a prompt that has any model write a pack from your lorebook or map.
+
 ## 0.8.7
 
 - **The Director's note is used once.** The note stayed in the settings after it shaped an arc, so a goal you forgot (*bring the twins home*) went on steering every later plan. Now accepting the arc it shaped (with **Accept**, or without review) clears it, with a notice saying so. It stays when the plan is discarded or planned again, and when you change the note while the plan waits.
