@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.5
+
+The story closes quests, not a click.
+
+- **Done and Failed are gone.** They let a click declare an outcome the story never told, and a Done earned RPG Battle's quest XP. A quest is finished or failed only when the story says so.
+- **Abandon** (asks twice) is the one closing left to the reader: giving a job up is a decision, like accepting one. It writes `- Key — abandoned` into the latest reply (deleting or swiping it takes it back); it is a failure, so no quest XP.
+- **Quest check:** an open quest whose `step` or `now` reads as over (*completed*, *wolf slain, reward collected*, *delivered*, *failed*… but not *complete the ritual* or *done with the first part*) adds one line to the note asking the story to close it with `- Key — outcome` if it has, and to leave it if not. Only while the model writes change lines.
+
 ## 0.9.4
 
 - **Bounties and contracts are quests again.** 0.9.2 stopped a `step` alone from turning a hook into a quest, but the arc planner offers jobs as hooks that already carry their pay (`+ hook Wolf pelts — … | reward: 2 silver each | type: bounty`), and taking one on is usually written as progress (`~ Wolf pelts — step: tracking the pack`), so offered bounties and contracts stayed hooks and left the Quests tab. A hook or event that is a job (it has, or the change gives it, a giver, a reward or a quest category) now becomes a quest when a `~` moves it on (giver, reward, goal, step or difficulty); a plain thread's step still does not, and beats never do. An event given a reward is a quest again, as before 0.9.2. The tracker is replayed from the replies, so the quests come back on their own.

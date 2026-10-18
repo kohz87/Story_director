@@ -1,4 +1,4 @@
-# Story Director v0.9.4
+# Story Director v0.9.5
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -135,9 +135,14 @@ Battle offers quest XP by difficulty when a quest is finished.
   *abandoned*… (alone or before punctuation: `step: completed — Garrow paid`; `step: complete
   the hunt` is still a step), and a `!` on a quest that says it was completed, done, turned in,
   rewarded or failed. A failure closes the quest without counting as done (no quest XP).
-- **Done** and **Failed** under each open quest in the Quests tab close it yourself (each asks
-  twice): the `-` line goes into the latest reply, so deleting or swiping that reply opens it
-  again, and RPG Battle offers the quest's XP for a quest done.
+- **The story closes quests, not a click** (since 0.9.5). When an open quest's own `step` or
+  `now` reads as over (*wolf slain, reward collected*, *delivered*, *failed*) but no line closed
+  it, the note adds a **Quest check**: "the story may have finished Sheep-killer. If it has,
+  close it with - Key — outcome; if not, leave it." Only while the model writes change lines.
+- **Abandon** under each open quest in the Quests tab is the one closing that is yours to make
+  (it asks twice): your character gives the job up. `- Key — abandoned` goes into the latest
+  reply, so deleting or swiping that reply takes it back; it counts as a failure, so RPG Battle
+  offers no quest XP for it.
 - `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30
   reached"), and the story decides what that costs.
 - Quests **never go dormant**. A quest untouched for forty replies stays in the note, and its

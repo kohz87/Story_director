@@ -745,7 +745,7 @@
     opacity: 0.75;
 }
 
-/* (0.9.1) Done and Failed under an open quest; a click asks again before it writes. */
+/* (0.9.5) Abandon under an open quest; a click asks again before it writes. */
 .story-director-tab .story-director-quest-actions {
     display: flex;
     flex-wrap: wrap;
@@ -758,6 +758,6 @@
     font-weight: 600;
 }
 
-.story-director-tab .story-director-quest-failed.is-armed {
+.story-director-tab .story-director-quest-abandon.is-armed {
     color: #d46a6a;
 }

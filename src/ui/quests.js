@@ -4,8 +4,9 @@
 // is behind the scenes: it is always shown in full. Active quests are grouped by their type
 // (main, side, bounty, contract…), each with its difficulty, goal, step, giver, reward and
 // deadline; a deadline that has passed or is close is marked. Finished quests fold away
-// underneath. Each open quest has Done and Failed (0.9.1): asked twice, then the glue writes
-// the `-` line into the latest reply, so deleting or swiping that reply opens it again.
+// underneath. A quest closes when the story closes it; the reader's one decision here is to
+// Abandon one (0.9.5, asked twice): the glue writes `- Key — abandoned` into the latest reply
+// (a failure, so no quest XP), and deleting or swiping that reply takes it back.
 // Everything arrives as parameters; this module only draws, and fills every node through
 // textContent (the values are written by the model).
 
@@ -48,8 +49,8 @@ function typeKey(record) {
 
 // The Finished fold stays open across redraws once opened.
 let finishedOpen = false;
-// The quest and outcome whose button asks again: "id|done" or "id|failed".
-let finishArmed = null;
+// The quest whose Abandon asks again.
+let abandonArmed = null;
 let lastArgs = null;
 
 function button(label, className, { iconName, title, onClick } = {}) {
@@ -91,32 +92,27 @@ function difficultyTag(record) {
     return el('span', { className: `story-director-tag is-difficulty is-${difficulty}`, text: difficulty, attrs: { title: 'difficulty' } });
 }
 
-function finishButtons(record, onFinish) {
-    if (typeof onFinish !== 'function') return null;
-    const one = (outcome, label, iconName, title) => {
-        const key = `${record.id}|${outcome}`;
-        const armed = finishArmed === key;
-        return button(armed ? `${label}? Click again` : label, `story-director-quest-${outcome}${armed ? ' is-armed' : ''}`, {
-            iconName,
-            title,
+function abandonButton(record, onAbandon) {
+    if (typeof onAbandon !== 'function') return null;
+    const armed = abandonArmed === record.id;
+    return el('div', { className: 'story-director-quest-actions' }, [
+        button(armed ? 'Abandon? Click again' : 'Abandon', `story-director-quest-abandon${armed ? ' is-armed' : ''}`, {
+            iconName: 'fa-flag',
+            title: `Give up ${record.key}: your character stops pursuing it (no quest XP). Written into the latest reply.`,
             onClick: () => {
                 if (!armed) {
-                    finishArmed = key;
+                    abandonArmed = record.id;
                     if (lastArgs) renderQuests(...lastArgs);
                     return;
                 }
-                finishArmed = null;
-                onFinish(record.id, outcome);
+                abandonArmed = null;
+                onAbandon(record.id);
             },
-        });
-    };
-    return el('div', { className: 'story-director-quest-actions' }, [
-        one('done', 'Done', 'fa-circle-check', `Mark ${record.key} finished: written into the latest reply`),
-        one('failed', 'Failed', 'fa-circle-xmark', `Mark ${record.key} failed: written into the latest reply`),
+        }),
     ]);
 }
 
-function renderQuest(record, { formatDate, status, onFinish }) {
+function renderQuest(record, { formatDate, status, onAbandon }) {
     const state = status?.(record) ?? '';
     const item = el('li', { className: `story-director-record is-quest${state ? ` is-${state}` : ''}` });
     item.dataset.recordId = record.id;
@@ -143,7 +139,7 @@ function renderQuest(record, { formatDate, status, onFinish }) {
         facts.append(el('dt', { text: ROW_LABELS[field] ?? field }), el('dd', { text: value }));
     }
     if (facts.children.length) item.append(facts);
-    const actions = finishButtons(record, onFinish);
+    const actions = abandonButton(record, onAbandon);
     if (actions) item.append(actions);
     return item;
 }
@@ -173,10 +169,10 @@ function renderFinished(finished) {
 /**
  * Draws the Quests tab into `pane`. `quests`: active quest records; `finished`: resolved
  * ones, most recent first; `status(record)` → 'overdue' | 'soon' | '' marks deadlines;
- * `onFinish(id, 'done' | 'failed')` when the reader closes one (no buttons without it).
+ * `onAbandon(id)` when the reader gives one up (no button without it).
  */
-export function renderQuests(pane, { quests = [], finished = [], formatDate = null, status = null, onFinish = null } = {}) {
-    lastArgs = [pane, { quests, finished, formatDate, status, onFinish }];
+export function renderQuests(pane, { quests = [], finished = [], formatDate = null, status = null, onAbandon = null } = {}) {
+    lastArgs = [pane, { quests, finished, formatDate, status, onAbandon }];
     const root = el('div', { className: 'story-director-tab story-director-quests' });
     if (!quests.length) {
         root.append(el('div', { className: 'story-director-empty' }, [
@@ -187,7 +183,7 @@ export function renderQuests(pane, { quests = [], finished = [], formatDate = nu
     for (const [type, list] of groups(quests)) {
         root.append(el('section', { className: `story-director-section is-quest-group${type ? ` is-${type}` : ''}` }, [
             sub(typeLabel(type), type === 'bounty' ? 'fa-coins' : type === 'main' ? 'fa-crown' : 'fa-scroll', list.length),
-            el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onFinish }))),
+            el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon }))),
         ]));
     }
     if (finished.length) root.append(renderFinished(finished));
