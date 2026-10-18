@@ -108,6 +108,8 @@ export function loadWorldPack(json) {
         if (!Object.hasOwn(ROUTE_CODES, code)) warnings.push(`Unknown road code "${code}" (R pace used).`);
     }
 
+    warnings.push(...mapWarnings(places, edges, positive(data.scaleKmPerUnit ?? data.scale_km_per_unit)));
+
     const rules = data.rules ?? data.travel_rules ?? {};
     const pack = {
         name: String(data.name ?? data.source ?? ''),
@@ -165,7 +167,47 @@ function readEdge(raw) {
         a, b, km, code,
         corridor: typeof raw.corridor === 'string' && raw.corridor.trim() ? raw.corridor.trim() : null,
         notes: typeof raw.notes === 'string' && raw.notes.trim() ? raw.notes : null,
+        bearing: typeof raw.bearing === 'string' && raw.bearing.trim() ? raw.bearing.trim().toUpperCase() : null,
     };
+}
+
+// A pack made by hand or by a model can contradict itself (0.8.8): a road shorter than the
+// straight line between its places, or a road's stated bearing ("SW/NE": b lies SW of a) that
+// its coordinates do not give. Coordinates are read with y growing north; when the bearings
+// fit y growing south instead, one warning says to set North is to Down.
+const COMPASS_16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const STRAIGHT_SLACK = 0.9;
+
+function mapWarnings(places, edges, scale) {
+    const warnings = [];
+    const off = { up: [], down: [] };
+    let stated = 0;
+    for (const edge of edges) {
+        const a = places[edge.a];
+        const b = places[edge.b];
+        if (![a?.x, a?.y, b?.x, b?.y].every(value => value !== null && value !== undefined)) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        if (scale) {
+            const straight = Math.hypot(dx, dy) * scale;
+            if (edge.km < straight * STRAIGHT_SLACK) warnings.push(`${edge.a} – ${edge.b} is ${num(edge.km)} km, but the places are ${Math.round(straight)} km apart in a straight line.`);
+        }
+        const want = COMPASS_16.indexOf(String(edge.bearing ?? '').split('/')[0].trim());
+        if (want < 0 || (dx === 0 && dy === 0)) continue;
+        stated += 1;
+        for (const north of ['up', 'down']) {
+            const degrees = (Math.atan2(dx, north === 'up' ? dy : -dy) * 180 / Math.PI + 360) % 360;
+            const gap = Math.abs(((degrees - want * 22.5) % 360 + 540) % 360 - 180);
+            // Within one 8-point step (45°) agrees; coordinates are rounded and roads bend.
+            if (gap > 45 + 1e-9) off[north].push({ edge, given: COMPASS_16[want], got: COMPASS_16[Math.round(degrees / 22.5) % 16] });
+        }
+    }
+    if (stated && off.down.length < off.up.length && off.up.length > stated / 2) {
+        warnings.unshift('The roads\' bearings fit a map whose y grows southwards (an image): set Map & travel → North is to Down.');
+    } else {
+        for (const { edge, given, got } of off.up) warnings.push(`${edge.a} – ${edge.b} says ${edge.b} lies ${given} of ${edge.a}, but the coordinates put it ${got}.`);
+    }
+    return warnings;
 }
 
 function readPaces(source, warnings) {

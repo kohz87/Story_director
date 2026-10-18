@@ -44,6 +44,24 @@ test('a world pack fills in coordinates and adds unvisited places last', () => {
     assert.ok(book.places.some(place => place.name === 'Shorn'));
 });
 
+test('the world pack\'s coordinates win over the story\'s, and a disagreement is kept', () => {
+    // The pack: Auvoth [59, 110], Hollin's Reach [58, 104], Bluewatch Village [64, 110].
+    const book = buildPlaceBook([
+        { message: 1, text: 'Bluewatch Village | Square | [64.4, 110]' },
+        { message: 2, text: 'Hollins Reach | Branch office | [70, 104]' },
+    ], { pack });
+    const hollin = findBookPlace(book, "Hollin's Reach");
+    assert.equal(hollin.visits, 1, 'no apostrophe is still the same place');
+    assert.equal(hollin.name, "Hollin's Reach", 'spelled as the pack spells it');
+    assert.deepEqual(hollin.coords, { x: 58, y: 104 });
+    assert.equal(hollin.coordsFrom, 'pack');
+    assert.deepEqual(hollin.storyCoords, { x: 70, y: 104 });
+    const bluewatch = findBookPlace(book, 'Bluewatch Village');
+    assert.equal(bluewatch.storyCoords, null, 'within a map unit is agreement');
+    assert.equal(bearing(bluewatch, hollin), 'SW');
+    assert.equal(bearing(findBookPlace(book, 'Auvoth'), hollin), 'S');
+});
+
 test('distance and direction follow the map settings', () => {
     const a = { coords: { x: 0, y: 0 } };
     const b = { coords: { x: 3, y: 4 } };

@@ -523,8 +523,8 @@ clause (≤ 7 words, made unique), `desc` = the summary (unless it is the key), 
 parseLocation(text) → { name, spot, parts, coords: { x, y } | null }   // "Auvoth | Terrace | [59.0, 110.0]"
 buildPlaceBook(visits, { pack }) → { places, current }
     // visits: [{ message, time, text }] in chat order (the scene's Loc cell per reply).
-    // place: { key, name, coords, coordsFrom: 'story'|'pack'|null, visits, firstTime, lastTime, lastMessage, spots }
-    // A stay over consecutive replies is one visit; the latest coordinates win; a pack fills gaps.
+    // place: { key, name, coords, coordsFrom: 'story'|'pack'|null, storyCoords (a reply's, when it differs from the pack's), visits, firstTime, lastTime, lastMessage, spots }
+    // A stay over consecutive replies is one visit; the latest coordinates win, but a pack's win over a reply's (0.8.8).
 findBookPlace(book, text) → place | null
 mapSettings(map) → { north: 'up'|'down', east: 'right'|'left', kmPerUnit, roadFactor }
 distanceKm(a, b, map) → number | null            // straight line × kmPerUnit

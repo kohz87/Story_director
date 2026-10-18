@@ -439,7 +439,8 @@ function renderPlaces({ book, map = null, formatTime = null } = {}) {
         ]));
         const facts = el('dl', { className: 'story-director-facts' });
         const add = (label, value) => { if (value) facts.append(el('dt', { text: label }), el('dd', { text: value })); };
-        add('map', place.coords ? `${tidy(place.coords.x)}, ${tidy(place.coords.y)}${place.coordsFrom === 'pack' ? ' (world pack)' : ''}` : '');
+        const story = place.storyCoords ? `; the story wrote ${tidy(place.storyCoords.x)}, ${tidy(place.storyCoords.y)}` : '';
+        add('map', place.coords ? `${tidy(place.coords.x)}, ${tidy(place.coords.y)}${place.coordsFrom === 'pack' ? ` (world pack${story})` : ''}` : '');
         add('from here', away(place));
         const last = typeof formatTime === 'function' && place.lastTime !== null ? formatTime(place.lastTime) : '';
         add('visits', `${place.visits}${last ? ` · last ${last}` : ''}`);
@@ -448,8 +449,10 @@ function renderPlaces({ book, map = null, formatTime = null } = {}) {
         return item;
     });
     const noCoords = !(book.places ?? []).some(place => place.coords);
+    const disagree = places.filter(place => place.storyCoords);
     return fold('is-places', 'Places', 'fa-map-location-dot', places.length, () => [
         renderMap(book.places ?? [], book.current, map),
+        disagree.length ? el('p', { className: 'story-director-places-hint is-disagree', text: `The story's coordinates for ${disagree.map(place => place.name).join(', ')} differ from your world pack; distances and directions use the pack's.` }) : null,
         noCoords ? el('p', { className: 'story-director-places-hint', text: 'No map coordinates yet. Ask for them in the scene\'s location (like "Auvoth | Terrace | [59.0, 110.0]") or import a world pack, and these places go on a map with distances.' }) : null,
         el('ul', { className: 'story-director-records' }, items),
     ]);

@@ -510,6 +510,13 @@ test('places: a fold with a map, distances from here, and shown even while hidde
     assert.equal(plain.querySelector('.story-director-map'), null);
     assert.match(plain.querySelector('.story-director-places-hint').textContent, /No map coordinates yet/);
     assert.equal(render({ places: { book: buildPlaceBook([]) } }).querySelector('.is-places'), null);
+
+    const pack = { places: { Shorn: { x: 0, y: 0 }, Mill: { x: 3, y: -4 } } };
+    const mixed = render({ places: { book: buildPlaceBook([{ message: 1, text: 'Shorn [0, 0]' }, { message: 2, text: 'Mill [3, 4]' }], { pack }), map: { kmPerUnit: 10 } } });
+    assert.match(mixed.querySelector('.story-director-places-hint.is-disagree').textContent, /coordinates for Mill differ from your world pack/);
+    const shorn = mixed.querySelectorAll('.story-director-record.is-place')[1];
+    assert.deepEqual(facts(shorn).slice(0, 2), [['map', '0, 0 (world pack)'], ['from here', '50 km NW']]);
+    assert.deepEqual(facts(mixed.querySelectorAll('.story-director-record.is-place')[0])[0], ['map', '3, -4 (world pack; the story wrote 3, 4)']);
 });
 
 test('quests live in their own tab: the Director tab does not list them', () => {

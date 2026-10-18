@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.8.7';
+const VERSION = '0.8.8';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1279,7 +1279,10 @@ async function importPack(text) {
     // edit does not write the old one back.
     if (adopted) settingsPanel?.update(settings(ctx), { packSummary: packSummary(pack) });
     storyBlock()?.refresh?.();
-    const note = warnings.length ? ` ${warnings.length} ${warnings.length === 1 ? 'note' : 'notes'} (e.g. ${warnings[0]}).` : '';
+    // The first few notes in full: a pack a model wrote is fixed from them.
+    const shown = warnings.slice(0, 5).join(' ');
+    const more = warnings.length > 5 ? ` …and ${warnings.length - 5} more.` : '';
+    const note = warnings.length ? ` ${warnings.length} ${warnings.length === 1 ? 'note' : 'notes'}: ${shown}${more}` : '';
     return { summary: packSummary(pack), message: `Imported ${packSummary(pack)}.${adopted}${note}` };
 }
 
