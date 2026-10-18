@@ -59,6 +59,8 @@ export function questDifficulty(value) {
 // captain (boss)`, `2 x dire wolf rank D`). Story Director only stores and schedules it; the
 // fight itself is resolved by another extension, so the text is never parsed here.
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', ...QUEST_FIELDS];
+// A comma or semicolon before one of the format's fields ("…, giver: Nelke"), for runs written without "|".
+const FIELD_RUN = new RegExp(`\\s*[,;]\\s*(?=(?:${FIELDS.join('|')})\\s*:)`, 'i');
 
 // Only a spaced hyphen ends a key, so `Jean-Luc` and `Hall-Warden` stay whole; em and en
 // dashes never appear inside names, so they count with or without spaces.
@@ -196,12 +198,16 @@ function parseLine(raw) {
     const id = lineKey(key);
     if (!id) return { error: 'missing key' };
     if (head.trim()) parts.unshift(head);
+    // (0.9.8) Fields run together with commas or semicolons, "type: contract, giver: Nelke, reward:
+    // 2 silver", are split as if written with "|": only before a field the format knows, so a
+    // comma inside a value ("Nelke, the clerk") stays.
+    const expanded = parts.flatMap(part => part.split(FIELD_RUN));
 
     const closing = op === '-' || op === '!';
     const fields = {};
     const extra = {};
     const loose = { text: '' };
-    for (const part of parts) {
+    for (const part of expanded) {
         const trimmed = part.trim();
         // A placeholder copied from the format (`- Key — part`) says nothing.
         if (!trimmed || PLACEHOLDER.test(trimmed)) continue;
