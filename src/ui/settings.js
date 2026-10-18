@@ -515,6 +515,8 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         note.placeholder = 'A goal, a pace, a beat you want: “Bring the guild into it; slow down after the fire.”';
         note.value = arc.note;
         note.addEventListener('input', () => commit(next => { next.arc.note = note.value; }));
+        const keepNote = toggle('story_director_arc_keep_note', arc.keepNote === true, 'Keep the note for every plan');
+        keepNote.addEventListener('change', () => commit(next => { next.arc.keepNote = Boolean(keepNote.checked); }));
 
         const prompt = el('textarea', { className: 'text_pole story-director-arc-prompt', attrs: { id: 'story_director_arc_prompt', rows: '8', spellcheck: 'false' } });
         prompt.value = arc.prompt || defaultPlannerPrompt;
@@ -536,7 +538,8 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             row('Stalled after', 'Automatic: plan again when no beat is due within this many story days.', withUnit(stall, 'days'), { id: 'story_director_arc_stall' }),
             row('Use plans without review', 'Off: a new plan waits in the Director tab for you to accept.', autoAccept, { id: 'story_director_arc_accept' }),
             row('Genre and tone', 'Told to the planner as written.', genre, { id: 'story_director_arc_genre' }),
-            row('Director’s note', 'Your hand on the wheel, read at every plan.', note, { id: 'story_director_arc_note' }),
+            row('Director’s note', arc.keepNote === true ? 'Your hand on the wheel, read at every plan.' : 'Your hand on the wheel for the next plan; cleared once you accept that arc.', note, { id: 'story_director_arc_note' }),
+            row('Keep the note for every plan', 'Off: the note is used once, so it cannot steer later arcs if you forget it.', keepNote, { id: 'story_director_arc_keep_note' }),
             row('Planning prompt', 'Macros: {{recent}}, {{tracker}}, {{now}}, {{place}}, {{nearby}}, {{note}}, {{genre}}, {{previous_arc}}.', el('div', { className: 'story-director-arc-prompt-wrap' }, [prompt, reset]), { id: 'story_director_arc_prompt', stacked: true }),
         ];
     }

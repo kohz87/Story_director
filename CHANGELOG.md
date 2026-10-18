@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.7
+
+- **The Director's note is used once.** The note stayed in the settings after it shaped an arc, so a goal you forgot (*bring the twins home*) went on steering every later plan. Now accepting the arc it shaped (with **Accept**, or without review) clears it, with a notice saying so. It stays when the plan is discarded or planned again, and when you change the note while the plan waits.
+- **Keep the note for every plan:** a new switch under Arc planning (off by default) keeps the note for good, as before.
+
 ## 0.8.6
 
 - **A hook you take on becomes the quest.** A job offered and tracked as a hook (*Sheep-killer*) stayed a hook after you took it, so it never reached the Quests tab and RPG Battle never offered quest XP for finishing it: the format had no way to say "this is now a quest", and a `~` adding its reward only added a part. Now a `~` that gives a hook, event or beat a quest's own part (`giver`, `goal`, `reward`, `step`, `difficulty`, or a quest category such as `type: bounty`; `type: quest` alone too) turns it into a quest, keeping its key, description and history; the Director tab notes it. Agendas, clocks, secrets and arcs are never turned.
