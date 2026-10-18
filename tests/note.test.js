@@ -444,3 +444,11 @@ test('quest check: an open quest whose step or now reads as over asks the story 
     }
     assert.ok(!buildNote(sel([done]), { calendar: null, instruction: '' }).includes('Quest check'), 'not when capture writes the changes');
 });
+
+test('quest check: a quest the latest exchange gives up asks the story to close it as abandoned (0.9.6)', () => {
+    const quest = { key: 'Herb run', id: 'herb run', kind: 'quest', status: 'active', fields: { goal: 'moonleaf', step: 'two found' } };
+    const sel = { now: null, place: '', arc: null, due: [], arriving: [], relevant: [{ record: quest, reason: 'active', priority: 6 }], dormant: [], secrets: [], resolvedRecently: [] };
+    const lines = buildNote(sel, { calendar: null, givenUp: ['Herb run'] }).split('\n');
+    assert.ok(lines.includes('Quest check: {{user}} may be giving up Herb run. If they do, close it with - Key — abandoned; if not, leave it.'));
+    assert.ok(!buildNote(sel, { calendar: null, givenUp: ['Herb run'], instruction: '' }).includes('Quest check'));
+});

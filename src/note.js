@@ -111,6 +111,7 @@ export function noteParts(selection, {
     instruction = CHANGE_INSTRUCTION,
     npcPlansOnly = false,
     offscreenInBlock = false,
+    givenUp = [],
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -129,7 +130,7 @@ export function noteParts(selection, {
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -168,7 +169,7 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [] }) {
     const parts = [part('Header', header(selection, calendar))];
     addLine(parts, 'Due now', due.map(record => withFight(dueItem(record), record)));
     addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
@@ -182,8 +183,14 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     addLine(parts, 'Corrections', fixes);
     // (0.9.5) An open quest whose progress reads as over: the story is asked to close it, never
     // closed for it. Only where the model writes change lines.
-    const ended = instruction ? [...due, ...relevant.map(entry => entry.record)].filter(looksFinished).map(record => record.key) : [];
-    if (ended.length) parts.push(part('Quest check', `Quest check: the story may have finished ${[...new Set(ended)].join(', ')}. If it has, close it with - Key — outcome; if not, leave it.`));
+    // (0.9.6) And one the latest exchange says {{user}} gave up: the story closes it as abandoned.
+    const ended = instruction ? [...new Set([...due, ...relevant.map(entry => entry.record)].filter(looksFinished).map(record => record.key))] : [];
+    const dropped = instruction ? [...new Set(givenUp ?? [])].filter(key => !ended.includes(key)) : [];
+    const checks = [
+        ended.length ? `the story may have finished ${ended.join(', ')}. If it has, close it with - Key — outcome; if not, leave it.` : '',
+        dropped.length ? `{{user}} may be giving up ${dropped.join(', ')}. If they do, close it with - Key — abandoned; if not, leave it.` : '',
+    ].filter(Boolean);
+    if (checks.length) parts.push(part('Quest check', `Quest check: ${checks.join(' Also: ')}`));
     if (scheduled(selection, due, arriving, relevant)) {
         parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
         if ([...due, ...arriving].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));

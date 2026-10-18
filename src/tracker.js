@@ -8,11 +8,11 @@ import { FIELDS, QUEST_TYPE_WORDS, formatOp, kindOf, lineKey, questDifficulty } 
 const HISTORY_LIMIT = 20;
 const SUPERSEDED = /supersed|replac|merged/i;
 // A quest closed with one of these was not done: it ended without the work being finished.
-const FAILED = /\b(?:fail|abandon|gave up|give up|given up|forfeit|expired|missed|too late|cancel|refused|declined|botched)/i;
+const FAILED = /\b(?:fail|abandon|gave up|give up|given up|giving up|forfeit|quit\b|walked away|backed out|called off|withdr[eao]w|expired|missed|too late|cancel|refused|declined|botched)/i;
 // (0.9.1) How a model says something is over without a `-` line: `~ Quest — step: done`,
 // `status: completed`, `outcome: failed`. Only a value that is one of these words, alone or
 // before punctuation ("completed — the wolves are dead"): "complete the ritual" is a step.
-const OVER_VALUE = /^(?:done|complete|completed|finished|fulfilled|accomplished|resolved|succeeded|success|turned in|handed in|delivered|over|closed|failed|failure|abandoned|given up|gave up|forfeited|expired|cancell?ed)\s*(?:$|[.,;:!—–(-])/i;
+const OVER_VALUE = /^(?:done|complete|completed|finished|fulfilled|accomplished|resolved|succeeded|success|turned in|handed in|delivered|over|closed|failed|failure|abandoned|given up|gave up|forfeit|forfeited|quit|withdrawn|called off|expired|cancell?ed)\s*(?:$|[.,;:!—–(-])/i;
 // The labels such a value comes under: any record's status or outcome, and a quest's step or now.
 const OVER_LABELS = ['status', 'state', 'outcome', 'result', 'progress'];
 const QUEST_OVER_FIELDS = ['step', 'now'];
@@ -22,12 +22,34 @@ const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|
 // (0.9.5) A quest still open whose own progress reads as over ("step: wolf slain, reward
 // collected"): finished or failed words in its step or now. Not its goal or description, which
 // say what the job is ("complete the ritual").
-const LOOKS_OVER = /\b(?:completed|finished|fulfilled|accomplished|done\b(?!\s+with)|turned in|handed in|delivered|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|failed|abandoned|gave up|given up|expired|too late)/i;
+const LOOKS_OVER = /\b(?:completed|finished|fulfilled|accomplished|done\b(?!\s+with)|turned in|handed in|delivered|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|failed|abandoned|gave up|given up|forfeit(?:ed)?|quit\b|walked away|backed out|called off|expired|too late)/i;
 
 /** Whether an open quest's step or now says it is over, so the note can ask the story to close it. */
 export function looksFinished(record) {
     if (record?.kind !== 'quest' || record.status !== 'active') return false;
     return ['step', 'now'].some(field => LOOKS_OVER.test(String(record.fields?.[field] ?? '')));
+}
+
+// (0.9.6) The reader's own message (or the reply's narration) saying a job is given up: a
+// sentence with one of these and the quest's key, or its giver's name. Only ever a hint: the
+// note asks the story to close it, nothing is closed here.
+const GIVE_UP = /\b(?:give up|gave up|giving up|given up|forfeit(?:s|ed|ing)?|abandon(?:s|ed|ing)?|quit(?:s|ting)?|walk(?:s|ed|ing)? away from|back(?:s|ed|ing)? out of|call(?:s|ed|ing)? off|drop(?:s|ped|ping)? the (?:job|bounty|contract|quest|hunt|search))\b/i;
+const NOT_BEFORE = /\b(?:not|never|won't|wont|don't|dont|didn't|didnt|wouldn't|can't|cannot|refuse to)\s+(?:\w+\s+){0,2}$/i;
+
+/** The open quests a text says are given up, by key: [key], in tracker order. */
+export function givenUpIn(tracker, text) {
+    const sentences = String(text ?? '').split(/(?<=[.!?…])\s+|\n+/).filter(Boolean);
+    const said = sentences.filter(sentence => {
+        const match = GIVE_UP.exec(sentence);
+        return match && !NOT_BEFORE.test(sentence.slice(0, match.index));
+    });
+    if (!said.length) return [];
+    const names = record => [record.key, String(record.fields?.giver ?? '').trim()].filter(name => name.length >= 3);
+    const named = (sentence, name) => new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'iu').test(sentence);
+    return (tracker?.records ?? [])
+        .filter(record => record.kind === 'quest' && record.status === 'active')
+        .filter(record => said.some(sentence => names(record).some(name => named(sentence, name))))
+        .map(record => record.key);
 }
 
 /** What a `~` (or a quest's `!`) says when it means the record is over, or null. */
