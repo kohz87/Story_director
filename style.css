@@ -744,3 +744,21 @@
 .story-director-tab .story-director-record.is-finished {
     opacity: 0.75;
 }
+
+/* (0.9.1) Done and Failed under an open quest; a click asks again before it writes. */
+.story-director-tab .story-director-quest-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+}
+
+.story-director-tab .story-director-quest-actions .menu_button.is-armed {
+    border-color: currentColor;
+    font-weight: 600;
+}
+
+.story-director-tab .story-director-quest-failed.is-armed {
+    color: #d46a6a;
+}
+

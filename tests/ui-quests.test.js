@@ -78,3 +78,19 @@ test('every quest shows its difficulty, normal when the story gave none', () => 
     // In the head, next to the key, not as a row.
     assert.ok(![...pane.querySelectorAll('dt')].some(dt => dt.textContent === 'difficulty'));
 });
+
+test('Done and Failed close a quest after asking twice; none without a handler (0.9.1)', () => {
+    const calls = [];
+    const pane = render({ quests: [quest('Sheep-killer', { goal: 'kill the wolf' }), quest('Herb run')], onFinish: (...args) => calls.push(args) });
+    const first = () => pane.querySelector('.story-director-record.is-quest');
+    assert.deepEqual(texts(first(), '.story-director-quest-actions .menu_button'), ['Done', 'Failed']);
+    first().querySelector('.story-director-quest-done').click();
+    assert.deepEqual(calls, [], 'the first click only asks');
+    assert.equal(first().querySelector('.story-director-quest-done').textContent, 'Done? Click again');
+    first().querySelector('.story-director-quest-done').click();
+    assert.deepEqual(calls, [['sheep-killer', 'done']]);
+    pane.querySelectorAll('.story-director-record.is-quest')[1].querySelector('.story-director-quest-failed').click();
+    pane.querySelectorAll('.story-director-record.is-quest')[1].querySelector('.story-director-quest-failed').click();
+    assert.deepEqual(calls.at(-1), ['herb run', 'failed']);
+    assert.equal(render({ quests: [quest('Herb run')] }).querySelector('.story-director-quest-actions'), null);
+});

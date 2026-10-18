@@ -9,6 +9,35 @@ const HISTORY_LIMIT = 20;
 const SUPERSEDED = /supersed|replac|merged/i;
 // A quest closed with one of these was not done: it ended without the work being finished.
 const FAILED = /\b(?:fail|abandon|gave up|give up|given up|forfeit|expired|missed|too late|cancel|refused|declined|botched)/i;
+// (0.9.1) How a model says something is over without a `-` line: `~ Quest — step: done`,
+// `status: completed`, `outcome: failed`. Only a value that is one of these words, alone or
+// before punctuation ("completed — the wolves are dead"): "complete the ritual" is a step.
+const OVER_VALUE = /^(?:done|complete|completed|finished|fulfilled|accomplished|resolved|succeeded|success|turned in|handed in|delivered|over|closed|failed|failure|abandoned|given up|gave up|forfeited|expired|cancell?ed)\s*(?:$|[.,;:!—–(-])/i;
+// The labels such a value comes under: any record's status or outcome, and a quest's step or now.
+const OVER_LABELS = ['status', 'state', 'outcome', 'result', 'progress'];
+const QUEST_OVER_FIELDS = ['step', 'now'];
+// A `!` on a quest that says it was finished or failed ("! Sheep-killer — wolves slain, reward paid").
+const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|handed in|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out)/i;
+
+/** What a `~` (or a quest's `!`) says when it means the record is over, or null. */
+function overByChange(record, op) {
+    if (op.op === '!') {
+        if (record.kind !== 'quest') return null;
+        const said = [op.reason, ...Object.values(op.fields ?? {}), ...Object.values(op.extra ?? {})].map(value => String(value ?? '')).join(' ');
+        return QUEST_OVER_TEXT.test(said) || FAILED.test(said) ? (op.reason || said).trim() : null;
+    }
+    for (const label of OVER_LABELS) {
+        const value = String(op.extra?.[label] ?? '').trim();
+        if (OVER_VALUE.test(value)) return value;
+    }
+    if (record.kind === 'quest' || takesOnQuest(record, op)) {
+        for (const field of QUEST_OVER_FIELDS) {
+            const value = String(op.fields?.[field] ?? '').trim();
+            if (OVER_VALUE.test(value)) return value;
+        }
+    }
+    return null;
+}
 const MIN_PERSON_LENGTH = 3;
 
 // Matching a key that is not tracked to the record it most likely means (v0.8.3): the words
@@ -274,6 +303,18 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
         }
 
         const record = edit(target);
+        // (0.9.1) A change that says the record is over closes it, as its `-` would have.
+        const over = (op.op === '~' || op.op === '!') ? overByChange(record, op) : null;
+        if (over !== null) {
+            const { status: _s, state: _st, outcome: _o, result: _r, progress: _p, ...extra } = op.extra ?? {};
+            const fields = Object.fromEntries(Object.entries(op.fields ?? {}).filter(([name, value]) => !(QUEST_OVER_FIELDS.includes(name) && OVER_VALUE.test(String(value ?? '').trim()))));
+            applyFields(record, { ...op, fields, extra });
+            record.status = 'resolved';
+            record.resolved = { ...at, reason: over };
+            problems.push(finding('closed-by-change', 'info', op, `"${record.key}" read as finished ("${over}"); "- ${record.key} — ${over}" says it directly.`));
+            touch(record, op, at);
+            continue;
+        }
         if (op.op === '~') {
             let change = op;
             if (takesOnQuest(record, op)) {

@@ -224,9 +224,9 @@ test('no records gives the instruction alone', () => {
     assert.equal(buildNote(selection(), { calendar, instruction: 'Only this.' }), 'Only this.');
 });
 
-test('CHANGE_INSTRUCTION: about 150 tokens, the four ops, kinds, fields and the rules', () => {
+test('CHANGE_INSTRUCTION: about 155 tokens, the four ops, kinds, fields and the rules', () => {
     const tokens = estimateTokens(CHANGE_INSTRUCTION);
-    assert.ok(tokens >= 100 && tokens <= 155, `${tokens} tokens`);
+    assert.ok(tokens >= 100 && tokens <= 160, `${tokens} tokens`);
     assert.match(CHANGE_INSTRUCTION, /a hook they take on: ~ it with these/);
     assert.match(CHANGE_INSTRUCTION, /<Director>/);
     assert.match(CHANGE_INSTRUCTION, /^\+ kind Key — summary \| label: value/m);
@@ -263,7 +263,7 @@ test('quests: their own line, deadline wording when due, and the instruction nam
     assert.ok(note.includes(PACING), 'a deadline is a schedule');
     const due = buildNote(selection({ due: [bounty] }), { calendar });
     assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
-    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it; a hook they take on: ~ it with these\): type, giver, goal, reward, step, due, difficulty\./);
+    assert.match(CHANGE_INSTRUCTION, /quest \(only once \{\{user\}\} accepts it; a hook they take on: ~ it with these; done or failed: - it\): type, giver, goal, reward, step, due, difficulty\./);
 });
 
 test('quest difficulty: shown with the type unless it is normal', () => {

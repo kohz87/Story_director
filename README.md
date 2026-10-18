@@ -1,4 +1,4 @@
-# Story Director v0.9.0
+# Story Director v0.9.1
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -121,6 +121,16 @@ Battle offers quest XP by difficulty when a quest is finished.
   `difficulty`, or a quest category such as `type: bounty`) turns it into one, keeping its key,
   description and history.
   The arc planner offers work as hooks and never completes a quest for you.
+- **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
+  quests ("done or failed: - it"). Models often write the end another way, so these close it too
+  (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
+  `status:` / `outcome:` (any record) is just *done*, *completed*, *finished*, *failed*,
+  *abandoned*… (alone or before punctuation: `step: completed — Garrow paid`; `step: complete
+  the hunt` is still a step), and a `!` on a quest that says it was completed, done, turned in,
+  rewarded or failed. A failure closes the quest without counting as done (no quest XP).
+- **Done** and **Failed** under each open quest in the Quests tab close it yourself (each asks
+  twice): the `-` line goes into the latest reply, so deleting or swiping that reply opens it
+  again, and RPG Battle offers the quest's XP for a quest done.
 - `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30
   reached"), and the story decides what that costs.
 - Quests **never go dormant**. A quest untouched for forty replies stays in the note, and its

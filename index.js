@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1183,7 +1183,25 @@ function questsTabKey() {
 
 function renderQuestsTab(pane) {
     const { active, finished, now } = questRecords();
-    renderQuests(pane, { quests: active, finished, status: questStatus(now) });
+    renderQuests(pane, { quests: active, finished, status: questStatus(now), onFinish: (id, outcome) => void finishQuest(id, outcome) });
+}
+
+/**
+ * (0.9.1) The reader closes a quest from the Quests tab: its `-` line goes into the latest
+ * reply like any change, so the tracker, the Quests tab and RPG Battle's quest XP see it, and
+ * deleting or swiping that reply takes it back.
+ */
+async function finishQuest(id, outcome) {
+    const record = questRecords().active.find(entry => entry.id === id);
+    if (!record) return;
+    const reason = outcome === 'failed' ? 'failed' : 'completed';
+    try {
+        await appendDirectorLines(`- ${record.key} — ${reason}`);
+        notify('success', `${record.key}: ${reason}. Delete or swipe the latest reply to take it back.`);
+    } catch (error) {
+        notify('error', error instanceof Error ? error.message : String(error));
+    }
+    storyBlock()?.refresh?.();
 }
 
 function tabBadge() {
