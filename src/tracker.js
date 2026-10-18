@@ -19,6 +19,17 @@ const QUEST_OVER_FIELDS = ['step', 'now'];
 // A `!` on a quest that says it was finished or failed ("! Sheep-killer — wolves slain, reward paid").
 const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|handed in|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out)/i;
 
+// (0.9.5) A quest still open whose own progress reads as over ("step: wolf slain, reward
+// collected"): finished or failed words in its step or now. Not its goal or description, which
+// say what the job is ("complete the ritual").
+const LOOKS_OVER = /\b(?:completed|finished|fulfilled|accomplished|done\b(?!\s+with)|turned in|handed in|delivered|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|failed|abandoned|gave up|given up|expired|too late)/i;
+
+/** Whether an open quest's step or now says it is over, so the note can ask the story to close it. */
+export function looksFinished(record) {
+    if (record?.kind !== 'quest' || record.status !== 'active') return false;
+    return ['step', 'now'].some(field => LOOKS_OVER.test(String(record.fields?.[field] ?? '')));
+}
+
 /** What a `~` (or a quest's `!`) says when it means the record is over, or null. */
 function overByChange(record, op) {
     if (op.op === '!') {

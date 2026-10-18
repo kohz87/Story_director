@@ -8,6 +8,7 @@
 
 import { questDifficulty } from './changes.js';
 import { estimateTokens } from './relevance.js';
+import { looksFinished } from './tracker.js';
 
 // About 155 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
@@ -97,7 +98,7 @@ export function buildNote(selection, options = {}) {
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
  * before `text`, so joining them gives buildNote exactly. Labels: Header, Due now, Arriving,
  * Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
- * Corrections, Pacing, Encounter cue, Change instruction, NPC plans only.
+ * Corrections, Quest check, Pacing, Encounter cue, Change instruction, NPC plans only.
  *
  * `offscreenInBlock` (0.9.3): the scene block's Off-Screen section already carries every active
  * agenda (Story Director mirrors it there and keeps the timeline), so the note leaves its
@@ -179,6 +180,10 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     // Secrets appear by key only, so the note never states them as facts.
     addLine(parts, 'Do not reveal', secrets.map(record => record.key), '; ');
     addLine(parts, 'Corrections', fixes);
+    // (0.9.5) An open quest whose progress reads as over: the story is asked to close it, never
+    // closed for it. Only where the model writes change lines.
+    const ended = instruction ? [...due, ...relevant.map(entry => entry.record)].filter(looksFinished).map(record => record.key) : [];
+    if (ended.length) parts.push(part('Quest check', `Quest check: the story may have finished ${[...new Set(ended)].join(', ')}. If it has, close it with - Key — outcome; if not, leave it.`));
     if (scheduled(selection, due, arriving, relevant)) {
         parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
         if ([...due, ...arriving].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));

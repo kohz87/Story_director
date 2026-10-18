@@ -432,3 +432,15 @@ test('long parts are trimmed in the note and its token count, never in the recor
     // Short parts are written as before.
     assert.ok(lines(buildNote(selection({ relevant: [geva] }), { calendar })).includes('Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17)'));
 });
+
+test('quest check: an open quest whose step or now reads as over asks the story to close it (0.9.5)', () => {
+    const quest = (key, fields) => ({ key, id: key.toLowerCase(), kind: 'quest', status: 'active', fields: { desc: '', goal: '', step: '', now: '', ...fields } });
+    const sel = rel => ({ now: null, place: '', arc: null, due: [], arriving: [], relevant: rel.map(record => ({ record, reason: 'active', priority: 6 })), dormant: [], secrets: [], resolvedRecently: [] });
+    const done = quest('Sheep-killer', { goal: 'kill the wolf', step: 'wolf slain, reward collected' });
+    const lines = buildNote(sel([done]), { calendar: null }).split('\n');
+    assert.ok(lines.includes('Quest check: the story may have finished Sheep-killer. If it has, close it with - Key — outcome; if not, leave it.'));
+    for (const fields of [{ goal: 'complete the ritual', step: 'gathering herbs' }, { step: 'done with the first part, now the den' }, { desc: 'finished business with the guild' }]) {
+        assert.ok(!buildNote(sel([quest('Ritual', fields)]), { calendar: null }).includes('Quest check'), JSON.stringify(fields));
+    }
+    assert.ok(!buildNote(sel([done]), { calendar: null, instruction: '' }).includes('Quest check'), 'not when capture writes the changes');
+});

@@ -79,18 +79,16 @@ test('every quest shows its difficulty, normal when the story gave none', () => 
     assert.ok(![...pane.querySelectorAll('dt')].some(dt => dt.textContent === 'difficulty'));
 });
 
-test('Done and Failed close a quest after asking twice; none without a handler (0.9.1)', () => {
+test('Abandon gives a quest up after asking twice; no Done or Failed: the story closes quests (0.9.5)', () => {
     const calls = [];
-    const pane = render({ quests: [quest('Sheep-killer', { goal: 'kill the wolf' }), quest('Herb run')], onFinish: (...args) => calls.push(args) });
+    const pane = render({ quests: [quest('Sheep-killer', { goal: 'kill the wolf' }), quest('Herb run')], onAbandon: id => calls.push(id) });
     const first = () => pane.querySelector('.story-director-record.is-quest');
-    assert.deepEqual(texts(first(), '.story-director-quest-actions .menu_button'), ['Done', 'Failed']);
-    first().querySelector('.story-director-quest-done').click();
+    assert.deepEqual(texts(first(), '.story-director-quest-actions .menu_button'), ['Abandon']);
+    assert.equal(pane.querySelector('.story-director-quest-done, .story-director-quest-failed'), null);
+    first().querySelector('.story-director-quest-abandon').click();
     assert.deepEqual(calls, [], 'the first click only asks');
-    assert.equal(first().querySelector('.story-director-quest-done').textContent, 'Done? Click again');
-    first().querySelector('.story-director-quest-done').click();
-    assert.deepEqual(calls, [['sheep-killer', 'done']]);
-    pane.querySelectorAll('.story-director-record.is-quest')[1].querySelector('.story-director-quest-failed').click();
-    pane.querySelectorAll('.story-director-record.is-quest')[1].querySelector('.story-director-quest-failed').click();
-    assert.deepEqual(calls.at(-1), ['herb run', 'failed']);
-    assert.equal(render({ quests: [quest('Herb run')] }).querySelector('.story-director-quest-actions'), null);
+    assert.equal(first().querySelector('.story-director-quest-abandon').textContent, 'Abandon? Click again');
+    first().querySelector('.story-director-quest-abandon').click();
+    assert.deepEqual(calls, ['sheep-killer']);
+    assert.equal(render({ quests: [quest('Herb run')] }).querySelector('.story-director-quest-actions'), null, 'none without a handler');
 });
