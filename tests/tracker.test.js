@@ -653,3 +653,24 @@ test('"+ quest Key" on a hook or event already tracked makes it the quest (0.9.9
     assert.equal(findRecord(applyOps(start, ops('+ quest Geva — follow her'), { message: 2 }).tracker, 'Geva').kind, 'agenda');
     assert.equal(applyOps(start, ops('+ hook Sheepfold Wolves — again'), { message: 2 }).problems[0].kind, 'duplicate-add');
 });
+
+test('a "- … accepted" line takes a job on, it does not finish it (0.9.13)', () => {
+    const start = applyOps(emptyTracker(), ops('+ hook Sheepfold Wolves — wolves at the east fold | giver: Nelke'), { message: 1 }).tracker;
+    // As written: the quest, then the hook "closed" because it was accepted.
+    const reply = '+ quest Sheepfold Wolves — Cull four timber wolves | type: contract | giver: Nelke | reward: 8 silver | due: Goldwane 13, 08:00 am | difficulty: easy\n- Hook Sheepfold Wolves — accepted by Wessel';
+    const { tracker, problems } = applyOps(start, ops(reply), { message: 2 });
+    const quest = findRecord(tracker, 'Sheepfold Wolves');
+    assert.equal(quest.kind, 'quest');
+    assert.equal(quest.status, 'active');
+    assert.deepEqual(questsDoneIn(tracker, 2), []);
+    assert.ok(problems.some(problem => problem.kind === 'taken-on'));
+    // On a hook alone, the - makes it the quest.
+    const taken = applyOps(start, ops('- Sheepfold Wolves — taken on by Wessel'), { message: 2 }).tracker;
+    assert.equal(findRecord(taken, 'Sheepfold Wolves').kind, 'quest');
+    assert.equal(findRecord(taken, 'Sheepfold Wolves').status, 'active');
+    // Pay, an ending or a refusal still close it.
+    const quested = applyOps(start, ops('+ quest Sheepfold Wolves — cull them | giver: Nelke'), { message: 2 }).tracker;
+    for (const reason of ['reward accepted, 8 silver paid', 'done, Nelke accepted the ears and the job is finished', 'declined the job', 'cleared']) {
+        assert.equal(findRecord(applyOps(quested, ops(`- Sheepfold Wolves — ${reason}`), { message: 3 }).tracker, 'Sheepfold Wolves').status, 'resolved', reason);
+    }
+});
