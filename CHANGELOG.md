@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.6
+
+- **Giving up, however it is written.** *forfeit*, *quit*, *walked away*, *backed out*, *called off* (and *withdrew*) now close a quest as a failure wherever *failed* or *gave up* already did: a `~ … status:` / `outcome:`, a quest's `!`, and the Quest check on its step. A failure earns no quest XP. *quit* is a whole word, so "turned in, quite a haul" is still a quest done.
+- **Your own message is heard.** When your latest message, or the reply's narration, gives up an open quest in a sentence that names it or its giver ("I give up on the Sheep-killer bounty", "Tell Garrow I quit"), the note's Quest check asks the story to close it with `- Key — abandoned` if it does. A negation ("I won't give up") does not count; only a hint, so the story still closes it. Only while the model writes change lines.
+
 ## 0.9.5
 
 The story closes quests, not a click.

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseChanges } from '../src/changes.js';
-import { activeRecords, applyOps, emptyTracker, findRecord, keyWords, markSeen, nearMatches, questsDoneIn, replay, untrackedCorrections } from '../src/tracker.js';
+import { activeRecords, applyOps, emptyTracker, findRecord, givenUpIn, keyWords, markSeen, nearMatches, questsDoneIn, replay, untrackedCorrections } from '../src/tracker.js';
 
 function ops(text) {
     const parsed = parseChanges(text);
@@ -602,4 +602,25 @@ test('progress on a plain thread or a beat is not a quest; progress on an offere
     const untracked = applyOps(start, ops('~ Kettle Jack bounty — giver: Warden Hale | reward: 40 crowns'), { message: 2 }).tracker;
     assert.equal(findRecord(untracked, 'Kettle Jack bounty').kind, 'quest');
     assert.equal(findRecord(applyOps(start, ops('~ Odd lights — now: over the marsh'), { message: 2 }).tracker, 'Odd lights').kind, 'hook');
+});
+
+test('giving up: forfeit, quit and walked away close a quest as a failure; "quite" does not (0.9.6)', () => {
+    const start = applyOps(emptyTracker(), ops('+ quest Sheep-killer — kill the wolf | giver: Garrow | reward: 2 silver'), { message: 1 }).tracker;
+    for (const line of ['~ Sheep-killer — outcome: forfeit', '~ Sheep-killer — status: quit', '! Sheep-killer — Ren walked away from the hunt', '- Sheep-killer — called off after the flood']) {
+        const tracker = applyOps(start, ops(line), { message: 2 }).tracker;
+        assert.equal(findRecord(tracker, 'Sheep-killer').status, 'resolved', line);
+        assert.deepEqual(questsDoneIn(tracker, 2), [], `${line}: a failure, no quest XP`);
+    }
+    const done = applyOps(start, ops('- Sheep-killer — turned in, quite a haul'), { message: 2 }).tracker;
+    assert.equal(questsDoneIn(done, 2).length, 1, '"quite" is not "quit"');
+});
+
+test('givenUpIn: the open quests a message says are given up, by key or giver; negations do not count (0.9.6)', () => {
+    const tracker = applyOps(emptyTracker(), ops('+ quest Sheep-killer — kill the wolf | giver: Garrow | reward: 2 silver\n+ quest Herb run — moonleaf | giver: Mother Ysolde | reward: 5 copper'), { message: 1 }).tracker;
+    assert.deepEqual(givenUpIn(tracker, 'I give up on the Sheep-killer bounty. It is not worth my neck.'), ['Sheep-killer']);
+    assert.deepEqual(givenUpIn(tracker, 'Tell Garrow I quit.'), ['Sheep-killer'], 'by the giver');
+    assert.deepEqual(givenUpIn(tracker, "I won't give up on the Sheep-killer."), [], 'a negation');
+    assert.deepEqual(givenUpIn(tracker, 'I give up. The rain wins.'), [], 'no quest named');
+    assert.deepEqual(givenUpIn(tracker, 'We pick moonleaf for the Herb run. Ren gives up on sleep.'), [], 'the quest and the giving up in different sentences');
+    assert.deepEqual(givenUpIn(tracker, 'I walk away from the Herb run and Mother Ysolde.'), ['Herb run']);
 });

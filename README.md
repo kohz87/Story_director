@@ -1,4 +1,4 @@
-# Story Director v0.9.5
+# Story Director v0.9.6
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -139,6 +139,13 @@ Battle offers quest XP by difficulty when a quest is finished.
   `now` reads as over (*wolf slain, reward collected*, *delivered*, *failed*) but no line closed
   it, the note adds a **Quest check**: "the story may have finished Sheep-killer. If it has,
   close it with - Key — outcome; if not, leave it." Only while the model writes change lines.
+- **Giving up** (since 0.9.6): a failure, never quest XP, however it is written: `failed`,
+  `abandoned`, `gave up`, `forfeit`, `quit`, `walked away`, `backed out`, `called off`… When
+  **your own message** (or the reply's narration) gives up an open quest in so many words, in a
+  sentence naming the quest or its giver ("I give up on the Sheep-killer bounty", "Tell Garrow I
+  quit"), the Quest check asks the story to close it: "Ren may be giving up Sheep-killer. If
+  they do, close it with - Key — abandoned; if not, leave it." A negation ("I won't give up")
+  does not count, and nothing is closed by the message itself.
 - **Abandon** under each open quest in the Quests tab is the one closing that is yours to make
   (it asks twice): your character gives the job up. `- Key — abandoned` goes into the latest
   reply, so deleting or swiping that reply takes it back; it counts as a failure, so RPG Battle

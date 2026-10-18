@@ -31,7 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { activeRecords, emptyTracker, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
+import { activeRecords, emptyTracker, givenUpIn, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.5';
+const VERSION = '0.9.6';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -411,7 +411,12 @@ function noteOptions(ctx, tracker, upTo) {
     if (asks) fixes.push(...latestReplyCorrections(upTo));
     // (0.9.3) While the scene block's Off-Screen carries the agendas, the note does not repeat them.
     const offscreenInBlock = Boolean(settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx)) && storyBlock()?.getBlock?.(settings(ctx).sceneTag)?.text);
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, ...instructionless };
+    // (0.9.6) The reader's latest message and the reply before it, read for a job given up.
+    const chat = ctx?.chat ?? [];
+    const lastUser = [...chat].reverse().find(message => message?.is_user);
+    const lastReply = [...chat].reverse().find(isAssistant);
+    const givenUp = asks ? givenUpIn(tracker, `${visibleText(lastReply)}\n${visibleText(lastUser)}`) : [];
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, ...instructionless };
 }
 
 /**
