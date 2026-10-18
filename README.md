@@ -1,4 +1,4 @@
-# Story Director v0.9.1
+# Story Director v0.9.2
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -114,12 +114,13 @@ nightmare), and anything else as normal. The note mentions it next to the type w
 normal (`Bounty on Kettle Jack (bounty, hard) — …`). Other extensions can scale by it: RPG
 Battle offers quest XP by difficulty when a quest is finished.
 
-- A quest starts only when your character **accepts** it; an offer not yet taken is a hook.
-  When you take on a hook that is already tracked (register for the bounty, agree to the job),
-  `~ Sheep-killer — giver: Hobb | reward: 4 silver` makes it the quest (since 0.8.6): a `~` that
-  gives a hook, event or beat a quest's own part (`giver`, `goal`, `reward`, `step`,
-  `difficulty`, or a quest category such as `type: bounty`) turns it into one, keeping its key,
-  description and history.
+- A quest starts only when your character **accepts** it, and only for a job that outlasts the
+  scene, not an errand; an offer not yet taken is a hook. When you take on a hook that is
+  already tracked (register for the bounty, agree to the job), `~ Sheep-killer — giver: Hobb |
+  reward: 4 silver` makes it the quest (since 0.8.6), keeping its key, description and history:
+  a `~` that gives a hook a `giver` or a `reward`, or names a hook or event a quest (`type:
+  quest`, or a category such as `type: bounty`). A `step`, `goal` or `difficulty` alone does not
+  (since 0.9.2; models write `step:` for any progress), and arc beats never become quests.
   The arc planner offers work as hooks and never completes a quest for you.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too

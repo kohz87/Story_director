@@ -16,7 +16,7 @@ export const CHANGE_INSTRUCTION = [
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (only once {{user}} accepts it; a hook they take on: ~ it with these; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a hook they take on: ~ it with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 

@@ -138,15 +138,17 @@ function untrackedRecordOp(op, id) {
     return { ...op, id, kind: named || UNTRACKED_KIND, fields };
 }
 
-// A hook, event or beat that a `~` gives a quest's own parts (who gave it, what it asks or pays,
-// its step or difficulty, or a quest category as its type) is work {{user}} took on (0.8.6).
-const BECOMES_QUEST = new Set(['hook', 'event', 'beat']);
-const QUEST_OWN_FIELDS = ['giver', 'goal', 'reward', 'step', 'difficulty'];
+// Work {{user}} took on (0.8.6): a hook that a `~` gives who it is for or what it pays (a giver
+// or a reward), or a hook or event that a `~` names a quest (`type: quest`, or a category such
+// as bounty). Since 0.9.2 a step, goal or difficulty alone no longer does: models write `step:`
+// for any progress ("asked around at the inn"), and beats are the world's, never a quest.
+const BECOMES_QUEST = new Set(['hook', 'event']);
+const QUEST_OWN_FIELDS = ['giver', 'reward'];
 
 function takesOnQuest(record, op) {
     if (!BECOMES_QUEST.has(record.kind)) return false;
     const fields = op.fields ?? {};
-    if (QUEST_OWN_FIELDS.some(name => String(fields[name] ?? '').trim())) return true;
+    if (record.kind === 'hook' && QUEST_OWN_FIELDS.some(name => String(fields[name] ?? '').trim())) return true;
     const type = lineKey(fields.type ?? '');
     return type === 'quest' || Object.hasOwn(QUEST_TYPE_WORDS, type);
 }

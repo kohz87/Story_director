@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.2
+
+- **Not every task is a quest.** Since 0.8.6 a `~` that gave a hook, event or beat a `step`, `goal` or `difficulty` turned it into a quest, and models write `step:` for any progress ("asked around at the inn"), so open threads and even arc beats filled the Quests tab. Now only a hook given a `giver` or a `reward`, or a hook or event named a quest (`type: quest` or a category such as bounty), becomes one; beats never do. The tracker is replayed from the replies, so threads turned into quests this way are threads again.
+- **Jobs, not errands:** the change instruction says a quest is "a job {{user}} accepted, not an errand", and that a hook taken on gets its giver and reward (the instruction stays about 160 tokens); the capture prompt says the same.
+
 ## 0.9.1
 
 Quests that never finished. A quest closed only on a `- Key — reason` line, and nothing told the model that this is how a quest ends, so models wrote `~ Sheep-killer — step: done` or `! Sheep-killer — the wolf is slain, reward paid`, and the quest stayed open (and RPG Battle never offered its XP).

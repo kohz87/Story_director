@@ -572,3 +572,14 @@ test('a quest closed without a - line: step done, status completed, a ! that say
     const agenda = applyOps(emptyTracker(), ops('+ agenda Geva — plots | now: waiting'), { message: 1 }).tracker;
     assert.equal(findRecord(applyOps(agenda, ops('~ Geva — now: done.'), { message: 2 }).tracker, 'Geva').status, 'active');
 });
+
+test('progress on a hook or a beat is not a quest: only a giver, a reward or a quest type makes one (0.9.2)', () => {
+    const start = applyOps(emptyTracker(), ops('+ hook River stranger — who pulled Ren out\n+ beat Toll riders — reach the ford | on: Goldwane 19\n+ event Market day — stalls on the green'), { message: 1 }).tracker;
+    const after = line => applyOps(start, ops(line), { message: 2 }).tracker;
+    assert.equal(findRecord(after('~ River stranger — step: asked around at the inn'), 'River stranger').kind, 'hook');
+    assert.equal(findRecord(after('~ River stranger — goal: find her | difficulty: hard'), 'River stranger').kind, 'hook');
+    assert.equal(findRecord(after('~ Toll riders — giver: the Reeve | reward: 5 silver'), 'Toll riders').kind, 'beat', 'beats are the world\'s');
+    assert.equal(findRecord(after('~ Market day — reward: a free pie'), 'Market day').kind, 'event');
+    assert.equal(findRecord(after('~ River stranger — giver: Lyra | reward: a favour owed'), 'River stranger').kind, 'quest');
+    assert.equal(findRecord(after('~ Market day — type: bounty'), 'Market day').kind, 'quest');
+});
