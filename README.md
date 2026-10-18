@@ -1,4 +1,4 @@
-# Story Director v0.9.3
+# Story Director v0.9.4
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -119,10 +119,14 @@ Battle offers quest XP by difficulty when a quest is finished.
 - A quest starts only when your character **accepts** it, and only for a job that outlasts the
   scene, not an errand; an offer not yet taken is a hook. When you take on a hook that is
   already tracked (register for the bounty, agree to the job), `~ Sheep-killer — giver: Hobb |
-  reward: 4 silver` makes it the quest (since 0.8.6), keeping its key, description and history:
-  a `~` that gives a hook a `giver` or a `reward`, or names a hook or event a quest (`type:
-  quest`, or a category such as `type: bounty`). A `step`, `goal` or `difficulty` alone does not
-  (since 0.9.2; models write `step:` for any progress), and arc beats never become quests.
+  reward: 4 silver` makes it the quest (since 0.8.6), keeping its key, description and history.
+  A hook or event becomes a quest when a `~` names it one (`type: quest`, or a category such as
+  `type: bounty`), or when it is a **job** (it has, or the `~` gives it, a `giver`, a `reward` or
+  a quest category) and the `~` moves it on (`giver`, `reward`, `goal`, `step` or `difficulty`).
+  So `~ Wolf pelts — step: tracking the pack` on a bounty the arc planner offered with its reward
+  makes it a quest, while a `step` on a plain thread does not (models write `step:` for any
+  progress). Arc beats never become quests, and an untracked key written with a giver or reward
+  is added as a quest.
   The arc planner offers work as hooks and never completes a quest for you.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too

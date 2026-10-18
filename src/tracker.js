@@ -135,22 +135,33 @@ function untrackedRecordOp(op, id) {
     const fields = { ...op.fields };
     // The type was the kind; only a quest's own category (bounty, contract…) stays its type.
     if (named && (named !== 'quest' || word === 'quest' || word === 'quests')) delete fields.type;
-    return { ...op, id, kind: named || UNTRACKED_KIND, fields };
+    // A job by its parts (0.9.4): who it is for or what it pays.
+    const job = !named && ['giver', 'reward'].some(name => String(fields[name] ?? '').trim());
+    return { ...op, id, kind: named || (job ? 'quest' : UNTRACKED_KIND), fields };
 }
 
-// Work {{user}} took on (0.8.6): a hook that a `~` gives who it is for or what it pays (a giver
-// or a reward), or a hook or event that a `~` names a quest (`type: quest`, or a category such
-// as bounty). Since 0.9.2 a step, goal or difficulty alone no longer does: models write `step:`
-// for any progress ("asked around at the inn"), and beats are the world's, never a quest.
+// Work {{user}} took on (0.8.6): a hook or event that a `~` names a quest (`type: quest`, or a
+// category such as bounty), or that is a job — it has, or the `~` gives it, a giver, a reward or
+// a quest category — and the `~` moves it on (a giver, reward, goal, step or difficulty). So
+// `~ Wolf pelts — step: tracking the pack` on a hook the planner offered with its reward makes
+// the bounty a quest (0.9.4), while a step on a plain thread ("River stranger") does not
+// (0.9.2: models write `step:` for any progress). Beats are the world's, never a quest.
 const BECOMES_QUEST = new Set(['hook', 'event']);
-const QUEST_OWN_FIELDS = ['giver', 'reward'];
+const JOB_FIELDS = ['giver', 'reward'];
+const MOVES_ON = ['giver', 'reward', 'goal', 'step', 'difficulty'];
+
+const isQuestType = value => {
+    const type = lineKey(value ?? '');
+    return type === 'quest' || Object.hasOwn(QUEST_TYPE_WORDS, type);
+};
 
 function takesOnQuest(record, op) {
     if (!BECOMES_QUEST.has(record.kind)) return false;
     const fields = op.fields ?? {};
-    if (record.kind === 'hook' && QUEST_OWN_FIELDS.some(name => String(fields[name] ?? '').trim())) return true;
-    const type = lineKey(fields.type ?? '');
-    return type === 'quest' || Object.hasOwn(QUEST_TYPE_WORDS, type);
+    if (isQuestType(fields.type)) return true;
+    const given = name => String(fields[name] ?? '').trim();
+    const job = JOB_FIELDS.some(name => given(name) || String(record.fields?.[name] ?? '').trim()) || isQuestType(record.fields?.type);
+    return job && MOVES_ON.some(given);
 }
 
 function withArticle(word) {
