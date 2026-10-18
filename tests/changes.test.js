@@ -255,7 +255,7 @@ test('formatOp round-trips awkward hand-built ops', () => {
 
 test('a quest line: its own fields, kind inferred from them, and aliases', () => {
     const { ops } = parseChanges('+ quest Bounty on Kettle Jack — giver: Warden Hale | goal: bring him in alive | reward: 40 crowns | due: Haywane 30\n+ Herb run — goal: twelve moonleaf | step: two found\n+ bounty Wolf pelts — reward: 2 silver each');
-    assert.deepEqual(ops.map(op => op.kind), ['quest', 'quest', 'quest']);
+    assert.deepEqual(ops.map(op => op.kind), ['quest', 'hook', 'quest'], 'a goal and a step alone are an open thread (0.9.3)');
     assert.equal(ops[2].fields.type, 'bounty', 'the word written is its category');
     assert.equal(ops[0].fields.type, undefined);
     assert.deepEqual(ops[0].fields, { giver: 'Warden Hale', goal: 'bring him in alive', reward: '40 crowns', due: 'Haywane 30' });
@@ -305,7 +305,9 @@ test('difficulty is a quest field: stored as one of the four words, inferred, an
     assert.equal(formatOp(op), '+ quest Kettle Jack — giver: Warden Hale | reward: 40 crowns | difficulty: nightmare');
     assert.deepEqual(withoutRaw(only(formatOp(op))), withoutRaw(op));
 
-    assert.equal(only('+ Rat cellar — difficulty: trivial').kind, 'quest', 'the field alone makes a quest');
+    assert.equal(only('+ Rat cellar — difficulty: trivial').kind, 'hook', 'the field alone is no quest (0.9.3)');
+    assert.equal(only('+ Rat cellar — difficulty: trivial | giver: the innkeeper').kind, 'quest', 'a giver makes it one');
+    assert.equal(only('+ Rat cellar — type: bounty').kind, 'quest', 'so does a quest type');
     assert.equal(only('~ Kettle Jack — difficulty: medium').fields.difficulty, 'normal');
     assert.equal(only('~ Kettle Jack — difficulty: whatever the gods decide').fields.difficulty, 'normal', 'unknown reads normal');
     assert.equal(only('~ Kettle Jack — difficulty:').fields.difficulty, '', 'an empty one clears it');

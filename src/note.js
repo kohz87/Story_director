@@ -95,9 +95,13 @@ export function buildNote(selection, options = {}) {
 
 /**
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
- * before `text`, so joining them gives buildNote exactly. Labels: Header, Arc, Due now,
- * Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
- * Pacing, Encounter cue, Change instruction, NPC plans only.
+ * before `text`, so joining them gives buildNote exactly. Labels: Header, Due now, Arriving,
+ * Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
+ * Corrections, Pacing, Encounter cue, Change instruction, NPC plans only.
+ *
+ * `offscreenInBlock` (0.9.3): the scene block's Off-Screen section already carries every active
+ * agenda (Story Director mirrors it there and keeps the timeline), so the note leaves its
+ * Off-screen line out; an agenda due or arriving is still on Due now / Arriving.
  */
 export function noteParts(selection, {
     calendar,
@@ -105,6 +109,7 @@ export function noteParts(selection, {
     corrections = [],
     instruction = CHANGE_INSTRUCTION,
     npcPlansOnly = false,
+    offscreenInBlock = false,
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -112,7 +117,7 @@ export function noteParts(selection, {
     if (npcPlansOnly && instruction) asks.push(part('NPC plans only', NPC_PLANS_ONLY));
     const due = selection?.due ?? [];
     const arriving = selection?.arriving ?? [];
-    const relevant = selection?.relevant ?? [];
+    const relevant = (selection?.relevant ?? []).filter(entry => !(offscreenInBlock && entry?.record?.kind === 'agenda'));
     const secrets = selection?.secrets ?? [];
     const fixes = (corrections ?? []).map(item => typeof item === 'string' ? item : item?.message ?? '').filter(Boolean);
 
@@ -164,14 +169,12 @@ function joinParts(parts) {
 
 function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks }) {
     const parts = [part('Header', header(selection, calendar))];
-    // The arc steers: its name and what it is about, so every reply leans the same way.
-    const arc = selection?.arc;
-    const arcDesc = fieldOf(arc, 'desc');
-    if (arc) parts.push(part('Arc', `Arc: ${arc.key}${arcDesc ? ` — ${arcDesc}` : ''}`));
     addLine(parts, 'Due now', due.map(record => withFight(dueItem(record), record)));
     addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
-        addLine(parts, label, relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record)));
+        const items = relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record));
+        if (kind === 'beat') addBeats(parts, selection?.arc, items);
+        else addLine(parts, label, items);
     }
     // Secrets appear by key only, so the note never states them as facts.
     addLine(parts, 'Do not reveal', secrets.map(record => record.key), '; ');
@@ -216,6 +219,21 @@ function withFight(item, record) {
 function fightPart(record) {
     const foes = encounterOf(record);
     return foes ? `${ITEM_SEPARATOR}fight: ${foes}` : '';
+}
+
+// The arc is carried by its beats (0.9.3): its name and what it is about head the Beats line,
+// "Beats — The Weir Debt (who sold the route): Toll riders reach the ford (Goldwane 19)", so
+// the note has no separate arc line to weigh against them. With every beat due (on Due now)
+// or none left, the line is the arc alone.
+function addBeats(parts, arc, items) {
+    const present = items.filter(Boolean);
+    if (!arc) {
+        addLine(parts, 'Beats', present);
+        return;
+    }
+    const desc = notePart(fieldOf(arc, 'desc'), 'desc');
+    const head = `Beats — ${arc.key}${desc ? ` (${desc})` : ''}`;
+    parts.push(part('Beats', present.length ? `${head}: ${present.join(ITEM_SEPARATOR)}` : head));
 }
 
 function addLine(parts, label, items, separator = ITEM_SEPARATOR) {
