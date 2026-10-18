@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.6
+
+- **A hook you take on becomes the quest.** A job offered and tracked as a hook (*Sheep-killer*) stayed a hook after you took it, so it never reached the Quests tab and RPG Battle never offered quest XP for finishing it: the format had no way to say "this is now a quest", and a `~` adding its reward only added a part. Now a `~` that gives a hook, event or beat a quest's own part (`giver`, `goal`, `reward`, `step`, `difficulty`, or a quest category such as `type: bounty`; `type: quest` alone too) turns it into a quest, keeping its key, description and history; the Director tab notes it. Agendas, clocks, secrets and arcs are never turned.
+- **The model is told.** The change instruction's quest fields say *a hook they take on: ~ it with these* (about 10 tokens; the instruction is now about 150), and the capture prompt says the same.
+
 ## 0.8.5
 
 - **Placeholders are not text.** A model sometimes copies the format's own word as the text: `- Sheep-killer — part` resolved the record with the reason "part". A part that is only `part`, `summary`, `reason`, `what happened` or `label: value` is now ignored, so the record resolves with no reason (or a new one gets no description).

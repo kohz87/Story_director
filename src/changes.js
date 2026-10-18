@@ -30,7 +30,7 @@ export const KIND_ALIASES = Object.freeze({
 });
 
 // `+ bounty Wolf pelts — …` is a quest of type bounty: the word written is its category.
-const QUEST_TYPE_WORDS = Object.freeze({
+export const QUEST_TYPE_WORDS = Object.freeze({
     bounty: 'bounty', bounties: 'bounty', contract: 'contract', contracts: 'contract',
     mission: 'mission', favour: 'favour', favor: 'favour',
 });

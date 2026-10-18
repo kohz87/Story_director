@@ -31,7 +31,7 @@ Fields: now, then, on, due, leg, arrive, shown, place, people, encounter (the fo
 
 Rules:
 - Record only what this exchange established as true. Never plans, intentions, options, guesses or hypotheticals.
-- A quest starts only when {{user}} accepts it in this exchange; an offer not yet taken is a hook. Move its step: as it progresses, - it when done or failed.
+- A quest starts only when {{user}} accepts it in this exchange; an offer not yet taken is a hook. A tracked hook {{user}} takes on becomes the quest: ~ its key with the quest's parts (giver, goal, reward, difficulty). Move its step: as it progresses, - it when done or failed.
 - What someone claims in dialogue is their claim ("the guard says the gate is shut"), not a fact. A rumour stays a rumour.
 - Use the exact keys above for ~, - and !. A new key only for something new.
 - Off-screen people get a line only when they have a stake in {{user}} or an open hook.

@@ -519,3 +519,25 @@ test('corrections come only from the latest reply', () => {
     assert.deepEqual(untrackedCorrections(problems, { message: 5 }), []);
     assert.equal(untrackedCorrections(problems).length, 2);
 });
+
+test('a hook taken on becomes a quest: ~ with its own parts (0.8.6)', () => {
+    const start = applyOps(emptyTracker(), parseChanges('+ hook Sheep-killer — Beast taking sheep by the drainage ditch\n+ event Market day — stalls on the green\n+ agenda Marrit — now: unloading').ops, { message: 1, time: 0 }).tracker;
+    const taken = applyOps(start, parseChanges('~ Sheep-killer — giver: Hobb | reward: 4 silver | difficulty: easy | type: bounty').ops, { message: 3, time: 0 });
+    const quest = findRecord(taken.tracker, 'Sheep-killer');
+    assert.equal(quest.kind, 'quest');
+    assert.equal(quest.fields.type, 'bounty');
+    assert.equal(quest.fields.giver, 'Hobb');
+    assert.equal(quest.fields.desc, 'Beast taking sheep by the drainage ditch', 'what it was is kept');
+    assert.ok(taken.problems.some(problem => problem.kind === 'became-quest'));
+    // Done in a later reply, it counts as a finished quest (RPG Battle's quest XP).
+    const done = applyOps(taken.tracker, parseChanges('- Hook Sheep-killer — slain at the ditch').ops, { message: 5, time: 0 });
+    assert.deepEqual(questsDoneIn(done.tracker, 5).map(entry => [entry.name, entry.difficulty, entry.reward]), [['Sheep-killer', 'easy', '4 silver']]);
+    // `type: quest` alone makes one, and says nothing more.
+    const typed = applyOps(start, parseChanges('~ Market day — type: quest').ops, { message: 3, time: 0 }).tracker;
+    assert.equal(findRecord(typed, 'Market day').kind, 'quest');
+    assert.equal(findRecord(typed, 'Market day').fields.type ?? '', '');
+    // Plain changes, or someone off-screen, stay what they were.
+    const plain = applyOps(start, parseChanges('~ Sheep-killer — shown: tracks by the pen\n~ Marrit — reward: a cut of the cargo').ops, { message: 3, time: 0 }).tracker;
+    assert.equal(findRecord(plain, 'Sheep-killer').kind, 'hook');
+    assert.equal(findRecord(plain, 'Marrit').kind, 'agenda');
+});
