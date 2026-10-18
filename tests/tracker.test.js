@@ -639,3 +639,17 @@ test('closing a closed quest again changes nothing: it stays finished in the rep
     const reopened = applyOps(tracker, ops('+ quest Wolves at the weir — a second pack | giver: Kael | reward: 4 silver'), { message: 5 }).tracker;
     assert.equal(questsDoneIn(applyOps(reopened, ops('- Wolves at the weir — done'), { message: 7 }).tracker, 7).length, 1);
 });
+
+test('"+ quest Key" on a hook or event already tracked makes it the quest (0.9.9)', () => {
+    const start = applyOps(emptyTracker(), ops('+ hook Sheepfold Wolves — wolves at the east fold | reward: 2 silver per ear\n+ beat Toll riders — reach the ford | on: Goldwane 19\n+ agenda Geva — now: Bailiff Court'), { message: 1 }).tracker;
+    const { tracker, problems } = applyOps(start, ops('+ quest Sheepfold Wolves — Cull up to 4 timber wolves | type: contract, giver: Nelke/Herders, goal: return right wolf ears, reward: 2 silver per head, due: Goldwane 12'), { message: 2 });
+    const quest = findRecord(tracker, 'Sheepfold Wolves');
+    assert.equal(quest.kind, 'quest');
+    assert.equal(quest.fields.type, 'contract');
+    assert.equal(quest.fields.giver, 'Nelke/Herders');
+    assert.equal(problems[0].kind, 'became-quest');
+    // Beats and agendas stay what they are; a + of the same kind is a change, as before.
+    assert.equal(findRecord(applyOps(start, ops('+ quest Toll riders — escort them'), { message: 2 }).tracker, 'Toll riders').kind, 'beat');
+    assert.equal(findRecord(applyOps(start, ops('+ quest Geva — follow her'), { message: 2 }).tracker, 'Geva').kind, 'agenda');
+    assert.equal(applyOps(start, ops('+ hook Sheepfold Wolves — again'), { message: 2 }).problems[0].kind, 'duplicate-add');
+});

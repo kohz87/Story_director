@@ -301,8 +301,15 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
             }
             const record = edit(index);
             if (record.status === 'active') {
-                problems.push(finding('duplicate-add', 'info', op,
-                    `"${op.key}" is already tracked; the + was applied as a change.`));
+                // (0.9.9) "+ quest Key" on a hook or event already tracked (one the planner
+                // offered) is the job taken on: it becomes the quest, as a ~ with its parts does.
+                if (op.kind === 'quest' && BECOMES_QUEST.has(record.kind)) {
+                    problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
+                    record.kind = 'quest';
+                } else {
+                    problems.push(finding('duplicate-add', 'info', op,
+                        `"${op.key}" is already tracked; the + was applied as a change.`));
+                }
                 applyFields(record, op);
             } else {
                 problems.push(finding('reopened', 'info', op,

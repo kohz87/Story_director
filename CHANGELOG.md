@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.9
+
+- **`+ quest` on an offered hook makes it the quest.** A job the arc planner (or an earlier reply) offered as a hook (`+ hook Sheepfold Wolves — … | reward: 2 silver per ear`) and then taken on with `+ quest Sheepfold Wolves — … | giver: … | goal: …` only had the new fields applied ("already tracked; the + was applied as a change"): it stayed a hook and never reached the Quests tab. A `+ quest` on an active hook or event now turns it into the quest (the Director tab notes it), keeping its key, description and history; beats and agendas stay what they are. The tracker is replayed from the replies, so such quests appear on their own.
+
 ## 0.9.8
 
 - **Fields written with commas.** A model wrote `+ quest Sheepfold Wolves — Cull up to 4 timber wolves | type: contract, giver: Nelke/Herders, goal: return right wolf ears, reward: 2 silver per head, due: Goldwane 12`, and everything after `type:` became the type: the quest had no giver, goal, reward or deadline, and the Quests tab put it under a heading made of that whole string. Fields run together with commas or semicolons are now split as if written with `|`, only before a field the format knows (so `giver: Nelke, the clerk` keeps its comma). The tracker is replayed from the replies, so such quests are read correctly on their own.
