@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.13
+
+- **Taking a job on no longer finishes it.** A model wrote `+ quest Sheepfold Wolves — …` and then `- Hook Sheepfold Wolves — accepted by Wessel` to say the hook had become the quest. The `-` was read as closing the quest, so it showed as finished the moment it was accepted and RPG Battle gave its quest XP. A `-` whose reason says the job was taken on (*accepted*, *taken on*, *took up*, *signed up*, *agreed to*, *became a quest*) now makes a hook or event the quest, and on a quest it changes nothing. One that also speaks of pay or an ending (*reward accepted*, *8 silver paid*, *declined*, *finished*) still closes it. Chats already affected are fixed on the next refresh, because the tracker is rebuilt from the replies.
+
 ## 0.9.12
 
 - **Quest deadlines at a clock time.** A deadline written as `Goldwane 12 sunset` or `Goldwane 30` is now shown at the time the calendar gives it: *Goldwane 12, 07:00 pm*, or for a date alone the end of its day, *Goldwane 30, 11:59 pm*. This applies in the Quests tab and in the Director's note, so the story sees the exact time too. A deadline already at a clock time, and words around the date, are kept as written; the record itself is unchanged. The change-line instruction now asks for dates with a clock time (4 tokens more).

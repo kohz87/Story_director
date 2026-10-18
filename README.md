@@ -1,4 +1,4 @@
-# Story Director v0.9.12
+# Story Director v0.9.13
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -142,7 +142,10 @@ Battle offers quest XP by difficulty when a quest is finished.
   makes it a quest, while a `step` on a plain thread does not (models write `step:` for any
   progress). Arc beats never become quests, and an untracked key written with a giver or reward
   is added as a quest. `+ quest Key` on a hook or event already tracked makes it the quest too
-  (since 0.9.9), keeping its key and history.
+  (since 0.9.9), keeping its key and history. A `-` that says the job was taken on (`- Hook
+  Sheepfold Wolves — accepted by Wessel`, *taken on*, *signed up*, *became a quest*) does not end
+  it (since 0.9.13): it makes a hook or event the quest, and on a quest it changes nothing. One
+  that also speaks of pay or an ending (*reward accepted*, *declined*) still closes it.
   The arc planner offers work as hooks and never completes a quest for you.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too

@@ -18,6 +18,11 @@ const OVER_LABELS = ['status', 'state', 'outcome', 'result', 'progress'];
 const QUEST_OVER_FIELDS = ['step', 'now'];
 // A `!` on a quest that says it was finished or failed ("! Sheep-killer — wolves slain, reward paid").
 const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|handed in|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out)/i;
+// (0.9.13) A `-` that says the job was taken on, not ended: "- Hook Sheepfold Wolves — accepted
+// by Wessel" beside the `+ quest` it became. Not when it also speaks of pay or an ending.
+const TAKEN_ON = /\b(?:accept(?:s|ed)?|tak(?:es|en|ing) (?:on|up)|took (?:on|up)|signed (?:on|up|for)|agreed to|became (?:a |the )?(?:quest|bounty|contract|job)|(?:now|turned into|converted (?:in)?to|promoted to|upgraded to) (?:a |the )?(?:quest|bounty|contract|job))\b/i;
+const NOT_TAKEN_ON = /\b(?:reward|paid|pay(?:ment)?|coin|silver|gold|copper|fee)\b/i;
+const takenOn = reason => TAKEN_ON.test(reason) && !NOT_TAKEN_ON.test(reason) && !QUEST_OVER_TEXT.test(reason) && !FAILED.test(reason) && !LOOKS_OVER.test(reason);
 
 // (0.9.5) A quest still open whose own progress reads as over ("step: wolf slain, reward
 // collected"): finished or failed words in its step or now. Not its goal or description, which
@@ -356,6 +361,18 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
         }
 
         const record = edit(target);
+        // (0.9.13) A job taken on is not over: the `-` turns a hook or event into the quest, and
+        // on a quest (most often the `+ quest` just above it) it changes nothing.
+        if (op.op === '-' && record.status === 'active' && takenOn(String(op.reason ?? ''))) {
+            if (BECOMES_QUEST.has(record.kind)) {
+                problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
+                record.kind = 'quest';
+                touch(record, op, at);
+            } else {
+                problems.push(finding('taken-on', 'info', op, `"${record.key}" was taken on, not ended; it stays open.`));
+            }
+            continue;
+        }
         // (0.9.1) A change that says the record is over closes it, as its `-` would have.
         // (0.9.7) Closing what is already closed changes nothing: the record keeps the reply that
         // first closed it, so a model repeating "- Quest — done" later never finishes it twice
