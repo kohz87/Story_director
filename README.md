@@ -13,6 +13,14 @@ distances and paces, with corrections in the next note and a `/route` planner. A
 story arc it **plans** the next arc with a model you choose, the way Megumin Suite's Story
 Director does, but the plan becomes dated, tracked beats instead of a block of prose.
 
+## Screenshots
+
+From a demo session with [Story Block](https://github.com/kohz87/Story_block), [NPC State Delta](https://github.com/kohz87/npc_state_delta) and [RPG Battle](https://github.com/kohz87/rpg_battle).
+
+| Director tab, behind the scenes revealed | Quests tab |
+| --- | --- |
+| <img src="docs/images/director-tab.png" alt="The Director tab: the place, off-screen agendas for Captain Kael and Mira with now, then and on, and a hook for the wolves' den" width="300"> | <img src="docs/images/quests-tab.png" alt="The Quests tab: the bounty Wolves at the weir, normal difficulty, with its goal, giver and reward" width="300"> |
+
 ## Why
 
 Models are good at judgment and prose, and bad at arithmetic, lookups, comparing two lists and
