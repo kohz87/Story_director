@@ -87,6 +87,11 @@ const MIN_CONTAINED_WORDS = 2;
 const MIN_WORD_OVERLAP = 0.75;
 // A `~` on a key that is not tracked, with something to say, becomes a record of this kind.
 const UNTRACKED_KIND = 'hook';
+// (0.9.14) Keys that only label a line, a block or a kind ("! Encounter — the wolves attack",
+// "~ Quest — …"): they name no record, so a line under one is skipped quietly instead of being
+// a warning, and the next note never asks the model to add them.
+const LABEL_KEYS = new Set(['encounter', 'encounters', 'fight', 'combat', 'battle', 'scene', 'director', 'world state', 'note', 'notes', 'summary', 'status', 'update', 'updates', 'change', 'changes', 'event', 'events', 'record', 'records']);
+const isLabelKey = id => LABEL_KEYS.has(id) || Boolean(kindOf(id));
 // What the next note may say about ignored lines: at most this many, from the latest reply.
 const MAX_UNTRACKED_CORRECTIONS = 3;
 
@@ -333,6 +338,10 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
         }
 
         let target = index;
+        if (target === undefined && isLabelKey(id)) {
+            problems.push(finding('label-key', 'info', op, `"${op.key}" is a label, not a record; the ${op.op} line was skipped.`));
+            continue;
+        }
         if (target === undefined) {
             // A key that is not tracked: the one record it plainly means, else (for a `~` with
             // something to say) a new record, else the line is ignored and the next note says so.

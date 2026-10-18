@@ -1,4 +1,4 @@
-# Story Director v0.9.13
+# Story Director v0.9.14
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -85,6 +85,9 @@ none, a `~` that carries something becomes a new hook (a `type:` that names a ki
 `type: clock`, sets that kind instead), a `-` does nothing, and any other line is ignored: a
 warning in the Director tab, and one line in the next note's `Corrections:` (`"Key" is not
 tracked: add it with "+ kind Key — …" before changing it.`), only for the latest reply.
+A key that only labels the line (*Encounter*, *Fight*, *Combat*, *Battle*, *Scene*, *Status*,
+*Update*, or a kind word such as *Quest* or *Hook*) names no record unless one is really called
+that: its line is skipped quietly (since 0.9.14), with no warning and nothing in `Corrections:`.
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
