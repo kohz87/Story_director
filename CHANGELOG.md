@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.14
+
+- **"! Encounter — …" is not a missing record.** A model wrote a Director line under the word *Encounter*. It showed as a warning ("Encounter" is not tracked), and the next note told the model to add it with `+ kind Encounter — …`, which invites a fake record. A key that only labels the line (*Encounter*, *Fight*, *Combat*, *Battle*, *Scene*, *Director*, *Status*, *Update*, *Changes*, or a kind word such as *Quest* or *Hook*) is now skipped quietly: no warning, and nothing in `Corrections:`. A record actually called that is still changed, and a `+` still adds one. Fights are RPG Battle's, from the `<Encounter>` block.
+
 ## 0.9.13
 
 - **Taking a job on no longer finishes it.** A model wrote `+ quest Sheepfold Wolves — …` and then `- Hook Sheepfold Wolves — accepted by Wessel` to say the hook had become the quest. The `-` was read as closing the quest, so it showed as finished the moment it was accepted and RPG Battle gave its quest XP. A `-` whose reason says the job was taken on (*accepted*, *taken on*, *took up*, *signed up*, *agreed to*, *became a quest*) now makes a hook or event the quest, and on a quest it changes nothing. One that also speaks of pay or an ending (*reward accepted*, *8 silver paid*, *declined*, *finished*) still closes it. Chats already affected are fixed on the next refresh, because the tracker is rebuilt from the replies.

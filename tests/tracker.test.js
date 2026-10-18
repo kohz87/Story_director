@@ -674,3 +674,15 @@ test('a "- … accepted" line takes a job on, it does not finish it (0.9.13)', (
         assert.equal(findRecord(applyOps(quested, ops(`- Sheepfold Wolves — ${reason}`), { message: 3 }).tracker, 'Sheepfold Wolves').status, 'resolved', reason);
     }
 });
+
+test('a line keyed by a label ("! Encounter — …") is skipped quietly and never asked to be added (0.9.14)', () => {
+    const start = applyOps(emptyTracker(), ops('+ hook Sheepfold Wolves — wolves at the east fold'), { message: 1 }).tracker;
+    const { tracker, problems } = applyOps(start, ops('! Encounter — 4 timber wolves attack at the fold\n~ Combat — wolves engaged\n~ Quest — step: fight\n- Scene — over'), { message: 2 });
+    assert.equal(tracker.records.length, 1, 'nothing added');
+    assert.deepEqual(problems.map(problem => [problem.kind, problem.severity]), [['label-key', 'info'], ['label-key', 'info'], ['label-key', 'info'], ['label-key', 'info']]);
+    assert.deepEqual(untrackedCorrections(problems, { message: 2 }), []);
+    // A record that is really called so is still changed.
+    const named = applyOps(emptyTracker(), ops('+ event Encounter — a stranger at the gate'), { message: 1 }).tracker;
+    assert.equal(findRecord(applyOps(named, ops('! Encounter — the stranger speaks'), { message: 2 }).tracker, 'Encounter').fields.now, '');
+    assert.equal(applyOps(named, ops('! Encounter — the stranger speaks'), { message: 2 }).problems.length, 0);
+});
