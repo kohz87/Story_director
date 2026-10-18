@@ -2,8 +2,8 @@
 //
 // Quests are promises the reader's character made, so unlike the Director tab nothing here
 // is behind the scenes: it is always shown in full. Active quests are grouped by their type
-// (main, side, bounty, contract…), each with its difficulty, goal, step, giver, reward and
-// deadline; a deadline that has passed or is close is marked. Finished quests fold away
+// (main, side, bounty, contract…), each with its goal, step, giver, reward and deadline, and
+// its difficulty when it is not normal; a deadline that has passed or is close is marked. Finished quests fold away
 // underneath. A quest closes when the story closes it; the reader's one decision here is to
 // Abandon one (0.9.5, asked twice): the glue writes `- Key — abandoned` into the latest reply
 // (a failure, so no quest XP), and deleting or swiping that reply takes it back.
@@ -14,8 +14,13 @@ import { questDifficulty } from '../changes.js';
 
 const TYPE_ORDER = ['main', 'side', 'bounty', 'contract', 'mission', 'favour'];
 const TYPE_LABELS = { main: 'Main', side: 'Side', bounty: 'Bounties', contract: 'Contracts', mission: 'Missions', favour: 'Favours' };
-const ROWS = ['goal', 'step', 'giver', 'reward', 'due', 'place'];
-const ROW_LABELS = { due: 'deadline' };
+// The quiet line under the goal and step, in this order.
+const META = {
+    giver: { label: 'giver', icon: 'fa-user' },
+    reward: { label: 'reward', icon: 'fa-coins' },
+    due: { label: 'deadline', icon: 'fa-hourglass-half' },
+    place: { label: 'place', icon: 'fa-location-dot' },
+};
 const FINISHED_SHOWN = 20;
 
 function el(tag, { className, text, attrs } = {}, children = []) {
@@ -87,46 +92,70 @@ function groups(quests) {
     });
 }
 
+// Normal says nothing a quest without the tag would not, so only the others are shown (0.9.11).
 function difficultyTag(record) {
     const difficulty = questDifficulty(record.fields?.difficulty);
+    if (difficulty === 'normal') return null;
     return el('span', { className: `story-director-tag is-difficulty is-${difficulty}`, text: difficulty, attrs: { title: 'difficulty' } });
 }
 
+// A quiet flag at the end of the key line; a click asks again, in words, before it writes.
 function abandonButton(record, onAbandon) {
     if (typeof onAbandon !== 'function') return null;
     const armed = abandonArmed === record.id;
-    return el('div', { className: 'story-director-quest-actions' }, [
-        button(armed ? 'Abandon? Click again' : 'Abandon', `story-director-quest-abandon${armed ? ' is-armed' : ''}`, {
-            iconName: 'fa-flag',
-            title: `Give up ${record.key}: your character stops pursuing it (no quest XP). Written into the latest reply.`,
-            onClick: () => {
-                if (!armed) {
-                    abandonArmed = record.id;
-                    if (lastArgs) renderQuests(...lastArgs);
-                    return;
-                }
-                abandonArmed = null;
-                onAbandon(record.id);
-            },
-        }),
+    return button(armed ? 'Abandon?' : '', `story-director-quest-abandon${armed ? ' is-armed' : ''}`, {
+        iconName: 'fa-flag',
+        title: armed
+            ? `Click again to give up ${record.key} (no quest XP).`
+            : `Abandon ${record.key}: your character stops pursuing it (no quest XP). Written into the latest reply.`,
+        onClick: () => {
+            if (!armed) {
+                abandonArmed = record.id;
+                if (lastArgs) renderQuests(...lastArgs);
+                return;
+            }
+            abandonArmed = null;
+            onAbandon(record.id);
+        },
+    });
+}
+
+function metaPart(field, value) {
+    return el('span', { className: `story-director-quest-meta-part is-${field}`, attrs: { title: META[field].label } }, [
+        icon(META[field].icon),
+        el('span', { text: value }),
     ]);
 }
 
+/*
+ * (0.9.11) A card reads top to bottom as what matters first: the goal (or the description
+ * when there is no goal), the next step, then who, what for, by when and where on one quiet
+ * line, and a longer description last, cut to two lines until it is clicked.
+ */
 function renderQuest(record, { formatDate, status, onAbandon }) {
     const state = status?.(record) ?? '';
     const item = el('li', { className: `story-director-record is-quest${state ? ` is-${state}` : ''}` });
     item.dataset.recordId = record.id;
     item.append(el('div', { className: 'story-director-record-head' }, [
         el('span', { className: 'story-director-record-key', text: record.key }),
-        // Every quest has one (normal unless the story said otherwise), so it is always shown.
         difficultyTag(record),
         state === 'overdue' ? el('span', { className: 'story-director-tag is-overdue', text: 'deadline passed' }) : null,
         state === 'soon' ? el('span', { className: 'story-director-tag is-soon', text: 'deadline soon' }) : null,
+        abandonButton(record, onAbandon),
     ]));
-    const facts = el('dl', { className: 'story-director-facts' });
+    const goal = text(record.fields?.goal);
     const desc = text(record.fields?.desc);
-    if (desc && desc !== text(record.fields?.goal)) facts.append(el('dd', { className: 'is-plain', text: desc }));
-    for (const field of ROWS) {
+    const lead = goal || desc;
+    if (lead) item.append(el('div', { className: 'story-director-quest-goal', text: lead }));
+    const step = text(record.fields?.step);
+    if (step) {
+        item.append(el('div', { className: 'story-director-quest-step', attrs: { title: 'next step' } }, [
+            icon('fa-arrow-right'),
+            el('span', { text: step }),
+        ]));
+    }
+    const parts = [];
+    for (const field of Object.keys(META)) {
         let value = text(record.fields?.[field]);
         if (!value) continue;
         if (field === 'due' && typeof formatDate === 'function') {
@@ -136,11 +165,14 @@ function renderQuest(record, { formatDate, status, onAbandon }) {
                 // The date as written.
             }
         }
-        facts.append(el('dt', { text: ROW_LABELS[field] ?? field }), el('dd', { text: value }));
+        parts.push(metaPart(field, value));
     }
-    if (facts.children.length) item.append(facts);
-    const actions = abandonButton(record, onAbandon);
-    if (actions) item.append(actions);
+    if (parts.length) item.append(el('div', { className: 'story-director-quest-meta' }, parts));
+    if (goal && desc && desc !== goal) {
+        const more = el('div', { className: 'story-director-quest-desc', text: desc, attrs: { title: 'Click to show it all' } });
+        more.addEventListener('click', () => more.classList.toggle('is-open'));
+        item.append(more);
+    }
     return item;
 }
 

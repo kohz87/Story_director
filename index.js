@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.10';
+const VERSION = '0.9.11';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1177,8 +1177,10 @@ function questStatus(now) {
         if (now === null || !record.fields?.due) return '';
         const deadline = cal.parse(record.fields.due, { reference: now });
         if (!deadline) return '';
-        if (deadline.abs <= now) return 'overdue';
-        return deadline.abs <= cal.addDays(now, soonDays) ? 'soon' : '';
+        // (0.9.11) A deadline without a time of day runs to the end of that day.
+        const end = deadline.hasTime ? deadline.abs : cal.addDays(deadline.abs, 1) - 1;
+        if (end <= now) return 'overdue';
+        return end <= cal.addDays(now, soonDays) ? 'soon' : '';
     };
 }
 
