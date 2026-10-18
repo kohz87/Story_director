@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.12
+
+- **Quest deadlines at a clock time.** A deadline written as `Goldwane 12 sunset` or `Goldwane 30` is now shown at the time the calendar gives it: *Goldwane 12, 07:00 pm*, or for a date alone the end of its day, *Goldwane 30, 11:59 pm*. This applies in the Quests tab and in the Director's note, so the story sees the exact time too. A deadline already at a clock time, and words around the date, are kept as written; the record itself is unchanged. The change-line instruction now asks for dates with a clock time (4 tokens more).
+
 ## 0.9.11
 
 - **Quieter quest cards.** Each quest read as a stack of labelled rows (GOAL, STEP, GIVER, REWARD, DEADLINE), a long description and a big Abandon button. A card is now the goal (or the description when there is no goal), the next step after an arrow, and one small line of giver, reward, deadline and place, each with an icon. A description beside a goal comes last, cut to two lines until clicked. The difficulty tag shows only when it is not normal. Abandon is a small flag at the end of the quest's name; a click turns it into *Abandon?* and a second click gives the quest up, as before.

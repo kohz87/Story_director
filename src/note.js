@@ -10,14 +10,14 @@ import { questDifficulty } from './changes.js';
 import { estimateTokens } from './relevance.js';
 import { looksFinished } from './tracker.js';
 
-// About 155 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
+// About 165 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
     'End your reply with one <Director>…</Director> block of change lines, one per line:',
     '+ kind Key — summary | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a hook they take on: ~ it with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a hook they take on: ~ it with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
@@ -171,10 +171,13 @@ function joinParts(parts) {
 
 function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [] }) {
     const parts = [part('Header', header(selection, calendar))];
-    addLine(parts, 'Due now', due.map(record => withFight(dueItem(record), record)));
+    // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
+    const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
+    const clock = text => (text && typeof calendar?.withClock === 'function' ? calendar.withClock(text, { reference: now }) : text);
+    addLine(parts, 'Due now', due.map(record => withFight(dueItem(record, clock), record)));
     addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
-        const items = relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record));
+        const items = relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record, clock));
         if (kind === 'beat') addBeats(parts, selection?.arc, items);
         else addLine(parts, label, items);
     }
@@ -261,10 +264,10 @@ function noteFields(record) {
 }
 
 // "Saartje's sale (Goldwane 16)", or with what is meant to happen: "Geva — files the warrant (Goldwane 17)".
-function dueItem(record) {
+function dueItem(record, clock = text => text) {
     const f = noteFields(record);
     // A quest's due is its deadline: reaching it means time ran out.
-    if (record.kind === 'quest') return `${record.key} — deadline${f.due ? ` ${f.due}` : ''} reached${f.goal ? ` (${f.goal})` : ''}`;
+    if (record.kind === 'quest') return `${record.key} — deadline${f.due ? ` ${clock(f.due)}` : ''} reached${f.goal ? ` (${f.goal})` : ''}`;
     const when = record.kind === 'clock' ? f.due || f.on : f.on || f.due;
     const what = f.then || (record.kind === 'clock' ? f.desc : '');
     return `${record.key}${what ? ` — ${what}` : ''}${when ? ` (${when})` : ''}`;
@@ -280,9 +283,9 @@ function arrivalItem(record) {
 // "Geva — Bailiff Court → files the warrant (Goldwane 17)",
 // "Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign".
 // "Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Haywane 30".
-function questItem(record) {
+function questItem(record, clock = text => text) {
     const f = noteFields(record);
-    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${f.due}` : '']
+    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${clock(f.due)}` : '']
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
     // A normal difficulty goes without saying; a set one rides with the type: "(bounty, hard)".
@@ -291,8 +294,8 @@ function questItem(record) {
     return record.key + (tags.length ? ` (${tags.join(', ')})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '') + fightPart(record);
 }
 
-function recordItem(record) {
-    if (record.kind === 'quest') return questItem(record);
+function recordItem(record, clock) {
+    if (record.kind === 'quest') return questItem(record, clock);
     const f = noteFields(record);
     const body = [];
     const state = f.now || f.desc;

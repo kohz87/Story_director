@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.11';
+const VERSION = '0.9.12';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1192,7 +1192,11 @@ function questsTabKey() {
 
 function renderQuestsTab(pane) {
     const { active, finished, now } = questRecords();
-    renderQuests(pane, { quests: active, finished, status: questStatus(now), onAbandon: id => void abandonQuest(id) });
+    // (0.9.12) Each deadline at the clock time the calendar sets: "Goldwane 12 sunset" reads
+    // "Goldwane 12, 07:00 pm", a date alone its last minute.
+    const cal = calendar();
+    const formatDate = value => cal.withClock(value, { reference: now });
+    renderQuests(pane, { quests: active, finished, formatDate, status: questStatus(now), onAbandon: id => void abandonQuest(id) });
 }
 
 /**

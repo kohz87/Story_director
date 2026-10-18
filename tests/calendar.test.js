@@ -316,3 +316,15 @@ test('the sun words are parts of day: "Goldwane 12 sunset" is at dusk, not the s
     // A month called Nightfall stays a month.
     assert.equal(c.parse('Nightfall 3').month, 7);
 });
+
+test('withClock: the calendar sets the clock time of a written date (0.9.12)', () => {
+    const c = makeCalendar({ months: MONTHS, era: 'CY' });
+    const reference = c.toAbs({ year: 611, month: GOLDWANE, day: 1 });
+    assert.equal(c.withClock('Goldwane 12 sunset', { reference }), 'Goldwane 12, 07:00 pm');
+    assert.equal(c.withClock('dawn on Goldwane 14, or the flock is lost', { reference }), 'Goldwane 14, 06:00 am, or the flock is lost');
+    assert.equal(c.withClock('Goldwane 30', { reference }), 'Goldwane 30, 11:59 pm', 'a date alone runs to the end of its day');
+    assert.equal(c.withClock('CY 612, Haywane 3 evening', { reference }), 'CY 612, Haywane 3, 07:00 pm', 'a written year is kept');
+    assert.equal(c.withClock('Goldwane 12, 06:15 pm', { reference }), 'Goldwane 12, 06:15 pm', 'a clock time stays');
+    assert.equal(c.withClock('before the frost', { reference }), 'before the frost');
+    assert.equal(c.withClock('', { reference }), '');
+});

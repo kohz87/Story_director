@@ -196,9 +196,23 @@ export function makeCalendar(input) {
 
     const parser = makeParser(config, { toAbs, fromAbs, daysInMonth });
 
+    // (0.9.12) The date in `input` with its clock time set by the calendar: a part of the day
+    // becomes its time ('Goldwane 12 sunset' → 'Goldwane 12, 07:00 pm') and a date alone runs
+    // to the end of its day ('Goldwane 12, 11:59 pm'), the way deadlines are counted. A date
+    // already at a clock time, or text with no date, comes back as written; words around the
+    // date are kept.
+    function withClock(input, { reference = null } = {}) {
+        const parsed = parser(input, { reference });
+        if (!parsed || (parsed.hasTime && !parsed.partOfDay)) return String(input ?? '');
+        const abs = parsed.hasTime ? parsed.abs : addDays(parsed.abs, 1) - 1;
+        const exact = format(abs, { era: !parsed.yearInferred });
+        const text = stripMarkdown(input);
+        return text.includes(parsed.text) ? text.replace(parsed.text, exact) : exact;
+    }
+
     return Object.freeze({
         config, daysInYear, daysInMonth, toAbs, fromAbs, dayIndex, addDays, daysBetween, format,
-        parse: parser,
+        parse: parser, withClock,
     });
 }
 

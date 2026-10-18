@@ -224,9 +224,9 @@ test('no records gives the instruction alone', () => {
     assert.equal(buildNote(selection(), { calendar, instruction: 'Only this.' }), 'Only this.');
 });
 
-test('CHANGE_INSTRUCTION: about 155 tokens, the four ops, kinds, fields and the rules', () => {
+test('CHANGE_INSTRUCTION: about 165 tokens, the four ops, kinds, fields and the rules', () => {
     const tokens = estimateTokens(CHANGE_INSTRUCTION);
-    assert.ok(tokens >= 100 && tokens <= 160, `${tokens} tokens`);
+    assert.ok(tokens >= 100 && tokens <= 165, `${tokens} tokens`);
     assert.match(CHANGE_INSTRUCTION, /a hook they take on: ~ it with giver, reward/);
     assert.match(CHANGE_INSTRUCTION, /<Director>/);
     assert.match(CHANGE_INSTRUCTION, /^\+ kind Key — summary \| label: value/m);
@@ -235,7 +235,7 @@ test('CHANGE_INSTRUCTION: about 155 tokens, the four ops, kinds, fields and the 
     assert.match(CHANGE_INSTRUCTION, /^! Key — what happened/m);
     for (const kind of ['agenda', 'event', 'hook', 'clock', 'beat', 'secret']) assert.ok(CHANGE_INSTRUCTION.includes(kind), kind);
     assert.match(CHANGE_INSTRUCTION, /now, then, on, due, leg, arrive, shown/);
-    assert.match(CHANGE_INSTRUCTION, /Dates go only in on, due and arrive/);
+    assert.match(CHANGE_INSTRUCTION, /Dates go only in on, due and arrive, with a clock time/);
     assert.match(CHANGE_INSTRUCTION, /never the whole list/);
     assert.ok(CHANGE_INSTRUCTION.includes('Never write actions for {{user}}'));
 });
@@ -451,4 +451,15 @@ test('quest check: a quest the latest exchange gives up asks the story to close 
     const lines = buildNote(sel, { calendar: null, givenUp: ['Herb run'] }).split('\n');
     assert.ok(lines.includes('Quest check: {{user}} may be giving up Herb run. If they do, close it with - Key — abandoned; if not, leave it.'));
     assert.ok(!buildNote(sel, { calendar: null, givenUp: ['Herb run'], instruction: '' }).includes('Quest check'));
+});
+
+test('a quest deadline goes out at the clock time the calendar sets, never "sunset" (0.9.12)', async () => {
+    const { makeCalendar } = await import('../src/calendar.js');
+    const real = makeCalendar({ preset: 'custom', months: ['Dawnwane', 'Goldwane', 'Haywane'].map(name => ({ name, days: 30 })) });
+    const now = real.parse('Goldwane 16, 09:00 am').abs;
+    const quest = (key, due) => record({ key, kind: 'quest', fields: { goal: 'drive off the wolves', due } });
+    const note = buildNote(selection({ now, relevant: [quest('Wolves', 'Goldwane 30 sunset'), quest('Bond', 'Goldwane 30'), quest('Ferry', 'Goldwane 18, 06:15 am'), quest('Vague', 'before the frost')] }), { calendar: real });
+    assert.ok(lines(note).includes('Quests: Wolves — drive off the wolves · by Goldwane 30, 07:00 pm · Bond — drive off the wolves · by Goldwane 30, 11:59 pm · Ferry — drive off the wolves · by Goldwane 18, 06:15 am · Vague — drive off the wolves · by before the frost'));
+    const due = buildNote(selection({ now, due: [quest('Wolves', 'Goldwane 16 dawn')] }), { calendar: real });
+    assert.ok(lines(due).includes('Due now: Wolves — deadline Goldwane 16, 06:00 am reached (drive off the wolves)'));
 });
