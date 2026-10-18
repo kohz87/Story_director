@@ -9,14 +9,14 @@
 import { questDifficulty } from './changes.js';
 import { estimateTokens } from './relevance.js';
 
-// About 140 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
+// About 150 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
     'End your reply with one <Director>…</Director> block of change lines, one per line:',
     '+ kind Key — summary | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (only once {{user}} accepts it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive.',
+    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (only once {{user}} accepts it; a hook they take on: ~ it with these): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 

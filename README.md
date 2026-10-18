@@ -1,4 +1,4 @@
-# Story Director v0.8.5
+# Story Director v0.8.6
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -107,6 +107,11 @@ normal (`Bounty on Kettle Jack (bounty, hard) — …`). Other extensions can sc
 Battle offers quest XP by difficulty when a quest is finished.
 
 - A quest starts only when your character **accepts** it; an offer not yet taken is a hook.
+  When you take on a hook that is already tracked (register for the bounty, agree to the job),
+  `~ Sheep-killer — giver: Hobb | reward: 4 silver` makes it the quest (since 0.8.6): a `~` that
+  gives a hook, event or beat a quest's own part (`giver`, `goal`, `reward`, `step`,
+  `difficulty`, or a quest category such as `type: bounty`) turns it into one, keeping its key,
+  description and history.
   The arc planner offers work as hooks and never completes a quest for you.
 - `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30
   reached"), and the story decides what that costs.

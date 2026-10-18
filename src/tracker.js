@@ -3,7 +3,7 @@
 // the chat is a replay of the entries up to it. Pure: every function returns new objects and
 // never mutates its inputs (records are copied on write, unchanged ones are shared).
 
-import { FIELDS, formatOp, kindOf, lineKey, questDifficulty } from './changes.js';
+import { FIELDS, QUEST_TYPE_WORDS, formatOp, kindOf, lineKey, questDifficulty } from './changes.js';
 
 const HISTORY_LIMIT = 20;
 const SUPERSEDED = /supersed|replac|merged/i;
@@ -107,6 +107,19 @@ function untrackedRecordOp(op, id) {
     // The type was the kind; only a quest's own category (bounty, contract…) stays its type.
     if (named && (named !== 'quest' || word === 'quest' || word === 'quests')) delete fields.type;
     return { ...op, id, kind: named || UNTRACKED_KIND, fields };
+}
+
+// A hook, event or beat that a `~` gives a quest's own parts (who gave it, what it asks or pays,
+// its step or difficulty, or a quest category as its type) is work {{user}} took on (0.8.6).
+const BECOMES_QUEST = new Set(['hook', 'event', 'beat']);
+const QUEST_OWN_FIELDS = ['giver', 'goal', 'reward', 'step', 'difficulty'];
+
+function takesOnQuest(record, op) {
+    if (!BECOMES_QUEST.has(record.kind)) return false;
+    const fields = op.fields ?? {};
+    if (QUEST_OWN_FIELDS.some(name => String(fields[name] ?? '').trim())) return true;
+    const type = lineKey(fields.type ?? '');
+    return type === 'quest' || Object.hasOwn(QUEST_TYPE_WORDS, type);
 }
 
 function withArticle(word) {
@@ -262,7 +275,17 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
 
         const record = edit(target);
         if (op.op === '~') {
-            applyFields(record, op);
+            let change = op;
+            if (takesOnQuest(record, op)) {
+                problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
+                record.kind = 'quest';
+                // `type: quest` only said what it is; a category (bounty, contract…) stays its type.
+                const type = lineKey(op.fields?.type ?? '');
+                const { type: _type, ...rest } = op.fields ?? {};
+                if (type === 'quest') change = { ...op, fields: rest };
+                else if (Object.hasOwn(QUEST_TYPE_WORDS, type)) change = { ...op, fields: { ...op.fields, type: QUEST_TYPE_WORDS[type] } };
+            }
+            applyFields(record, change);
         } else if (op.op === '-') {
             applyFields(record, op);
             record.status = SUPERSEDED.test(op.reason ?? '') ? 'superseded' : 'resolved';
