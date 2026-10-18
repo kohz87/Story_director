@@ -194,7 +194,17 @@ function parseLine(raw) {
 
     const parts = body.split(/\s*\|\s*/);
     const { key: rawKey, head } = splitKey(parts.shift());
-    const key = stripMarkdown(rawKey).trim();
+    // (0.9.10) "~ Hook: Sheepfold Wolves — …": a kind and a colon in front of the key name the
+    // kind, they are not part of the key. On a + with no kind yet, they set it.
+    let key = stripMarkdown(rawKey).trim();
+    const prefixed = key.match(/^([A-Za-z]+)\s*:\s*(\S.*)$/s);
+    if (prefixed && kindOf(prefixed[1])) {
+        key = prefixed[2].trim();
+        if (op === '+' && !kind) {
+            kind = kindOf(prefixed[1]);
+            kindWord = prefixed[1].toLowerCase();
+        }
+    }
     const id = lineKey(key);
     if (!id) return { error: 'missing key' };
     if (head.trim()) parts.unshift(head);

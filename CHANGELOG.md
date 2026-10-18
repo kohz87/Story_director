@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.10
+
+- **`Hook: Key` is the key.** A model wrote `~ Hook: Sheepfold Wolves — giver: Nelke, …`: the key read as *Hook: Sheepfold Wolves*. A kind and a colon in front of a key (`Hook:`, `Quest:`, any kind word) now name the kind and are not part of the key; on a `+` with no kind yet, they set it. A colon after any other word (`Mister: Smith`) stays in the key.
+- Goes with **Story Block 0.9.7**, which reads change lines a model wrote as `<!-- Director … -->` outside the envelope (no quest was captured from them).
+
 ## 0.9.9
 
 - **`+ quest` on an offered hook makes it the quest.** A job the arc planner (or an earlier reply) offered as a hook (`+ hook Sheepfold Wolves — … | reward: 2 silver per ear`) and then taken on with `+ quest Sheepfold Wolves — … | giver: … | goal: …` only had the new fields applied ("already tracked; the + was applied as a change"): it stayed a hook and never reached the Quests tab. A `+ quest` on an active hook or event now turns it into the quest (the Director tab notes it), keeping its key, description and history; beats and agendas stay what they are. The tracker is replayed from the replies, so such quests appear on their own.

@@ -356,3 +356,14 @@ test('fields run together with commas or semicolons are split as if written with
     assert.equal(only('+ quest Ledger — giver: Nelke, the clerk | reward: 4 silver, paid on return').fields.reward, '4 silver, paid on return');
     assert.equal(only('+ hook Old Tom — the herder, on the moor road').fields.desc, 'the herder, on the moor road', '"on" without a colon is a word');
 });
+
+test('a kind and a colon in front of the key name the kind, not the key (0.9.10)', () => {
+    const changed = only('~ Hook: Sheepfold Wolves — giver: Nelke, reward: 8 silver, step: culling pack at fold');
+    assert.equal(changed.key, 'Sheepfold Wolves');
+    assert.deepEqual(changed.fields, { giver: 'Nelke', reward: '8 silver', step: 'culling pack at fold' });
+    const added = only('+ Quest: Granary Culling — kill the rats | giver: Nelke');
+    assert.equal(added.kind, 'quest');
+    assert.equal(added.key, 'Granary Culling');
+    assert.equal(only('- Quest: Sheepfold Wolves — done').key, 'Sheepfold Wolves');
+    assert.equal(only('~ Mister: Smith — now: away').key, 'Mister: Smith', 'not a kind: part of the key');
+});
