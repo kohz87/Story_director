@@ -1,4 +1,4 @@
-# Story Director v0.9.10
+# Story Director v0.9.11
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -19,7 +19,7 @@ From a demo session with [Story Block](https://github.com/kohz87/Story_block), [
 
 | Director tab, behind the scenes revealed | Quests tab |
 | --- | --- |
-| <img src="docs/images/director-tab.png" alt="The Director tab: the place, off-screen agendas for Captain Kael and Mira with now, then and on, and a hook for the wolves' den" width="300"> | <img src="docs/images/quests-tab.png" alt="The Quests tab: the bounty Wolves at the weir, normal difficulty, with its goal, giver and reward" width="300"> |
+| <img src="docs/images/director-tab.png" alt="The Director tab: the place, off-screen agendas for Captain Kael and Mira with now, then and on, and a hook for the wolves' den" width="300"> | <img src="docs/images/quests-tab.png" alt="The Quests tab: the main quest The bond, hard, and two sheepfold bounties, each with its goal, next step and a quiet line of giver, reward and deadline" width="300"> |
 
 ## Why
 
@@ -158,8 +158,8 @@ Battle offers quest XP by difficulty when a quest is finished.
   quit"), the Quest check asks the story to close it: "Ren may be giving up Sheep-killer. If
   they do, close it with - Key — abandoned; if not, leave it." A negation ("I won't give up")
   does not count, and nothing is closed by the message itself.
-- **Abandon** under each open quest in the Quests tab is the one closing that is yours to make
-  (it asks twice): your character gives the job up. `- Key — abandoned` goes into the latest
+- **Abandon** (the flag at the end of each open quest's name in the Quests tab) is the one
+  closing that is yours to make (it asks twice): your character gives the job up. `- Key — abandoned` goes into the latest
   reply, so deleting or swiping that reply takes it back; it counts as a failure, so RPG Battle
   offers no quest XP for it.
 - `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30

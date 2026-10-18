@@ -745,19 +745,98 @@
     opacity: 0.75;
 }
 
-/* (0.9.5) Abandon under an open quest; a click asks again before it writes. */
-.story-director-tab .story-director-quest-actions {
+/* (0.9.11) A quest card: the goal, the next step, one quiet line of who / what for / by when /
+   where, and a longer description cut to two lines until clicked. */
+.story-director-tab .story-director-quest-goal {
+    margin-top: 0.15rem;
+    line-height: 1.4;
+}
+
+.story-director-tab .story-director-quest-step {
+    display: flex;
+    gap: 0.4rem;
+    align-items: baseline;
+    margin-top: 0.15rem;
+    line-height: 1.4;
+    opacity: 0.85;
+}
+
+.story-director-tab .story-director-quest-step > i {
+    flex: none;
+    font-size: 0.75em;
+    color: var(--sd-accent);
+}
+
+.story-director-tab .story-director-quest-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    margin-top: 0.4rem;
+    gap: 0.1rem 0.8rem;
+    margin-top: 0.25rem;
+    font-size: 0.82em;
+    line-height: 1.4;
+    opacity: 0.6;
 }
 
-.story-director-tab .story-director-quest-actions .menu_button.is-armed {
-    border-color: currentColor;
-    font-weight: 600;
+.story-director-tab .story-director-quest-meta-part {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: baseline;
+    min-width: 0;
 }
 
-.story-director-tab .story-director-quest-abandon.is-armed {
+.story-director-tab .story-director-quest-meta-part > i {
+    flex: none;
+    font-size: 0.85em;
+}
+
+.story-director-tab .story-director-record.is-overdue .story-director-quest-meta-part.is-due {
+    color: var(--warning, #e0a040);
+    opacity: 1;
+}
+
+.story-director-tab .story-director-quest-desc {
+    display: -webkit-box;
+    margin-top: 0.3rem;
+    overflow: hidden;
+    font-size: 0.85em;
+    line-height: 1.4;
+    opacity: 0.55;
+    cursor: pointer;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.story-director-tab .story-director-quest-desc.is-open {
+    display: block;
+}
+
+/* Abandon: a quiet flag at the end of the key line, like the pin; a click asks again. */
+.story-director-tab .menu_button.story-director-quest-abandon {
+    display: inline-flex;
+    flex: none;
+    gap: 0.3rem;
+    align-items: center;
+    align-self: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    margin: 0 0 0 auto;
+    padding: 0.2rem 0.4rem;
+    border: 0;
+    background: none;
+    font-size: 0.8em;
+    opacity: 0.35;
+}
+
+.story-director-tab .menu_button.story-director-quest-abandon:hover,
+.story-director-tab .menu_button.story-director-quest-abandon:focus-visible {
+    background: var(--sd-hover-bg);
+    opacity: 0.85;
+}
+
+.story-director-tab .menu_button.story-director-quest-abandon.is-armed {
     color: #d46a6a;
+    font-weight: 600;
+    opacity: 1;
 }

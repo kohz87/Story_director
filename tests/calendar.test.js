@@ -304,3 +304,15 @@ test('sharedCalendar: era and months as plain copies, for StoryDirector.calendar
     assert.deepEqual(sharedCalendar({ era: 'AR', days_per_month: 28, months: ['Solmonth', 'Lunmonth'] }),
         { era: 'AR', months: [{ name: 'Solmonth', days: 28 }, { name: 'Lunmonth', days: 28 }] });
 });
+
+test('the sun words are parts of day: "Goldwane 12 sunset" is at dusk, not the start of the day (0.9.11)', () => {
+    const c = makeCalendar({ months: MONTHS });
+    for (const [word, minutes] of [['sunset', 1140], ['sundown', 1140], ['sunrise', 360], ['daybreak', 360]]) {
+        const parsed = c.parse(`Goldwane 12 ${word}`, { reference: c.toAbs({ year: 611, month: GOLDWANE, day: 1 }) });
+        assert.ok(parsed?.hasTime, word);
+        assert.equal(parsed.minutes, minutes, word);
+        assert.equal(parsed.month, GOLDWANE);
+    }
+    // A month called Nightfall stays a month.
+    assert.equal(c.parse('Nightfall 3').month, 7);
+});

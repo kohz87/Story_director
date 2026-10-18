@@ -37,7 +37,7 @@ test('grouped by type in a fixed order, untyped last; plural and singular types 
     assert.equal(groups[1].querySelector('.story-director-count').textContent, '2');
 });
 
-test('rows for goal, step, giver, reward, deadline and place; deadline marks', () => {
+test('a card: goal, next step, one quiet line of giver, reward, deadline and place; deadline marks (0.9.11)', () => {
     const jack = quest('Kettle Jack', { type: 'bounty', goal: 'bring him in alive', step: 'cornered at the weir', giver: 'Warden Hale', reward: '40 crowns', due: 'Haywane 30', place: 'Weir road' });
     const late = quest('Herb run', { goal: 'twelve moonleaf', due: 'Haywane 2' });
     const pane = render({
@@ -46,11 +46,33 @@ test('rows for goal, step, giver, reward, deadline and place; deadline marks', (
         formatDate: value => `${value} · in 3 days`,
     });
     const [first, second] = pane.querySelectorAll('.story-director-record');
-    const rows = [...first.querySelectorAll('dt')].map((dt, index) => [dt.textContent, first.querySelectorAll('dd')[index].textContent]);
-    assert.deepEqual(rows, [['goal', 'bring him in alive'], ['step', 'cornered at the weir'], ['giver', 'Warden Hale'], ['reward', '40 crowns'], ['deadline', 'Haywane 30 · in 3 days'], ['place', 'Weir road']]);
+    assert.equal(first.querySelector('.story-director-quest-goal').textContent, 'bring him in alive');
+    assert.equal(first.querySelector('.story-director-quest-step').textContent, 'cornered at the weir');
+    const meta = first.querySelectorAll('.story-director-quest-meta-part');
+    assert.deepEqual(meta.map(part => [part.getAttribute('title'), part.textContent]), [['giver', 'Warden Hale'], ['reward', '40 crowns'], ['deadline', 'Haywane 30 · in 3 days'], ['place', 'Weir road']]);
+    assert.equal(first.querySelector('dl'), null, 'no label rows');
     assert.match(first.textContent, /deadline soon/);
     assert.ok(second.classList.contains('is-overdue'));
     assert.match(second.textContent, /deadline passed/);
+    assert.equal(second.querySelector('.story-director-quest-step'), null);
+});
+
+test('the description leads when there is no goal, and sits last, cut short, when there is (0.9.11)', () => {
+    const pane = render({ quests: [
+        quest('The bond', { goal: 'pay the bond', desc: 'A long tale of debts owed to the Glassdock collector and the reasons behind them.' }),
+        quest('Sheepfold Wolves', { desc: 'drive the wolves off' }),
+        quest('Same', { goal: 'one thing', desc: 'one thing' }),
+    ] });
+    const [bond, wolves, same] = pane.querySelectorAll('.story-director-record');
+    assert.equal(bond.querySelector('.story-director-quest-goal').textContent, 'pay the bond');
+    const desc = bond.querySelector('.story-director-quest-desc');
+    assert.match(desc.textContent, /Glassdock collector/);
+    assert.ok(!desc.classList.contains('is-open'));
+    desc.click();
+    assert.ok(desc.classList.contains('is-open'));
+    assert.equal(wolves.querySelector('.story-director-quest-goal').textContent, 'drive the wolves off');
+    assert.equal(wolves.querySelector('.story-director-quest-desc'), null);
+    assert.equal(same.querySelector('.story-director-quest-desc'), null);
 });
 
 test('finished quests fold away with how they ended; empty state explains quests', () => {
@@ -63,7 +85,7 @@ test('finished quests fold away with how they ended; empty state explains quests
     assert.match(pane.querySelector('.story-director-empty-text').textContent, /No open quests/);
 });
 
-test('every quest shows its difficulty, normal when the story gave none', () => {
+test('difficulty in the head, unless it is normal (0.9.11)', () => {
     const pane = render({ quests: [
         quest('Kettle Jack', { type: 'bounty', difficulty: 'hard' }),
         quest('Drowned Crown', { type: 'main', difficulty: 'nightmare' }),
@@ -72,23 +94,24 @@ test('every quest shows its difficulty, normal when the story gave none', () => 
         quest('Odd one', { difficulty: 'Deadly!' }),
     ] });
     const tags = pane.querySelectorAll('.story-director-tag.is-difficulty');
-    assert.deepEqual(tags.map(tag => tag.textContent), ['nightmare', 'hard', 'easy', 'normal', 'nightmare']);
+    assert.deepEqual(tags.map(tag => tag.textContent), ['nightmare', 'hard', 'easy', 'nightmare']);
     assert.ok(tags[1].classList.contains('is-hard'));
     assert.ok(tags[0].classList.contains('is-nightmare'));
-    // In the head, next to the key, not as a row.
-    assert.ok(![...pane.querySelectorAll('dt')].some(dt => dt.textContent === 'difficulty'));
+    assert.ok(!/normal/.test(pane.textContent));
 });
 
 test('Abandon gives a quest up after asking twice; no Done or Failed: the story closes quests (0.9.5)', () => {
     const calls = [];
     const pane = render({ quests: [quest('Sheep-killer', { goal: 'kill the wolf' }), quest('Herb run')], onAbandon: id => calls.push(id) });
     const first = () => pane.querySelector('.story-director-record.is-quest');
-    assert.deepEqual(texts(first(), '.story-director-quest-actions .menu_button'), ['Abandon']);
+    const flag = () => first().querySelector('.story-director-record-head .story-director-quest-abandon');
+    assert.equal(flag().textContent, '', 'a quiet flag in the key line');
+    assert.match(flag().getAttribute('title'), /Abandon Sheep-killer/);
     assert.equal(pane.querySelector('.story-director-quest-done, .story-director-quest-failed'), null);
     first().querySelector('.story-director-quest-abandon').click();
     assert.deepEqual(calls, [], 'the first click only asks');
-    assert.equal(first().querySelector('.story-director-quest-abandon').textContent, 'Abandon? Click again');
+    assert.equal(first().querySelector('.story-director-quest-abandon').textContent, 'Abandon?');
     first().querySelector('.story-director-quest-abandon').click();
     assert.deepEqual(calls, ['sheep-killer']);
-    assert.equal(render({ quests: [quest('Herb run')] }).querySelector('.story-director-quest-actions'), null, 'none without a handler');
+    assert.equal(render({ quests: [quest('Herb run')] }).querySelector('.story-director-quest-abandon'), null, 'none without a handler');
 });

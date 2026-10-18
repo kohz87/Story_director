@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.11
+
+- **Quieter quest cards.** Each quest read as a stack of labelled rows (GOAL, STEP, GIVER, REWARD, DEADLINE), a long description and a big Abandon button. A card is now the goal (or the description when there is no goal), the next step after an arrow, and one small line of giver, reward, deadline and place, each with an icon. A description beside a goal comes last, cut to two lines until clicked. The difficulty tag shows only when it is not normal. Abandon is a small flag at the end of the quest's name; a click turns it into *Abandon?* and a second click gives the quest up, as before.
+- **"Goldwane 12 sunset" is not past at breakfast.** A deadline the calendar read as a date alone counted from the start of that day, so a quest due at sunset showed *deadline passed* that morning. A deadline without a time now runs to the end of its day, and `sunrise`, `daybreak`, `sunset` and `sundown` are parts of the day like `dawn` and `dusk` (a calendar's own parts of day still win).
+
 ## 0.9.10
 
 - **`Hook: Key` is the key.** A model wrote `~ Hook: Sheepfold Wolves — giver: Nelke, …`: the key read as *Hook: Sheepfold Wolves*. A kind and a colon in front of a key (`Hook:`, `Quest:`, any kind word) now name the kind and are not part of the key; on a `+` with no kind yet, they set it. A colon after any other word (`Mister: Smith`) stays in the key.
