@@ -1,4 +1,4 @@
-# Story Director v0.9.11
+# Story Director v0.9.12
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -89,8 +89,15 @@ tracked: add it with "+ kind Key — …" before changing it.`), only for the la
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
 foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
-`difficulty`. Dates go only in `on`, `due` and `arrive`. The note tells the model all of this in
-about 140 tokens.
+`difficulty`. Dates go only in `on`, `due` and `arrive`, with a clock time. The note tells the
+model all of this in about 165 tokens.
+
+A quest's deadline is always shown, in the Quests tab and in the note, at a clock time the
+calendar sets (since 0.9.12): a part of the day becomes its time (`Goldwane 12 sunset` →
+*Goldwane 12, 07:00 pm*; dawn, sunrise and daybreak are 06:00 am, morning 09:00 am, noon,
+afternoon 03:00 pm, dusk, evening, sunset and sundown 07:00 pm, night 10:00 pm) and a date
+alone runs to the end of its day (*Goldwane 30, 11:59 pm*). The deadline marks count from that
+time. A calendar with its own parts of day changes those times.
 
 A kind written with a colon in front of the key (`~ Hook: Sheepfold Wolves — …`, `+ Quest: …`)
 names the kind and is not part of the key (since 0.9.10).
