@@ -1,4 +1,4 @@
-# Story Director v0.9.9
+# Story Director v0.9.10
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -91,6 +91,9 @@ Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `
 foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
 `difficulty`. Dates go only in `on`, `due` and `arrive`. The note tells the model all of this in
 about 140 tokens.
+
+A kind written with a colon in front of the key (`~ Hook: Sheepfold Wolves — …`, `+ Quest: …`)
+names the kind and is not part of the key (since 0.9.10).
 
 Parts are separated by `|`. Fields a model runs together with commas or semicolons instead
 (`type: contract, giver: Nelke, reward: 2 silver`) are split the same way (since 0.9.8), but
