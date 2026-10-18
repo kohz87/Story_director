@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.8
+
+- **Fields written with commas.** A model wrote `+ quest Sheepfold Wolves — Cull up to 4 timber wolves | type: contract, giver: Nelke/Herders, goal: return right wolf ears, reward: 2 silver per head, due: Goldwane 12`, and everything after `type:` became the type: the quest had no giver, goal, reward or deadline, and the Quests tab put it under a heading made of that whole string. Fields run together with commas or semicolons are now split as if written with `|`, only before a field the format knows (so `giver: Nelke, the clerk` keeps its comma). The tracker is replayed from the replies, so such quests are read correctly on their own.
+
 ## 0.9.7
 
 - **A quest is finished once.** A later reply that closed an already closed quest again (`- Wolves at the weir — the pack is dead`, repeated by the model; or a `~ … status: completed`, or a quest's `!` that says so) re-stamped it as closed in that reply, so `questsDoneAt` reported it again and RPG Battle, which now awards quest XP at once, gave it twice. Closing something already closed now changes nothing (a note, `already-closed`, in the Director tab); it stays finished in the reply that first closed it. Reopened with `+`, it can be finished again.

@@ -345,3 +345,14 @@ test('the format copied word for word still reads as the record it means', () =>
     // A record really keyed "Kind" is still read as before.
     assert.equal(parseChanges('+ hook Kind — a gentle stranger').ops[0].key, 'Kind');
 });
+
+test('fields run together with commas or semicolons are split as if written with "|" (0.9.8)', () => {
+    const op = only('+ quest Sheepfold Wolves — Cull up to 4 timber wolves | type: contract, giver: Nelke/Herders, goal: return right wolf ears, reward: 2 silver per head, due: Goldwane 12');
+    assert.equal(op.kind, 'quest');
+    assert.deepEqual(op.fields, { desc: 'Cull up to 4 timber wolves', type: 'contract', giver: 'Nelke/Herders', goal: 'return right wolf ears', reward: '2 silver per head', due: 'Goldwane 12' });
+    assert.deepEqual(only('~ Geva — now: Bailiff Court; then: files the warrant; on: Goldwane 17').fields, { now: 'Bailiff Court', then: 'files the warrant', on: 'Goldwane 17' });
+    // A comma inside a value stays when no field follows it.
+    assert.equal(only('+ quest Ledger — giver: Nelke, the clerk | reward: 4 silver, paid on return').fields.giver, 'Nelke, the clerk');
+    assert.equal(only('+ quest Ledger — giver: Nelke, the clerk | reward: 4 silver, paid on return').fields.reward, '4 silver, paid on return');
+    assert.equal(only('+ hook Old Tom — the herder, on the moor road').fields.desc, 'the herder, on the moor road', '"on" without a colon is a word');
+});
