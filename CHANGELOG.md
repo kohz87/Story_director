@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.7
+
+- **A quest is finished once.** A later reply that closed an already closed quest again (`- Wolves at the weir — the pack is dead`, repeated by the model; or a `~ … status: completed`, or a quest's `!` that says so) re-stamped it as closed in that reply, so `questsDoneAt` reported it again and RPG Battle, which now awards quest XP at once, gave it twice. Closing something already closed now changes nothing (a note, `already-closed`, in the Director tab); it stays finished in the reply that first closed it. Reopened with `+`, it can be finished again.
+
 ## 0.9.6
 
 - **Giving up, however it is written.** *forfeit*, *quit*, *walked away*, *backed out*, *called off* (and *withdrew*) now close a quest as a failure wherever *failed* or *gave up* already did: a `~ … status:` / `outcome:`, a quest's `!`, and the Quest check on its step. A failure earns no quest XP. *quit* is a whole word, so "turned in, quite a haul" is still a quest done.
