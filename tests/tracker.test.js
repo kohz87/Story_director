@@ -624,3 +624,18 @@ test('givenUpIn: the open quests a message says are given up, by key or giver; n
     assert.deepEqual(givenUpIn(tracker, 'We pick moonleaf for the Herb run. Ren gives up on sleep.'), [], 'the quest and the giving up in different sentences');
     assert.deepEqual(givenUpIn(tracker, 'I walk away from the Herb run and Mother Ysolde.'), ['Herb run']);
 });
+
+test('closing a closed quest again changes nothing: it stays finished in the reply that first closed it (0.9.7)', () => {
+    let tracker = applyOps(emptyTracker(), ops('+ quest Wolves at the weir — the pack | giver: Kael | reward: 4 silver'), { message: 1 }).tracker;
+    tracker = applyOps(tracker, ops('- Wolves at the weir — the pack is dead'), { message: 3 }).tracker;
+    assert.equal(questsDoneIn(tracker, 3).length, 1);
+    for (const line of ['- Wolves at the weir — the pack is dead', '~ Wolves at the weir — status: completed', '! Wolves at the weir — reward paid']) {
+        const again = applyOps(tracker, ops(line), { message: 7 });
+        assert.deepEqual(questsDoneIn(again.tracker, 7), [], `${line}: not finished a second time`);
+        assert.equal(findRecord(again.tracker, 'Wolves at the weir').resolved.message, 3);
+        assert.equal(again.problems[0].kind, 'already-closed');
+    }
+    // Reopened with a +, it can be finished again.
+    const reopened = applyOps(tracker, ops('+ quest Wolves at the weir — a second pack | giver: Kael | reward: 4 silver'), { message: 5 }).tracker;
+    assert.equal(questsDoneIn(applyOps(reopened, ops('- Wolves at the weir — done'), { message: 7 }).tracker, 7).length, 1);
+});

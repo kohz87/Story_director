@@ -1,4 +1,4 @@
-# Story Director v0.9.6
+# Story Director v0.9.7
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -139,6 +139,9 @@ Battle offers quest XP by difficulty when a quest is finished.
   `now` reads as over (*wolf slain, reward collected*, *delivered*, *failed*) but no line closed
   it, the note adds a **Quest check**: "the story may have finished Sheep-killer. If it has,
   close it with - Key — outcome; if not, leave it." Only while the model writes change lines.
+- **A quest is finished once.** A later line closing it again (models repeat `- Quest — done`)
+  changes nothing (since 0.9.7): it stays finished in the reply that first closed it, so RPG
+  Battle's quest XP is never given twice. Reopen it with `+ quest …` and it can be finished anew.
 - **Giving up** (since 0.9.6): a failure, never quest XP, however it is written: `failed`,
   `abandoned`, `gave up`, `forfeit`, `quit`, `walked away`, `backed out`, `called off`… When
   **your own message** (or the reply's narration) gives up an open quest in so many words, in a

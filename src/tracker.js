@@ -350,6 +350,14 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
 
         const record = edit(target);
         // (0.9.1) A change that says the record is over closes it, as its `-` would have.
+        // (0.9.7) Closing what is already closed changes nothing: the record keeps the reply that
+        // first closed it, so a model repeating "- Quest — done" later never finishes it twice
+        // (RPG Battle's quest XP follows the reply a quest was closed in).
+        const closing = op.op === '-' || ((op.op === '~' || op.op === '!') && overByChange(record, op) !== null);
+        if (closing && record.status !== 'active') {
+            problems.push(finding('already-closed', 'info', op, `"${record.key}" is already ${record.status}; the line changed nothing.`));
+            continue;
+        }
         const over = (op.op === '~' || op.op === '!') ? overByChange(record, op) : null;
         if (over !== null) {
             const { status: _s, state: _st, outcome: _o, result: _r, progress: _p, ...extra } = op.extra ?? {};
