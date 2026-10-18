@@ -40,7 +40,7 @@ import { checkReply } from './src/checks.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
-import { MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
+import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { buildPlannerMessages, DEFAULT_PLANNER_PROMPT, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.8.8';
+const VERSION = '0.9.0';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -762,7 +762,7 @@ function renderDirectorTab(pane) {
         canSeed: !tracker.records.length && canSeed(),
         onSeed: () => void seed(),
         onPin: (id, pinned) => setPin(id, pinned),
-        route: routePlaces(book).length > 1 ? { places: routePlaces(book), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
+        route: routePlaces(book).length > 1 ? { places: routePlaces(book), era: travelEra(), onRoute: (from, to, mode) => routeText(from, to, { mode }) } : null,
         places: { book, map: settings().map, formatTime: time => (time === null ? '' : cal.format(time)) },
         arc: arcView(selection, tracker),
         spoiler: settings().spoilerGuard !== false
@@ -1067,10 +1067,22 @@ async function maybePlanAutomatically(tracker) {
 // ---------------------------------------------------------------------------
 // Routes: the tab's route tool and /route
 
+// How travel is counted: a world pack's era wins; without one, Settings → Map & travel → Era.
+function travelEra() {
+    return worldPack()?.era ?? settings().map?.era ?? 'pre-modern';
+}
+
+const modesOf = era => (era === 'modern' ? MODERN_MODES : MODES);
+// Every mode word /route takes: both eras', and the common ones they map to.
+const ROUTE_MODE_WORDS = [...new Set([...MODES, ...MODERN_MODES, 'drive', 'taxi', 'fly', 'flight', 'walk'])];
+
 /** A journey from the scene's current time: one readable line, or why there is none. */
 function routeText(fromText, toText, { mode = 'foot', rate = null } = {}) {
     const pack = worldPack();
-    const travel = MODES.includes(mode) ? mode : 'foot';
+    const era = travelEra();
+    const aliases = era === 'modern' ? { drive: 'car', taxi: 'car', fly: 'plane', flight: 'plane', walk: 'foot', boat: 'ferry' } : { walk: 'foot', fly: 'flight' };
+    const word = aliases[mode] ?? mode;
+    const travel = modesOf(era).includes(word) ? word : 'foot';
     const { now, upTo } = situation('normal');
     const cal = calendar();
     // Roads first: a world pack that knows both places plans by its roads.
@@ -1089,9 +1101,10 @@ function routeText(fromText, toText, { mode = 'foot', rate = null } = {}) {
         const known = book.places.filter(place => place.coords).length;
         return `"${missing[1]}" has no map coordinates yet${known ? '' : ' (no place has any: coordinates come from the scene\'s location, like "[59.0, 110.0]", or a world pack)'}.`;
     }
-    const trip = estimateTrip(a, b, { map: settings().map, mode: travel, rate, rules: pack?.rules });
+    const map = { ...settings().map, era };
+    const trip = estimateTrip(a, b, { map, mode: travel, rate, rules: pack?.rules });
     const arrive = now !== null && trip ? ` · arrive ${cal.format(now + Math.round(trip.days * 1440))}` : '';
-    return `${formatTrip(trip, { map: settings().map })}${arrive} (estimated from the map)`;
+    return `${formatTrip(trip, { map })}${arrive} (estimated from the map)`;
 }
 
 // `/route Shorn to Auvoth ride`, `/route Shorn → Auvoth mode=courier`, `/route from=Shorn to=Auvoth`.
@@ -1099,7 +1112,7 @@ function parseRouteArgs(named, unnamed) {
     let text = String(unnamed ?? '').trim();
     let mode = String(named?.mode ?? '').trim().toLowerCase();
     const lastWord = /\s+(\w+)$/.exec(text);
-    if (!mode && lastWord && MODES.includes(lastWord[1].toLowerCase())) {
+    if (!mode && lastWord && ROUTE_MODE_WORDS.includes(lastWord[1].toLowerCase())) {
         mode = lastWord[1].toLowerCase();
         text = text.slice(0, lastWord.index);
     }
@@ -1121,20 +1134,20 @@ function registerSlashCommand() {
             const args = parseRouteArgs(named, unnamed);
             const answer = args.from && args.to
                 ? routeText(args.from, args.to, args)
-                : 'Usage: /route FROM to TO [foot|ride|wagon|boat|courier] [rate=N]';
+                : `Usage: /route FROM to TO [${modesOf(travelEra()).join('|')}] [rate=N]`;
             globalThis.toastr?.info?.(answer, 'Route', { timeOut: 20000, extendedTimeOut: 10000 });
             return answer;
         },
         namedArgumentList: [
-            SlashCommandNamedArgument.fromProps({ name: 'mode', description: 'foot, ride, wagon, boat or courier', typeList: [ARGUMENT_TYPE.STRING], enumList: MODES }),
-            SlashCommandNamedArgument.fromProps({ name: 'rate', description: 'km per day, overriding the pace', typeList: [ARGUMENT_TYPE.NUMBER] }),
+            SlashCommandNamedArgument.fromProps({ name: 'mode', description: 'foot, ride, wagon, boat or courier; modern: foot, bike, car, bus, train, ferry or plane', typeList: [ARGUMENT_TYPE.STRING], enumList: ROUTE_MODE_WORDS }),
+            SlashCommandNamedArgument.fromProps({ name: 'rate', description: 'km per day (modern: km an hour), overriding the pace', typeList: [ARGUMENT_TYPE.NUMBER] }),
             SlashCommandNamedArgument.fromProps({ name: 'from', description: 'start place', typeList: [ARGUMENT_TYPE.STRING] }),
             SlashCommandNamedArgument.fromProps({ name: 'to', description: 'destination', typeList: [ARGUMENT_TYPE.STRING] }),
         ],
         unnamedArgumentList: [
             SlashCommandArgument.fromProps({ description: 'FROM to TO [mode]', typeList: [ARGUMENT_TYPE.STRING] }),
         ],
-        helpString: 'Plans a journey over the Story Director world pack: hops, km, pace, days (each road rounded up to a half day, rest days on land) and the arrival from the scene\'s current time.',
+        helpString: 'Plans a journey over the Story Director world pack: hops, km, pace, days (each road rounded up to a half day, rest days on land; modern: hours to the quarter hour, boarding, nights on long drives) and the arrival from the scene\'s current time.',
     }));
 }
 

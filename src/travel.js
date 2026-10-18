@@ -77,7 +77,7 @@ export function corrections(findings) {
 
 // Roads that make a place "nearby": short and overland. Sea lanes, flights and seasonal
 // expeditions can join places thousands of km apart in one hop.
-const FAR_CODES = new Set(['S', 'D', 'A', 'X']);
+const FAR_CODES = new Set(['S', 'D', 'A', 'X', 'AR', 'SL']);
 
 /** The scene's place and the places one short road away, for relevance ("one hop away"). */
 export function nearbyPlaces(pack, place, { maxKm = 150 } = {}) {

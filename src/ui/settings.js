@@ -25,7 +25,7 @@ const DEFAULTS = {
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
     arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
     capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
-    map: { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25 },
+    map: { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25, era: 'pre-modern' },
     sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' },
 };
 
@@ -420,6 +420,11 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             { value: 'left', label: 'Left: x grows to the west' },
         ], map.east === 'left' ? 'left' : 'right');
         east.addEventListener('change', () => commit(next => { next.map.east = east.value === 'left' ? 'left' : 'right'; }));
+        const era = select('story_director_map_era', [
+            { value: 'pre-modern', label: 'Pre-modern: on foot, horse, wagon, boat; km a day' },
+            { value: 'modern', label: 'Modern: car, bus, train, ferry, plane; km an hour' },
+        ], map.era === 'modern' ? 'modern' : 'pre-modern');
+        era.addEventListener('change', () => commit(next => { next.map.era = era.value === 'modern' ? 'modern' : 'pre-modern'; }));
         const decimal = (id, key, value, [min, max], step) => {
             const input = el('input', { className: 'text_pole', attrs: { id, min: String(min), max: String(max), step: String(step), inputmode: 'decimal' } });
             input.type = 'number';
@@ -436,6 +441,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const factor = decimal('story_director_map_factor', 'roadFactor', map.roadFactor, [1, 3], 0.05);
         return [
             muted('Places come from the scene\'s location as the story goes (Director tab → Places). When the location carries coordinates, like "Auvoth | Terrace | [59.0, 110.0]", they go on a map with distances, and /route estimates trips between them. No world pack needed.'),
+            row('Travel', 'How trips are counted without a world pack (a pack says its own era).', era, { id: 'story_director_map_era' }),
             row('North is', 'Which way the y coordinate runs.', north, { id: 'story_director_map_north' }),
             row('East is', 'Which way the x coordinate runs.', east, { id: 'story_director_map_east' }),
             row('Map scale', 'How far one coordinate unit is.', withUnit(scale, 'km per unit'), { id: 'story_director_map_scale' }),
@@ -640,7 +646,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             const count = calendar.months.length;
             return count ? `${count} ${count === 1 ? 'month' : 'months'}${calendar.era ? ` · ${calendar.era}` : ''}` : 'Your months: none yet';
         },
-        pack: () => `${current.map.kmPerUnit} km per unit · ${summary ? 'world pack loaded' : 'no world pack'}`,
+        pack: () => `${current.map.era === 'modern' ? 'Modern · ' : ''}${current.map.kmPerUnit} km per unit · ${summary ? 'world pack loaded' : 'no world pack'}`,
         arc: () => `${current.arc.trigger === 'auto' ? 'Automatic' : 'Manual'} · ${profileName(current.arc.model)}`,
         capture: () => (current.capture.mode === 'off' || !CAPTURE_SHORT[current.capture.mode]
             ? 'Off'

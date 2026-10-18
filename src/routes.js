@@ -29,6 +29,46 @@ export const ROUTE_CODES = Object.freeze({
 
 export const MODES = Object.freeze(['foot', 'ride', 'wagon', 'boat', 'ship', 'flight', 'courier']);
 
+// Modern travel (0.9.0): a pack with `"era": "modern"` (or `pace_km_per_hour`) uses these road
+// codes and modes, paces in km an hour, and times in hours. Each code says which modes may use
+// it and how fast; a mode a code leaves out cannot use it. A pack's own paces are merged over
+// these, and may add codes of its own (one to three capital letters).
+export const MODERN_MODES = Object.freeze(['foot', 'bike', 'car', 'motorbike', 'bus', 'train', 'metro', 'ferry', 'ship', 'plane']);
+export const MODERN_CODES = Object.freeze({
+    MW: { name: 'motorway or highway', paces: { car: 100, motorbike: 100, bus: 80 } },
+    RD: { name: 'road', paces: { car: 60, motorbike: 60, bus: 45, bike: 18, foot: 5 } },
+    ST: { name: 'city streets', paces: { car: 25, motorbike: 25, bus: 18, bike: 15, foot: 5 } },
+    OR: { name: 'off-road or dirt track', paces: { car: 30, motorbike: 30, bike: 10, foot: 4 } },
+    TR: { name: 'trail or footpath', paces: { bike: 12, foot: 4 } },
+    RL: { name: 'railway', paces: { train: 90 }, board: 0.25 },
+    HS: { name: 'high-speed rail', paces: { train: 250 }, board: 0.5 },
+    MT: { name: 'metro, subway or tram', paces: { metro: 30 } },
+    FY: { name: 'ferry', paces: { ferry: 30, car: 30, motorbike: 30, bike: 30, foot: 30 }, board: 0.5 },
+    SL: { name: 'sea lane', paces: { ship: 35 }, board: 1 },
+    AR: { name: 'air route', paces: { plane: 750 }, board: 2 },
+});
+// Trains, planes and boats are reached by a short ride or walk: a hop the mode cannot take,
+// up to this long, goes by the first of these that can (a taxi, else on foot).
+const TRANSFER_MODES = ['car', 'foot'];
+const TRANSFER_KM = 60;
+// The mode a modern leg most likely means when it names only a road code.
+const MODERN_DEFAULT_MODE = { MW: 'car', RD: 'car', ST: 'foot', OR: 'car', TR: 'foot', RL: 'train', HS: 'train', MT: 'metro', FY: 'ferry', SL: 'ship', AR: 'plane' };
+// Modes someone drives, rides or walks themselves: they stop for the night on long trips.
+const SELF_MODES = ['foot', 'bike', 'car', 'motorbike'];
+const MODERN_ALIASES = {
+    walk: 'foot', walking: 'foot', walks: 'foot', hike: 'foot', hiking: 'foot', 'on foot': 'foot',
+    bicycle: 'bike', cycle: 'bike', cycling: 'bike', biking: 'bike', bikes: 'bike',
+    drive: 'car', driving: 'car', drives: 'car', cars: 'car', taxi: 'car', cab: 'car', van: 'car', truck: 'car',
+    motorcycle: 'motorbike', scooter: 'motorbike', moped: 'motorbike',
+    coach: 'bus', buses: 'bus',
+    rail: 'train', trains: 'train',
+    subway: 'metro', underground: 'metro', tube: 'metro', tram: 'metro',
+    boat: 'ferry', ferries: 'ferry',
+    ships: 'ship', cruise: 'ship',
+    fly: 'plane', flying: 'plane', flies: 'plane', flight: 'plane', planes: 'plane', airplane: 'plane', aeroplane: 'plane', jet: 'plane',
+};
+export const MODERN_RULES = Object.freeze({ unit: 'hour', roundUpTo: 0.25, driveHoursPerDay: 10 });
+
 // Words the model writes for a mode.
 const MODE_ALIASES = {
     walk: 'foot', walking: 'foot', walks: 'foot', hike: 'foot', hiking: 'foot',
@@ -104,8 +144,14 @@ export function loadWorldPack(json) {
         warnings.push(`"${name}" is on ${count} ${count === 1 ? 'edge' : 'edges'} but not in places.`);
     }
     const codes = new Set(edges.map(edge => edge.code));
+    const modern = isModernPack(data);
+    const ownPaces = data.paces ?? data.pace_km_per_hour;
     for (const code of codes) {
-        if (!Object.hasOwn(ROUTE_CODES, code)) warnings.push(`Unknown road code "${code}" (R pace used).`);
+        if (modern) {
+            if (!Object.hasOwn(MODERN_CODES, code) && !(isObject(ownPaces) && Object.keys(ownPaces).some(key => key.trim().toUpperCase() === code))) {
+                warnings.push(`Unknown road code "${code}" with no paces in pace_km_per_hour (nothing can use it).`);
+            }
+        } else if (!Object.hasOwn(ROUTE_CODES, code)) warnings.push(`Unknown road code "${code}" (R pace used).`);
     }
 
     warnings.push(...mapWarnings(places, edges, positive(data.scaleKmPerUnit ?? data.scale_km_per_unit)));
@@ -113,13 +159,19 @@ export function loadWorldPack(json) {
     const rules = data.rules ?? data.travel_rules ?? {};
     const pack = {
         name: String(data.name ?? data.source ?? ''),
+        era: modern ? 'modern' : 'pre-modern',
         calendar: isObject(data.calendar) ? data.calendar : null,
         scaleKmPerUnit: positive(data.scaleKmPerUnit ?? data.scale_km_per_unit),
         places,
         edges,
-        paces: readPaces(data.paces ?? data.pace_km_per_day, warnings),
+        paces: modern ? modernPaces(data.paces ?? data.pace_km_per_hour, warnings) : readPaces(data.paces ?? data.pace_km_per_day, warnings),
         courierMultiplier: positive(data.courierMultiplier ?? data.courier_multiplier) ?? DEFAULT_COURIER_MULTIPLIER,
-        rules: {
+        rules: modern ? {
+            unit: 'hour',
+            roundUpTo: nonNegative(rules.roundUpTo ?? rules.round_edge_up_to_hours) ?? MODERN_RULES.roundUpTo,
+            driveHoursPerDay: positive(rules.driveHoursPerDay ?? rules.drive_hours_per_day) ?? MODERN_RULES.driveHoursPerDay,
+            restDayEvery: 0, crewedWaterRest: false, leveeRoads: [], noLevee: [],
+        } : {
             roundUpTo: nonNegative(rules.roundUpTo ?? rules.round_edge_up_to_days) ?? DEFAULT_RULES.roundUpTo,
             restDayEvery: nonNegative(rules.restDayEvery ?? rules.rest_day_every_active_days) ?? DEFAULT_RULES.restDayEvery,
             crewedWaterRest: Boolean(rules.crewedWaterRest ?? rules.crewed_water_rest_days ?? false),
@@ -128,6 +180,43 @@ export function loadWorldPack(json) {
         },
     };
     return { pack, errors, warnings };
+}
+
+// A modern pack says so, or gives its paces per hour.
+function isModernPack(data) {
+    const era = String(data?.era ?? '').trim().toLowerCase();
+    if (era) return era === 'modern';
+    if (data?.unit === 'hour' || data?.rules?.unit === 'hour') return true;
+    return isObject(data?.pace_km_per_hour);
+}
+
+// The modern table with the pack's own paces merged over it: { CODE: { mode: pace } }. A pace
+// of null takes a mode off a code.
+function modernPaces(source, warnings) {
+    const paces = Object.fromEntries(Object.entries(MODERN_CODES).map(([code, info]) => [code, { ...info.paces, ...(info.board ? { boardHours: info.board } : {}) }]));
+    if (!isObject(source)) return paces;
+    for (const [rawCode, table] of Object.entries(source)) {
+        const code = rawCode.trim().toUpperCase();
+        if (!isObject(table)) continue;
+        paces[code] ??= {};
+        for (const [rawKey, value] of Object.entries(table)) {
+            if (rawKey === 'board_hours' || rawKey === 'boardHours') {
+                if (nonNegative(value) === null) warnings.push(`Pace ${code}.${rawKey} is not a number of hours.`);
+                else paces[code].boardHours = value;
+                continue;
+            }
+            const key = normalizeMode(rawKey, { era: 'modern' });
+            if (!key) {
+                warnings.push(`Pace ${code}.${rawKey}: "${rawKey}" is not a modern mode (${MODERN_MODES.join(', ')}).`);
+                continue;
+            }
+            const pace = readPace(value);
+            if (pace === undefined || pace === 'foot') warnings.push(`Pace ${code}.${rawKey} is not a number, range or null.`);
+            else if (pace === null) delete paces[code][key];
+            else paces[code][key] = pace;
+        }
+    }
+    return paces;
 }
 
 function readPlaces(source, errors) {
@@ -163,6 +252,7 @@ function readEdge(raw) {
     if (km === null) return `${a} – ${b} has no km`;
     const code = typeof raw.code === 'string' ? raw.code.trim().toUpperCase() : '';
     if (!code) return `${a} – ${b} has no road code`;
+    if (!/^[A-Z]{1,3}$/.test(code)) return `${a} – ${b} has the road code "${raw.code}" (one to three letters)`;
     return {
         a, b, km, code,
         corridor: typeof raw.corridor === 'string' && raw.corridor.trim() ? raw.corridor.trim() : null,
@@ -242,7 +332,7 @@ export function packSummary(pack) {
     if (!pack) return 'no world pack';
     const places = Object.keys(pack.places ?? {}).length;
     const routes = (pack.edges ?? []).length;
-    return `${places} ${places === 1 ? 'place' : 'places'} · ${routes} ${routes === 1 ? 'route' : 'routes'}`;
+    return `${places} ${places === 1 ? 'place' : 'places'} · ${routes} ${routes === 1 ? 'route' : 'routes'}${pack.era === 'modern' ? ' · modern' : ''}`;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -333,15 +423,30 @@ function edgesBetween(pack, a, b) {
 // ---------------------------------------------------------------------------------------
 // Paces
 
-function normalizeMode(mode) {
+function normalizeMode(mode, pack = null) {
     if (typeof mode !== 'string') return null;
-    const word = mode.trim().toLowerCase();
+    const word = mode.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (pack?.era === 'modern') return MODERN_MODES.includes(word) ? word : MODERN_ALIASES[word] ?? null;
     if (MODES.includes(word)) return word;
     return MODE_ALIASES[word] ?? null;
 }
 
+/** The modes a pack's travel knows: the modern ones for a modern pack. */
+export function modesFor(pack) {
+    return pack?.era === 'modern' ? MODERN_MODES : MODES;
+}
+
+/** What a road code is called ("bastion road", "railway"). */
+export function codeName(pack, code) {
+    if (pack?.era === 'modern') return MODERN_CODES[code]?.name ?? 'road';
+    return ROUTE_CODES[code] ?? 'road';
+}
+
 // The mode a leg most likely means when it names only a road code.
-function inferMode(code) {
+function inferMode(code, pack = null) {
+    if (pack?.era === 'modern') {
+        return MODERN_DEFAULT_MODE[code] ?? Object.keys(pack.paces?.[code] ?? {})[0] ?? 'foot';
+    }
     if (code === 'W') return 'boat';
     if (code === 'S' || code === 'D') return 'ship';
     if (code === 'A') return 'flight';
@@ -379,9 +484,11 @@ function landPace(pack, code, mode) {
  * (R pace); S is ship; D is ship or boat at vessel pace; A is flight.
  */
 export function paceFor(pack, code, mode, { corridor = null } = {}) {
-    const name = normalizeMode(mode);
+    const name = normalizeMode(mode, pack);
     if (!pack || !name) return null;
     const key = String(code ?? '').trim().toUpperCase();
+    // Modern: the code's own table, km an hour; a mode it leaves out cannot use it.
+    if (pack.era === 'modern') return toPace(pack.paces?.[key]?.[name]);
 
     if (name === 'courier') {
         const ride = paceFor(pack, key, 'ride', { corridor });
@@ -403,6 +510,27 @@ function edgePace(pack, edge, mode) {
     return paceFor(pack, edge.code, mode, { corridor: edge.corridor });
 }
 
+/** Days spent boarding on a modern code: check-in for a flight, the wait for a train. */
+export function boardDays(pack, code) {
+    if (pack?.era !== 'modern') return 0;
+    return tidy((nonNegative(pack.paces?.[code]?.boardHours) ?? 0) / 24);
+}
+
+// The mode a hop goes by: the trip's own, or for public transport in a modern pack a short
+// transfer (a taxi to the airport). Null when nothing can.
+function hopMode(pack, edge, mode, transfer) {
+    if (edgePace(pack, edge, mode)) return mode;
+    if (!transfer || edge.km > TRANSFER_KM) return null;
+    return TRANSFER_MODES.find(other => edgePace(pack, edge, other)) ?? null;
+}
+
+// One hop's time in days: the road at the mode's pace, plus boarding when the mode rides it.
+function hopDays(pack, edge, mode, rate = null) {
+    const pace = rate ?? edgePace(pack, edge, mode)?.rate;
+    const days = legDays(edge.km, pace, pack.rules);
+    return days === null ? null : tidy(days + boardDays(pack, edge.code));
+}
+
 // The rates a stated pace may use: the pace's range, and on a river also the upstream and
 // downstream ranges (direction is not in the data).
 function acceptedRange(pack, edge, mode) {
@@ -420,12 +548,21 @@ function acceptedRange(pack, edge, mode) {
 /** Days for one edge: `ceil(km / rate / roundUpTo) * roundUpTo`; null for a bad rate. */
 export function legDays(km, rate, rules = DEFAULT_RULES) {
     if (!(rate > 0) || !(km >= 0)) return null;
+    // Modern: km an hour, rounded up to the quarter hour (or the pack's step), in days.
+    if (rules?.unit === 'hour') {
+        const step = rules.roundUpTo ?? MODERN_RULES.roundUpTo;
+        const hours = step > 0 ? Math.ceil(km / rate / step - EPSILON) * step : km / rate;
+        return tidy(hours / 24);
+    }
     const step = rules?.roundUpTo ?? DEFAULT_RULES.roundUpTo;
     if (!(step > 0)) return km / rate;
     return tidy(Math.ceil(km / rate / step - EPSILON) * step);
 }
 
 export function restDaysFor(mode, activeDays, rules = DEFAULT_RULES) {
+    // Modern: whoever drives, rides or walks stops for the night after driveHoursPerDay; trains,
+    // buses, ferries and planes go on. Returned in days, like a rest day.
+    if (rules?.unit === 'hour') return tidy(overnights(mode, activeDays, rules) * (24 - driveHours(rules)) / 24);
     const every = rules?.restDayEvery ?? DEFAULT_RULES.restDayEvery;
     if (mode === 'courier' || !(every > 0) || !(activeDays > 0)) return 0;
     if (WATER_MODES.includes(mode) && !rules?.crewedWaterRest) return 0;
@@ -433,21 +570,36 @@ export function restDaysFor(mode, activeDays, rules = DEFAULT_RULES) {
     return Math.floor((activeDays - EPSILON) / every);
 }
 
+function driveHours(rules) {
+    return Math.min(24, positive(rules?.driveHoursPerDay) ?? MODERN_RULES.driveHoursPerDay);
+}
+
+/** Nights a modern trip stops for: 0 for public transport and trips within a day's driving. */
+export function overnights(mode, activeDays, rules = MODERN_RULES) {
+    if (rules?.unit !== 'hour' || !SELF_MODES.includes(mode) || !(activeDays > 0)) return 0;
+    const hours = driveHours(rules);
+    if (hours >= 24) return 0;
+    return Math.max(0, Math.ceil(activeDays * 24 / hours - EPSILON) - 1);
+}
+
 // ---------------------------------------------------------------------------------------
 // Routes
 
 // Per neighbour, the edge this mode can use with the fewest days (shorter km on a tie).
-function usableEdges(pack, place, mode, accept) {
+function usableEdges(pack, place, mode, accept, transfer = false) {
     const best = new Map();
     for (const edge of indexOf(pack).adjacency.get(place) ?? []) {
         if (accept && !accept(edge)) continue;
-        const pace = edgePace(pack, edge, mode);
-        if (!pace) continue;
+        const by = hopMode(pack, edge, mode, transfer);
+        if (!by) continue;
         const next = edge.a === place ? edge.b : edge.a;
-        const days = legDays(edge.km, pace.rate, pack.rules);
+        // A transfer weighs three times its time, so a train trip takes the train where there is one.
+        const days = hopDays(pack, edge, by) * (by === mode ? 1 : 3);
         const current = best.get(next);
-        if (!current || days < current.days || (days === current.days && edge.km < current.edge.km)) {
-            best.set(next, { edge, days });
+        const own = current && current.mode === mode;
+        if (own && by !== mode) continue;
+        if (!current || (by === mode && !own) || days < current.days || (days === current.days && edge.km < current.edge.km)) {
+            best.set(next, { edge, days, mode: by });
         }
     }
     return best;
@@ -464,8 +616,11 @@ function bestEdge(pack, edges, mode) {
     return best?.edge ?? null;
 }
 
-// Dijkstra by km. `accept` narrows the edges (validateLeg uses it to stay on one road code).
-function search(pack, start, goal, mode, accept = null) {
+// Dijkstra by km; in a modern pack by time, as a motorway's detour or a flight is quicker.
+// `accept` narrows the edges (validateLeg uses it to stay on one road code); `transfer` lets
+// public transport reach its stations (planRoute and shortestPath only).
+function search(pack, start, goal, mode, accept = null, transfer = false) {
+    const byTime = pack.era === 'modern';
     if (start === goal) return { from: start, to: goal, km: 0, hops: [] };
     const dist = new Map([[start, 0]]);
     const prev = new Map();
@@ -480,11 +635,11 @@ function search(pack, start, goal, mode, accept = null) {
         if (done.has(place)) continue;
         done.add(place);
         if (place === goal) break;
-        for (const [next, { edge }] of usableEdges(pack, place, mode, accept)) {
-            const km = dist.get(place) + edge.km;
-            if (km < (dist.get(next) ?? Infinity)) {
-                dist.set(next, km);
-                prev.set(next, { place, edge });
+        for (const [next, { edge, days, mode: by }] of usableEdges(pack, place, mode, accept, transfer)) {
+            const cost = dist.get(place) + (byTime ? days : edge.km);
+            if (cost < (dist.get(next) ?? Infinity)) {
+                dist.set(next, cost);
+                prev.set(next, { place, edge, mode: by });
                 queue.push(next);
             }
         }
@@ -492,18 +647,23 @@ function search(pack, start, goal, mode, accept = null) {
     if (!prev.has(goal)) return null;
     const hops = [];
     for (let place = goal; place !== start; place = prev.get(place).place) {
-        const { place: from, edge } = prev.get(place);
-        hops.unshift({ from, to: place, km: edge.km, code: edge.code, corridor: edge.corridor });
+        const { place: from, edge, mode: by } = prev.get(place);
+        const hop = { from, to: place, km: edge.km, code: edge.code, corridor: edge.corridor };
+        if (by !== mode) hop.mode = by;
+        hops.unshift(hop);
     }
-    return { from: start, to: goal, km: tidy(dist.get(goal)), hops };
+    return { from: start, to: goal, km: tidy(hops.reduce((sum, hop) => sum + hop.km, 0)), hops };
 }
 
+// Public transport in a modern pack may take a short transfer to its station.
+const transfersFor = (pack, mode) => pack?.era === 'modern' && !SELF_MODES.includes(mode);
+
 export function shortestPath(pack, from, to, { mode = 'foot' } = {}) {
-    const name = normalizeMode(mode);
+    const name = normalizeMode(mode, pack);
     const start = resolvePlace(pack, from);
     const goal = resolvePlace(pack, to);
     if (!name || !start || !goal) return null;
-    return search(pack, start, goal, name);
+    return search(pack, start, goal, name, null, transfersFor(pack, name));
 }
 
 /**
@@ -512,21 +672,26 @@ export function shortestPath(pack, from, to, { mode = 'foot' } = {}) {
  * read with `calendar`).
  */
 export function planRoute(pack, from, to, { mode = 'foot', rate = null, depart = null, calendar = null } = {}) {
-    const name = normalizeMode(mode);
+    const name = normalizeMode(mode, pack);
     const route = shortestPath(pack, from, to, { mode: name });
     if (!route) return null;
     const explicit = positive(rate);
     const rules = pack.rules ?? DEFAULT_RULES;
     const hops = route.hops.map(hop => {
-        const hopRate = explicit ?? paceFor(pack, hop.code, name, { corridor: hop.corridor }).rate;
-        return { ...hop, rate: hopRate, days: legDays(hop.km, hopRate, rules) };
+        const by = hop.mode ?? name;
+        // An explicit rate is the trip's own mode's; a transfer goes at its pace.
+        const hopRate = (by === name ? explicit : null) ?? paceFor(pack, hop.code, by, { corridor: hop.corridor }).rate;
+        return { ...hop, rate: hopRate, days: hopDays(pack, hop, by, hopRate) };
     });
     const activeDays = tidy(hops.reduce((sum, hop) => sum + hop.days, 0));
     const restDays = restDaysFor(name, activeDays, rules);
+    const boardHours = tidy(hops.reduce((sum, hop) => sum + (hop.mode ? 0 : boardDays(pack, hop.code)), 0) * 24);
     const days = tidy(activeDays + restDays);
     const start = toAbs(depart, calendar);
     return {
         ...route, mode: name, hops, activeDays, restDays, days,
+        unit: rules.unit === 'hour' ? 'hour' : 'day', boardHours,
+        stops: overnights(name, activeDays, rules),
         depart: start,
         arrive: start === null ? null : addDays(start, days, calendar),
     };
@@ -537,9 +702,13 @@ export function planRoute(pack, from, to, { mode = 'foot', rate = null, depart =
 
 const ARROW = /\s*(?:→|⟶|➔|->|=>)\s*/u;
 const BRACKETED = /\(([^()]*(?:→|⟶|➔|->|=>)[^()]*)\)/u;
-const RATE = /(\d+(?:\.\d+)?)\s*(?:km\s*)?(?:\/\s*(?:day|d)\b|(?:a|per)\s+day\b)/i;
-const KM_CODE = /(?<![\d.])(\d+(?:\.\d+)?)\s*(?:km\b\.?)?\s*(?:([A-Z])(?![\p{L}\p{N}]))?/u;
-const MODE_WORD = new RegExp(`(?<![\\p{L}])(${[...MODES, ...Object.keys(MODE_ALIASES)].join('|')})(?![\\p{L}])`, 'iu');
+const RATE = /(\d+(?:\.\d+)?)\s*(?:km\s*)?(?:\/\s*(day|d|h|hr|hour)\b|(?:a|an|per)\s+(day|hour)\b|(kph))/i;
+const KM_CODE = /(?<![\d.])(\d+(?:\.\d+)?)\s*(?:km\b\.?)?\s*(?:([A-Z]{1,3})(?![\p{L}\p{N}]))?/u;
+const modeWord = words => new RegExp(`(?<![\\p{L}])(${words.sort((a, b) => b.length - a.length).join('|')})(?![\\p{L}])`, 'iu');
+const MODE_WORD = modeWord([...MODES, ...Object.keys(MODE_ALIASES)]);
+const MODERN_MODE_WORD = modeWord([...MODERN_MODES, ...Object.keys(MODERN_ALIASES)]);
+// "→ 2.5 h", "→ 45 min", "→ 1.5 days", or a bare number in the pack's unit.
+const DURATION = /^(\d+(?:\.\d+)?)\s*(min(?:ute)?s?|h(?:rs?|ours?)?|d(?:ays?)?)?(?![\p{L}])/iu;
 
 /**
  * Reads a `leg:` value: `Shorn → Varnhold Watch 35 B, courier 70/day → 0.5`, also `->`,
@@ -572,11 +741,17 @@ export function parseLeg(pack, text) {
         rate = Number(rateMatch[1]);
         rest = rest.slice(0, rateMatch.index) + rest.slice(rateMatch.index + rateMatch[0].length);
     }
-    const modeMatch = MODE_WORD.exec(rest) ?? MODE_WORD.exec(tail.join(' '));
-    const mode = modeMatch ? normalizeMode(modeMatch[1]) : null;
+    const words = pack?.era === 'modern' ? MODERN_MODE_WORD : MODE_WORD;
+    const modeMatch = words.exec(rest) ?? words.exec(tail.join(' '));
+    const mode = modeMatch ? normalizeMode(modeMatch[1], pack) : null;
 
     const kmMatch = KM_CODE.exec(rest);
-    const daysMatch = /^(\d+(?:\.\d+)?)/.exec(tail[0] ?? '');
+    // Days, whatever unit the leg wrote its time in.
+    const durationMatch = DURATION.exec(tail[0] ?? '');
+    const hourly = pack?.era === 'modern';
+    const unit = (durationMatch?.[2] ?? '').toLowerCase();
+    const perDay = /^min/.test(unit) ? 1440 : /^h/.test(unit) ? 24 : /^d/.test(unit) ? 1 : hourly ? 24 : 1;
+    const days = durationMatch ? Number(durationMatch[1]) / perDay : null;
 
     const place = (raw, whole) => {
         if (!pack) return raw || null;
@@ -590,7 +765,7 @@ export function parseLeg(pack, text) {
         code: kmMatch?.[2] ?? null,
         mode,
         rate,
-        days: daysMatch ? Number(daysMatch[1]) : null,
+        days,
         fromText,
         toText: toText || middle,
     };
@@ -629,9 +804,9 @@ export function validateLeg(pack, leg, { from = null, depart = null, arrive = nu
     }
 
     const origin = from ? resolvePlace(pack, from) : null;
-    const statedMode = normalizeMode(leg.mode);
+    const statedMode = normalizeMode(leg.mode, pack);
     if (origin && origin !== leg.from) {
-        const mode = statedMode ?? inferMode(leg.code);
+        const mode = statedMode ?? inferMode(leg.code, pack);
         const plan = planRoute(pack, origin, leg.to, { mode });
         const hop = plan?.hops[0];
         findings.push(finding('leg-wrong-start', 'error',
@@ -643,7 +818,7 @@ export function validateLeg(pack, leg, { from = null, depart = null, arrive = nu
     if (leg.from === leg.to) return findings;
 
     const direct = edgesBetween(pack, leg.from, leg.to);
-    const mode = statedMode ?? inferMode(leg.code ?? direct[0]?.code);
+    const mode = statedMode ?? inferMode(leg.code ?? direct[0]?.code, pack);
 
     if (!direct.length) {
         const onCode = leg.code ? edge => edge.code === leg.code : null;
@@ -688,7 +863,7 @@ export function validateLeg(pack, leg, { from = null, depart = null, arrive = nu
     const fix = correctionFor({ ...ctx, hop, mode, rateOk: statedMode ? null : true });
     if (leg.code && !named.length) {
         findings.push(finding('leg-code', 'warn',
-            `The road from ${leg.from} to ${leg.to} is ${edge.code} (${ROUTE_CODES[edge.code] ?? 'road'}), not ${leg.code}.`, fix.text));
+            `The road from ${leg.from} to ${leg.to} is ${edge.code} (${codeName(pack, edge.code)}), not ${leg.code}.`, fix.text));
     }
     if (leg.km !== null && leg.km !== undefined && Math.abs(leg.km - edge.km) > KM_TOLERANCE * edge.km) {
         findings.push(finding('leg-km', 'warn',
@@ -696,21 +871,23 @@ export function validateLeg(pack, leg, { from = null, depart = null, arrive = nu
     }
     if (!statedMode && !ctx.legRate) return findings;
 
+    const unit = unitOf(pack);
     if (statedMode && ctx.legRate && !fix.rateInRange) {
         findings.push(finding('leg-rate', 'warn',
-            `${capitalize(mode)} on ${edge.code} goes ${rangeText(fix.range)} km a day, not ${num(ctx.legRate)}.`, fix.text));
+            `${capitalize(mode)} on ${edge.code} goes ${rangeText(fix.range)} ${rateWords(unit)}, not ${num(ctx.legRate)}.`, fix.text));
     }
+    const tolerance = toleranceFor(fix.days, unit);
     if (leg.days !== null && leg.days !== undefined
-        && Math.abs(leg.days - fix.days) > DAYS_TOLERANCE && Math.abs(leg.days - fix.activeDays) > DAYS_TOLERANCE) {
+        && Math.abs(leg.days - fix.days) > tolerance && Math.abs(leg.days - fix.activeDays) > tolerance) {
         findings.push(finding('leg-days', 'warn',
-            `${num(edge.km)} km at ${num(fix.rate)} a day is ${num(fix.days)} ${dayWord(fix.days)}, not ${num(leg.days)}.`, fix.text));
+            `${num(edge.km)} km at ${num(fix.rate)} ${rateWords(unit)} is ${durationText(fix.days, unit)}, not ${durationText(leg.days, unit)}.`, fix.text));
     }
     if (fix.arrive !== null) {
         const gap = arrivalGap(fix.arrive, arrive, calendar);
-        if (gap !== null && gap > DAYS_TOLERANCE) {
+        if (gap !== null && gap > tolerance) {
             findings.push(finding('leg-arrive', 'warn',
-                `Arrival ${dateText(arrive, calendar)} is ${num(gap)} ${dayWord(gap)} off: `
-                + `${num(fix.days)} ${dayWord(fix.days)} from ${dateText(start, calendar)} is ${dateText(fix.arrive, calendar)}.`, fix.text));
+                `Arrival ${dateText(arrive, calendar)} is ${durationText(gap, unit)} off: `
+                + `${durationText(fix.days, unit)} from ${dateText(start, calendar)} is ${dateText(fix.arrive, calendar)}.`, fix.text));
         }
     }
     return findings;
@@ -728,10 +905,10 @@ function correctionFor({ pack, calendar, start, legRate, hop, mode, rateOk = nul
     const range = acceptedRange(pack, hop, mode) ?? pace;
     const rateInRange = Boolean(legRate && range && legRate >= range.low - EPSILON && legRate <= range.high + EPSILON);
     const rate = legRate && (rateInRange || rateOk) ? legRate : pace?.rate ?? legRate;
-    const activeDays = legDays(hop.km, rate, pack.rules);
+    const activeDays = rate > 0 ? hopDays(pack, hop, mode, rate) : null;
     const days = tidy(activeDays + restDaysFor(mode, activeDays, pack.rules));
     const arrive = start === null ? null : addDays(start, days, calendar);
-    const text = formatLeg(hop, { mode, rate, days, arrive, calendar });
+    const text = formatLeg(hop, { mode, rate, days, arrive, calendar, unit: unitOf(pack) });
     return { text, rate, range, rateInRange, activeDays, days, arrive };
 }
 
@@ -759,24 +936,34 @@ function arrivalGap(expected, arrive, calendar) {
 /** `Shorn → Varnhold Watch 35 B → … = 220 km · ride 35/day · 7 active days + 1 rest = 8 days · arrive …` */
 export function formatRoute(plan, calendar = null) {
     if (!plan) return '';
-    const path = [plan.from, ...plan.hops.map(hop => `${hop.to} ${num(hop.km)} ${hop.code}`)].join(' → ');
+    const path = [plan.from, ...plan.hops.map(hop => `${hop.to} ${num(hop.km)} ${hop.code}${hop.mode ? ` (${hop.mode})` : ''}`)].join(' → ');
     const parts = [`${path} = ${num(plan.km)} km`];
-    const rates = [...new Set(plan.hops.map(hop => hop.rate))].sort((a, b) => a - b);
+    const rates = [...new Set(plan.hops.filter(hop => !hop.mode).map(hop => hop.rate))].sort((a, b) => a - b);
     if (rates.length) {
         const rate = rates.length === 1 ? num(rates[0]) : `${num(rates[0])}–${num(rates[rates.length - 1])}`;
-        parts.push(`${plan.mode} ${rate}/day`);
+        parts.push(`${plan.mode} ${rate}${plan.unit === 'hour' ? ' km/h' : '/day'}`);
     }
-    parts.push(plan.restDays > 0
-        ? `${num(plan.activeDays)} active ${dayWord(plan.activeDays)} + ${num(plan.restDays)} rest = ${num(plan.days)} ${dayWord(plan.days)}`
-        : `${num(plan.days)} ${dayWord(plan.days)}`);
+    if (plan.unit === 'hour') {
+        if (plan.boardHours > 0) parts.push(`${durationText(plan.boardHours / 24, 'hour')} boarding`);
+        parts.push(plan.stops > 0
+            ? `${durationText(plan.activeDays, 'hour')} on the way + ${plan.stops} ${plan.stops === 1 ? 'night' : 'nights'} = ${durationText(plan.days, 'hour')}`
+            : durationText(plan.days, 'hour'));
+    } else {
+        parts.push(plan.restDays > 0
+            ? `${num(plan.activeDays)} active ${dayWord(plan.activeDays)} + ${num(plan.restDays)} rest = ${num(plan.days)} ${dayWord(plan.days)}`
+            : `${num(plan.days)} ${dayWord(plan.days)}`);
+    }
     if (plan.arrive !== null && plan.arrive !== undefined && calendar) {
         parts.push(`arrive ${calendar.format(plan.arrive, { era: false })}`);
     }
     return parts.join(' · ');
 }
 
-/** One leg in the line grammar: `Shorn → Varnhold Watch 35 B, courier 70/day → 0.5 | arrive: …`. */
-export function formatLeg(hop, { mode = null, rate = null, days = null, arrive = null, calendar = null } = {}) {
+/**
+ * One leg in the line grammar: `Shorn → Varnhold Watch 35 B, courier 70/day → 0.5 | arrive: …`;
+ * with `unit: 'hour'` (a modern pack) `Home → Office 25 RD, car 60/h → 0.5 h`.
+ */
+export function formatLeg(hop, { mode = null, rate = null, days = null, arrive = null, calendar = null, unit = 'day' } = {}) {
     if (!hop) return '';
     const m = normalizeMode(mode ?? hop.mode) ?? mode ?? null;
     const r = rate ?? hop.rate ?? null;
@@ -784,9 +971,10 @@ export function formatLeg(hop, { mode = null, rate = null, days = null, arrive =
     let text = `${hop.from} → ${hop.to}`;
     if (hop.km !== null && hop.km !== undefined) text += ` ${num(hop.km)}`;
     if (hop.code) text += ` ${hop.code}`;
-    const working = [m, r !== null ? `${num(r)}/day` : null].filter(Boolean).join(' ');
+    const hourly = unit === 'hour';
+    const working = [m, r !== null ? `${num(r)}/${hourly ? 'h' : 'day'}` : null].filter(Boolean).join(' ');
     if (working) text += `, ${working}`;
-    if (d !== null) text += ` → ${num(d)}`;
+    if (d !== null) text += hourly ? ` → ${num(d * 24)} h` : ` → ${num(d)}`;
     const when = typeof arrive === 'number' ? (calendar ? calendar.format(arrive, { era: false }) : null) : arrive;
     if (when) text += ` | arrive: ${when}`;
     return text;
@@ -821,6 +1009,30 @@ function dateText(value, calendar) {
     return String(value);
 }
 
+function unitOf(pack) {
+    return pack?.rules?.unit === 'hour' ? 'hour' : 'day';
+}
+
+function rateWords(unit) {
+    return unit === 'hour' ? 'km/h' : 'km a day';
+}
+
+// Pre-modern: half a day. Modern: a quarter hour, or a tenth of the trip when that is more.
+function toleranceFor(days, unit) {
+    return unit === 'hour' ? Math.max(0.25 / 24, (days ?? 0) * 0.1) : DAYS_TOLERANCE;
+}
+
+/** "1.5 days"; for a modern pack "45 min", "2 h 15 min", "1 day 3 h". */
+export function durationText(days, unit = 'day') {
+    if (unit !== 'hour') return `${num(days)} ${dayWord(days)}`;
+    const minutes = Math.round((days ?? 0) * 1440);
+    const d = Math.floor(minutes / 1440);
+    const h = Math.floor((minutes % 1440) / 60);
+    const m = minutes % 60;
+    const parts = [d ? `${d} ${d === 1 ? 'day' : 'days'}` : '', h ? `${h} h` : '', m ? `${m} min` : ''].filter(Boolean);
+    return parts.join(' ') || '0 min';
+}
+
 function dayWord(days) {
     return days <= 1 ? 'day' : 'days';
 }
@@ -838,8 +1050,9 @@ function toAbs(value, calendar, reference = null) {
     return null;
 }
 
+// To the minute: hours in thirds and quarters must not land on 09:59.
 function addDays(abs, days, calendar) {
-    return calendar?.addDays ? calendar.addDays(abs, days) : abs + days * DAY_MINUTES;
+    return Math.round(calendar?.addDays ? calendar.addDays(abs, days) : abs + days * DAY_MINUTES);
 }
 
 // 6.500000000001 → 6.5, so sums and printed numbers stay clean.

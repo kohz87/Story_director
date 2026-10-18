@@ -72,7 +72,7 @@ test('distance and direction follow the map settings', () => {
     assert.equal(bearing(a, { coords: { x: 0, y: -2 } }, {}), 'S');
     assert.equal(bearing(a, a, {}), '');
     assert.equal(distanceKm(a, { coords: null }), null);
-    assert.deepEqual(mapSettings({ kmPerUnit: -1, roadFactor: 0.5, north: 'x' }), { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25 });
+    assert.deepEqual(mapSettings({ kmPerUnit: -1, roadFactor: 0.5, north: 'x' }), { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25, era: 'pre-modern' });
 });
 
 test('nearby by coordinates, and finding a place by a longer location', () => {

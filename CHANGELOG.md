@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0
+
+Modern travel. Roads, paces and rest days were all pre-modern (bastion roads, wagons, a rest day every six days), so a story set now could not use world packs or `/route`.
+
+- **Modern packs:** a pack with `"era": "modern"` (or `pace_km_per_hour`) has its own road codes (`MW` motorway, `RD` road, `ST` city streets, `OR` off-road, `TR` trail, `RL` railway, `HS` high-speed rail, `MT` metro, `FY` ferry, `SL` sea lane, `AR` air route) and modes (foot, bike, car, motorbike, bus, train, metro, ferry, ship, plane), with built-in paces in km an hour. A mode a code does not list cannot use it. The pack's own paces are merged over them, may take a mode off (`null`) or add codes (one to three letters).
+- **Hours, not days:** each road rounds up to the quarter hour; routes, legs, corrections and findings read in hours (`2 h 15 min`); arrivals are checked to the quarter hour or a tenth of the trip.
+- **Nights on long drives:** car, motorbike, bike and foot stop for the night after 10 hours on the road (`drive_hours_per_day`); public transport goes on.
+- **Boarding:** trains 15 min, high-speed rail and ferries 30 min, ships 1 h, flights 2 h (`board_hours` per code).
+- **Getting to the station:** train, plane, ferry, bus and metro trips reach their station by a short taxi or walk (up to 60 km), shown as `(car)`; modern routes take the fastest way.
+- **Without a pack:** Settings → Map & travel → **Travel** (*Pre-modern* or *Modern*) chooses how `/route` estimates from coordinates; modern paces are door to door with boarding. The Director tab's route tool offers the era's modes.
+- **README:** a Modern travel section with the codes and paces, and a modern version of the pack-making prompt.
+
 ## 0.8.8
 
 - **Your world pack's coordinates win.** A reply's coordinates (`Hollin's Reach | … | [70, 104]`) used to win over the pack's for any place the story had been, so one wrong number from the model made the Places section and `/route` give the wrong distance and direction (Hollin's Reach "east" when the pack puts it south-west of Bluewatch). Now the pack's coordinates are used for every place it knows. When a reply's coordinates differ by more than one map unit, the place says "(world pack; the story wrote 70, 104)" and the Places section names it. Places the pack does not know keep the story's coordinates.

@@ -1,4 +1,4 @@
-# Story Director v0.8.8
+# Story Director v0.9.0
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -207,6 +207,7 @@ picks what is relevant. Nobody has to write a map file for any of this.
 
 | Setting | Default | |
 |---|---|---|
+| Travel | Pre-modern | *Pre-modern*: on foot, horse, wagon, boat, in km a day. *Modern*: car, bus, train, ferry, plane, in km an hour (see [Modern travel](#modern-travel)). A world pack says its own era |
 | North is | Up | *Up*: y grows to the north (a chart). *Down*: y grows to the south (an image, where 0,0 is the top left) |
 | East is | Right | Which way x grows |
 | km per unit | 1 | How far one coordinate unit is (a world pack's `scale_km_per_unit` sets it) |
@@ -222,6 +223,17 @@ Shorn → Auvoth ≈ 219 km SE (≈ 175 km straight × 1.25) · foot 20/day · 1
 The days follow the same rules as roads: rounded up to the half day, a rest day after every six
 days on land, none for couriers; boats and flight go straight. Paces without a pack: foot 20,
 ride 35, wagon 18, boat 35, courier 70 km a day (or `rate=`).
+
+With **Travel** set to *Modern*, the same estimate counts hours:
+
+```
+/route Home to Coast car
+Home → Coast ≈ 1250 km NE (≈ 1000 km straight × 1.25) · car 70 km/h · 1 day 8 h (1 night on the way) · arrive …
+```
+
+Modern paces without a pack, door to door: foot 5, bike 15, car and motorbike 70, bus 50,
+train 90, metro 30, ferry 30, ship 35, plane 750 km an hour, plus boarding (train 15 min,
+ferry 30 min, ship 1 h, plane 2 h).
 
 ## World packs and travel
 
@@ -283,6 +295,54 @@ Shorn → Varnhold Watch 35 B → Wolfmere Outpost 55 B → Auvoth 130 B = 220 k
 
 The Director tab has the same tool under **Route**.
 
+### Modern travel
+
+For a story set now (or in the last century or so), a pack with `"era": "modern"` (or paces
+under `pace_km_per_hour`) travels by modern roads and transport. Everything above works the
+same, with these differences:
+
+- **Times are hours.** Each road rounds up to the quarter hour (`round_edge_up_to_hours`), and
+  the result reads like a clock: `45 min`, `2 h 15 min`, `1 day 3 h`.
+- **Nights on long drives:** whoever drives, rides or walks (car, motorbike, bike, foot) stops
+  for the night after 10 hours on the road (`drive_hours_per_day`). Trains, buses, ferries,
+  ships and planes go on.
+- **Boarding:** a train waits 15 minutes, high-speed rail and ferries 30, ships an hour, a
+  flight 2 hours (check-in and security). A pack sets its own with `"board_hours"` in a code's
+  paces.
+- **Getting to the station:** a trip by train, plane, ferry, bus or metro reaches its station
+  by a short taxi ride or walk (roads up to 60 km), shown as `(car)` in the route. Driving
+  trips drive the whole way.
+- **Fastest, not shortest:** routes take the quickest way, so a motorway's detour or a flight
+  beats a slower direct road.
+
+| Code | Road | Modes (km an hour) |
+|---|---|---|
+| `MW` | motorway or highway | car 100, motorbike 100, bus 80 |
+| `RD` | road | car 60, motorbike 60, bus 45, bike 18, foot 5 |
+| `ST` | city streets | car 25, motorbike 25, bus 18, bike 15, foot 5 |
+| `OR` | off-road or dirt track | car 30, motorbike 30, bike 10, foot 4 |
+| `TR` | trail or footpath | bike 12, foot 4 |
+| `RL` | railway | train 90 |
+| `HS` | high-speed rail | train 250 |
+| `MT` | metro, subway or tram | metro 30 |
+| `FY` | ferry | ferry 30 (cars and people aboard) |
+| `SL` | sea lane | ship 35 |
+| `AR` | air route | plane 750 |
+
+A mode a code does not list cannot use it: no bikes on the motorway, no cars on a footpath.
+A pack's `pace_km_per_hour` changes any of these (`"MW": { "car": 120 }`), takes a mode off a
+code (`"bus": null`), or adds codes of its own, one to three capital letters
+(`"MAG": { "train": 400, "board_hours": 0.5 }`). The model can write the modes as it likes
+(`drive`, `taxi`, `cycling`, `subway`, `fly`). Legs read and are corrected in hours:
+
+```
+leg: Home → Downtown 14 ST, car 30/h → 0.5 h
+/route Downtown to North City plane
+Downtown → Airport 25 MW (car) → North City 920 AR = 945 km · plane 750 km/h · 2 h boarding · 3 h 30 min · arrive …
+```
+
+Arrivals are checked to the quarter hour, or a tenth of the trip when that is more.
+
 ### Making a world pack
 
 You do not need to write the JSON by hand. Give a model your world, and the prompt below has it
@@ -305,7 +365,8 @@ less it has to invent.
   downwards, keep them and set **North is** to *Down* after importing; a pack whose `bearing`s
   fit that gets one note saying so.
 - **Every road code it uses has a pace** in `pace_km_per_day` (at least `R`; codes without land
-  paces go at the `R` pace).
+  paces go at the `R` pace). A modern pack needs none: the [built-in codes](#modern-travel)
+  have theirs.
 
 | Code | Road | Code | Road |
 |---|---|---|---|
@@ -320,6 +381,8 @@ less it has to invent.
 
 A pace is km a day: a number, a range `[low, high]`, `"foot"` (riders go at foot pace there) or
 `null` (that mode cannot use the road; wagons stay off trails and mountains this way).
+
+The codes below are the pre-modern ones; a modern pack uses [its own](#modern-travel).
 
 **The prompt** (paste it into any capable model, followed by your material):
 
@@ -372,6 +435,55 @@ Rules:
 
 Before answering, check every edge: both places exist, km ≥ straight-line distance, and the
 bearing agrees with the coordinates.
+
+Material:
+````
+
+**For a modern world**, use this prompt instead:
+
+````text
+You are converting a modern-day setting (real or fictional) into a world pack: one JSON
+object, and nothing else (no comments, no code fence, no explanation). Use only what the
+material below says or clearly implies; where you must invent a distance or position, keep it
+consistent with the rest. For real places, use their real distances.
+
+Shape:
+{
+  "source": "<setting name>",
+  "era": "modern",
+  "scale_km_per_unit": <km per coordinate unit, e.g. 1>,
+  "travel_rules": { "round_edge_up_to_hours": 0.25, "drive_hours_per_day": 10 },
+  "places": {
+    "<Place name>": { "x": <number>, "y": <number>, "region": "<city, district or region>" }
+  },
+  "edges": [
+    { "a": "<Place>", "b": "<Place>", "km": <number>, "code": "<road code>", "corridor": "<road, line or route name, or null>", "bearing": "<compass of b from a>/<compass of a from b>" }
+  ]
+}
+
+Rules:
+- Places: homes, neighbourhoods, towns, stations, airports, ports, landmarks and anywhere a
+  trip starts, ends or changes. Names exactly as the material spells them. One coordinate
+  system for all; y grows to the NORTH, x to the east. The coordinate distance between two
+  places × scale_km_per_unit is the straight-line distance in km.
+- Edges: only between neighbouring places, one edge per stretch. Two places joined by a road
+  and a railway get two edges. Airports join by air routes (AR), stations by rail (RL, HS),
+  ports by ferry (FY) or sea lanes (SL); give each station, airport and port a short road
+  (ST or RD) to the place it serves. Both ends must be in "places".
+- km: the length of that stretch, 1.1 to 1.4 × the straight-line distance for roads and rail
+  (never less); air and sea routes about the straight line.
+- bearing: an 8-point compass pair, e.g. "SW/NE" when b lies south-west of a. It must match the
+  coordinates.
+- code: MW motorway or highway, RD road, ST city streets, OR off-road or dirt track, TR trail or
+  footpath, RL railway, HS high-speed rail, MT metro, subway or tram, FY ferry, SL sea lane,
+  AR air route.
+- Only if the setting needs other speeds: "pace_km_per_hour": { "<code>": { "<mode>": <km an
+  hour> } } with modes foot, bike, car, motorbike, bus, train, metro, ferry, ship, plane
+  (null takes a mode off a code); "board_hours" in a code sets its boarding time.
+- Optional: "calendar": { "preset": "gregorian" } for real dates.
+
+Before answering, check every edge: both places exist, km ≥ straight-line distance for roads
+and rail, and the bearing agrees with the coordinates.
 
 Material:
 ````
