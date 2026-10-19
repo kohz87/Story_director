@@ -42,7 +42,7 @@ import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
 import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
-import { buildPlannerMessages, DEFAULT_PLANNER_PROMPT, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
+import { arcBeats, autoPlanReason, buildPlannerMessages, DEFAULT_LOW_THREADS, DEFAULT_PLANNER_PROMPT, DEFAULT_STALL_DAYS, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
@@ -75,7 +75,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     // The tracker is the story behind the scenes: hidden in the tab until the reader asks.
     spoilerGuard: true,
     calendar: PRESETS.gregorian,
-    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
+    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: DEFAULT_STALL_DAYS, lowThreads: DEFAULT_LOW_THREADS, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
     // How to read map coordinates: which way north and east run, km per unit, road winding.
     map: DEFAULT_MAP,
@@ -811,9 +811,27 @@ function setArcDraft(draft) {
     ctx.saveMetadataDebounced?.();
 }
 
-function arcBeats(tracker, arc) {
-    const beats = tracker.records.filter(record => record.kind === 'beat' && arc && record.arc === arc.arc);
-    return { done: beats.filter(record => record.status !== 'active').length, total: beats.length, active: beats.filter(record => record.status === 'active') };
+// (0.9.19) Where the last plan was asked for: { chatId, message } (the latest reply then), so
+// "running low" waits for the story to move on instead of asking again every reply.
+function lastPlan(ctx = context()) {
+    const mark = chatMeta(ctx)?.[SETTINGS_KEY]?.lastPlan;
+    return mark && typeof mark === 'object' && mark.chatId === chatIdOf(ctx) && Number.isInteger(mark.message) ? mark : null;
+}
+
+function markPlanned(ctx = context()) {
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), lastPlan: { chatId: chatIdOf(ctx), message: latestAssistantIndex(ctx?.chat ?? []) } };
+    ctx.saveMetadataDebounced?.();
+}
+
+// Replies written since the last plan; after a delete below that point, counted from the end.
+function repliesSincePlan(ctx = context()) {
+    const mark = lastPlan(ctx);
+    if (!mark) return Infinity;
+    const chat = ctx?.chat ?? [];
+    const from = Math.min(mark.message, chat.length - 1);
+    return chat.slice(from + 1).filter(isAssistant).length;
 }
 
 function arcView(selection, tracker) {
@@ -883,6 +901,8 @@ async function planArc({ reason = 'manual' } = {}) {
     const own = settings(ctx);
     planning = true;
     planError = '';
+    // Asked for, whatever comes of it: a failed or discarded plan waits too.
+    markPlanned(ctx);
     storyBlock()?.refresh?.();
     // Planning reads a long stretch of chat and can take a while: a toast stays up until it
     // is done, wherever the reader is (the tab may be closed or hidden).
@@ -1060,32 +1080,26 @@ async function endArc() {
     if (settings().arc.trigger === 'auto') await planArc({ reason: 'arc-end' });
 }
 
-// Automatic: plan when there is no arc, when every beat of the arc is done, or when no beat
-// is due within the stall window. Never while a plan waits for review.
+// Automatic: plan when there is no arc, when every beat of the arc is done, when no beat is
+// due within the stall window, or (0.9.19) when open threads run low (autoPlanReason). Never
+// while a plan waits for review.
 async function maybePlanAutomatically(tracker) {
     if (planning || arcDraft()) return;
     const own = settings();
-    const cal = calendar();
     const { selection, now } = situation('normal');
     const arc = selection.arc;
-    if (!arc) {
-        // Only once the story has something to plan from.
-        if (tracker.records.length) await planArc({ reason: 'no-arc' });
-        return;
-    }
-    const { total, active } = arcBeats(tracker, arc);
-    if (total && !active.length) {
-        await appendDirectorLines(`- ${arc.key} — every beat played out`).catch(() => {});
-        await planArc({ reason: 'arc-end' });
-        return;
-    }
-    if (now === null || !active.length) return;
-    const horizon = cal.addDays(now, Number(own.arc.stallDays) || 7);
-    const upcoming = active.some(beat => {
-        const date = beat.fields.on ? cal.parse(beat.fields.on, { reference: now }) : null;
-        return !date || date.abs <= horizon;
+    const reason = autoPlanReason({
+        tracker,
+        arc,
+        now,
+        calendar: calendar(),
+        stallDays: own.arc.stallDays,
+        lowThreads: own.arc.lowThreads,
+        repliesSincePlan: repliesSincePlan(),
     });
-    if (!upcoming) await planArc({ reason: 'stalled' });
+    if (!reason) return;
+    if (reason === 'arc-end') await appendDirectorLines(`- ${arc.key} — every beat played out`).catch(() => {});
+    await planArc({ reason });
 }
 
 // ---------------------------------------------------------------------------

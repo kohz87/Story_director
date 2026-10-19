@@ -588,8 +588,13 @@ Places section: if it is upside down, change **North is**.
 Tracking and the note happen every reply, in code. **Planning is one model call per arc.**
 
 - **When:** *Manual* (the **Plan arc** / **End arc** buttons in the Director tab), or
-  *Automatic*: when there is no arc yet, when every beat of the arc has played out, or when no
-  beat is due within the stall window (7 story days by default). The buttons work in both.
+  *Automatic*: when there is no arc yet, when every beat of the arc has played out, when no
+  beat is due within the stall window (7 story days by default), or when the story is
+  **running low** (since 0.9.19): fewer than 3 threads open (*Running low at*; 0 turns it off),
+  counting active hooks, clocks and the arc's beats still to play. Offers of work are not
+  counted, since they wait for you to take them; nor are quests (yours), agendas, events or
+  secrets. After a plan is asked for, running low waits 5 replies before asking again, so a
+  plan you discarded is not asked for every reply. The buttons work in both.
 - **Model:** *Same as chat*, or any SillyTavern **connection profile** (its own API and model; a
   cheaper or faster one is fine). A missing profile fails with a message; it never falls back
   to another model.
@@ -680,7 +685,7 @@ closed; the ones you open are remembered in this browser.
 | Source of truth | Automatic | Calendar, timeline and NPCs: who keeps each when other story extensions are installed (see [Working with the other story extensions](#working-with-the-other-story-extensions)) |
 | Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |
 | World pack | none | Optional roads: places, edges, paces and travel rules, as JSON |
-| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note (used once, or kept), prompt |
+| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, running low, review, genre and tone, Director's note (used once, or kept), prompt |
 | Capture | off | Off, when a reply has no `<Director>` block, or always; its model and answer length |
 
 ## The Director tab
