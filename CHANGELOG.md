@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.26
+
+- **The Off-Screen mirror keeps the story's own lines.** With *Mirror Off-Screen* on, Story Director rewrote the World State's whole Off-Screen section from its tracked agendas, so the story's own lines were dropped: *Jor — crying in the granary alley*, *Lefty — hiding aboard the Kettle Wife*. Now the agendas come first and the story's lines for people the tracker has no agenda for stay after them. A line for an agenda that has been closed still goes, and so does one written under a name the agenda was also called by. NPC State Delta 1.2.10 reads this section to tell who has left the scene, so keeping these lines also keeps those people off its Present cards.
+
 ## 0.9.25
 
 - **The distance Fix button stays in the Director tab.** In 0.9.24 the button only lived on the pop-up warning, which goes after 20 seconds. Now the warning also sits under Director tab → Problems → Warnings with its own **Fix** button, for as long as the latest reply carries the wrong figure. It is read from the reply itself, so it is there after a reload too, needs no Reveal, and goes once the reply is fixed or swiped away.

@@ -53,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.25';
+const VERSION = '0.9.26';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -810,7 +810,9 @@ async function mirror(index, tracker) {
     const own = settings();
     const scene = sb.blockInText(context()?.chat?.[index]?.mes, own.sceneTag);
     if (!scene) return;
-    const next = mirrorOffscreen(scene.text, activeRecords(tracker, { kind: 'agenda' }));
+    // (0.9.26) Every agenda, closed ones too: the mirror writes the active ones and keeps the
+    // story's own lines only for people the tracker has no agenda for.
+    const next = mirrorOffscreen(scene.text, tracker.records.filter(record => record.kind === 'agenda'));
     if (next !== scene.text) await sb.setBlockText(index, own.sceneTag, next);
 }
 
