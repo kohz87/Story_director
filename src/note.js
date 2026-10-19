@@ -227,7 +227,7 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     const checks = [
         ended.length ? `the story may have finished ${ended.join(', ')}. If it has, close it with - Key — outcome; if not, leave it.` : '',
         dropped.length ? `{{user}} may be giving up ${dropped.join(', ')}. If they do, close it with - Key — abandoned; if not, leave it.` : '',
-        instruction && taking?.length ? `{{user}} may be taking on ${[...new Set(taking)].join(', ')}. If they do, write + quest Key with its parts; if not, leave it an offer.` : '',
+        instruction && taking?.length ? `{{user}} may be taking on ${[...new Set(taking)].join(', ')}. If they do, write + quest Key with its parts (no - line for the hook); if not, leave it an offer.` : '',
         instruction && declining?.length ? `{{user}} may be turning down ${[...new Set(declining)].join(', ')}. If they do, close it with - Key — declined; if not, leave it.` : '',
     ].filter(Boolean);
     if (checks.length) parts.push(part('Quest check', `Quest check: ${checks.join(' Also: ')}`));

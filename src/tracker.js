@@ -22,6 +22,7 @@ const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|
 // by Wessel" beside the `+ quest` it became. Not when it also speaks of pay or an ending.
 const TAKEN_ON = /\b(?:accept(?:s|ed)?|tak(?:es|en|ing) (?:on|up)|took (?:on|up)|signed (?:on|up|for)|agreed to|became (?:a |the )?(?:quest|bounty|contract|job)|(?:now|turned into|converted (?:in)?to|promoted to|upgraded to) (?:a |the )?(?:quest|bounty|contract|job))\b/i;
 const NOT_TAKEN_ON = /\b(?:reward|paid|pay(?:ment)?|coin|silver|gold|copper|fee)\b/i;
+const endsJob = reason => QUEST_OVER_TEXT.test(reason) || FAILED.test(reason) || LOOKS_OVER.test(reason);
 const takenOn = reason => TAKEN_ON.test(reason) && !NOT_TAKEN_ON.test(reason) && !QUEST_OVER_TEXT.test(reason) && !FAILED.test(reason) && !LOOKS_OVER.test(reason);
 
 // (0.9.5) A quest still open whose own progress reads as over ("step: wolf slain, reward
@@ -405,6 +406,9 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
     const copied = new Set();
     const problems = [];
     const at = { message, time };
+    // (0.9.20) Records this reply names with `+ quest`: a `-` on one of them in the same reply
+    // closes the hook it was, not the job just taken on.
+    const questNow = new Set();
 
     // Copy a record the first time this call changes it, so the input stays untouched.
     const edit = index => {
@@ -447,11 +451,13 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
                     added = { ...added, kind: 'hook' };
                     offered(op, added);
                 }
+                if (op.kind === 'quest') questNow.add(records.length);
                 indexById.set(id, records.length);
                 copied.add(records.length);
                 records.push(newRecord(added, at));
                 continue;
             }
+            if (op.kind === 'quest') questNow.add(index);
             const record = edit(index);
             if (record.status === 'active') {
                 // (0.9.9) "+ quest Key" on a hook or event already tracked (one the planner
@@ -484,6 +490,12 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         }
 
         let target = index;
+        // (0.9.20) "- hook Lone Grey Wolf": a kind word in front of a tracked key names the form
+        // the line is about ("the hook"), it is not part of the key.
+        if (target === undefined) {
+            const kinded = String(op.key ?? '').match(/^([A-Za-z]+)\s+(\S.*)$/s);
+            if (kinded && kindOf(kinded[1])) target = lookup(lineKey(kinded[2]));
+        }
         if (target === undefined && isLabelKey(id)) {
             problems.push(finding('label-key', 'info', op, `"${op.key}" is a label, not a record; the ${op.op} line was skipped.`));
             continue;
@@ -529,6 +541,12 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             } else {
                 problems.push(finding('taken-on', 'info', op, `"${record.key}" was taken on, not ended; it stays open.`));
             }
+            continue;
+        }
+        // (0.9.20) "+ quest Key" then "- hook Key — <what the hook was>": the hook made way for the
+        // quest, so the quest stays open. Only a reason that says the job is over or failed ends it.
+        if (op.op === '-' && record.status === 'active' && questNow.has(target) && !endsJob(String(op.reason ?? ''))) {
+            problems.push(finding('taken-on', 'info', op, `"${record.key}" was taken on, not ended; it stays open.`));
             continue;
         }
         // (0.9.1) A change that says the record is over closes it, as its `-` would have.

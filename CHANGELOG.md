@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.20
+
+- **A quest you just took on no longer finishes in the same reply.** When the story turned an offered hook into a quest, it sometimes also wrote `- hook Lone Grey Wolf — Hunt the lone wolf…` to retire the hook. That line was read as the quest being finished, so the quest closed right away and RPG Battle awarded its XP. Now a `-` line on a quest taken on in that same reply leaves it open, unless its reason says the job is done or failed. A word like `hook` in front of a tracked name is read as a label, not as part of the name. The quest check also tells the story not to write a `-` line for the hook. Quests already closed this way in older chats reopen; the XP already given stays in that reply's Party block, and swiping or deleting that reply removes it.
+
 ## 0.9.19
 
 Six improvements to how the Director keeps the world moving around your character.

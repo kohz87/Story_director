@@ -688,6 +688,29 @@ test('a "- … accepted" line takes a job on, it does not finish it (0.9.13)', (
     }
 });
 
+test('"- hook Key — <what the hook was>" beside "+ quest Key" does not finish the quest (0.9.20)', () => {
+    const start = applyOps(emptyTracker(), ops('+ hook Lone Grey Wolf — Hunt the lone wolf killing sheep past the western ditch | giver: Verna'), { message: 1 }).tracker;
+    // As written in a reply: the quest, then the hook it came from "closed" with its old text.
+    const reply = "+ quest Lone Grey Wolf — Hunt the wolf pack preying on Gerrick's sheepfold | type: bounty | giver: Verna | reward: 1 gold | difficulty: ordinary\n- hook Lone Grey Wolf — Hunt the lone wolf killing sheep past the western ditch";
+    const { tracker, problems } = applyOps(start, ops(reply), { message: 2, said: "I'll take the wolf bounty." });
+    const quest = findRecord(tracker, 'Lone Grey Wolf');
+    assert.equal(quest.kind, 'quest');
+    assert.equal(quest.status, 'active');
+    assert.deepEqual(questsDoneIn(tracker, 2), []);
+    assert.ok(problems.some(problem => problem.kind === 'taken-on'));
+    assert.deepEqual(quest.aliases ?? [], [], 'the kind word is not remembered as a name');
+    // Not accepted: the offer stays an offer, not closed by the hook's line.
+    const offer = findRecord(applyOps(start, ops(reply), { message: 2, said: 'I look around the square.' }).tracker, 'Lone Grey Wolf');
+    assert.equal(offer.status, 'active');
+    // With no hook tracked before, the same pair still leaves the quest open.
+    assert.equal(findRecord(applyOps(emptyTracker(), ops(reply), { message: 2, said: "I'll take the wolf bounty." }).tracker, 'Lone Grey Wolf').status, 'active');
+    // A reason that says the job is over still ends it, in the same reply or later.
+    assert.equal(findRecord(applyOps(tracker, ops('- hook Lone Grey Wolf — the wolf is slain and the bounty paid out'), { message: 3 }).tracker, 'Lone Grey Wolf').status, 'resolved');
+    assert.equal(findRecord(applyOps(start, ops("+ quest Lone Grey Wolf — hunt it | giver: Verna\n- Lone Grey Wolf — done, Verna paid"), { message: 2, said: "I'll take the wolf bounty." }).tracker, 'Lone Grey Wolf').status, 'resolved');
+    // A later plain "- Key — the wolf is dead" on the quest still closes it, as before.
+    assert.equal(findRecord(applyOps(tracker, ops('- Lone Grey Wolf — cleared'), { message: 3 }).tracker, 'Lone Grey Wolf').status, 'resolved');
+});
+
 test('a line keyed by a label ("! Encounter — …") is skipped quietly and never asked to be added (0.9.14)', () => {
     const start = applyOps(emptyTracker(), ops('+ hook Sheepfold Wolves — wolves at the east fold'), { message: 1 }).tracker;
     const { tracker, problems } = applyOps(start, ops('! Encounter — 4 timber wolves attack at the fold\n~ Combat — wolves engaged\n~ Quest — step: fight\n- Scene — over'), { message: 2 });
