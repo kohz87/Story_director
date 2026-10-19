@@ -534,3 +534,21 @@ test('"Manage all in Story Suite": on top, hidden until available, opens the ove
     renderSettings(shown, { settings: SETTINGS, onChange() {}, suiteLink: true });
     assert.ok(!shown.querySelector('.story-suite-manage').hasAttribute('hidden'), 'shown from the start when available');
 });
+
+test('Week and Today is (0.9.21): the names go into the calendar, and Today is sets which day the story is on', async () => {
+    const { makeCalendar } = await import('../src/calendar.js');
+    const container = doc.createElement('div');
+    doc.body.appendChild(container);
+    const changes = [];
+    const now = makeCalendar(SETTINGS.calendar).toAbs({ year: 611, month: 1, day: 12, minutes: 600 });
+    renderSettings(container, { settings: structuredClone(SETTINGS), blocks: BLOCKS, onChange: next => changes.push(next), storyNow: () => now });
+    const today = container.querySelector('#story_director_today');
+    assert.equal(today.disabled, true, 'no week yet');
+    edit(container.querySelector('#story_director_week'), 'Moonday, Tideday, Thornday', 'input');
+    assert.deepEqual(last(changes).calendar.week, ['Moonday', 'Tideday', 'Thornday']);
+    assert.equal(today.disabled, false);
+    edit(today, 'Thornday');
+    const calendar = makeCalendar(last(changes).calendar);
+    assert.equal(calendar.weekday(now), 'Thornday');
+    assert.equal(calendar.weekday(calendar.addDays(now, 1)), 'Moonday');
+});

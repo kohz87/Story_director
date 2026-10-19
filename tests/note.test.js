@@ -590,3 +590,23 @@ test('an offer that lapsed in the latest reply gets one line, its giver by name 
     const labels = noteParts(selection(), { calendar, abandoning: ['Wolf Hunt'], slipped: [{ key: 'Riders', on: 'Goldwane 13' }], lapsed: [{ key: 'Ferry' }] }).map(entry => entry.label);
     assert.deepEqual(labels, ['Header', 'Abandoned', 'Slipped', 'Lapsed', 'Change instruction']);
 });
+
+test('weekdays in the note (0.9.21): today\'s leads the header; a world without a week is told to give dates', async () => {
+    const { makeCalendar } = await import('../src/calendar.js');
+    const plain = makeCalendar({ preset: 'custom', era: 'CY', months: ['Dawnwane', 'Goldwane', 'Haywane'] });
+    const now = plain.toAbs({ year: 611, month: 1, day: 12, minutes: 738 });
+    const selection = { now, place: 'Bluewatch', arc: null, due: [], arriving: [], relevant: [{ record: record({ key: 'Marsh-trolls', kind: 'hook' }), reason: 'active', priority: 6 }], dormant: [], secrets: [], resolvedRecently: [] };
+    const parts = noteParts(selection, { calendar: plain });
+    assert.equal(parts[0].text, '[Story Director · CY 611, Goldwane 12, 12:18 pm · Bluewatch]');
+    assert.deepEqual([parts[1].label, parts[1].join], ['No weekdays', ' ']);
+    assert.equal(parts[1].text, 'This world has no weekdays: name a day by its date (Goldwane 14), never Monday to Sunday.');
+    const config = { preset: 'custom', era: 'CY', months: ['Dawnwane', 'Goldwane', 'Haywane'], week: ['Moonday', 'Tideday', 'Thornday'] };
+    const week = makeCalendar({ ...config, weekOffset: makeCalendar(config).weekOffsetFor(now, 'Tideday') });
+    const named = noteParts(selection, { calendar: week });
+    assert.equal(named[0].text, '[Story Director · Tideday, CY 611, Goldwane 12, 12:18 pm · Bluewatch]');
+    assert.ok(!named.some(entry => entry.label === 'No weekdays'));
+    const gregorian = makeCalendar('gregorian');
+    const real = noteParts({ ...selection, now: gregorian.toAbs({ year: 2026, month: 9, day: 19, minutes: 600 }) }, { calendar: gregorian });
+    assert.match(real[0].text, /^\[Story Director · Monday, October 19, 2026, 10:00 am/);
+    assert.ok(!real.some(entry => entry.label === 'No weekdays'));
+});

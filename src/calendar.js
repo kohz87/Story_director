@@ -19,6 +19,22 @@ const GREGORIAN_MONTHS = [
     ['July', 31], ['August', 31], ['September', 30], ['October', 31], ['November', 30], ['December', 31],
 ].map(([name, days]) => ({ name, days }));
 
+const GREGORIAN_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+// (0.9.21) A custom calendar's week: up to this many day names. None: the world has no weekdays.
+export const MAX_WEEK_DAYS = 14;
+
+// Day names from a list or from text ("Moonday, Tideday" or one per line), trimmed, once each.
+export function parseWeek(value) {
+    const list = Array.isArray(value) ? value : String(value ?? '').split(/[,\n]/);
+    const seen = new Set();
+    return list.map(name => String(name ?? '').trim()).filter(name => {
+        const key = name.toLowerCase();
+        if (!name || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).slice(0, MAX_WEEK_DAYS);
+}
+
 function deepFreeze(value) {
     if (value && typeof value === 'object') {
         Object.values(value).forEach(deepFreeze);
@@ -92,7 +108,7 @@ export function normalizeCalendar(config) {
     if (config.preset === 'gregorian') {
         return {
             preset: 'gregorian', era, months: GREGORIAN_MONTHS.map(m => ({ ...m })),
-            daysPerMonth, leapYears: true, partsOfDay,
+            daysPerMonth, leapYears: true, partsOfDay, week: [...GREGORIAN_WEEK], weekOffset: 0,
         };
     }
 
@@ -102,10 +118,13 @@ export function normalizeCalendar(config) {
     // A calendar needs at least one month; an empty list falls back to twelve numbered ones.
     if (!months.length) months = PRESETS.custom30.months.map(m => ({ name: m.name, days: daysPerMonth }));
 
+    const week = parseWeek(config.week);
+    const offset = Math.trunc(Number(config.weekOffset) || 0);
     return {
         preset: 'custom', era, months, daysPerMonth,
         leapYears: config.leapYears === true || config.leap_years === true,
         partsOfDay,
+        week, weekOffset: week.length ? ((offset % week.length) + week.length) % week.length : 0,
     };
 }
 
@@ -194,6 +213,29 @@ export function makeCalendar(input) {
         return time ? `${text}, ${formatTime(d.minutes)}` : text;
     }
 
+    // (0.9.21) The weekday at `abs`, or '' when the world has no week. Gregorian: the real one
+    // (proleptic). A custom week runs on from the epoch, shifted by weekOffset.
+    function weekday(abs) {
+        const { week } = config;
+        if (!week.length || !Number.isFinite(abs)) return '';
+        if (config.preset === 'gregorian') {
+            const d = fromAbs(abs);
+            const date = new Date(0);
+            date.setUTCFullYear(d.year, d.month, d.day);
+            return week[(date.getUTCDay() + 6) % 7];
+        }
+        const n = week.length;
+        return week[(((dayIndex(abs) + config.weekOffset) % n) + n) % n];
+    }
+
+    /** The weekOffset that makes the day at `abs` the weekday `name` (0 if it is not in the week). */
+    function weekOffsetFor(abs, name) {
+        const n = config.week.length;
+        const at = config.week.findIndex(day => day.toLowerCase() === String(name ?? '').trim().toLowerCase());
+        if (!n || at < 0 || !Number.isFinite(abs)) return 0;
+        return (((at - dayIndex(abs)) % n) + n) % n;
+    }
+
     const parser = makeParser(config, { toAbs, fromAbs, daysInMonth });
 
     // (0.9.12) The date in `input` with its clock time set by the calendar: a part of the day
@@ -212,7 +254,7 @@ export function makeCalendar(input) {
 
     return Object.freeze({
         config, daysInYear, daysInMonth, toAbs, fromAbs, dayIndex, addDays, daysBetween, format,
-        parse: parser, withClock,
+        parse: parser, withClock, weekday, weekOffsetFor,
     });
 }
 

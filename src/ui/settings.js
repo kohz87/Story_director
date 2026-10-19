@@ -12,6 +12,8 @@
 // the sections for settings changed elsewhere, leaving the drawer and the status line as
 // they are (rebuilding the drawer would fold it shut).
 
+import { makeCalendar, parseWeek } from '../calendar.js';
+
 const DEFAULTS = {
     enabled: true,
     sceneTag: 'World_State',
@@ -242,7 +244,7 @@ export function formatMonths(months, daysPerMonth = DEFAULTS.calendar.daysPerMon
  * `suiteLink` shows the "Manage all in Story Suite" line, which calls `onOpenSuite()`.
  * Returns `{ root, update(settings), setOthers(names), setSource(area, choice), setEnabled(on), setSuiteLink(shown) }`.
  */
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null, others = [], suiteLink = false, onOpenSuite = null } = {}) {
+export function renderSettings(container, { settings, blocks = [], onChange, onSeed, onPlanArc = null, version = '', status = '', packSummary = '', onImportPack = null, onClearPack = null, profiles = null, defaultPlannerPrompt = '', onImportWsa = null, others = [], suiteLink = false, onOpenSuite = null, storyNow = null } = {}) {
     let summary = packSummary;
     // The other Story Suite extensions announced now, by name; see setOthers.
     let suiteNames = [...others];
@@ -356,10 +358,37 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             next.calendar.daysPerMonth = value;
         });
 
+        // (0.9.21) A custom world's week, if it has one, and which of its days the story is on.
+        const week = textInput('story_director_week', (calendar.week ?? []).join(', '), 'Moonday, Tideday, Thornday');
+        const today = el('select', { className: 'text_pole', attrs: { id: 'story_director_today' } });
+        const fillToday = () => {
+            const names = parseWeek(current.calendar.week);
+            const now = typeof storyNow === 'function' ? storyNow() : null;
+            today.replaceChildren(...names.map(name => {
+                const item = el('option', { text: name });
+                item.value = name;
+                return item;
+            }));
+            today.disabled = !names.length || now === null;
+            if (names.length) today.value = now === null ? names[0] : makeCalendar(current.calendar).weekday(now) || names[0];
+        };
+        week.addEventListener('input', () => {
+            commit(next => { next.calendar.week = parseWeek(week.value); });
+            fillToday();
+        });
+        today.addEventListener('change', () => {
+            const now = typeof storyNow === 'function' ? storyNow() : null;
+            if (now === null) return;
+            commit(next => { next.calendar.weekOffset = makeCalendar(next.calendar).weekOffsetFor(now, today.value); });
+        });
+        fillToday();
+
         // The month list only means something for a custom calendar.
         const customRows = [
             row('Months', 'One per line, in order: Name, or Name | days.', months, { id: 'story_director_months', className: 'is-custom' }),
             row('Days per month', 'For months written without a length.', withUnit(perMonth, 'days'), { id: 'story_director_days_per_month', className: 'is-custom' }),
+            row('Week', 'Its day names in order, separated by commas. Empty: the world has no weekdays, and the story is told to give dates instead.', week, { id: 'story_director_week', className: 'is-custom' }),
+            row('Today is', 'Which weekday the story’s current day is; the rest follow from it. Set once the story has a date.', today, { id: 'story_director_today', className: 'is-custom' }),
         ];
         const showCustom = () => customRows.forEach(node => {
             if (preset.value === 'gregorian') node.setAttribute('hidden', '');

@@ -52,7 +52,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.20';
+const VERSION = '0.9.21';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1460,8 +1460,19 @@ function addSettingsPanel(documentRef) {
         others: otherSuiteNames(),
         suiteLink: suiteLinkShown(),
         onOpenSuite: openSuite,
+        storyNow,
     });
     return true;
+}
+
+// (0.9.21) The story time of the latest message, for Settings → Today is; null without one.
+function storyNow() {
+    try {
+        const time = trackerAt((context()?.chat?.length ?? 0) - 1).tracker.time;
+        return Number.isFinite(time) ? time : null;
+    } catch {
+        return null;
+    }
 }
 
 // A full new settings object, from the panel or from Story Suite's overlay (api.manage).

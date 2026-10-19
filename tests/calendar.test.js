@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PRESETS, DEFAULT_PARTS_OF_DAY, normalizeCalendar, makeCalendar, sharedCalendar } from '../src/calendar.js';
+import { PRESETS, DEFAULT_PARTS_OF_DAY, normalizeCalendar, makeCalendar, parseWeek, sharedCalendar } from '../src/calendar.js';
 
 const MONTHS = [
     'Dawnwane', 'Rainmoot', 'Greengale', 'Highsun', 'Goldwane', 'Haywane',
@@ -327,4 +327,24 @@ test('withClock: the calendar sets the clock time of a written date (0.9.12)', (
     assert.equal(c.withClock('Goldwane 12, 06:15 pm', { reference }), 'Goldwane 12, 06:15 pm', 'a clock time stays');
     assert.equal(c.withClock('before the frost', { reference }), 'before the frost');
     assert.equal(c.withClock('', { reference }), '');
+});
+
+test('weekdays (0.9.21): Gregorian has the real ones, a custom week runs from the day the reader names, none means none', () => {
+    const gregorian = makeCalendar('gregorian');
+    assert.equal(gregorian.weekday(gregorian.toAbs({ year: 2026, month: 9, day: 19 })), 'Monday');
+    assert.equal(gregorian.weekday(gregorian.toAbs({ year: 2000, month: 0, day: 1, minutes: 600 })), 'Saturday');
+    const plain = makeCalendar({ preset: 'custom', era: 'CY', months: ['Dawnwane', 'Goldwane'] });
+    assert.deepEqual(plain.config.week, []);
+    assert.equal(plain.weekday(plain.toAbs({ year: 611, month: 1, day: 12 })), '', 'no week, no weekday');
+    assert.deepEqual(parseWeek('Moonday, Tideday\nThornday, moonday, , Ashday'), ['Moonday', 'Tideday', 'Thornday', 'Ashday']);
+    const config = { preset: 'custom', era: 'CY', months: ['Dawnwane', 'Goldwane'], week: 'Moonday, Tideday, Thornday, Ashday' };
+    const at = makeCalendar(config).toAbs({ year: 611, month: 1, day: 12, minutes: 735 });
+    const offset = makeCalendar(config).weekOffsetFor(at, 'thornday');
+    const week = makeCalendar({ ...config, weekOffset: offset });
+    assert.equal(week.weekday(at), 'Thornday', 'today is the day named');
+    assert.equal(week.weekday(week.addDays(at, 1)), 'Ashday');
+    assert.equal(week.weekday(week.addDays(at, 2)), 'Moonday', 'and it wraps round');
+    assert.equal(week.weekday(week.addDays(at, -2)), 'Moonday', 'backwards too');
+    assert.equal(makeCalendar({ ...config, weekOffset: 4 + offset }).weekday(at), 'Thornday', 'the offset is taken round the week');
+    assert.equal(makeCalendar(config).weekOffsetFor(at, 'Sunday'), 0, 'a name not in the week');
 });
