@@ -58,7 +58,7 @@ test('+ creates a full record', () => {
         pinned: false,
         arc: null,
         aliases: [],
-        history: [{ message: 4, op: '+', text: START[0].raw }],
+        history: [{ message: 4, op: '+', text: START[0].raw, time: 1000 }],
     });
 });
 
@@ -180,8 +180,8 @@ test('history keeps the newest 20 entries', () => {
     }
     const geva = findRecord(replay(entries).tracker, 'Geva');
     assert.equal(geva.history.length, 20);
-    assert.deepEqual(geva.history[0], { message: 6, op: '~', text: '~ Geva — then: step 6' });
-    assert.deepEqual(geva.history[19], { message: 25, op: '~', text: '~ Geva — then: step 25' });
+    assert.deepEqual(geva.history[0], { message: 6, op: '~', text: '~ Geva — then: step 6', time: 6 });
+    assert.deepEqual(geva.history[19], { message: 25, op: '~', text: '~ Geva — then: step 25', time: 25 });
     assert.equal(geva.fields.then, 'step 25');
 });
 
@@ -400,7 +400,7 @@ test('a ~ on a near key is applied to the one record it means', () => {
         assert.deepEqual(problems.map(({ kind, severity, text }) => ({ kind, severity, text })), [
             { kind: 'near-key', severity: 'info', text: `"${key}" read as "Footing at Bluewatch".` },
         ], key);
-        assert.deepEqual(findRecord(tracker, 'Footing at Bluewatch').history.at(-1), { message: 1, op: '~', text: `~ ${key} — now: a room at the inn` });
+        assert.deepEqual(findRecord(tracker, 'Footing at Bluewatch').history.at(-1), { message: 1, op: '~', text: `~ ${key} — now: a room at the inn`, time: 10 });
     }
 });
 
@@ -462,7 +462,7 @@ test('a ~ with something to say on a key that is not tracked adds a hook', () =>
     assert.equal(added.fields.now, 'two silver owed');
     assert.equal(added.fields.people, 'Brann');
     assert.deepEqual(added.created, { message: 1, time: 10 });
-    assert.deepEqual(added.history, [{ message: 1, op: '~', text: '~ Lantern Guild dues — now: two silver owed | people: Brann' }]);
+    assert.deepEqual(added.history, [{ message: 1, op: '~', text: '~ Lantern Guild dues — now: two silver owed | people: Brann', time: 10 }]);
     assert.deepEqual(problems.map(({ kind, severity, key, text }) => ({ kind, severity, key, text })), [
         { kind: 'untracked-added', severity: 'info', key: 'Lantern Guild dues', text: '"Lantern Guild dues" was not tracked; added as a hook (write "+ kind Key" to set its kind).' },
     ]);
