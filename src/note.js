@@ -108,7 +108,7 @@ export function buildNote(selection, options = {}) {
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
  * before `text`, so joining them gives buildNote exactly. Labels: Header, No weekdays, While away, Due now,
  * Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
- * Corrections, Quest check, Abandoned, Slipped, Lapsed, Pacing, Encounter cue, Change
+ * Corrections, Quest check, Abandoned, Slipped, Lapsed, Distances, Pacing, Encounter cue, Change
  * instruction, NPC plans only.
  *
  * `offscreenInBlock` (0.9.3): the scene block's Off-Screen section already carries every active
@@ -135,6 +135,8 @@ export function noteParts(selection, {
     previousTime = null,
     slipped = [],
     lapsed = [],
+    distances = [],
+    distanceFrom = '',
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -148,14 +150,14 @@ export function noteParts(selection, {
     const away = awayIn(selection, { calendar, from: previousTime });
 
     // The model still needs to know how to add records when there are none yet.
-    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length || slipped?.length || lapsed?.length;
+    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length || slipped?.length || lapsed?.length || (distances?.length && distanceFrom);
     if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc && !choices) {
         return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning, away, slipped, lapsed });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning, away, slipped, lapsed, distances, distanceFrom });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -194,7 +196,7 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], away = null, slipped = [], lapsed = [] }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], away = null, slipped = [], lapsed = [], distances = [], distanceFrom = '' }) {
     const parts = [part('Header', header(selection, calendar))];
     const noWeek = noWeekLine(selection, calendar);
     if (noWeek) parts.push(part('No weekdays', noWeek, ' '));
@@ -254,6 +256,8 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
         const after = who ? `${who} may mention it` : lapses.length === 1 ? 'it may come up in passing' : 'whoever offered them may mention it';
         parts.push(part('Lapsed', `Lapsed: ${lapses.join(', ')} went to someone else; ${after}.`));
     }
+    const distanceLine = distancesLine(distances, distanceFrom);
+    if (distanceLine) parts.push(part('Distances', distanceLine));
     if (scheduled(selection, due, arriving, relevant)) {
         parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
         // A fight on the While away line already happened off-screen: no first blow to stop at.
@@ -297,6 +301,31 @@ function header(selection, calendar) {
     }
     if (selection?.place) parts.push(selection.place);
     return `[${parts.join(ITEM_SEPARATOR)}]`;
+}
+
+// (0.9.22) The places the story or the reader just named, by the world pack's roads: about 12
+// tokens a place, and a few more when the reply said a time far off the map.
+export const DISTANCES_OFF = 'Keep to these when the trip comes up again.';
+const MODE_WORDS = Object.freeze({ foot: 'foot', ride: 'riding', wagon: 'wagon', boat: 'boat' });
+
+function daysText(days) {
+    return days < 3 ? String(Math.round(days * 2) / 2) : String(Math.round(days));
+}
+
+function distanceItem({ place, fastest, slowest, said }) {
+    const low = daysText(fastest.days);
+    const high = daysText(slowest.days);
+    const how = low === high || fastest.mode === slowest.mode
+        ? `${low} ${low === '1' || Number(low) < 1 ? 'day' : 'days'} by ${MODE_WORDS[fastest.mode] ?? fastest.mode}`
+        : `${low}–${high} days (${MODE_WORDS[fastest.mode] ?? fastest.mode} to ${MODE_WORDS[slowest.mode] ?? slowest.mode})`;
+    return `${place} ${how}${said ? `, not ${said.text}` : ''}`;
+}
+
+function distancesLine(distances, from) {
+    const list = (distances ?? []).filter(entry => entry?.place && entry.fastest && entry.slowest);
+    if (!list.length || !from) return '';
+    const off = list.some(entry => entry.said);
+    return `Distances from ${from}: ${list.map(distanceItem).join(ITEM_SEPARATOR)}.${off ? ` ${DISTANCES_OFF}` : ''}`;
 }
 
 // (0.9.21) About 20 tokens after the header, only for a calendar with no week: without it a

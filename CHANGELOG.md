@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.22
+
+- **The story is told how far places really are.** Story Director already checked travel times on its own records, but never what the story itself said. So Verna could call Ninebarge Crossing "three days downstream" when the world pack's routes make it 22 to 40 days. Now, with a world pack, the note after a reply lists the places that reply or your message named, with the real trip from where the scene is, from the quickest way to the slowest: *Distances from Bluewatch Village: Ninebarge Crossing 22–40 days (boat to foot)*. If the reply said a time far off the map (under half the quickest trip, or over twice the slowest), it adds *not three days* and asks the story to keep to the map when the trip comes up again. Your own message is never corrected, and nothing is written into the reply.
+
 ## 0.9.21
 
 - **Weekdays follow your world.** Story Director never used weekday names itself, but it never told the story the world has none either. So a model would make up "Friday noon" for a deadline, and nobody in a world with no week could say which day that is. Now:

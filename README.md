@@ -1,4 +1,4 @@
-# Story Director v0.9.21
+# Story Director v0.9.22
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -371,6 +371,15 @@ and they **win over the coordinates a reply writes**: the pack is your map, whil
 numbers drift. When a reply's coordinates for a place differ from the pack's by more than one map
 unit, the Places section says so ("the story wrote 70, 104"), and distances and directions use the
 pack's. If it brings a calendar, you are asked whether to use it.
+
+**Distances the story talks about** (since 0.9.22). When a reply or your message names places on
+the pack's roads, the next note gives how far they are from where the scene is, from the quickest
+way to the slowest: *Distances from Bluewatch Village: Ninebarge Crossing 22–40 days (boat to
+foot) · Auvoth 2.5–5 days (riding to wagon).* When the reply itself said a time far off the map
+("three days downstream"), the line adds *not three days* and asks the story to keep to the map
+the next time the trip comes up. A time counts as off when it is under half the quickest trip or
+over twice the slowest. Your own message is never corrected, and nothing is written into the reply,
+so a swipe or delete leaves no trace.
 
 ```jsonc
 {

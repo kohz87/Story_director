@@ -399,6 +399,22 @@ export function findPlace(pack, text) {
     return null;
 }
 
+/**
+ * (0.9.22) Every place named inside `text`, in the order they first appear: whole words,
+ * longest names first, so "Bluewatch Village" is found once and not again as a shorter name
+ * inside it.
+ */
+export function placesIn(pack, text) {
+    if (!pack || typeof text !== 'string') return [];
+    const haystack = normalizeName(text);
+    const found = [];
+    for (const [key, name] of indexOf(pack).longestFirst) {
+        if (found.some(entry => entry.key.includes(key)) || !containsWord(haystack, key)) continue;
+        found.push({ key, name, at: haystack.indexOf(key) });
+    }
+    return found.sort((a, b) => a.at - b.at).map(entry => entry.name);
+}
+
 function resolvePlace(pack, name) {
     if (!pack || typeof name !== 'string') return null;
     return indexOf(pack).byKey.get(normalizeName(name)) ?? findPlace(pack, name);
