@@ -43,7 +43,8 @@ import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
 import { renderJournal } from './src/ui/journal.js';
 import { buildJournal } from './src/journal.js';
-import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
+import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, placesIn, planRoute } from './src/routes.js';
+import { distancesFor } from './src/distances.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { arcBeats, autoPlanReason, buildPlannerMessages, DEFAULT_LOW_THREADS, DEFAULT_PLANNER_PROMPT, DEFAULT_STALL_DAYS, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
@@ -52,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.21';
+const VERSION = '0.9.22';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -438,7 +439,7 @@ function latestReplyAt(upTo) {
 }
 
 // How the note is built for a reply: the same for the injected note and for its token count.
-function noteOptions(ctx, tracker, upTo) {
+function noteOptions(ctx, tracker, upTo, place = '') {
     const cal = calendar();
     // With capture writing every reply's changes, the model is not asked to.
     const asks = settings(ctx).capture.mode !== 'always';
@@ -460,8 +461,14 @@ function noteOptions(ctx, tracker, upTo) {
     // change lines, since it is about the narration.
     const previousTime = timeBeforeLatestReply(upTo);
     // (0.9.19) Beats that slipped and offers that lapsed in the latest reply: in this note only.
-    const { slipped, lapsed } = lapsesIn(tracker, latestReplyAt(upTo));
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, slipped, lapsed, ...instructionless };
+    const latest = latestReplyAt(upTo);
+    const { slipped, lapsed } = lapsesIn(tracker, latest);
+    // (0.9.22) How far the places the story and the reader just named really are, by the
+    // world pack's roads, and whether the reply said otherwise.
+    const pack = worldPack();
+    const distances = pack ? distancesFor(pack, place, { reply: latest >= 0 ? visibleText(chat[latest]) : '', message: said }) : [];
+    const distanceFrom = distances.length ? placesIn(pack, place)[0] : '';
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, slipped, lapsed, distances, distanceFrom, ...instructionless };
 }
 
 /**
@@ -475,7 +482,7 @@ function nextReplyTokens() {
     if (!ctx || !chatIdOf(ctx) || !storyBlock() || !settings(ctx).enabled) return noteTokens([]);
     const { selection, tracker, upTo } = situation('normal');
     const substitute = typeof ctx.substituteParams === 'function' ? text => ctx.substituteParams(text) : text => text;
-    const parts = noteParts(selection, noteOptions(ctx, tracker, upTo)).map(entry => ({ ...entry, text: substitute(entry.text) }));
+    const parts = noteParts(selection, noteOptions(ctx, tracker, upTo, selection.place)).map(entry => ({ ...entry, text: substitute(entry.text) }));
     return noteTokens(parts);
 }
 
@@ -489,7 +496,7 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
         }
         const { selection, tracker, upTo } = situation(type);
         const slot = replacesLastReply(ctx.chat ?? [], type) ? (ctx.chat?.length ?? 1) - 1 : ctx.chat?.length ?? 0;
-        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo), abandoning: abandoningFor(slot, tracker) });
+        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo, selection.place), abandoning: abandoningFor(slot, tracker) });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
