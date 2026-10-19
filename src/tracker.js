@@ -49,7 +49,7 @@ export function givenUpIn(tracker, text) {
         return match && !NOT_BEFORE.test(sentence.slice(0, match.index));
     });
     if (!said.length) return [];
-    const names = record => [record.key, String(record.fields?.giver ?? '').trim()].filter(name => name.length >= 3);
+    const names = record => [record.key, String(record.fields?.giver ?? '').trim(), ...(record.aliases ?? [])].filter(name => name.length >= 3);
     const named = (sentence, name) => new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'iu').test(sentence);
     return (tracker?.records ?? [])
         .filter(record => record.kind === 'quest' && record.status === 'active')
@@ -75,7 +75,8 @@ const sentencesOf = text => String(text ?? '').split(/(?<=[.!?…\]])\s+|\n+/).f
 
 function namesJob(sentence, record) {
     const words = keyWords(record.key).filter(word => word.length >= 3 && !GENERIC_WORDS.has(word));
-    const names = [record.key, String(record.fields?.giver ?? '').trim(), ...words].filter(name => name.length >= 3);
+    // (0.9.19) A name the story gave the job (an alias) names it too: "the fold wolf contract".
+    const names = [record.key, String(record.fields?.giver ?? '').trim(), ...words, ...(record.aliases ?? [])].filter(name => name.length >= 3);
     // A name as written, or with a plural ending: wolf/wolves, bounty/bounties, rat/rats.
     const pattern = name => {
         const body = escapeRegExp(normalizeQuotes(name)).replace(/\s+/g, '\\s+');
@@ -151,6 +152,8 @@ const LABEL_KEYS = new Set(['encounter', 'encounters', 'fight', 'combat', 'battl
 const isLabelKey = id => LABEL_KEYS.has(id) || Boolean(kindOf(id));
 // What the next note may say about ignored lines: at most this many, from the latest reply.
 const MAX_UNTRACKED_CORRECTIONS = 3;
+// (0.9.19) The other names a record was reached by, newest kept: enough for a model's drift.
+const MAX_ALIASES = 8;
 
 export function emptyTracker() {
     return { version: 1, records: [], message: -1, time: null };
@@ -170,6 +173,8 @@ function cloneRecord(record) {
         seen: { ...record.seen },
         resolved: record.resolved ? { ...record.resolved } : null,
         legSince: record.legSince ? { ...record.legSince } : null,
+        // (0.9.19) A tracker saved before aliases has none.
+        aliases: [...(record.aliases ?? [])],
         // History entries are never edited, only appended, so they can be shared.
         history: [...record.history],
     };
@@ -351,6 +356,7 @@ function newRecord(op, at) {
         legSince: null,
         pinned: false,
         arc: null,
+        aliases: [],
         history: [],
     };
     applyFields(record, op);
@@ -358,10 +364,25 @@ function newRecord(op, at) {
     return record;
 }
 
+// (0.9.19) The names records were once reached by (their aliases), each to its record's
+// index: a name that is a record's own id is that record's, and a name two records hold
+// belongs to the first in tracker order, so a replay always reads it the same way.
+function aliasIndexOf(records, indexById) {
+    const index = new Map();
+    records.forEach((record, at) => {
+        for (const alias of record.aliases ?? []) {
+            if (!indexById.has(alias) && !index.has(alias)) index.set(alias, at);
+        }
+    });
+    return index;
+}
+
 /**
  * Applies ops for one reply. A `~`, `-` or `!` on a key that is not tracked goes to the one
  * active record it plainly means (nearMatches); failing that, a `~` that carries something
- * becomes a new hook, and anything else is reported and ignored.
+ * becomes a new hook, and anything else is reported and ignored. (0.9.19) A key read so is
+ * remembered on the record (an alias), and a later line with it, `+` included, is that record's
+ * as its own key would be, with no further finding.
  * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
  */
 export function applyOps(tracker, ops, { message, time = null, said, chosen = [] } = {}) {
@@ -378,6 +399,9 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         || saidAbout(said, record, GIVE_UP, { alone: false }) || saidAbout(said, record, REFUSE_WORDS, { alone: false });
     const offered = (op, record) => problems.push(finding('offered', 'info', op, `"${record.key}" was offered, not taken on: it stays an offer until {{user}} accepts it.`));
     const indexById = new Map(records.map((record, index) => [record.id, index]));
+    let aliasIndex = aliasIndexOf(records, indexById);
+    // A record by its id, else by a name it was reached by before.
+    const lookup = id => indexById.get(id) ?? aliasIndex.get(id);
     const copied = new Set();
     const problems = [];
     const at = { message, time };
@@ -390,11 +414,21 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         }
         return records[index];
     };
+    // (0.9.19) Remember a made-up name a line reached a record by, so the next line with it is
+    // that record at once, not matched (and noted) again. The newest names are kept.
+    const remember = (index, id) => {
+        if (lookup(id) !== undefined) return;
+        const record = edit(index);
+        const aliases = [...(record.aliases ?? []), id];
+        record.aliases = aliases.slice(-MAX_ALIASES);
+        if (aliases.length > MAX_ALIASES) aliasIndex = aliasIndexOf(records, indexById);
+        else aliasIndex.set(id, index);
+    };
 
     for (const op of ops ?? []) {
         const id = op.id || lineKey(op.key);
         if (!id) continue;
-        const index = indexById.get(id);
+        const index = lookup(id);
 
         if (op.op === '+') {
             // One arc at a time: a new arc closes the one before it.
@@ -428,8 +462,9 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
                     problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
                     record.kind = 'quest';
                 } else {
+                    const as = record.id === id ? '' : ` as "${record.key}"`;
                     problems.push(finding('duplicate-add', 'info', op,
-                        `"${op.key}" is already tracked; the + was applied as a change.`));
+                        `"${op.key}" is already tracked${as}; the + was applied as a change.`));
                 }
                 applyFields(record, op);
             } else {
@@ -460,6 +495,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             if (near.length === 1) {
                 target = near[0].index;
                 problems.push(finding('near-key', 'info', op, `"${op.key}" read as "${near[0].record.key}".`));
+                remember(target, id);
             } else if (op.op === '~' && !near.length && hasContent(op)) {
                 const added = untrackedRecordOp(op, id);
                 indexById.set(id, records.length);
@@ -648,11 +684,17 @@ export function untrackedCorrections(problems, { message, limit = MAX_UNTRACKED_
     return lines;
 }
 
-/** The record with this key or id (markdown and punctuation ignored), or null. */
+/**
+ * The record with this key or id (markdown and punctuation ignored), or null. (0.9.19) Failing
+ * that, the record a line once reached by this name (an alias), as applyOps reads it.
+ */
 export function findRecord(tracker, keyOrId) {
     const id = lineKey(keyOrId);
     if (!id) return null;
-    return tracker.records.find(record => record.id === id) ?? null;
+    const records = tracker?.records ?? [];
+    return records.find(record => record.id === id)
+        ?? records.find(record => (record.aliases ?? []).includes(id))
+        ?? null;
 }
 
 export function activeRecords(tracker, { kind = null } = {}) {

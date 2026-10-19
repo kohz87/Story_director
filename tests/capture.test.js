@@ -66,3 +66,10 @@ test('parseCapture: a captured quest keeps its difficulty as one of the four wor
     assert.equal(ops[0].fields.difficulty, 'easy');
     assert.equal(lines, '+ quest Wolf pelts — type: bounty | giver: Tanner Ole | reward: 2 silver each | difficulty: easy');
 });
+
+test('parseCapture keeps a change to a name a record was reached by before (0.9.19)', () => {
+    const named = { ...tracker, records: tracker.records.map(record => (record.key === 'River stranger' ? { ...record, aliases: ['the old fisher'] } : record)) };
+    const answer = '<Director>\n~ The Old Fisher — then: sends word\n</Director>';
+    assert.deepEqual(parseCapture(answer, named).ops.map(op => op.key), ['The Old Fisher']);
+    assert.deepEqual(parseCapture(answer, tracker).ops, [], 'without the alias it is not tracked');
+});

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseChanges } from '../src/changes.js';
+import { lineKey, parseChanges } from '../src/changes.js';
 import { activeRecords, applyOps, emptyTracker, findRecord, givenUpIn, keyWords, markSeen, nearMatches, questsDoneIn, replay, untrackedCorrections } from '../src/tracker.js';
 
 function ops(text) {
@@ -57,6 +57,7 @@ test('+ creates a full record', () => {
         legSince: null,
         pinned: false,
         arc: null,
+        aliases: [],
         history: [{ message: 4, op: '+', text: START[0].raw }],
     });
 });
@@ -755,4 +756,140 @@ test('a made-up name for a tracked job still finds it: plurals, compounds, job w
     const start = applyOps(emptyTracker(), ops('+ quest Wolf Hunt — Kill ridge wolves threatening the sheep fold | giver: Danique | reward: 4 silver'), { message: 1 }).tracker;
     const { problems } = applyOps(start, ops('! Fold Wolf Contract — the pack broke the hurdles again'), { message: 2 });
     assert.equal(problems[0].kind, 'near-key');
+});
+
+// (0.9.19) Aliases: a made-up name a line reached a record by is remembered on it.
+
+const WOLF_HUNT = '+ quest Wolf Hunt — Kill ridge wolves threatening the sheep fold | giver: Danique | reward: 4 silver';
+
+test('a name read as a record once is remembered, and later lines with it apply quietly (0.9.19)', () => {
+    const entries = [
+        { message: 1, time: 0, text: '', ops: ops(WOLF_HUNT) },
+        { message: 3, time: 10, text: '', ops: ops('! Fold Wolf Contract — the pack broke the hurdles again\n~ Fold Wolf Contract — step: tracking the pack') },
+        { message: 5, time: 20, text: '', ops: ops('~ **Fold Wolf Contract** — step: at the den') },
+    ];
+    const { tracker, problems } = replay(entries);
+    // Matched once, in the first line; the second line of that reply and the next reply find it by its alias.
+    assert.deepEqual(problems.map(problem => [problem.kind, problem.message]), [['near-key', 3]]);
+    const hunt = findRecord(tracker, 'Wolf Hunt');
+    assert.deepEqual(hunt.aliases, ['fold wolf contract']);
+    assert.equal(hunt.fields.step, 'at the den');
+    assert.deepEqual(hunt.history.map(entry => entry.message), [1, 3, 3, 5], 'each line leaves its trace on the record');
+    assert.equal(tracker.records.length, 1);
+    // Closed by its alias, it is a quest done; closing it again by that name changes nothing.
+    const done = applyOps(tracker, ops('- Fold Wolf Contract — ears delivered, Danique paid'), { message: 7 });
+    assert.deepEqual(done.problems, []);
+    assert.deepEqual(questsDoneIn(done.tracker, 7).map(quest => quest.name), ['Wolf Hunt']);
+    const again = applyOps(done.tracker, ops('- Fold Wolf Contract — done\n~ Fold Wolf Contract — reward: 4 silver and a ham'), { message: 9 });
+    assert.equal(again.problems[0].kind, 'already-closed');
+    assert.equal(again.tracker.records.length, 1, 'no new hook for a name it already has');
+    assert.deepEqual(questsDoneIn(again.tracker, 9), []);
+    // Nothing is remembered from an ambiguous key, a new hook or an exact key.
+    const two = replay([
+        { message: 1, time: 0, ops: ops('+ hook Footing at Bluewatch — a foothold\n+ hook Footing on Bluewatch — another') },
+        { message: 2, time: 0, ops: ops('~ Footing in Bluewatch — now: a room\n~ Lantern Guild dues — now: owed\n~ Footing at Bluewatch — now: settled') },
+    ]).tracker;
+    assert.ok(two.records.every(record => record.aliases.length === 0));
+});
+
+test('a + on a remembered name is that record: a change, the quest taken on, or still an offer (0.9.19)', () => {
+    const start = replay([
+        { message: 1, time: 0, ops: ops('+ hook Sheepfold Wolves — wolves at the east fold | reward: 2 silver per ear') },
+        { message: 2, time: 0, ops: ops('~ Fold Wolf Contract — shown: tracks by the pen') },
+    ]).tracker;
+    assert.deepEqual(findRecord(start, 'Sheepfold Wolves').aliases, ['fold wolf contract']);
+    assert.equal(findRecord(start, 'Sheepfold Wolves').kind, 'hook');
+    // A + of the same kind: applied as a change, saying which record it is.
+    const plain = applyOps(start, ops('+ hook Fold Wolf Contract — now: the pack circles'), { message: 3 });
+    assert.equal(plain.tracker.records.length, 1);
+    assert.deepEqual(plain.problems.map(problem => [problem.kind, problem.message]), [
+        ['duplicate-add', '"Fold Wolf Contract" is already tracked as "Sheepfold Wolves"; the + was applied as a change.'],
+    ]);
+    assert.equal(findRecord(plain.tracker, 'Sheepfold Wolves').fields.now, 'the pack circles');
+    // + quest: the job taken on only on the reader's word (0.9.15), never a second record.
+    const offered = applyOps(start, ops('+ quest Fold Wolf Contract — cull the pack | giver: Nelke'), { message: 3, said: 'What does it pay?' });
+    assert.equal(offered.tracker.records.length, 1);
+    assert.equal(findRecord(offered.tracker, 'Sheepfold Wolves').kind, 'hook');
+    assert.equal(offered.problems[0].kind, 'offered');
+    const taken = applyOps(start, ops('+ quest Fold Wolf Contract — cull the pack | giver: Nelke'), { message: 3, said: 'Fine, I\'ll take it.' });
+    assert.equal(taken.tracker.records.length, 1);
+    assert.equal(findRecord(taken.tracker, 'Sheepfold Wolves').kind, 'quest');
+    assert.equal(findRecord(taken.tracker, 'Sheepfold Wolves').fields.giver, 'Nelke');
+    assert.equal(taken.problems[0].kind, 'became-quest');
+    // With two jobs in the reply, the reader names this one by the name the story gave it.
+    const both = '+ quest Fold Wolf Contract — cull the pack | giver: Nelke\n+ quest Rat Culling — rats | giver: Danique | reward: 8 copper';
+    const named = applyOps(start, ops(both), { message: 3, said: 'I accept the fold wolf contract.' }).tracker;
+    assert.deepEqual(named.records.map(record => [record.key, record.kind]), [['Sheepfold Wolves', 'quest'], ['Rat Culling', 'hook']]);
+    // Closed, a + on the name reopens it, as one on its key would.
+    const closed = applyOps(start, ops('- Sheepfold Wolves — the pack moved on'), { message: 3 }).tracker;
+    const reopened = applyOps(closed, ops('+ hook Fold Wolf Contract — the pack is back'), { message: 4 });
+    assert.equal(reopened.problems[0].kind, 'reopened');
+    assert.equal(reopened.tracker.records.length, 1);
+    assert.equal(findRecord(reopened.tracker, 'Sheepfold Wolves').status, 'active');
+    assert.deepEqual(findRecord(reopened.tracker, 'Sheepfold Wolves').aliases, ['fold wolf contract'], 'its names are identity, kept');
+});
+
+test('aliases: a record\'s own id wins, the first record keeps a name two claim, the newest eight are kept (0.9.19)', () => {
+    const base = applyOps(emptyTracker(), ops('+ hook Sheepfold Wolves — wolves at the fold\n+ hook Wolves of the Fold — the other pack\n+ hook Fold Wolf Contract — a real record by that name'), { message: 1 }).tracker;
+    // Built by hand: both packs claim the same name, and one claims another record's key.
+    const claimed = { ...base, records: base.records.map((record, index) => ({ ...record, aliases: index < 2 ? ['the fold pack', 'fold wolf contract'] : [] })) };
+    const { tracker, problems } = applyOps(claimed, ops('~ The Fold Pack — now: howling\n~ Fold Wolf Contract — now: signed'), { message: 2 });
+    assert.deepEqual(problems, [], 'neither line is matched afresh, so neither is ambiguous');
+    assert.deepEqual(tracker.records.map(record => record.fields.now), ['howling', '', 'signed']);
+    assert.equal(findRecord(claimed, 'the fold pack').key, 'Sheepfold Wolves');
+    assert.equal(findRecord(claimed, 'Fold Wolf Contract').key, 'Fold Wolf Contract');
+    // A name already held is not taken by another record: the first keeps it.
+    const once = replay([
+        { message: 1, time: 0, ops: ops('+ hook Sheepfold Wolves — wolves at the fold') },
+        { message: 2, time: 0, ops: ops('~ Fold Wolf Bounty — now: tracks') },
+        { message: 3, time: 0, ops: ops('+ hook Wolves of the Fold — the other pack') },
+        { message: 4, time: 0, ops: ops('~ Fold Wolf Bounty — now: howling') },
+    ]);
+    assert.deepEqual(once.tracker.records.map(record => [record.key, record.fields.now, record.aliases]), [
+        ['Sheepfold Wolves', 'howling', ['fold wolf bounty']], ['Wolves of the Fold', '', []],
+    ]);
+    assert.deepEqual(once.problems.map(problem => problem.kind), ['near-key'], 'two records fit now, but the name is already the first one\'s');
+    // At most eight names, the newest kept.
+    const names = ['Footing in Bluewatch', 'Footing on Bluewatch', 'Footing for Bluewatch', 'Footing to Bluewatch', 'Footing from Bluewatch', 'The Footing at Bluewatch', 'Footing, Bluewatch', 'A Footing in Bluewatch', 'Footing of Bluewatch', 'Footing and Bluewatch'];
+    let many = applyOps(emptyTracker(), ops('+ hook Footing at Bluewatch — a foothold'), { message: 0 }).tracker;
+    many = applyOps(many, ops(names.map((name, index) => `~ ${name} — now: room ${index}`).join('\n')), { message: 1 }).tracker;
+    const footing = findRecord(many, 'Footing at Bluewatch');
+    assert.equal(footing.aliases.length, 8);
+    assert.deepEqual(footing.aliases, names.slice(2).map(name => lineKey(name)));
+    assert.equal(footing.fields.now, 'room 9');
+    assert.equal(findRecord(many, 'Footing in Bluewatch'), null, 'the oldest names are let go');
+});
+
+test('aliases replay deterministically, roll back with the reply, and need nothing from older trackers (0.9.19)', () => {
+    const entries = [
+        { message: 1, time: 0, text: '', ops: ops(WOLF_HUNT) },
+        { message: 3, time: 10, text: '', ops: ops('! Fold Wolf Contract — the pack attacks') },
+        { message: 5, time: 20, text: '', ops: ops('~ Fold Wolf Contract — step: at the den') },
+    ];
+    assert.deepEqual(replay(entries), replay(entries));
+    // The reply that made the alias swiped away: the name is gone with it.
+    const rolled = replay(entries.slice(0, 1)).tracker;
+    assert.deepEqual(findRecord(rolled, 'Wolf Hunt').aliases, []);
+    assert.equal(findRecord(rolled, 'Fold Wolf Contract'), null);
+    const later = replay([entries[0], entries[2]]);
+    assert.equal(later.problems[0].kind, 'near-key', 'without it, the next line is matched afresh');
+    // A tracker saved before 0.9.19 has no aliases at all, and inputs stay untouched.
+    const old = applyOps(emptyTracker(), ops(WOLF_HUNT), { message: 1 }).tracker;
+    const seed = deepFreeze({ ...old, records: old.records.map(({ aliases: _a, ...record }) => record) });
+    const { tracker } = replay(entries.slice(1), { seed });
+    assert.equal(seed.records[0].aliases, undefined);
+    assert.deepEqual(findRecord(tracker, 'Wolf Hunt').aliases, ['fold wolf contract']);
+    assert.equal(findRecord(tracker, 'Wolf Hunt').fields.step, 'at the den');
+    assert.equal(findRecord(seed, 'Fold Wolf Contract'), null);
+});
+
+test('findRecord finds a record by a name it was reached by (0.9.19)', () => {
+    const { tracker } = replay([
+        { message: 1, time: 0, ops: ops(WOLF_HUNT) },
+        { message: 2, time: 0, ops: ops('~ Fold Wolf Contract — step: tracking') },
+    ]);
+    assert.equal(findRecord(tracker, 'Fold Wolf Contract').key, 'Wolf Hunt');
+    assert.equal(findRecord(tracker, '**fold wolf contract!**').key, 'Wolf Hunt');
+    assert.equal(findRecord(tracker, 'wolf hunt').key, 'Wolf Hunt');
+    assert.equal(findRecord(tracker, 'Fold Wolf'), null, 'an alias is matched whole');
 });
