@@ -1,4 +1,4 @@
-# Story Director v0.9.14
+# Story Director v0.9.15
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -150,6 +150,20 @@ Battle offers quest XP by difficulty when a quest is finished.
   it (since 0.9.13): it makes a hook or event the quest, and on a quest it changes nothing. One
   that also speaks of pay or an ending (*reward accepted*, *declined*) still closes it.
   The arc planner offers work as hooks and never completes a quest for you.
+- **Your choices are yours** (since 0.9.15). Taking a job on, turning it down and giving it up
+  come from **your own message**, the one the reply answers; finishing and failing are the
+  story's. A `+ quest` counts only when your message accepts the job (*accept*, *take it*, *I'll
+  do*, *agree to*, *sign up*, *count me in*, *deal*…) in a sentence naming it, its giver or a
+  word of its name (*the wolf job* is Wolf Hunt), or with only one job in question; otherwise it
+  is kept as an **offer**. A main quest (`type: main`) is the story's to give, and an offer the
+  story moves on (`~ Wolf Hunt — step: tracking the pack`; a `step: 0/1` is not under way) is
+  one your character is already doing: both start at once. A model line that gives a job up or
+  turns it down (*abandoned*, *gave up*, *declined*, *refused*…) changes nothing unless your
+  message said so. When your message takes an offer on or turns one down, the note asks the
+  story to write it ("Ren may be taking on Wolf Hunt. If they do, write + quest Key with its
+  parts; if not, leave it an offer."). Offers fold under **Offered** in the Quests tab, without
+  buttons, until taken on, turned down or past their deadline. Messages in other languages, or
+  a job taken on without saying so, leave it an offer until the story moves it on.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
@@ -166,15 +180,17 @@ Battle offers quest XP by difficulty when a quest is finished.
   Battle's quest XP is never given twice. Reopen it with `+ quest …` and it can be finished anew.
 - **Giving up** (since 0.9.6): a failure, never quest XP, however it is written: `failed`,
   `abandoned`, `gave up`, `forfeit`, `quit`, `walked away`, `backed out`, `called off`… When
-  **your own message** (or the reply's narration) gives up an open quest in so many words, in a
+  **your own message** (only yours since 0.9.15) gives up an open quest in so many words, in a
   sentence naming the quest or its giver ("I give up on the Sheep-killer bounty", "Tell Garrow I
   quit"), the Quest check asks the story to close it: "Ren may be giving up Sheep-killer. If
   they do, close it with - Key — abandoned; if not, leave it." A negation ("I won't give up")
   does not count, and nothing is closed by the message itself.
-- **Abandon** (the flag at the end of each open quest's name in the Quests tab) is the one
-  closing that is yours to make (it asks twice): your character gives the job up. `- Key — abandoned` goes into the latest
-  reply, so deleting or swiping that reply takes it back; it counts as a failure, so RPG Battle
-  offers no quest XP for it.
+- **Abandon** (the flag at the end of each open quest's name in the Quests tab, asks twice)
+  puts `[Abandon quest: Wolf Hunt]` into your message box (since 0.9.15): your character gives
+  the job up with your next message, and the story shows it. Remove the line before sending to
+  keep the quest. If the reply does not close it, Story Director writes `- Key — abandoned`
+  into that reply, so deleting or swiping it takes it back; it counts as a failure, so RPG
+  Battle offers no quest XP for it.
 - `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30
   reached"), and the story decides what that costs.
 - Quests **never go dormant**. A quest untouched for forty replies stays in the note, and its

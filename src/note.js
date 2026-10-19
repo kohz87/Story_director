@@ -17,7 +17,7 @@ export const CHANGE_INSTRUCTION = [
     '~ Key — label: value (change only what changed)',
     '- Key — reason (resolved)',
     '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a hook they take on: ~ it with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.',
+    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a job only offered: + hook with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
@@ -112,6 +112,8 @@ export function noteParts(selection, {
     npcPlansOnly = false,
     offscreenInBlock = false,
     givenUp = [],
+    taking = [],
+    declining = [],
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -124,13 +126,14 @@ export function noteParts(selection, {
     const fixes = (corrections ?? []).map(item => typeof item === 'string' ? item : item?.message ?? '').filter(Boolean);
 
     // The model still needs to know how to add records when there are none yet.
-    if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc) {
+    const choices = instruction && (givenUp?.length || taking?.length || declining?.length);
+    if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc && !choices) {
         return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -169,7 +172,7 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [] }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [] }) {
     const parts = [part('Header', header(selection, calendar))];
     // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
     const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
@@ -187,11 +190,15 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     // (0.9.5) An open quest whose progress reads as over: the story is asked to close it, never
     // closed for it. Only where the model writes change lines.
     // (0.9.6) And one the latest exchange says {{user}} gave up: the story closes it as abandoned.
+    // (0.9.15) Read from the reader's message only, as are an offer taken on or turned down:
+    // the choices are theirs, the lines that record them the story's.
     const ended = instruction ? [...new Set([...due, ...relevant.map(entry => entry.record)].filter(looksFinished).map(record => record.key))] : [];
     const dropped = instruction ? [...new Set(givenUp ?? [])].filter(key => !ended.includes(key)) : [];
     const checks = [
         ended.length ? `the story may have finished ${ended.join(', ')}. If it has, close it with - Key — outcome; if not, leave it.` : '',
         dropped.length ? `{{user}} may be giving up ${dropped.join(', ')}. If they do, close it with - Key — abandoned; if not, leave it.` : '',
+        instruction && taking?.length ? `{{user}} may be taking on ${[...new Set(taking)].join(', ')}. If they do, write + quest Key with its parts; if not, leave it an offer.` : '',
+        instruction && declining?.length ? `{{user}} may be turning down ${[...new Set(declining)].join(', ')}. If they do, close it with - Key — declined; if not, leave it.` : '',
     ].filter(Boolean);
     if (checks.length) parts.push(part('Quest check', `Quest check: ${checks.join(' Also: ')}`));
     if (scheduled(selection, due, arriving, relevant)) {

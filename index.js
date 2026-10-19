@@ -31,7 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { activeRecords, emptyTracker, givenUpIn, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
+import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.14';
+const VERSION = '0.9.15';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -252,7 +252,17 @@ function signature(message) {
 
 // One replay entry per message: its change lines (assistant replies only), its narration
 // (for "seen"), and the story time its scene block states.
-function entryFor(message, index, sb, cal, own, reference) {
+// (0.9.15) The reader's message(s) a reply answers: every user message since the reply before
+// it, or null when there is none (a greeting, a reply after another reply).
+function saidBefore(chat, index) {
+    const said = [];
+    for (let at = index - 1; at >= 0 && !isAssistant(chat[at]); at--) {
+        if (chat[at]?.is_user) said.unshift(visibleText(chat[at]));
+    }
+    return said.length ? said.join('\n') : null;
+}
+
+function entryFor(message, index, sb, cal, own, reference, said = null) {
     const assistant = isAssistant(message);
     const block = assistant ? sb.blockInText(message.mes, BLOCK.tag) : null;
     const parsed = block ? parseChanges(block.text) : { ops: [], errors: [] };
@@ -260,7 +270,7 @@ function entryFor(message, index, sb, cal, own, reference) {
     const timeText = scene ? sceneTimeText(scene.text) : '';
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
-        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null },
+        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said } : {}) },
         location: scene ? headerCell(scene.text, 'loc|location|place') : '',
         hadBlock: Boolean(block),
         parseErrors: parsed.errors,
@@ -288,7 +298,7 @@ function trackerAt(upTo) {
     if (start < cache.entries.length) cache.entries.length = start;
     for (let index = start; index <= last; index++) {
         const seed = cache.entries[index - 1]?.tracker ?? emptyTracker();
-        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null);
+        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index));
         const result = replay([read.entry], { seed });
         cache.entries[index] = {
             sig: signature(chat[index]),
@@ -411,12 +421,15 @@ function noteOptions(ctx, tracker, upTo) {
     if (asks) fixes.push(...latestReplyCorrections(upTo));
     // (0.9.3) While the scene block's Off-Screen carries the agendas, the note does not repeat them.
     const offscreenInBlock = Boolean(settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx)) && storyBlock()?.getBlock?.(settings(ctx).sceneTag)?.text);
-    // (0.9.6) The reader's latest message and the reply before it, read for a job given up.
+    // (0.9.6) The reader's latest message, read for a job given up; (0.9.15) only theirs, and
+    // for an offer taken on or turned down too: choices are the reader's.
     const chat = ctx?.chat ?? [];
     const lastUser = [...chat].reverse().find(message => message?.is_user);
-    const lastReply = [...chat].reverse().find(isAssistant);
-    const givenUp = asks ? givenUpIn(tracker, `${visibleText(lastReply)}\n${visibleText(lastUser)}`) : [];
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, ...instructionless };
+    const said = visibleText(lastUser);
+    const givenUp = asks ? givenUpIn(tracker, said) : [];
+    const taking = asks ? offersChosenIn(tracker, said, 'accept') : [];
+    const declining = asks ? offersChosenIn(tracker, said, 'refuse') : [];
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, ...instructionless };
 }
 
 /**
@@ -627,6 +640,7 @@ async function onReply({ messageIndex }) {
     try {
         // Capture first, so the checks below see the changes it wrote.
         if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
+        await closeAbandoned(index);
         const before = trackerAt(index - 1).tracker;
         const { tracker: after, problems, info } = trackerAt(index);
         const block = sb.blockInText(chat[index].mes, BLOCK.tag);
@@ -1167,7 +1181,9 @@ function questRecords() {
     const active = quests.filter(record => record.status === 'active');
     const finished = quests.filter(record => record.status !== 'active')
         .sort((a, b) => (b.resolved?.message ?? -1) - (a.resolved?.message ?? -1));
-    return { active, finished, now };
+    // (0.9.15) Jobs offered and not taken on yet: shown apart, until their deadline passes.
+    const offered = tracker.records.filter(isOffer);
+    return { active, finished, offered, now };
 }
 
 function questStatus(now) {
@@ -1191,30 +1207,57 @@ function questsTabKey() {
 }
 
 function renderQuestsTab(pane) {
-    const { active, finished, now } = questRecords();
+    const { active, finished, offered, now } = questRecords();
     // (0.9.12) Each deadline at the clock time the calendar sets: "Goldwane 12 sunset" reads
     // "Goldwane 12, 07:00 pm", a date alone its last minute.
     const cal = calendar();
     const formatDate = value => cal.withClock(value, { reference: now });
-    renderQuests(pane, { quests: active, finished, formatDate, status: questStatus(now), onAbandon: id => void abandonQuest(id) });
+    const status = questStatus(now);
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, onAbandon: id => abandonQuest(id) });
 }
 
 /**
- * (0.9.5) The reader gives a quest up from the Quests tab, the one closing that is theirs to
- * make: `- Key — abandoned` goes into the latest reply like any change (a failure, so RPG Battle
- * offers no quest XP), and deleting or swiping that reply takes it back. Finishing or failing a
- * quest is the story's to tell.
+ * (0.9.5) The reader gives a quest up from the Quests tab, the one quest choice with a button.
+ * (0.9.15) It puts `[Abandon quest: Key]` into the message box rather than editing a reply:
+ * the giving up is the reader's own words, sent with their next message, and the story shows
+ * it and closes the quest (`- Key — abandoned`, a failure, so no quest XP). Remove the line
+ * before sending to keep the quest. Swiping or deleting that reply takes it back.
  */
-async function abandonQuest(id) {
+const ABANDON_MARK = /\[Abandon quest:\s*([^\]\n]+?)\s*\]/gi;
+
+function abandonQuest(id) {
     const record = questRecords().active.find(entry => entry.id === id);
     if (!record) return;
-    try {
-        await appendDirectorLines(`- ${record.key} — abandoned`);
-        notify('info', `${record.key} is abandoned. Delete or swipe the latest reply to take it back.`);
-    } catch (error) {
-        notify('error', error instanceof Error ? error.message : String(error));
+    const box = globalThis.document?.querySelector?.('#send_textarea');
+    if (!box) {
+        notify('error', 'The message box is not there to write in.');
+        return;
     }
-    storyBlock()?.refresh?.();
+    const line = `[Abandon quest: ${record.key}]`;
+    const current = String(box.value ?? '');
+    if (!current.includes(line)) box.value = current.trim() ? `${current.trimEnd()}\n${line}` : line;
+    box.dispatchEvent?.(new Event('input', { bubbles: true }));
+    box.focus?.();
+    notify('info', `${record.key} is given up with your next message. Remove the line from the message box to keep it.`);
+}
+
+/**
+ * (0.9.15) A reply to `[Abandon quest: Key]` that did not close the quest: the reader chose,
+ * so the closing goes into that reply's own <Director> block (swipe or delete takes it back).
+ */
+async function closeAbandoned(index) {
+    const ctx = context();
+    const sb = storyBlock();
+    const said = saidBefore(ctx?.chat ?? [], index) ?? '';
+    const keys = [...said.matchAll(ABANDON_MARK)].map(match => match[1]);
+    if (!keys.length) return false;
+    const { tracker } = trackerAt(index);
+    const open = keys.map(key => findRecord(tracker, key)).filter(record => record && record.status === 'active');
+    if (!open.length) return false;
+    const existing = sb.blockInText(ctx.chat[index].mes, BLOCK.tag)?.text ?? '';
+    const lines = open.map(record => `- ${record.key} — abandoned`).join('\n');
+    await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
+    return true;
 }
 
 function tabBadge() {
