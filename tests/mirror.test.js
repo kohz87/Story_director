@@ -67,14 +67,29 @@ test('replaces an existing Off-Screen section, leaving the rest byte for byte', 
     assert.ok(result.endsWith(suffix));
 });
 
-test('writes * None when no agenda is active', () => {
-    const result = mirrorOffscreen(WORLD_STATE, [AGENDAS[4], AGENDAS[5]]);
+test('writes * None when no agenda is active and the story listed nobody else', () => {
+    // Brant's agenda is closed and Geva's and Giertnow's are tracked: none of their lines stay.
+    const tracked = [AGENDAS[4], { ...AGENDAS[0], status: 'resolved' }, { ...AGENDAS[2], status: 'resolved' }, AGENDAS[5]];
+    const result = mirrorOffscreen(WORLD_STATE, tracked);
     assert.equal(
         result,
         `${WORLD_STATE.slice(0, OFFSCREEN_START)}**📡 Off-Screen:**\n* None${WORLD_STATE.slice(WORLD_START - 1)}`,
     );
-    assert.equal(mirrorOffscreen(WORLD_STATE, []), result);
-    assert.equal(mirrorOffscreen(WORLD_STATE, null), result);
+    assert.equal(mirrorOffscreen('Loc: Auvoth\n**📡 Off-Screen:**\n* None', null), 'Loc: Auvoth\n**📡 Off-Screen:**\n* None');
+});
+
+test('the story\'s own lines for people with no agenda stay, after the agendas; a closed agenda\'s line goes (0.9.26)', () => {
+    // Only Brant (closed) is known: Geva's and Giertnow's lines are the story's and stay.
+    const result = mirrorOffscreen(WORLD_STATE, [AGENDAS[4]]);
+    assert.equal(result, `${WORLD_STATE.slice(0, OFFSCREEN_START)}**📡 Off-Screen:**
+* **Senior Listener Geva — now:** District Bailiff Court | then: argues with magistrates | on: Haywane 12, 05:45 pm
+* Master Giertnow: Bluewatch market | then: sells the mules | on: Haywane 14${WORLD_STATE.slice(WORLD_START - 1)}`);
+    const alley = 'Loc: Guild\n**📡 Off-Screen:**\n* Jor — crying in the granary alley\n* Bond collector — on a barge\n* None';
+    assert.equal(mirrorOffscreen(alley, [agenda('Bond collector', { now: 'leaving Glassdock' })]),
+        'Loc: Guild\n**📡 Off-Screen:**\n* Bond collector — now: leaving Glassdock\n* Jor — crying in the granary alley');
+    // A name the agenda was also called by is the agenda's too.
+    assert.equal(mirrorOffscreen('**📡 Off-Screen:**\n* The collector — on a barge', [agenda('Bond collector', {}, { aliases: ['the collector'] })]),
+        '**📡 Off-Screen:**\n* Bond collector');
 });
 
 test('inserts the section before the World heading when there is none', () => {
@@ -107,7 +122,7 @@ test('the section ends at a rule or the end, keeps blank lines and CRLF, and tak
         '',
     ].join('\r\n');
     const result = mirrorOffscreen(block, [AGENDAS[3]], { heading: '**Off-Screen:**' });
-    assert.equal(result, 'Loc: Auvoth\r\n**Off-Screen:**\r\n* Thys\r\n\r\n---\r\nArc Phase: Escalation\r\n');
+    assert.equal(result, 'Loc: Auvoth\r\n**Off-Screen:**\r\n* Thys\r\n* Kade — now: the docks\r\n\r\n---\r\nArc Phase: Escalation\r\n');
 
     const atEnd = 'Loc: Auvoth\n**📡 Off-Screen:**\n* Old line';
     assert.equal(mirrorOffscreen(atEnd, []), 'Loc: Auvoth\n**📡 Off-Screen:**\n* None');

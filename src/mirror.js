@@ -2,6 +2,7 @@
 // block as its Off-Screen section, for readers who keep that section in Story Block's block.
 // Only that section changes; every byte outside it is kept as it was. Pure.
 
+import { lineKey } from './changes.js';
 import { readHeading } from './seed.js';
 
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
@@ -21,10 +22,24 @@ function agendaLine(record) {
     return parts.length ? `* ${record.key} — ${parts.join(' | ')}` : `* ${record.key}`;
 }
 
-function sectionLines(agendas, heading) {
+// (0.9.26) "* Jor — crying in the granary alley": the name a story line starts with.
+const STORY_LINE = /^\s*[-*•]\s+\**\s*([^—–:*]+?)\s*\**\s*(?:—|–|-\s|:)/u;
+const NONE_LINE = /^\s*[-*•]?\s*[*_(\[]*\s*(?:none|nobody|no one)\s*[)\]*_.]*\s*$/i;
+
+function sectionLines(agendas, heading, storyLines = []) {
     const active = (agendas ?? []).filter(record =>
         (record.status ?? 'active') === 'active' && (record.kind ?? 'agenda') === 'agenda');
-    return [heading, ...(active.length ? active.map(agendaLine) : ['* None'])];
+    // (0.9.26) The story's own lines for people the tracker has no agenda for stay, after the
+    // agendas: who else is off-screen and what they are doing is the story's, not ours to drop.
+    // Every agenda the tracker knows, closed ones too: those lines are the tracker's to drop.
+    const tracked = new Set((agendas ?? []).filter(record => (record.kind ?? 'agenda') === 'agenda')
+        .flatMap(record => [lineKey(record.key), ...(record.aliases ?? [])]).filter(Boolean));
+    const kept = storyLines.filter(line => {
+        const name = STORY_LINE.exec(line)?.[1];
+        return name && !NONE_LINE.test(line) && !tracked.has(lineKey(name));
+    });
+    const body = [...active.map(agendaLine), ...kept];
+    return [heading, ...(body.length ? body : ['* None'])];
 }
 
 // Lines with their offsets; a '\r' stays on its line so offsets match the original text.
@@ -47,7 +62,6 @@ function indexLines(text) {
 export function mirrorOffscreen(worldStateText, agendas, { heading = '**📡 Off-Screen:**' } = {}) {
     const text = String(worldStateText ?? '');
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
-    const section = sectionLines(agendas, heading).join(eol);
     const lines = indexLines(text);
     const headings = lines.map(({ line }) => readHeading(line));
 
@@ -60,8 +74,11 @@ export function mirrorOffscreen(worldStateText, agendas, { heading = '**📡 Off
             if (headings[index] || RULE.test(lines[index].line)) break;
             if (lines[index].line.trim()) last = index;
         }
+        const storyLines = lines.slice(first + 1, last + 1).map(({ line }) => line.replace(/\r$/, '')).filter(line => line.trim());
+        const section = sectionLines(agendas, heading, storyLines).join(eol);
         return text.slice(0, lines[first].start) + section + text.slice(lines[last].end);
     }
+    const section = sectionLines(agendas, heading).join(eol);
 
     const before = headings.findIndex(found =>
         found && (AFTER_OFFSCREEN_KINDS.has(found.kind) || AFTER_OFFSCREEN_NAMES.has(found.name)));
