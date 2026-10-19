@@ -262,6 +262,21 @@ is due or arriving is still on *Due now* or *Arriving*. With Story Block 0.9.5 o
 World State itself then leaves out Unresolved Threads, Planted Seeds, Consequence Timers and Arc
 Phase: hooks, clocks and the arc are Story Director's, so the model gets them from one place.
 
+**While away** (since 0.9.19). When the story skips ahead (a night's sleep, days on the road)
+and the scene's time is 12 hours or more past the reply before it, what came due or arrived in
+between is told once, on a line of its own before *Due now*, and not repeated there:
+
+```
+While away (Goldwane 12, 08:00 pm → Goldwane 15, 07:00 am): Stray Oar — sacked by the guild (Goldwane 13) · Bond collector reached Hollin's Reach (Goldwane 14) · Bounty on Kettle Jack — deadline Goldwane 14, 11:59 pm passed (bring him in alive). Show what came of them as news, signs or aftermath, not as scenes {{user}} lived through.
+```
+
+What was already due before the jump stays on *Due now*, and so does a quest whose deadline is
+later the same day. A planned fight in the gap reads *fought off-screen* (RPG Battle offers no
+**Fight?** for it, since no reply reached it). Secrets never appear here. While the model writes
+the change lines, the line also asks it to record each (`! Key — what came of it`, an arrival
+with `~ Key — now:`, a passed deadline with `- Key — failed` or a new `due:`); with capture
+writing them, it only asks for the narration. The note's budget never cuts it.
+
 Whenever something is scheduled, a short **Pacing** line says how a schedule meets a scene:
 bring a due item in only where it fits (on-screen if your character is there, otherwise later
 as news, signs or aftermath), never cut into or bend the current scene for a beat, never decide
