@@ -489,7 +489,7 @@ test('quest check: an offer the reader takes on or turns down asks the story to 
     const offer = record({ key: 'Wolf Hunt', kind: 'hook', fields: { giver: 'Danique', reward: '4 silver' } });
     const note = buildNote(selection({ relevant: [offer] }), { calendar, taking: ['Wolf Hunt'], declining: ['Rat Culling'] });
     const check = lines(note).find(line => line.startsWith('Quest check:'));
-    assert.match(check, /\{\{user\}\} may be taking on Wolf Hunt\. If they do, write \+ quest Key with its parts; if not, leave it an offer\./);
+    assert.match(check, /\{\{user\}\} may be taking on Wolf Hunt\. If they do, write \+ quest Key with its parts \(no - line for the hook\); if not, leave it an offer\./);
     assert.match(check, /\{\{user\}\} may be turning down Rat Culling\. If they do, close it with - Key — declined; if not, leave it\./);
     // Even with nothing else to say, and never where capture writes the lines.
     assert.match(buildNote(selection(), { calendar, taking: ['Wolf Hunt'] }), /may be taking on Wolf Hunt/);
