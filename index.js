@@ -53,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.28';
+const VERSION = '0.9.29';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -132,6 +132,16 @@ function reportStatus(text) {
 
 function isAssistant(message) {
     return Boolean(message) && !message.is_user && !message.is_system;
+}
+
+// (0.9.29) A reply hidden from the model (SillyTavern's hide, or an extension that hides old
+// messages to save context) is still the story: its Director and scene blocks stay part of the
+// tracker, so hiding the reply that started a quest never loses the quest. A hidden message
+// without either block (a system note, a battle hand-off) is not a reply.
+function isStoryReply(message, sb = storyBlock(), sceneTag = settings().sceneTag) {
+    if (isAssistant(message)) return true;
+    if (!message || message.is_user || !message.is_system || !sb?.blockInText) return false;
+    return Boolean(sb.blockInText(message.mes, BLOCK.tag) || sb.blockInText(message.mes, sceneTag));
 }
 
 // Quiet and impersonate generations are other features' prompts, not the story's reply.
@@ -261,16 +271,16 @@ function signature(message) {
 // (for "seen"), and the story time its scene block states.
 // (0.9.15) The reader's message(s) a reply answers: every user message since the reply before
 // it, or null when there is none (a greeting, a reply after another reply).
-function saidBefore(chat, index) {
+function saidBefore(chat, index, isReply = isAssistant) {
     const said = [];
-    for (let at = index - 1; at >= 0 && !isAssistant(chat[at]); at--) {
+    for (let at = index - 1; at >= 0 && !isReply(chat[at]); at--) {
         if (chat[at]?.is_user) said.unshift(visibleText(chat[at]));
     }
     return said.length ? said.join('\n') : null;
 }
 
 function entryFor(message, index, sb, cal, own, reference, said = null) {
-    const assistant = isAssistant(message);
+    const assistant = isStoryReply(message, sb, own.sceneTag);
     const block = assistant ? sb.blockInText(message.mes, BLOCK.tag) : null;
     const parsed = block ? parseChanges(block.text) : { ops: [], errors: [] };
     const scene = assistant ? sb.blockInText(message.mes, own.sceneTag) : null;
@@ -305,7 +315,7 @@ function trackerAt(upTo) {
     if (start < cache.entries.length) cache.entries.length = start;
     for (let index = start; index <= last; index++) {
         const seed = cache.entries[index - 1]?.tracker ?? emptyTracker();
-        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index));
+        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index, message => isStoryReply(message, sb, own.sceneTag)));
         const result = replay([read.entry], { seed });
         cache.entries[index] = {
             sig: signature(chat[index]),
@@ -359,7 +369,7 @@ function sceneTextAt(upTo) {
     const chat = ctx?.chat ?? [];
     const tag = settings(ctx).sceneTag;
     for (let index = Math.min(upTo, chat.length - 1); index >= 0; index--) {
-        if (!isAssistant(chat[index])) continue;
+        if (!isStoryReply(chat[index], sb, tag)) continue;
         const scene = sb?.blockInText?.(chat[index].mes, tag);
         if (scene?.text) return scene.text;
     }

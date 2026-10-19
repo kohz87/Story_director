@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.29
+
+- **Hidden replies stay part of the story.** Story Director builds its quests, hooks and agendas by reading every reply's Director block from the start of the chat, and it skipped replies hidden from the model. Extensions that save context by hiding old messages (Summarybook hides messages 0–10, for example) therefore wiped out everything those replies had set up: the Lone Grey Wolf bounty and the rat granary job vanished from the Quests tab, the Finished fold and the Journal at once. Now a hidden reply that carries a Director or scene block is still read. Hiding only changes what the model sees, and the tracker keeps everything. Swiping and deleting still roll changes back as before. Hidden messages without those blocks (system notes, battle hand-offs) are still skipped. Quests lost this way come back on their own once you update and reload the chat.
+
 ## 0.9.28
 
 - **A quest with only its pay left is no longer failed by the clock.** Lone Grey Wolf was done (the wolf dead, a voucher in hand) and its step was *turn in voucher at the bailiff hatch on Friday noon*, with `due: Goldwane 14, 12:00 pm`. That time was when the hatch opens, but Story Director read it as a deadline. When the hour came, the note told the story *Lone Grey Wolf — deadline reached (Slay the pack)*, so the story failed the quest while you were on your way to cash it. Now a quest whose step or now is only collecting the pay (*turn in the voucher*, *collect the bounty*, *return to Verna for payment*, *get paid*) is told as *pay waiting from Goldwane 14, 12:00 pm (…); the work is done, the hour fails nothing*. A `-` line that fails it only for time (*deadline passed*, *expired*, *too late*, *missed the window*) leaves it open, with a note in the Director tab. A failure for another reason (*the bailiff tore up the voucher*) still ends it, and so does cashing it. The Quests tab marks such a quest **pay waiting**, not *deadline passed*.
