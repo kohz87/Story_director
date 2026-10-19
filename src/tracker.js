@@ -17,7 +17,8 @@ const OVER_VALUE = /^(?:done|complete|completed|finished|fulfilled|accomplished|
 const OVER_LABELS = ['status', 'state', 'outcome', 'result', 'progress'];
 const QUEST_OVER_FIELDS = ['step', 'now'];
 // A `!` on a quest that says it was finished or failed ("! Sheep-killer — wolves slain, reward paid").
-const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|handed in|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out)/i;
+// (0.9.27) Or the pay for it: "voucher paid", "bounty collected".
+const QUEST_OVER_TEXT = /\b(?:complet|finish|fulfil|accomplish|done\b|turned in|handed in|(?:reward|bounty|voucher|fee|payment)(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|paid in full)/i;
 // (0.9.13) A `-` that says the job was taken on, not ended: "- Hook Sheepfold Wolves — accepted
 // by Wessel" beside the `+ quest` it became. Not when it also speaks of pay or an ending.
 const TAKEN_ON = /\b(?:accept(?:s|ed)?|tak(?:es|en|ing) (?:on|up)|took (?:on|up)|signed (?:on|up|for)|agreed to|became (?:a |the )?(?:quest|bounty|contract|job)|(?:now|turned into|converted (?:in)?to|promoted to|upgraded to) (?:a |the )?(?:quest|bounty|contract|job))\b/i;
@@ -28,7 +29,7 @@ const takenOn = reason => TAKEN_ON.test(reason) && !NOT_TAKEN_ON.test(reason) &&
 // (0.9.5) A quest still open whose own progress reads as over ("step: wolf slain, reward
 // collected"): finished or failed words in its step or now. Not its goal or description, which
 // say what the job is ("complete the ritual").
-const LOOKS_OVER = /\b(?:completed|finished|fulfilled|accomplished|done\b(?!\s+with)|turned in|handed in|delivered|reward(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|failed|abandoned|gave up|given up|forfeit(?:ed)?|quit\b|walked away|backed out|called off|expired|too late)/i;
+const LOOKS_OVER = /\b(?:completed|finished|fulfilled|accomplished|done\b(?!\s+with)|turned in|handed in|delivered|(?:reward|bounty|voucher|fee|payment)(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|paid in full|failed|abandoned|gave up|given up|forfeit(?:ed)?|quit\b|walked away|backed out|called off|expired|too late)/i;
 
 /** Whether an open quest's step or now says it is over, so the note can ask the story to close it. */
 export function looksFinished(record) {
@@ -63,7 +64,10 @@ export function givenUpIn(tracker, text) {
 // made it, naming the job (its key, its giver or a word of its name). The story keeps the
 // outcomes: done, failed, expired. A main quest is the story's to give, and a job the story
 // moves on (a step under way) is one the character is already doing.
-const ACCEPT_WORDS = /\b(?:accept(?:s|ed|ing)?|take (?:it|this|that|the|on|up)|takes (?:it|the|on|up)|took (?:it|the|on|up)|taking (?:it|the|on|up)|i'?ll (?:take|do|handle)|i will (?:take|do|handle)|agree(?:s|d)? to|sign(?:s|ed)? (?:up|on)|count me in|i'?m in|deal|choose|chose|pick(?:s|ed)?)\b/i;
+// (0.9.27) "We" as well as "I", and going along: "we'll join the hunt", "count us in".
+const ACCEPT_WORDS = /\b(?:accept(?:s|ed|ing)?|take (?:it|this|that|the|on|up)|takes (?:it|the|on|up)|took (?:it|the|on|up)|taking (?:it|the|on|up)|(?:i|we)(?:'?ll| will| shall) (?:take|do|handle|join|help|see to)|join(?:s|ed)? (?:the|you|your|in)|agree(?:s|d)? to|sign(?:s|ed)? (?:up|on)|count (?:me|us) in|(?:i'?m|we'?re) in|(?:i'?m|we'?re) up for|up for it|let'?s do (?:it|this)|deal|choose|chose|pick(?:s|ed)?)\b/i;
+// (0.9.27) Plain yes words: they take a job only when the reply's one new quest is the question.
+const AGREE_WORDS = /^\W*(?:yes|yeah|aye|sure|okay|ok|alright|all right|very well|of course|fine)\b/i;
 const REFUSE_WORDS = /\b(?:refuse[sd]?|refusing|declin(?:e|es|ed|ing)|turn(?:s|ed|ing)? (?:it |that |this |them )?down|no thanks|pass(?:es|ed)? on|not interested)\b/i;
 // A closing reason that is the reader's decision rather than the story's outcome.
 const CHOSEN_END = /\b(?:abandon|gave up|give up|given up|giving up|forfeit|quit\b|walked away|backed out|withdr[eao]w|refus|declin|turned down|passed on)/i;
@@ -119,15 +123,17 @@ export function offersChosenIn(tracker, text, choice = 'accept') {
 /** What a `~` (or a quest's `!`) says when it means the record is over, or null. */
 function overByChange(record, op) {
     if (op.op === '!') {
-        if (record.kind !== 'quest') return null;
+        // (0.9.27) An offer too, when the story says the job is done ("skins turned in"): what
+        // happens to an offer that is not the reader's ("the bandits withdrew") is only news.
+        if (record.kind !== 'quest' && !isJob(record)) return null;
         const said = [op.reason, ...Object.values(op.fields ?? {}), ...Object.values(op.extra ?? {})].map(value => String(value ?? '')).join(' ');
-        return QUEST_OVER_TEXT.test(said) || FAILED.test(said) ? (op.reason || said).trim() : null;
+        return QUEST_OVER_TEXT.test(said) || (record.kind === 'quest' && FAILED.test(said)) ? (op.reason || said).trim() : null;
     }
     for (const label of OVER_LABELS) {
         const value = String(op.extra?.[label] ?? '').trim();
         if (OVER_VALUE.test(value)) return value;
     }
-    if (record.kind === 'quest' || takesOnQuest(record, op)) {
+    if (record.kind === 'quest' || isJob(record) || takesOnQuest(record, op)) {
         for (const field of QUEST_OVER_FIELDS) {
             const value = String(op.fields?.[field] ?? '').trim();
             if (OVER_VALUE.test(value)) return value;
@@ -391,14 +397,28 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
     // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.
     const gated = said !== undefined;
     const quests = (ops ?? []).filter(op => op.op === '+' && op.kind === 'quest');
+    const alone = op => quests.length === 1 && (!op || quests.includes(op));
     const accepts = (record, op = null) => !gated
         || lineKey(op?.fields?.type ?? record.fields?.type ?? '') === 'main'
-        || saidAbout(said, record, ACCEPT_WORDS, { alone: quests.length === 1 && (!op || quests.includes(op)) });
+        || saidAbout(said, record, ACCEPT_WORDS, { alone: alone(op) })
+        || (alone(op) && saidAbout(said, record, AGREE_WORDS, { alone: true }));
+    // (0.9.27) Whether the reader has spoken of a job: in this reply's message, or before.
+    const spokenOf = record => !gated || Boolean(record.engaged) || sentencesOf(said).some(sentence => namesJob(sentence, record));
     // `chosen`: records the reader gave up with the Abandon flag (ids stamped on the reply).
     const picked = new Set((chosen ?? []).map(key => lineKey(key)));
     const chose = record => picked.has(record.id) || picked.has(lineKey(record.key))
         || saidAbout(said, record, GIVE_UP, { alone: false }) || saidAbout(said, record, REFUSE_WORDS, { alone: false });
     const offered = (op, record) => problems.push(finding('offered', 'info', op, `"${record.key}" was offered, not taken on: it stays an offer until {{user}} accepts it.`));
+    // (0.9.27) An offer the story closes as done ("! Barrow-Viper Clearing — skins turned in to
+    // Verna") was done by {{user}}, who went and did it without the words to take it on: when
+    // they have spoken of it, it closes as their quest finished. Failed, given up or lapsed, it
+    // stays the offer it was.
+    const doneOffer = (record, reason, op) => {
+        if (!isOffer(record) || !QUEST_OVER_TEXT.test(reason) && !LOOKS_OVER.test(reason)) return;
+        if (FAILED.test(reason) || CHOSEN_END.test(reason) || !spokenOf(record)) return;
+        record.kind = 'quest';
+        problems.push(finding('done-offer', 'info', op, `"${record.key}" was offered and the story says it is done: it is a quest {{user}} finished.`));
+    };
     const indexById = new Map(records.map((record, index) => [record.id, index]));
     let aliasIndex = aliasIndexOf(records, indexById);
     // A record by its id, else by a name it was reached by before.
@@ -428,6 +448,14 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         if (aliases.length > MAX_ALIASES) aliasIndex = aliasIndexOf(records, indexById);
         else aliasIndex.set(id, index);
     };
+
+    // (0.9.27) An offer the reader's message names is one they have spoken of: it is given the
+    // story's grace before it lapses (lapses.js), and done by the story it is their quest.
+    if (gated && said) {
+        records.forEach((record, index) => {
+            if (!record.engaged && isOffer(record) && sentencesOf(said).some(sentence => namesJob(sentence, record))) edit(index).engaged = { ...at };
+        });
+    }
 
     for (const op of ops ?? []) {
         const id = op.id || lineKey(op.key);
@@ -508,6 +536,11 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
                 target = near[0].index;
                 problems.push(finding('near-key', 'info', op, `"${op.key}" read as "${near[0].record.key}".`));
                 remember(target, id);
+            } else if (op.op === '~' && !near.length && hasContent(op) && overByChange({ kind: 'quest', fields: {} }, op) !== null) {
+                // (0.9.27) "~ North Levee Vipers — step: completed" on nothing tracked: there is
+                // nothing left to track, so no record is made for it.
+                problems.push(finding('unknown-key', 'info', op, `"${op.key}" is not tracked and reads as over; the ~ line was ignored.`, { op: op.op }));
+                continue;
             } else if (op.op === '~' && !near.length && hasContent(op)) {
                 const added = untrackedRecordOp(op, id);
                 indexById.set(id, records.length);
@@ -569,6 +602,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             const { status: _s, state: _st, outcome: _o, result: _r, progress: _p, ...extra } = op.extra ?? {};
             const fields = Object.fromEntries(Object.entries(op.fields ?? {}).filter(([name, value]) => !(QUEST_OVER_FIELDS.includes(name) && OVER_VALUE.test(String(value ?? '').trim()))));
             applyFields(record, { ...op, fields, extra });
+            doneOffer(record, over, op);
             record.status = 'resolved';
             record.resolved = { ...at, reason: over };
             problems.push(finding('closed-by-change', 'info', op, `"${record.key}" read as finished ("${over}"); "- ${record.key} — ${over}" says it directly.`));
@@ -592,6 +626,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             applyFields(record, change);
         } else if (op.op === '-') {
             applyFields(record, op);
+            if (!SUPERSEDED.test(op.reason ?? '')) doneOffer(record, String(op.reason ?? ''), op);
             record.status = SUPERSEDED.test(op.reason ?? '') ? 'superseded' : 'resolved';
             record.resolved = { ...at, reason: op.reason ?? '' };
         } else if (op.op === '!') {
@@ -665,7 +700,8 @@ export function replay(entries, { seed = null } = {}) {
         const time = entry.time ?? tracker.time;
         const at = { message: entry.message, time };
         if (entry.text) tracker = markSeen(tracker, entry.text, at);
-        if (entry.ops?.length) {
+        // (0.9.27) A reply with no change lines still reads the reader's message (offers spoken of).
+        if (entry.ops?.length || (typeof entry.said === 'string' && entry.said)) {
             const result = applyOps(tracker, entry.ops, entry.said === undefined ? at : { ...at, said: entry.said, chosen: entry.chosen ?? [] });
             tracker = result.tracker;
             for (const problem of result.problems) {

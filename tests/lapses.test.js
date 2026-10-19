@@ -148,3 +148,19 @@ test('nothing is mutated', () => {
     lapsesIn(tracker, 1);
     assert.deepEqual(tracker, copy);
 });
+
+test('an offer the reader spoke of gets a beat\'s grace past its date before it lapses (0.9.27)', () => {
+    const offered = applyOps(emptyTracker(), ops('+ hook Wolfhound Hunt — the hunt rides out | giver: Burl | reward: 1 gold | due: Goldwane 13'), { message: 1, said: 'Hello.' }).tracker;
+    const spoken = applyOps(offered, ops('~ Wolfhound Hunt — now: Burl readies the hounds'), { message: 3, said: 'I tell Burl I will be at the wolfhound kennels on the day.' }).tracker;
+    assert.ok(findRecord(spoken, 'Wolfhound Hunt').engaged);
+    assert.equal(lapsedOffers(offered, { calendar, now: at('Goldwane 14, 09:00 am') }).length, 1);
+    assert.deepEqual(lapsedOffers(spoken, { calendar, now: at('Goldwane 14, 09:00 am') }), []);
+    assert.deepEqual(lapsedOffers(spoken, { calendar, now: at(`Goldwane ${13 + SLIP_GRACE_DAYS}, 11:58 pm`) }), []);
+    assert.equal(lapsedOffers(spoken, { calendar, now: at(`Goldwane ${13 + SLIP_GRACE_DAYS}, 11:59 pm`) }).length, 1);
+    // A reply with no change lines still reads the reader's message.
+    const replayed = replay([
+        { message: 1, ops: parseChanges('+ hook Wolfhound Hunt — giver: Burl | reward: 1 gold | due: Goldwane 13').ops, said: 'Hi.' },
+        { message: 3, ops: null, said: 'Burl, I am in for the wolfhound hunt.' },
+    ]).tracker;
+    assert.ok(findRecord(replayed, 'Wolfhound Hunt').engaged);
+});
