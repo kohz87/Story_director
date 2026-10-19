@@ -583,3 +583,15 @@ test('a record shows the other names the story reached it by, last (0.9.19)', ()
     // None (or a tracker from before aliases): no row.
     assert.deepEqual(facts(itemFor(render(), 'Senior Listener Geva')).map(([label]) => label), ['now', 'then', 'on']);
 });
+
+test('a distance off the map shows with its Fix button, which does the fix (0.9.25)', () => {
+    let fixed = 0;
+    const finding = { kind: 'distance', severity: 'warn', key: 'Ledgerford', message: '“three days” to Ledgerford: by the map it is 18–33 days.', fix: { label: 'Fix: “twenty-one days”', onFix: () => { fixed += 1; } } };
+    const pane = render({ findings: [finding] });
+    const fix = pane.querySelector('.story-director-problem-fix');
+    assert.ok(fix, 'the button is on the warning');
+    assert.match(fix.textContent, /Fix: “twenty-one days”/);
+    fix.dispatch('click');
+    assert.equal(fixed, 1);
+    assert.equal(render({ findings: [{ ...finding, fix: null }] }).querySelector('.story-director-problem-fix'), null, 'no fix, no button');
+});

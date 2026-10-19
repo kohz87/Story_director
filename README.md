@@ -1,4 +1,4 @@
-# Story Director v0.9.24
+# Story Director v0.9.25
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -385,8 +385,9 @@ so a swipe or delete leaves no trace.
 
 **Checked the moment a reply arrives** (since 0.9.24). A reply that says a time far off the map
 gets a warning straight away, before you write anything: *“three days” to Ledgerford: by the map
-it is 18–33 days (ride to wagon) from Bluewatch Village; by boat, 21.* It is also listed under the
-Director tab's warnings. Its **Fix** button puts the map's figure into the reply's text in place
+it is 18–33 days (ride to wagon) from Bluewatch Village; by boat, 21.* The same warning stays under
+**Director tab → Problems → Warnings** for as long as the latest reply carries the figure, with
+the same button, after a reload too (since 0.9.25), and no Reveal is needed. The **Fix** button puts the map's figure into the reply's text in place
 of the story's (*twenty-one days downstream*), using the way the sentence names (downstream, on
 foot, a day's ride) or else the quickest. Nothing in the reply changes unless you press it, and a
 swipe or regenerate brings a fresh reply that is checked the same way.

@@ -53,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.24';
+const VERSION = '0.9.25';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -758,6 +758,22 @@ function toastDistance(index, entry) {
     }
 }
 
+/** The latest reply's distances off the map, as Director tab warnings with their Fix. */
+function distanceFindings(index) {
+    const pack = worldPack();
+    const message = context()?.chat?.[index];
+    if (!pack || !isAssistant(message)) return [];
+    try {
+        return wrongDistances(pack, situationAt(index, sceneTextAt(index)).place, visibleText(message)).map(entry => ({
+            kind: 'distance', severity: 'warn', key: entry.place, message: distanceMessage(entry),
+            fix: { label: `Fix: “${entry.fix}”`, onFix: () => void fixDistance(index, entry).then(() => storyBlock()?.refresh?.()) },
+        }));
+    } catch (error) {
+        console.warn('[Story Director] distances could not be checked', error);
+        return [];
+    }
+}
+
 /** The reader's Fix: the map's figure written into the reply where the story put its own. */
 async function fixDistance(index, entry) {
     const ctx = context();
@@ -884,7 +900,9 @@ function renderDirectorTab(pane) {
         timeText: now === null ? '' : cal.format(now),
         place,
         selection,
-        findings: current ? lastFindings : [],
+        // (0.9.25) Distances off the map are read from the latest reply now, so they show (with
+        // their Fix) after a reload too, and go once fixed or swiped away.
+        findings: [...(current ? lastFindings.filter(finding => finding.kind !== 'distance') : []), ...distanceFindings(latestAssistantIndex(chat))],
         canSeed: !tracker.records.length && canSeed(),
         onSeed: () => void seed(),
         onPin: (id, pinned) => setPin(id, pinned),

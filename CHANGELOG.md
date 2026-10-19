@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.25
+
+- **The distance Fix button stays in the Director tab.** In 0.9.24 the button only lived on the pop-up warning, which goes after 20 seconds. Now the warning also sits under Director tab → Problems → Warnings with its own **Fix** button, for as long as the latest reply carries the wrong figure. It is read from the reply itself, so it is there after a reload too, needs no Reveal, and goes once the reply is fixed or swiped away.
+
 ## 0.9.24
 
 - **A wrong distance is caught the moment the reply arrives.** Until now, a travel time the story got wrong was only corrected in the note for the next reply, so it sat in the reply you were reading. Now each new reply is checked as it comes in. If it names a place on the world pack's roads and says a time far off the map, a warning shows at once: *“three days” to Ledgerford: by the map it is 18–33 days (ride to wagon) from Bluewatch Village; by boat, 21.* The warning has a **Fix** button that writes the map's figure into the reply (*…twenty-one days downstream*), using the way the sentence names (downstream: by boat) or else the quickest. The warning is also listed in the Director tab. Nothing changes unless you press Fix.
