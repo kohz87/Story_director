@@ -1,4 +1,4 @@
-# Story Director v0.9.20
+# Story Director v0.9.21
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -50,7 +50,9 @@ and lets quiet threads fade. Story Director keeps that memory in code instead:
 1. Open a chat with a World State block (Story Block's `World_State` template, or your own;
    pick it under **Scene block**).
 2. Set your **calendar**: Gregorian, or your world's months (one per line, `Name` or
-   `Name | days`) and era.
+   `Name | days`) and era. If your world has its own week, list its day names under **Week**
+   and pick **Today is** (since 0.9.21). Left empty, the note tells the story the world has no
+   weekdays, so it gives dates ("Goldwane 14") instead of "Friday noon".
 3. Already tracking Off-Screen, World, Hooks or Clocks lines in your World State? Press
    **Seed from World State** once: they become tracked records.
 4. Play. The note goes in before each reply; the model answers with its `<Director>` changes,
@@ -717,7 +719,7 @@ closed; the ones you open are remembered in this browser.
 | Budget | 1000 tokens | Most the note may use; lowest-priority records drop first |
 | Dormant after | 15 replies or 30 story days unseen | Left out of the note until mentioned again |
 | Due soon | 3 days | Anything due this soon is never dormant |
-| Calendar | Gregorian | Or your own months and era |
+| Calendar | Gregorian | Or your own months and era, and optionally a week of your own day names with the day the story is on (the note's header then shows today's weekday; Gregorian shows the real one) |
 | Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for readers who keep that section in Story Block's World State (once tracking has started) |
 | Source of truth | Automatic | Calendar, timeline and NPCs: who keeps each when other story extensions are installed (see [Working with the other story extensions](#working-with-the-other-story-extensions)) |
 | Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |

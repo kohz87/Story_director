@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.21
+
+- **Weekdays follow your world.** Story Director never used weekday names itself, but it never told the story the world has none either. So a model would make up "Friday noon" for a deadline, and nobody in a world with no week could say which day that is. Now:
+  - **No week:** with a custom calendar and no week, the note says so once, right after its header: *This world has no weekdays: name a day by its date (Goldwane 14), never Monday to Sunday.*
+  - **A week of its own:** list its day names under Settings → Calendar → **Week**, then pick which one the story's current day is under **Today is**. The note's header then starts with today's weekday (*Ashday, CY 611, Goldwane 12, 12:18 pm*), and the week runs on from there.
+  - **Gregorian:** the header shows the real weekday.
+
 ## 0.9.20
 
 - **A quest you just took on no longer finishes in the same reply.** When the story turned an offered hook into a quest, it sometimes also wrote `- hook Lone Grey Wolf — Hunt the lone wolf…` to retire the hook. That line was read as the quest being finished, so the quest closed right away and RPG Battle awarded its XP. Now a `-` line on a quest taken on in that same reply leaves it open, unless its reason says the job is done or failed. A word like `hook` in front of a tracked name is read as a label, not as part of the name. The quest check also tells the story not to write a `-` line for the hook. Quests already closed this way in older chats reopen; the XP already given stays in that reply's Party block, and swiping or deleting that reply removes it.

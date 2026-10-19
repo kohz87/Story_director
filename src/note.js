@@ -106,7 +106,7 @@ export function buildNote(selection, options = {}) {
 
 /**
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
- * before `text`, so joining them gives buildNote exactly. Labels: Header, While away, Due now,
+ * before `text`, so joining them gives buildNote exactly. Labels: Header, No weekdays, While away, Due now,
  * Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
  * Corrections, Quest check, Abandoned, Slipped, Lapsed, Pacing, Encounter cue, Change
  * instruction, NPC plans only.
@@ -196,6 +196,8 @@ function joinParts(parts) {
 
 function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], away = null, slipped = [], lapsed = [] }) {
     const parts = [part('Header', header(selection, calendar))];
+    const noWeek = noWeekLine(selection, calendar);
+    if (noWeek) parts.push(part('No weekdays', noWeek, ' '));
     // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
     const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
     const clock = text => (text && typeof calendar?.withClock === 'function' ? calendar.withClock(text, { reference: now }) : text);
@@ -288,9 +290,25 @@ function scheduled(selection, due, arriving, relevant) {
 function header(selection, calendar) {
     const parts = ['Story Director'];
     const now = selection?.now;
-    if (calendar && typeof now === 'number' && Number.isFinite(now)) parts.push(calendar.format(now));
+    if (calendar && typeof now === 'number' && Number.isFinite(now)) {
+        // (0.9.21) Today's weekday leads the date when the world has a week.
+        const day = typeof calendar.weekday === 'function' ? calendar.weekday(now) : '';
+        parts.push(day ? `${day}, ${calendar.format(now)}` : calendar.format(now));
+    }
     if (selection?.place) parts.push(selection.place);
     return `[${parts.join(ITEM_SEPARATOR)}]`;
+}
+
+// (0.9.21) About 20 tokens after the header, only for a calendar with no week: without it a
+// model gives deadlines as "Friday noon", which no one in the world can count to.
+export const NO_WEEKDAYS = 'This world has no weekdays: name a day by its date ({{date}}), never Monday to Sunday.';
+
+function noWeekLine(selection, calendar) {
+    const now = selection?.now;
+    // A real custom calendar only (makeCalendar's config names its preset; Gregorian has a week).
+    if (calendar?.config?.preset !== 'custom' || (calendar.config.week ?? []).length) return '';
+    if (typeof now !== 'number' || !Number.isFinite(now) || typeof calendar.format !== 'function') return '';
+    return NO_WEEKDAYS.replace('{{date}}', calendar.format(calendar.addDays(now, 2), { time: false, era: false }));
 }
 
 // The foes of a planned fight, as written ('' for a record that is not one).
