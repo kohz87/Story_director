@@ -224,6 +224,10 @@ function problemList(items) {
         finding.key ? el('span', { className: 'story-director-problem-key', text: finding.key }) : null,
         el('span', { className: 'story-director-problem-text', text: finding.message ?? '' }),
         finding.kind ? el('code', { className: 'story-director-problem-kind', text: finding.kind }) : null,
+        // (0.9.25) A problem that can be put right in one click: a distance off the map.
+        finding.fix && typeof finding.fix.onFix === 'function'
+            ? button(finding.fix.label, 'story-director-problem-fix', { iconName: 'fa-wand-magic-sparkles', title: 'Put the map’s figure into the reply', onClick: () => finding.fix.onFix() })
+            : null,
     ])));
 }
 
