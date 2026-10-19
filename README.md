@@ -1,4 +1,4 @@
-# Story Director v0.9.27
+# Story Director v0.9.28
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -192,6 +192,12 @@ Battle offers quest XP by difficulty when a quest is finished.
   An offer your messages have spoken of (since 0.9.27) is often the job's own day (*the hunt
   rides out on Goldwane 15*), so it gets two more story days, as a late beat does, and stays
   under **Offered** meanwhile. The Quests tab shows once there is an offer, not only a quest.
+- **Pay waiting** (since 0.9.28). A quest whose step (or now) is only collecting the pay (*turn
+  in voucher at the bailiff hatch on Friday noon*, *collect the bounty from Verna*, *return to
+  Verna for payment*) has its work done: its `due` is when the pay can be had, not a deadline. The
+  note tells it as *Lone Grey Wolf — pay waiting from Goldwane 14, 12:00 pm (…); the work is done,
+  the hour fails nothing*, the Quests tab marks it **pay waiting**, and a `-` that fails it only
+  for time (*deadline passed*, *expired*, *too late*) leaves it open. Any other ending still ends it.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or

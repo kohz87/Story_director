@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.28
+
+- **A quest with only its pay left is no longer failed by the clock.** Lone Grey Wolf was done (the wolf dead, a voucher in hand) and its step was *turn in voucher at the bailiff hatch on Friday noon*, with `due: Goldwane 14, 12:00 pm`. That time was when the hatch opens, but Story Director read it as a deadline. When the hour came, the note told the story *Lone Grey Wolf — deadline reached (Slay the pack)*, so the story failed the quest while you were on your way to cash it. Now a quest whose step or now is only collecting the pay (*turn in the voucher*, *collect the bounty*, *return to Verna for payment*, *get paid*) is told as *pay waiting from Goldwane 14, 12:00 pm (…); the work is done, the hour fails nothing*. A `-` line that fails it only for time (*deadline passed*, *expired*, *too late*, *missed the window*) leaves it open, with a note in the Director tab. A failure for another reason (*the bailiff tore up the voucher*) still ends it, and so does cashing it. The Quests tab marks such a quest **pay waiting**, not *deadline passed*.
+- **`- Key — failed: reason` counts as a failure.** A closing line that wrote its outcome as a label (*failed: the pack fled*, *done: pack slain*) was saved with no reason at all, and a quest with no reason counts as done, so a failed quest could award quest XP. The label and its text are now the reason.
+
 ## 0.9.27
 
 - **A job you went and did counts as done.** An offer only became your quest when your message used words like *accept* or *I'll take it*, so a job you simply went and did stayed under **Offered** even after the story finished it: *! Barrow-Viper Clearing — cleared pit, 10 skins turned in to Verna* changed nothing. Now, when the story says an offer is done (a `!`, a `~ … step: completed` or a `-` that reads as finished) and your messages have spoken of it, it closes as your finished quest, and RPG Battle awards its quest XP. An offer you never spoke of still leaves the Offered list, but as news with no XP (someone else did it). Failed, given up or lapsed is never a quest done.

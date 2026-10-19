@@ -31,6 +31,19 @@ const takenOn = reason => TAKEN_ON.test(reason) && !NOT_TAKEN_ON.test(reason) &&
 // say what the job is ("complete the ritual").
 const LOOKS_OVER = /\b(?:completed|finished|fulfilled|accomplished|done\b(?!\s+with)|turned in|handed in|delivered|(?:reward|bounty|voucher|fee|payment)(?:ed)?\s+(?:paid|collected|received|claimed)|paid out|paid in full|failed|abandoned|gave up|given up|forfeit(?:ed)?|quit\b|walked away|backed out|called off|expired|too late)/i;
 
+// (0.9.28) A step that is only the pay left to collect ("turn in voucher at the bailiff hatch",
+// "collect the bounty from Verna"): the work is done. A time it was given is when the pay can be
+// had, not a deadline the job can be failed by; and a failing reason that is only about time.
+const PAY_WORDS = '(?:vouchers?|rewards?|bount(?:y|ies)|pay|payment|purse|coins?|fees?|chits?|tokens?|receipts?|scrip|silver|gold|copper|wages?)';
+const CLAIM_STEP = new RegExp(`\\b(?:(?:turn|hand|cash|redeem|collect|claim|pick)(?:s|ed|ing)?(?: in| up)?|exchang(?:e|es|ed|ing))(?:\\s+[\\w'’-]+){0,2}?\\s+${PAY_WORDS}\\b|\\b(?:get|getting|be) paid\\b|\\b(?:return|go back|report)\\w*(?:\\s+[\\w'’-]+){0,4}?\\s+for\\s+(?:the |their |his |her |my |our )?${PAY_WORDS}\\b`, 'i');
+const TIME_FAIL = /\b(?:expired|missed|too late|deadline|lapsed|ran out|out of time|overdue|late\b|window (?:closed|passed|shut))/i;
+
+/** (0.9.28) Whether an open quest's work is done and only its pay is left (its step or now says so). */
+export function waitsForPay(record) {
+    if (record?.kind !== 'quest' || record.status !== 'active') return false;
+    return ['step', 'now'].some(field => CLAIM_STEP.test(String(record.fields?.[field] ?? '')));
+}
+
 /** Whether an open quest's step or now says it is over, so the note can ask the story to close it. */
 export function looksFinished(record) {
     if (record?.kind !== 'quest' || record.status !== 'active') return false;
@@ -118,6 +131,12 @@ export function offersChosenIn(tracker, text, choice = 'accept') {
     const offers = (tracker?.records ?? []).filter(isOffer);
     const words = choice === 'refuse' ? REFUSE_WORDS : ACCEPT_WORDS;
     return offers.filter(record => saidAbout(text, record, words, { alone: offers.length === 1 })).map(record => record.key);
+}
+
+// A `-` line's reason with its labelled parts ("failed: deadline passed"), as written.
+function closingReason(op) {
+    const parts = Object.entries(op.extra ?? {}).map(([label, value]) => (String(value ?? '').trim() ? `${label}: ${value}` : label));
+    return [String(op.reason ?? '').trim(), ...parts].filter(Boolean).join('; ');
 }
 
 /** What a `~` (or a quest's `!`) says when it means the record is over, or null. */
@@ -457,7 +476,10 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         });
     }
 
-    for (const op of ops ?? []) {
+    for (const line of ops ?? []) {
+        // (0.9.28) "- Key — failed: deadline passed" reads its label as a part, leaving no reason:
+        // the closing's words are the reason, so a failure is never read as done.
+        const op = line.op === '-' ? { ...line, reason: closingReason(line) } : line;
         const id = op.id || lineKey(op.key);
         if (!id) continue;
         const index = lookup(id);
@@ -596,6 +618,11 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         const ending = op.op === '-' ? String(op.reason ?? '') : over;
         if (gated && closing && ending !== null && CHOSEN_END.test(ending) && (record.kind === 'quest' || isJob(record)) && !chose(record)) {
             problems.push(finding('not-chosen', 'info', op, `"${record.key}" stays open: giving it up or turning it down is {{user}}'s choice, and their message did not make it.`));
+            continue;
+        }
+        // (0.9.28) The work done and the pay waiting, a quest is not failed for the hour passing.
+        if (closing && ending !== null && record.kind === 'quest' && FAILED.test(ending) && TIME_FAIL.test(ending) && waitsForPay(record)) {
+            problems.push(finding('pay-waiting', 'info', op, `"${record.key}" stays open: its work is done and only the pay is left, which a passed time does not take away.`));
             continue;
         }
         if (over !== null) {

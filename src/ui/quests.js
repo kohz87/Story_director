@@ -152,6 +152,7 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
         difficultyTag(record),
         state === 'overdue' ? el('span', { className: 'story-director-tag is-overdue', text: 'deadline passed' }) : null,
         state === 'soon' ? el('span', { className: 'story-director-tag is-soon', text: 'deadline soon' }) : null,
+        state === 'pay' ? el('span', { className: 'story-director-tag is-pay', text: 'pay waiting', attrs: { title: 'The work is done; only the pay is left to collect.' } }) : null,
         pending ? el('span', { className: 'story-director-tag is-giving-up', text: 'giving up' }) : null,
         abandonButton(record, onAbandon, { pending, onKeep }),
     ]));
@@ -236,7 +237,7 @@ function renderFinished(finished) {
 /**
  * Draws the Quests tab into `pane`. `quests`: active quest records; `finished`: resolved
  * ones, most recent first; `offered`: jobs not taken on yet (0.9.15), folded under Offered;
- * `status(record)` → 'overdue' | 'soon' | '' marks deadlines;
+ * `status(record)` → 'overdue' | 'soon' | 'pay' | '' marks deadlines ('pay': only the pay is left);
  * `onAbandon(id)` when the reader gives one up (no button without it).
  */
 export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null } = {}) {
