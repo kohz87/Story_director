@@ -978,3 +978,27 @@ test('taking a job: "we" as well as "I", joining, and a plain yes to the one new
     // A plain yes with two new quests in the reply says which one only by name.
     assert.equal(take('Yes.', '+ quest Wolfhound Hunt — run down the wolfhounds | giver: Burl\n+ quest Ferry Run — row the ferry | giver: Ola'), 'hook');
 });
+
+test('a quest with only its pay left is not failed for the hour passing (0.9.28)', () => {
+    const start = applyOps(emptyTracker(), ops('+ quest Lone Grey Wolf — hunt the pack | giver: Verna | reward: 1 gold\n~ Lone Grey Wolf — step: turn in voucher at bailiff hatch on Friday noon | due: Goldwane 14, 12:00 pm'), { message: 1 }).tracker;
+    for (const line of ['- Lone Grey Wolf — failed: deadline passed', '- Lone Grey Wolf — voucher expired, too late', '~ Lone Grey Wolf — status: failed (missed the window)']) {
+        const { tracker, problems } = applyOps(start, ops(line), { message: 3, said: 'I wait.' });
+        assert.equal(findRecord(tracker, 'Lone Grey Wolf').status, 'active', line);
+        assert.ok(problems.some(problem => problem.kind === 'pay-waiting'), line);
+    }
+    // Done is done, and a failure that is not about time still ends it.
+    assert.deepEqual(questsDoneIn(applyOps(start, ops('- Lone Grey Wolf — voucher cashed, 1 gold paid'), { message: 3 }).tracker, 3).map(quest => quest.name), ['Lone Grey Wolf']);
+    assert.equal(findRecord(applyOps(start, ops('- Lone Grey Wolf — failed: the bailiff tore up the voucher'), { message: 3 }).tracker, 'Lone Grey Wolf').status, 'resolved');
+    // While the work is still to do, a passed deadline fails it as before.
+    const hunting = applyOps(emptyTracker(), ops('+ quest Wolves — hunt the pack | giver: Verna | step: track the pack | due: Goldwane 14'), { message: 1 }).tracker;
+    assert.equal(findRecord(applyOps(hunting, ops('- Wolves — failed: deadline passed'), { message: 3 }).tracker, 'Wolves').status, 'resolved');
+});
+
+test('"- Key — failed: deadline passed" is a failure, not a quest done (0.9.28)', () => {
+    const start = applyOps(emptyTracker(), ops('+ quest Wolves — hunt the pack | giver: Verna | step: track the pack'), { message: 1 }).tracker;
+    const failed = applyOps(start, ops('- Wolves — failed: the pack fled north'), { message: 3 }).tracker;
+    assert.equal(findRecord(failed, 'Wolves').resolved.reason, 'failed: the pack fled north');
+    assert.deepEqual(questsDoneIn(failed, 3), []);
+    const done = applyOps(start, ops('- Wolves — done: pack slain'), { message: 3 }).tracker;
+    assert.equal(questsDoneIn(done, 3).length, 1);
+});

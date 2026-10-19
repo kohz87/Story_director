@@ -610,3 +610,18 @@ test('weekdays in the note (0.9.21): today\'s leads the header; a world without 
     assert.match(real[0].text, /^\[Story Director · Monday, October 19, 2026, 10:00 am/);
     assert.ok(!real.some(entry => entry.label === 'No weekdays'));
 });
+
+test('a quest whose work is done and only the pay is left: its time is when the pay can be had (0.9.28)', () => {
+    const wolf = record({ key: 'Lone Grey Wolf', kind: 'quest', fields: { giver: 'Verna', goal: 'Slay the pack', reward: '1 gold', step: 'turn in voucher at bailiff hatch on Friday noon', due: 'Goldwane 16, 12:00 pm' } });
+    const due = buildNote(selection({ now: at('Goldwane 16, 01:00 pm'), due: [wolf] }), { calendar });
+    assert.ok(lines(due).includes('Due now: Lone Grey Wolf — pay waiting from Goldwane 16, 12:00 pm (turn in voucher at bailiff hatch on Friday noon); the work is done, the hour fails nothing'));
+    assert.ok(!due.includes('deadline'), 'never told as a deadline reached');
+    // In a skipped stretch of time too, without the passed-deadline instruction.
+    const parts = noteParts(selection({ now: at('Goldwane 17, 07:00 am'), due: [wolf] }), { calendar, previousTime: at('Goldwane 15, 08:00 pm') });
+    const away = parts.find(entry => entry.label === 'While away').text;
+    assert.ok(away.includes('Lone Grey Wolf — pay waiting from Goldwane 16, 12:00 pm'));
+    assert.ok(!away.includes(AWAY_DEADLINE));
+    // A step that is still the work keeps the deadline wording.
+    const hunt = record({ key: 'Wolves', kind: 'quest', fields: { goal: 'drive off the wolves', step: 'return skins to Verna', due: 'Goldwane 16' } });
+    assert.ok(lines(buildNote(selection({ due: [hunt] }), { calendar })).includes('Due now: Wolves — deadline Goldwane 16 reached (drive off the wolves)'));
+});

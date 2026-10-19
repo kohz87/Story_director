@@ -8,7 +8,7 @@
 
 import { questDifficulty } from './changes.js';
 import { awayIn, estimateTokens } from './relevance.js';
-import { looksFinished } from './tracker.js';
+import { looksFinished, waitsForPay } from './tracker.js';
 
 // About 165 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
 export const CHANGE_INSTRUCTION = [
@@ -397,6 +397,8 @@ function noteFields(record) {
 // "Saartje's sale (Goldwane 16)", or with what is meant to happen: "Geva — files the warrant (Goldwane 17)".
 function dueItem(record, clock = text => text) {
     const f = noteFields(record);
+    // (0.9.28) The work done and only the pay left, its time is when the pay can be had.
+    if (record.kind === 'quest' && waitsForPay(record)) return payItem(record, clock);
     // A quest's due is its deadline: reaching it means time ran out.
     if (record.kind === 'quest') return `${record.key} — deadline${f.due ? ` ${clock(f.due)}` : ''} reached${f.goal ? ` (${f.goal})` : ''}`;
     const when = record.kind === 'clock' ? f.due || f.on : f.on || f.due;
@@ -417,7 +419,7 @@ function awayPart(away, calendar, clock, instruction) {
     if (!items.length) return '';
     const span = `${calendar.format(away.from, { era: false })} → ${calendar.format(away.to, { era: false })}`;
     const record = instruction
-        ? [AWAY_RECORD, away.arriving?.length ? AWAY_ARRIVAL : '', (away.due ?? []).some(entry => entry.kind === 'quest') ? AWAY_DEADLINE : '']
+        ? [AWAY_RECORD, away.arriving?.length ? AWAY_ARRIVAL : '', (away.due ?? []).some(entry => entry.kind === 'quest' && !waitsForPay(entry)) ? AWAY_DEADLINE : '']
         : [];
     const list = items.join(ITEM_SEPARATOR);
     // A list ending in a trimmed part ("…") needs no full stop after it.
@@ -425,8 +427,16 @@ function awayPart(away, calendar, clock, instruction) {
 }
 
 // A due item as it reads in the past: a quest's deadline "passed", not "reached".
+// "Lone Grey Wolf — pay waiting from Goldwane 14, 12:00 pm (turn in voucher at the bailiff hatch);
+// the work is done, the hour fails nothing".
+function payItem(record, clock) {
+    const f = noteFields(record);
+    const step = f.step || f.now;
+    return `${record.key} — pay waiting${f.due ? ` from ${clock(f.due)}` : ''}${step ? ` (${step})` : ''}; the work is done, the hour fails nothing`;
+}
+
 function awayDueItem(record, clock) {
-    if (record.kind !== 'quest') return dueItem(record, clock);
+    if (record.kind !== 'quest' || waitsForPay(record)) return dueItem(record, clock);
     const f = noteFields(record);
     return `${record.key} — deadline${f.due ? ` ${clock(f.due)}` : ''} passed${f.goal ? ` (${f.goal})` : ''}`;
 }

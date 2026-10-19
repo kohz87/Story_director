@@ -739,7 +739,8 @@
 }
 
 /* Quests tab: deadline marks. */
-.story-director-tab .story-director-tag.is-soon {
+.story-director-tab .story-director-tag.is-soon,
+.story-director-tab .story-director-tag.is-pay {
     color: var(--sd-accent);
     opacity: 1;
 }

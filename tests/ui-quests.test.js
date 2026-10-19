@@ -143,3 +143,12 @@ test('a quest given up with the next reply shows "giving up" and a Keep button (
     card.querySelector('.story-director-quest-keep').click();
     assert.deepEqual(kept, ['wolf hunt']);
 });
+
+test('a quest with only its pay left is marked "pay waiting", never "deadline passed" (0.9.28)', () => {
+    const wolf = quest('Lone Grey Wolf', { goal: 'Slay the pack', step: 'turn in voucher at bailiff hatch on Friday noon', due: 'Goldwane 14, 12:00 pm' });
+    const pane = render({ quests: [wolf], status: () => 'pay' });
+    const card = pane.querySelector('.story-director-record');
+    assert.ok(card.classList.contains('is-pay'));
+    assert.match(card.textContent, /pay waiting/);
+    assert.doesNotMatch(card.textContent, /deadline passed/);
+});
