@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.30
+
+- **The tracker is kept at the back of the chat.** Until now, Story Director rebuilt quests, hooks and agendas by re-reading every reply from the very first message. So any old message that went missing could take a quest with it. Now it keeps a **checkpoint**: one copy of the tracker as it stood ten replies back, saved in the chat's own hidden data (not in any message, never sent to the model). The tracker is that copy plus the last few replies. Messages before it are never read again, so hiding them, summarising them away (Summarybook and the like) or deleting them changes nothing. A new checkpoint is taken every ten replies and the newest four are kept, about 7 KB each.
+  - **Swipe, edit or delete** within the last ten or so replies rolls back exactly as before.
+  - **A bigger rollback** (deleting replies past the newest checkpoint) falls back on an older checkpoint. Past all of them, the tracker is rebuilt from whatever messages are left, hidden ones included.
+  - **Editing a reply older than the checkpoint** no longer changes the tracker: the past stays put.
+  - **Changing the calendar or the scene block's tag** starts the checkpoints over, because they turn dates into numbers.
+  - **Branches** check that the checkpoint's reply is really there before using it.
+- The Journal dates its entries from the story time saved with each change line, so entries from before a checkpoint keep their day.
+
 ## 0.9.29
 
 - **Hidden replies stay part of the story.** Story Director builds its quests, hooks and agendas by reading every reply's Director block from the start of the chat, and it skipped replies hidden from the model. Extensions that save context by hiding old messages (Summarybook hides messages 0–10, for example) therefore wiped out everything those replies had set up: the Lone Grey Wolf bounty and the rat granary job vanished from the Quests tab, the Finished fold and the Journal at once. Now a hidden reply that carries a Director or scene block is still read. Hiding only changes what the model sees, and the tracker keeps everything. Swiping and deleting still roll changes back as before. Hidden messages without those blocks (system notes, battle hand-offs) are still skipped. Quests lost this way come back on their own once you update and reload the chat.

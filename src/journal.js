@@ -59,13 +59,15 @@ function latest(trackers) {
  * The message at which each quest was taken on and the record as it was then: the first
  * tracker in which it is a quest. A hook offered earlier becomes a quest only when taken on.
  */
-function questsTakenOn(trackers) {
+function questsTakenOn(trackers, base = -1) {
     const taken = new Map();
     let previous = null;
     trackers.forEach((tracker, message) => {
         const records = tracker?.records;
         if (!records || records === previous) return;
         previous = records;
+        // (0.9.30) A checkpoint holds every quest taken before it: those keep their own start.
+        if (message <= base) return;
         for (const record of records) {
             if (record.kind === 'quest' && !taken.has(record.id)) taken.set(record.id, { message, record });
         }
@@ -75,14 +77,14 @@ function questsTakenOn(trackers) {
 
 function eventItems(record, push) {
     const fired = (record.history ?? []).filter(entry => entry.op === '!' && isMessage(entry.message));
-    for (const entry of fired) push({ type: 'event', how: 'fired', kind: record.kind, key: record.key, text: reasonOf(entry), message: entry.message });
+    for (const entry of fired) push({ type: 'event', how: 'fired', kind: record.kind, key: record.key, text: reasonOf(entry), message: entry.message, time: finite(entry.time) });
 
     if (SIGN_KINDS.has(record.kind)) {
         // The first line that set a sign is when the reader saw it.
         const sign = (record.history ?? []).find(entry => isMessage(entry.message) && !NO_SIGN.test(text(fieldsOf(entry).shown)));
         if (sign) {
             const shown = text(fieldsOf(sign).shown);
-            push({ type: 'event', how: 'sign', kind: record.kind, key: record.key, text: BARE_SIGN.test(shown) ? '' : shown, message: sign.message });
+            push({ type: 'event', how: 'sign', kind: record.kind, key: record.key, text: BARE_SIGN.test(shown) ? '' : shown, message: sign.message, time: finite(sign.time) });
         }
     }
 
@@ -102,14 +104,14 @@ function questItems(record, taken, push) {
     const goal = text(then.fields?.goal) || text(then.fields?.desc);
     const giver = text(then.fields?.giver);
     if (isMessage(start.message)) {
-        push({ type: 'quest', how: 'taken', kind: 'quest', key: record.key, text: goal, giver, message: start.message });
+        push({ type: 'quest', how: 'taken', kind: 'quest', key: record.key, text: goal, giver, message: start.message, time: start.message === record.created?.message ? finite(record.created?.time) : null });
     }
     const outcome = questOutcome(record);
     const ended = QUEST_ENDINGS.has(outcome) && isMessage(record.resolved?.message) ? record.resolved.message : null;
     // Its `!` lines once it was the reader's work; the one that ended it is the ending.
     for (const entry of record.history ?? []) {
         if (entry.op !== '!' || !isMessage(entry.message) || entry.message < (start.message ?? 0) || entry.message === ended) continue;
-        push({ type: 'quest', how: 'progress', kind: 'quest', key: record.key, text: reasonOf(entry), message: entry.message });
+        push({ type: 'quest', how: 'progress', kind: 'quest', key: record.key, text: reasonOf(entry), message: entry.message, time: finite(entry.time) });
     }
     if (ended !== null) {
         push({ type: 'quest', how: outcome, kind: 'quest', key: record.key, text: text(record.resolved.reason), message: ended, time: finite(record.resolved.time) });
@@ -135,7 +137,7 @@ function dayOf(time, calendar) {
  * tracker's time at the item's message; items before any time is known come last, in a day
  * with `key: 'undated'`.
  */
-export function buildJournal({ trackers = [], places = [], calendar = null } = {}) {
+export function buildJournal({ trackers = [], places = [], calendar = null, base = -1 } = {}) {
     const list = Array.isArray(trackers) ? trackers : [];
     const current = latest(list);
     const items = [];
@@ -150,7 +152,7 @@ export function buildJournal({ trackers = [], places = [], calendar = null } = {
         if (!isMessage(message)) continue;
         push({ type: 'place', how: 'visited', kind: 'place', key: text(place.name), text: '', message, time: finite(place.firstTime) });
     }
-    const taken = questsTakenOn(list);
+    const taken = questsTakenOn(list, Number.isInteger(base) ? base : -1);
     for (const record of current?.records ?? []) {
         if (record.kind === 'quest') questItems(record, taken, push);
         else if (STORY_KINDS.has(record.kind) && !isJob(record)) eventItems(record, push);

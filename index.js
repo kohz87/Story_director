@@ -33,6 +33,7 @@ import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/
 import { formatOp, parseChanges } from './src/changes.js';
 import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections, waitsForPay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
+import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
 import { buildNote, noteParts, noteTokens } from './src/note.js';
@@ -53,7 +54,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.29';
+const VERSION = '0.9.30';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -94,7 +95,8 @@ let uiRetry = null;
 let lastFindings = [];
 let lastFindingsKey = '';
 // Replay cache: one entry per message of the active chat, { sig, tracker, problems, … }.
-let cache = { chatId: null, entries: [] };
+// `base`: (0.9.30) the message whose entry is a checkpoint, -1 for a replay from the start.
+let cache = { chatId: null, entries: [], base: -1 };
 // The loaded world pack, rebuilt only when the stored JSON object changes.
 let packCache = { source: null, pack: null };
 let settingsPanel = null;
@@ -294,9 +296,82 @@ function entryFor(message, index, sb, cal, own, reference, said = null) {
     };
 }
 
+// One message read into a cache entry, after the entry before it (`previous`).
+function readEntry(chat, index, previous, sb, cal, own) {
+    const seed = previous?.tracker ?? emptyTracker();
+    const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index, message => isStoryReply(message, sb, own.sceneTag)));
+    const result = replay([read.entry], { seed });
+    return {
+        sig: signature(chat[index]),
+        tracker: result.tracker,
+        problems: result.problems,
+        hadBlock: read.hadBlock,
+        parseErrors: read.parseErrors,
+        location: read.location ? { message: index, time: read.entry.time ?? seed.time ?? null, text: read.location } : null,
+    };
+}
+
+// (0.9.30) Checkpoints: the tracker kept at the back of the chat (src/checkpoints.js), in its
+// metadata, so the messages before one are never read again.
+function checkpointKey(own = settings()) {
+    return JSON.stringify([own.calendar ?? null, own.sceneTag ?? '']);
+}
+
+function checkpoints(ctx = context()) {
+    const list = chatMeta(ctx)?.[SETTINGS_KEY]?.checkpoints;
+    return Array.isArray(list) ? list : [];
+}
+
+// The cache entry a checkpoint stands for, at `index` (where its reply is now).
+function checkpointEntry({ index, point }, chat) {
+    const delta = index - point.message;
+    const visits = shiftVisits(point.visits, delta);
+    return {
+        sig: signature(chat[index]),
+        tracker: shiftTracker(point.tracker, delta),
+        problems: [],
+        hadBlock: true,
+        parseErrors: [],
+        location: visits.at(-1)?.message === index ? visits.at(-1) : null,
+        visits,
+        checkpoint: true,
+    };
+}
+
+// The place visits up to and including message `upTo`, from the cache.
+function visitsUpTo(upTo) {
+    return cache.entries.slice(0, upTo + 1).flatMap(entry => (entry ? entry.visits ?? (entry.location ? [entry.location] : []) : []));
+}
+
+// After a read through the newest message: keep a checkpoint once one is due.
+function keepCheckpoint(ctx, chat, sb, own) {
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    const points = checkpoints(ctx);
+    const key = checkpointKey(own);
+    const replies = [];
+    chat.forEach((message, index) => { if (isStoryReply(message, sb, own.sceneTag)) replies.push(index); });
+    const newest = usableCheckpoint(points, chat, { signature, upTo: chat.length - 1, key });
+    const at = checkpointDue(replies, newest ? newest.index : null);
+    if (at === null || at <= cache.base || !cache.entries[at]) return;
+    const point = {
+        message: at,
+        sig: cache.entries[at].sig,
+        sendDate: String(chat[at]?.send_date ?? ''),
+        key,
+        version: VERSION,
+        tracker: compactTracker(cache.entries[at].tracker),
+        visits: compactVisits(visitsUpTo(at)),
+    };
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), checkpoints: withCheckpoint(points, point) };
+    ctx.saveMetadataDebounced?.();
+}
+
 /**
  * The tracker after message `upTo` (inclusive), replaying only what changed since the last
- * call: { tracker, problems (from that message), info (its cache entry) }.
+ * call: { tracker, problems (from that message), info (its cache entry) }. (0.9.30) It starts
+ * from the newest checkpoint it can use, so messages before that are not read; one asked for
+ * before it is read from the start, without the cache.
  */
 function trackerAt(upTo) {
     const ctx = context();
@@ -304,28 +379,35 @@ function trackerAt(upTo) {
     const chat = ctx?.chat ?? [];
     const chatId = chatIdOf(ctx);
     if (!sb || !chatId) return { tracker: emptyTracker(), problems: [], info: null };
-    if (cache.chatId !== chatId) cache = { chatId, entries: [] };
+    if (cache.chatId !== chatId) cache = { chatId, entries: [], base: -1 };
     const own = settings(ctx);
     const cal = calendar();
     const last = Math.min(Number(upTo), chat.length - 1);
 
+    // The checkpoint's reply changed or went (a swipe, an edit, a rollback past it): start over.
+    if (cache.base >= 0 && cache.entries[cache.base]?.sig !== signature(chat[cache.base])) cache = { chatId, entries: [], base: -1 };
+    if (!cache.entries.length) {
+        const found = usableCheckpoint(checkpoints(ctx), chat, { signature, upTo: chat.length - 1, key: checkpointKey(own) });
+        if (found) {
+            cache.base = found.index;
+            cache.entries[found.index] = checkpointEntry(found, chat);
+        }
+    }
+    if (last < cache.base) {
+        // Before the checkpoint: read from the start, with whatever messages are still there.
+        let entry = null;
+        for (let index = 0; index <= last; index++) entry = readEntry(chat, index, entry, sb, cal, own);
+        return { tracker: entry?.tracker ?? emptyTracker(), problems: entry?.problems ?? [], info: entry };
+    }
+
     // Resume from the first message whose text (or role) changed.
-    let start = 0;
+    let start = cache.base + 1;
     while (start <= last && cache.entries[start]?.sig === signature(chat[start])) start++;
     if (start < cache.entries.length) cache.entries.length = start;
     for (let index = start; index <= last; index++) {
-        const seed = cache.entries[index - 1]?.tracker ?? emptyTracker();
-        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index, message => isStoryReply(message, sb, own.sceneTag)));
-        const result = replay([read.entry], { seed });
-        cache.entries[index] = {
-            sig: signature(chat[index]),
-            tracker: result.tracker,
-            problems: result.problems,
-            hadBlock: read.hadBlock,
-            parseErrors: read.parseErrors,
-            location: read.location ? { message: index, time: read.entry.time ?? seed.time ?? null, text: read.location } : null,
-        };
+        cache.entries[index] = readEntry(chat, index, cache.entries[index - 1], sb, cal, own);
     }
+    if (start <= last && last === chat.length - 1) keepCheckpoint(ctx, chat, sb, own);
     const at = last >= 0 ? cache.entries[last] : null;
     return { tracker: at?.tracker ?? emptyTracker(), problems: at?.problems ?? [], info: at ?? null };
 }
@@ -338,7 +420,7 @@ function placeBookAt(upTo) {
     const pack = worldPack();
     const key = [cache.chatId, last, last >= 0 ? cache.entries[last]?.sig : '', pack ? packSummary(pack) : ''].join('|');
     if (placeCache.key !== key) {
-        const visits = cache.entries.slice(0, last + 1).map(entry => entry?.location).filter(Boolean);
+        const visits = visitsUpTo(last);
         placeCache = { key, book: buildPlaceBook(visits, { pack }) };
     }
     return placeCache.book;
@@ -1377,7 +1459,7 @@ function journalData() {
     const last = chat.length - 1;
     const book = placeBookAt(last);
     const trackers = cache.entries.slice(0, last + 1).map(entry => entry?.tracker ?? null);
-    return buildJournal({ trackers, places: book?.places ?? [], calendar: calendar() });
+    return buildJournal({ trackers, places: book?.places ?? [], calendar: calendar(), base: cache.base });
 }
 
 // Another chat, another reply or a changed one, or a calendar that names days differently.
@@ -1588,7 +1670,7 @@ function applySettings(next) {
     // The switch or a source-of-truth choice may change what we offer.
     announceToSuite();
     // The calendar or the scene block may have changed: every cached replay is stale.
-    cache = { chatId: null, entries: [] };
+    cache = { chatId: null, entries: [], base: -1 };
     storyBlock()?.refresh?.();
 }
 
@@ -1622,7 +1704,7 @@ async function importPack(text) {
         adopted += ` Map scale set to ${pack.scaleKmPerUnit} km per unit.`;
     }
     saveSettings(ctx);
-    cache = { chatId: null, entries: [] };
+    cache = { chatId: null, entries: [], base: -1 };
     // The panel holds its own copy of the settings; give it the adopted calendar so its next
     // edit does not write the old one back.
     if (adopted) settingsPanel?.update(settings(ctx), { packSummary: packSummary(pack) });
@@ -1735,7 +1817,7 @@ function registerEvents() {
     const events = ctx?.eventTypes ?? ctx?.event_types ?? {};
     if (events.CHAT_CHANGED) {
         ctx.eventSource.on(events.CHAT_CHANGED, () => {
-            cache = { chatId: null, entries: [] };
+            cache = { chatId: null, entries: [], base: -1 };
             lastFindings = [];
             lastFindingsKey = '';
             setNote('');

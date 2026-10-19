@@ -363,7 +363,8 @@ function touch(record, op, at) {
     record.changed = { ...at };
     record.seen = { ...at };
     const text = op.raw || formatOp(op);
-    record.history = [...record.history, { message: at.message, op: op.op, text }].slice(-HISTORY_LIMIT);
+    // (0.9.30) With its time, so the Journal can date it once the message is behind a checkpoint.
+    record.history = [...record.history, { message: at.message, op: op.op, text, time: at.time ?? null }].slice(-HISTORY_LIMIT);
 }
 
 function newRecord(op, at) {

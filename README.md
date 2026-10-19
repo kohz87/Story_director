@@ -1,4 +1,4 @@
-# Story Director v0.9.29
+# Story Director v0.9.30
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -192,6 +192,14 @@ Battle offers quest XP by difficulty when a quest is finished.
   An offer your messages have spoken of (since 0.9.27) is often the job's own day (*the hunt
   rides out on Goldwane 15*), so it gets two more story days, as a late beat does, and stays
   under **Offered** meanwhile. The Quests tab shows once there is an offer, not only a quest.
+- **Kept at the back of the chat** (since 0.9.30). The tracker is the newest checkpoint (one copy of
+  it as it stood ten replies back, kept in the chat's metadata, never in a message or the prompt)
+  plus the replies after it, so the messages before it can be hidden, summarised away or deleted.
+  A checkpoint is taken every ten replies and the newest four are kept; a swipe, edit or delete in
+  the last ten replies rolls back as always, and a bigger rollback falls back on an older one (past
+  all of them, the tracker is rebuilt from the messages left). Editing a reply older than the
+  newest checkpoint no longer changes the tracker. Changing the calendar or the scene tag starts
+  the checkpoints over.
 - **Hidden replies count** (since 0.9.29). A reply hidden from the model (SillyTavern's hide, or
   an extension such as Summarybook hiding old messages to save context) is still read for its
   Director and scene blocks, so hiding the reply that started a quest never loses the quest.
