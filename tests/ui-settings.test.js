@@ -159,6 +159,26 @@ test('numbers are clamped, and text that is not a number keeps the old value', (
     assert.equal(last(changes).budgetTokens, 20000);
 });
 
+test('(0.9.19) running low sits by the stall window in the Arc fold: 3 by default, 0 turns it off', () => {
+    const { $, changes, container } = setup();
+    const input = $('#story_director_arc_low_threads');
+    assert.ok(container.querySelector('.story-suite-fold[data-fold="arc"] > .story-suite-fold-body #story_director_arc_low_threads'), 'in the Arc fold');
+    assert.equal(input.value, '3');
+    const row = input.closest('.story-suite-row');
+    assert.equal(row.querySelector('span > b').textContent, 'Running low at');
+    assert.match(row.querySelector('span > small').textContent, /^Automatic: .*fewer than .*hooks, clocks and beats.*0: off/);
+    assert.equal(input.closest('.story-suite-number').querySelector('small').textContent, 'threads');
+    const rows = container.querySelectorAll('.story-suite-fold[data-fold="arc"] .story-suite-row').map(node => node.getAttribute('for'));
+    assert.equal(rows.indexOf('story_director_arc_low_threads'), rows.indexOf('story_director_arc_stall') + 1, 'right after Stalled after');
+    edit(input, '0');
+    assert.equal(last(changes).arc.lowThreads, 0);
+    assert.equal(last(changes).arc.stallDays, 7, 'the rest of the arc kept');
+    edit(input, '99');
+    assert.equal(last(changes).arc.lowThreads, 20, 'clamped');
+    edit(input, 'some');
+    assert.equal(input.value, '20');
+});
+
 test('months textarea parses Name and Name | days lines', () => {
     assert.deepEqual(parseMonths('Dawnwane\n  Haywane | 31 \n\nGoldwane|28\nYearsend | x', 30), [
         { name: 'Dawnwane', days: 30 },

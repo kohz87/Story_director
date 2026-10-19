@@ -194,10 +194,14 @@ Write changes in <Director> (+ new, ~ change, - resolve, ! fired).
 - **Arc end:** every beat of the arc is resolved, or the reader presses *End arc*.
 - **Stalled:** no beat is due within the next N story days (default 7) and the reader
   allows automatic replanning.
+- **Running low** (since 0.9.19): fewer than N threads open (default 3; 0 is off), counting
+  active hooks, clocks and the arc's unplayed beats, not offers (the reader's to take),
+  quests, agendas, events or secrets. It waits 5 replies after the last plan was asked for,
+  so a discarded or failed plan is not asked for again every reply.
 - **Never** on an ordinary reply. Ordinary replies only track.
 
 The reader picks the trigger: **manual** (Plan arc / End arc buttons only) or **automatic**
-(at arc end and when stalled, as above, plus the buttons).
+(at arc end, when stalled and when running low, as above, plus the buttons).
 
 ### 5.2 Model
 

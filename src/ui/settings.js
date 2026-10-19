@@ -23,7 +23,7 @@ const DEFAULTS = {
     mirrorOffscreen: true,
     spoilerGuard: true,
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
-    arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', prompt: '' },
+    arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, lowThreads: 3, autoAccept: false, genre: '', note: '', prompt: '' },
     capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
     map: { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25, era: 'pre-modern' },
     sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' },
@@ -52,6 +52,8 @@ const LIMITS = {
     recent: [4, 400],
     maxTokens: [200, 16000],
     stallDays: [1, 365],
+    // (0.9.19) 0 turns "running low" off.
+    lowThreads: [0, 20],
     captureTokens: [100, 8000],
 };
 
@@ -496,7 +498,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const arc = current.arc;
         const trigger = select('story_director_arc_trigger', [
             { value: 'manual', label: 'Manual (Plan arc / End arc)' },
-            { value: 'auto', label: 'Automatic (at arc end or when stalled)' },
+            { value: 'auto', label: 'Automatic (at arc end, when stalled or running low)' },
         ], arc.trigger === 'auto' ? 'auto' : 'manual');
         trigger.addEventListener('change', () => commit(next => { next.arc.trigger = trigger.value === 'auto' ? 'auto' : 'manual'; }));
 
@@ -512,6 +514,8 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         bindNumber(maxTokens, 'maxTokens', value => value.arc.maxTokens, (next, value) => { next.arc.maxTokens = value; });
         const stall = numberInput('story_director_arc_stall', arc.stallDays, LIMITS.stallDays);
         bindNumber(stall, 'stallDays', value => value.arc.stallDays, (next, value) => { next.arc.stallDays = value; });
+        const lowThreads = numberInput('story_director_arc_low_threads', arc.lowThreads, LIMITS.lowThreads);
+        bindNumber(lowThreads, 'lowThreads', value => value.arc.lowThreads, (next, value) => { next.arc.lowThreads = value; });
         const autoAccept = toggle('story_director_arc_accept', arc.autoAccept, 'Use new plans without review');
         autoAccept.addEventListener('change', () => commit(next => { next.arc.autoAccept = Boolean(autoAccept.checked); }));
 
@@ -542,6 +546,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
             row('Messages to read', 'How much recent chat the planner sees.', withUnit(recent, 'messages'), { id: 'story_director_arc_recent' }),
             row('Answer length', 'Most tokens the plan may use.', withUnit(maxTokens, 'tokens'), { id: 'story_director_arc_tokens' }),
             row('Stalled after', 'Automatic: plan again when no beat is due within this many story days.', withUnit(stall, 'days'), { id: 'story_director_arc_stall' }),
+            row('Running low at', 'Automatic: plan the next arc when fewer than this many hooks, clocks and beats are open (offers not counted); 0: off.', withUnit(lowThreads, 'threads'), { id: 'story_director_arc_low_threads' }),
             row('Use plans without review', 'Off: a new plan waits in the Director tab for you to accept.', autoAccept, { id: 'story_director_arc_accept' }),
             row('Genre and tone', 'Told to the planner as written.', genre, { id: 'story_director_arc_genre' }),
             row('Director’s note', arc.keepNote === true ? 'Your hand on the wheel, read at every plan.' : 'Your hand on the wheel for the next plan; cleared once you accept that arc.', note, { id: 'story_director_arc_note' }),
