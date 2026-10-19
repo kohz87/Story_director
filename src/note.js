@@ -98,11 +98,15 @@ export function buildNote(selection, options = {}) {
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
  * before `text`, so joining them gives buildNote exactly. Labels: Header, Due now, Arriving,
  * Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
- * Corrections, Quest check, Pacing, Encounter cue, Change instruction, NPC plans only.
+ * Corrections, Quest check, Abandoned, Slipped, Lapsed, Pacing, Encounter cue, Change
+ * instruction, NPC plans only.
  *
  * `offscreenInBlock` (0.9.3): the scene block's Off-Screen section already carries every active
  * agenda (Story Director mirrors it there and keeps the timeline), so the note leaves its
  * Off-screen line out; an agenda due or arriving is still on Due now / Arriving.
+ *
+ * `slipped` and `lapsed` (0.9.19): what the latest reply closed because time ran past it, as
+ * `[{ key, on, giver }]` (lapses.lapsesIn): beats that slipped, offers that lapsed.
  */
 export function noteParts(selection, {
     calendar,
@@ -115,6 +119,8 @@ export function noteParts(selection, {
     taking = [],
     declining = [],
     abandoning = [],
+    slipped = [],
+    lapsed = [],
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -127,14 +133,14 @@ export function noteParts(selection, {
     const fixes = (corrections ?? []).map(item => typeof item === 'string' ? item : item?.message ?? '').filter(Boolean);
 
     // The model still needs to know how to add records when there are none yet.
-    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length;
+    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length || slipped?.length || lapsed?.length;
     if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc && !choices) {
         return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning, slipped, lapsed });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -173,7 +179,7 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [] }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], slipped = [], lapsed = [] }) {
     const parts = [part('Header', header(selection, calendar))];
     // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
     const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
@@ -208,12 +214,43 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     if (giving.length) {
         parts.push(part('Abandoned', `Abandoned: {{user}} gives up ${giving.join(', ')}. Show it in this reply${instruction ? ', and close each with - Key — abandoned' : ''}.`));
     }
+    // (0.9.19) What time closed in the latest reply, told once, in the note right after it: the
+    // story need not stage a beat that slipped or a job that went to someone else, only not
+    // contradict it.
+    const slips = lapseItems(slipped, entry => `${entry.key}${entry.on ? ` (${notePart(entry.on, 'on')})` : ''}`);
+    if (slips.length) {
+        const one = slips.length === 1;
+        parts.push(part('Slipped', `Slipped: ${slips.join(', ')} — ${one ? 'it' : 'they'} happened off-screen or not at all; mention ${one ? 'it' : 'them'} only where ${one ? 'it fits' : 'they fit'}.`));
+    }
+    const lapses = lapseItems(lapsed, entry => `${entry.key}${giverName(entry.giver) ? ` (${giverName(entry.giver)}'s offer)` : ''}`);
+    if (lapses.length) {
+        const givers = [...new Set(lapsed.map(entry => giverName(entry?.giver)).filter(Boolean))];
+        const who = lapses.length === 1 ? givers[0] || '' : '';
+        const after = who ? `${who} may mention it` : lapses.length === 1 ? 'it may come up in passing' : 'whoever offered them may mention it';
+        parts.push(part('Lapsed', `Lapsed: ${lapses.join(', ')} went to someone else; ${after}.`));
+    }
     if (scheduled(selection, due, arriving, relevant)) {
         parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
         if ([...due, ...arriving].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));
     }
     // No instruction when a capture call writes the changes instead of the model.
     return [...parts, ...asks];
+}
+
+// One item per record, once each by key.
+function lapseItems(entries, item) {
+    const seen = new Set();
+    return (entries ?? []).filter(entry => {
+        const key = String(entry?.key ?? '').trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).map(item);
+}
+
+// A giver by name only: "Danique, the rat-catcher's widow" is Danique.
+function giverName(giver) {
+    return notePart(String(giver ?? '').split(/[,(;—–]/)[0], 'giver');
 }
 
 // Anything with a date or a plan behind it: an arc, something due or arriving, a beat or a

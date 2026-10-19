@@ -168,6 +168,13 @@ Battle offers quest XP by difficulty when a quest is finished.
   parts; if not, leave it an offer."). Offers fold under **Offered** in the Quests tab, without
   buttons, until taken on, turned down or past their deadline. Messages in other languages, or
   a job taken on without saying so, leave it an offer until the story moves it on.
+- **An offer lapses at its deadline** (since 0.9.19). When a reply's story time passes an
+  offer's `due` (a date alone runs to the end of its day, as for a quest's deadline), that reply
+  closes it: `- Rat Culling — offer lapsed` is written into its Director block, so deleting or
+  swiping the reply takes it back. The note right after it, and only that one, says so once:
+  "Lapsed: Rat Culling (Danique's offer) went to someone else; Danique may mention it." It is
+  nobody's choice and no quest's outcome: never blocked as a decision only you can make, never
+  quest XP. Only offers lapse; a quest taken on keeps its deadline for the story to deal with.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
@@ -266,6 +273,16 @@ Whenever something is scheduled, a short **Pacing** line says how a schedule mee
 bring a due item in only where it fits (on-screen if your character is there, otherwise later
 as news, signs or aftermath), never cut into or bend the current scene for a beat, never decide
 what your character does, and let what cannot fit happen off-screen or slip to a later date.
+
+**A beat that slips closes itself** (since 0.9.19). A beat whose date went by without the story
+firing it (`!`) would otherwise sit on *Due now* for ever. Once a reply's story time is more
+than **2 story days** past the beat's date (a date alone counts to the end of its day, so a
+beat on Goldwane 13 slips on Goldwane 16), that reply closes it: `- Guards sack the Stray Oar —
+slipped` is written into its Director block, so deleting or swiping the reply takes it back.
+The note right after it, and only that one, adds: "Slipped: Guards sack the Stray Oar
+(Goldwane 13) — it happened off-screen or not at all; mention it only where it fits." Only
+beats slip; events, clocks, agendas and quests keep their dates. A beat fired with parts
+(`! Key — … | now: …`) has played out and never slips; give it a new `on` and it can.
 
 **Long parts are trimmed in the note only.** A part runs to at most 12 words for what a record
 is doing and when (`now`, `then`, `on`, `due`, `arrive`) and 16 for what it is (`desc`, a
@@ -603,7 +620,9 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
   ready; a failure (the API refused, the answer was unusable) says why in a red notice.
 - **Beats leave room:** the planner is told that a beat's date is when the world acts, not an
   appointment for your character. Every beat must work whether or not you are there, and may
-  slip; the note's Pacing line tells the storyteller the same every reply.
+  slip; the note's Pacing line tells the storyteller the same every reply. One left unplayed
+  more than two story days past its date is closed as slipped (since 0.9.19; see
+  [The note](#the-note)).
 - **Review:** the plan waits in the Director tab as editable change lines; **Accept** writes them
   into the latest reply (deleting that reply undoes the plan), **Discard** drops it, **Plan
   again** asks for another. Turn on *Use plans without review* to skip this.
