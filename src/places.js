@@ -69,7 +69,7 @@ export function parseLocation(text) {
  * The place book from the scene's locations, in chat order:
  * visits = [{ message, time, text }] → { places, current }.
  * A place: { key, name, coords, coordsFrom: 'story' | 'pack' | null, storyCoords, visits,
- * firstTime, lastTime, lastMessage, spots: [latest first] }. The pack's coordinates win;
+ * firstTime, lastTime, firstMessage, lastMessage, spots: [latest first] }. The pack's coordinates win;
  * `storyCoords` is the reply's latest when it is more than a map unit away from them, else null. `places` is most recently visited first;
  * places only a world pack knows (`visits: 0`) come last.
  */
@@ -83,7 +83,7 @@ export function buildPlaceBook(visits, { pack = null } = {}) {
         const key = keyOf(location.name);
         let place = byKey.get(key);
         if (!place) {
-            place = { key, name: location.name, coords: null, coordsFrom: null, storyCoords: null, visits: 0, firstTime: null, lastTime: null, lastMessage: null, spots: [] };
+            place = { key, name: location.name, coords: null, coordsFrom: null, storyCoords: null, visits: 0, firstTime: null, lastTime: null, firstMessage: null, lastMessage: null, spots: [] };
             byKey.set(key, place);
         }
         // A stay over several replies is one visit.
@@ -99,6 +99,8 @@ export function buildPlaceBook(visits, { pack = null } = {}) {
             place.firstTime ??= time;
             place.lastTime = time;
         }
+        // (0.9.19) The reply that first named it, for the Journal's "first visit".
+        place.firstMessage ??= visit?.message ?? null;
         place.lastMessage = visit?.message ?? place.lastMessage;
         if (location.spot) {
             place.spots = [location.spot, ...place.spots.filter(spot => keyOf(spot) !== keyOf(location.spot))];
@@ -119,7 +121,7 @@ export function buildPlaceBook(visits, { pack = null } = {}) {
             place.coordsFrom = 'pack';
             place.storyCoords = story && Math.hypot(story.x - x, story.y - y) > COORDS_SLACK ? story : null;
         } else {
-            byKey.set(key, { key, name, coords: { x, y }, coordsFrom: 'pack', storyCoords: null, visits: 0, firstTime: null, lastTime: null, lastMessage: null, spots: [] });
+            byKey.set(key, { key, name, coords: { x, y }, coordsFrom: 'pack', storyCoords: null, visits: 0, firstTime: null, lastTime: null, firstMessage: null, lastMessage: null, spots: [] });
         }
     }
     const places = [...byKey.values()].sort((a, b) => {

@@ -684,6 +684,18 @@ export function untrackedCorrections(problems, { message, limit = MAX_UNTRACKED_
     return lines;
 }
 
+// (0.9.19) A closed quest's own reason, read for the Journal: given up is the reader's choice,
+// failed is the story's, anything else is done.
+const ABANDONED = /\b(?:abandon|gave up|give up|given up|giving up|forfeit|quit\b|walked away|backed out|withdr[eao]w)/i;
+
+/** How a closed quest ended: 'done' | 'failed' | 'abandoned', or null (open, or merged into another). */
+export function questOutcome(record) {
+    if (record?.kind !== 'quest' || record.status !== 'resolved') return null;
+    const reason = String(record.resolved?.reason ?? '');
+    if (ABANDONED.test(reason)) return 'abandoned';
+    return FAILED.test(reason) ? 'failed' : 'done';
+}
+
 /**
  * The record with this key or id (markdown and punctuation ignored), or null. (0.9.19) Failing
  * that, the record a line once reached by this name (an alias), as applyOps reads it.
