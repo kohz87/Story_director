@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.15
+
+- **Quest choices are yours.** A model wrote `+ quest` for two jobs a clerk had only offered ("What's it going to be?"), and both showed as active quests. Taking a job on, turning it down and giving it up now come only from your own message, the one the reply answers. Finishing and failing stay with the story.
+  - A `+ quest` counts only when your message accepts the job, in a sentence naming it, its giver or a word of its name (or with only one job in question). Otherwise it is kept as an offer.
+  - A main quest is the story's to give, and an offer the story moves on (a step under way, not `0/1`) is one your character is already doing: both start at once.
+  - A model's *abandoned*, *gave up*, *declined* or *refused* line changes nothing unless your message said so. Your giving up is read from your message only, no longer from the narration.
+  - When your message takes an offer on or turns one down, the note asks the story to write the line.
+  - The change instruction now says an offered job is `+ hook` with its giver and reward.
+- **Offered** jobs fold away in the Quests tab, with no buttons, until taken on, turned down or past their deadline.
+- **Abandon works behind the scenes, like a fight's hand-off.** The flag no longer edits the latest reply. The quest shows *giving up* with a **Keep** button until your next reply. That reply's note tells the story you give it up, and the reply records it: your choice is stamped on the message, and the closing line is added if the story left it out. A swipe is told again; deleting that reply takes the abandon back.
+- Chats already played are re-read the same way on the next refresh, so jobs that were only offered move to Offered.
+
 ## 0.9.14
 
 - **"! Encounter — …" is not a missing record.** A model wrote a Director line under the word *Encounter*. It showed as a warning ("Encounter" is not tracked), and the next note told the model to add it with `+ kind Encounter — …`, which invites a fake record. A key that only labels the line (*Encounter*, *Fight*, *Combat*, *Battle*, *Scene*, *Director*, *Status*, *Update*, *Changes*, or a kind word such as *Quest* or *Hook*) is now skipped quietly: no warning, and nothing in `Corrections:`. A record actually called that is still changed, and a `+` still adds one. Fights are RPG Battle's, from the `<Encounter>` block.

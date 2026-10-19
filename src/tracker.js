@@ -57,6 +57,63 @@ export function givenUpIn(tracker, text) {
         .map(record => record.key);
 }
 
+// (0.9.15) Choices about a job are the reader's: taking it on, turning it down, giving it up.
+// The model's line for one counts only when the reader's own message (the one the reply answers)
+// made it, naming the job (its key, its giver or a word of its name). The story keeps the
+// outcomes: done, failed, expired. A main quest is the story's to give, and a job the story
+// moves on (a step under way) is one the character is already doing.
+const ACCEPT_WORDS = /\b(?:accept(?:s|ed|ing)?|take (?:it|this|that|the|on|up)|takes (?:it|the|on|up)|took (?:it|the|on|up)|taking (?:it|the|on|up)|i'?ll (?:take|do|handle)|i will (?:take|do|handle)|agree(?:s|d)? to|sign(?:s|ed)? (?:up|on)|count me in|i'?m in|deal|choose|chose|pick(?:s|ed)?)\b/i;
+const REFUSE_WORDS = /\b(?:refuse[sd]?|refusing|declin(?:e|es|ed|ing)|turn(?:s|ed|ing)? (?:it |that |this |them )?down|no thanks|pass(?:es|ed)? on|not interested)\b/i;
+// A closing reason that is the reader's decision rather than the story's outcome.
+const CHOSEN_END = /\b(?:abandon|gave up|give up|given up|giving up|forfeit|quit\b|walked away|backed out|withdr[eao]w|refus|declin|turned down|passed on)/i;
+// Words of a job's name too general to say which job is meant.
+const GENERIC_WORDS = new Set(['quest', 'job', 'jobs', 'contract', 'bounty', 'task', 'work', 'mission', 'favour', 'favor', 'side', 'main']);
+// A step that has not started is not the story moving a job on.
+const NOT_STARTED = /^\s*(?:0\s*(?:\/|of)\s*\d+|0|none|not (?:yet )?started|pending|unstarted)\b/i;
+
+const sentencesOf = text => String(text ?? '').split(/(?<=[.!?…\]])\s+|\n+/).filter(Boolean);
+
+function namesJob(sentence, record) {
+    const words = keyWords(record.key).filter(word => word.length >= 3 && !GENERIC_WORDS.has(word));
+    const names = [record.key, String(record.fields?.giver ?? '').trim(), ...words].filter(name => name.length >= 3);
+    // A name as written, or with a plural ending: wolf/wolves, bounty/bounties, rat/rats.
+    const pattern = name => {
+        const body = escapeRegExp(normalizeQuotes(name)).replace(/\s+/g, '\\s+');
+        if (/f$/i.test(name)) return `${body.slice(0, -1)}(?:f|ves)`;
+        if (/y$/i.test(name)) return `${body.slice(0, -1)}(?:y|ies)`;
+        return `${body}(?:s|es)?`;
+    };
+    return names.some(name => new RegExp(`(?<![\\p{L}\\p{N}])${pattern(name)}(?![\\p{L}\\p{N}])`, 'iu').test(normalizeQuotes(sentence)));
+}
+
+/**
+ * Whether `said` (the reader's message) makes a choice about `record` with `words`: a sentence
+ * with one of them, not negated, naming the job, or any such sentence when `alone` (it is the
+ * only job in question).
+ */
+function saidAbout(said, record, words, { alone = false } = {}) {
+    return sentencesOf(said).some(sentence => {
+        const match = words.exec(sentence);
+        if (!match || NOT_BEFORE.test(sentence.slice(0, match.index))) return false;
+        return alone || namesJob(sentence, record);
+    });
+}
+
+const isJob = record => BECOMES_QUEST.has(record.kind)
+    && (JOB_FIELDS.some(name => String(record.fields?.[name] ?? '').trim()) || isQuestType(record.fields?.type));
+
+/** (0.9.15) An offer: a job (a giver, a reward or a quest type) the reader has not taken on yet. */
+export function isOffer(record) {
+    return record?.status === 'active' && isJob(record);
+}
+
+/** The offers `text` (the reader's message) takes on, or turns down: [key], in tracker order. */
+export function offersChosenIn(tracker, text, choice = 'accept') {
+    const offers = (tracker?.records ?? []).filter(isOffer);
+    const words = choice === 'refuse' ? REFUSE_WORDS : ACCEPT_WORDS;
+    return offers.filter(record => saidAbout(text, record, words, { alone: offers.length === 1 })).map(record => record.key);
+}
+
 /** What a `~` (or a quest's `!`) says when it means the record is over, or null. */
 function overByChange(record, op) {
     if (op.op === '!') {
@@ -271,8 +328,19 @@ function newRecord(op, at) {
  * becomes a new hook, and anything else is reported and ignored.
  * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
  */
-export function applyOps(tracker, ops, { message, time = null } = {}) {
+export function applyOps(tracker, ops, { message, time = null, said, chosen = [] } = {}) {
     const records = [...tracker.records];
+    // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.
+    const gated = said !== undefined;
+    const quests = (ops ?? []).filter(op => op.op === '+' && op.kind === 'quest');
+    const accepts = (record, op = null) => !gated
+        || lineKey(op?.fields?.type ?? record.fields?.type ?? '') === 'main'
+        || saidAbout(said, record, ACCEPT_WORDS, { alone: quests.length === 1 && (!op || quests.includes(op)) });
+    // `chosen`: records the reader gave up with the Abandon flag (ids stamped on the reply).
+    const picked = new Set((chosen ?? []).map(key => lineKey(key)));
+    const chose = record => picked.has(record.id) || picked.has(lineKey(record.key))
+        || saidAbout(said, record, GIVE_UP, { alone: false }) || saidAbout(said, record, REFUSE_WORDS, { alone: false });
+    const offered = (op, record) => problems.push(finding('offered', 'info', op, `"${record.key}" was offered, not taken on: it stays an offer until {{user}} accepts it.`));
     const indexById = new Map(records.map((record, index) => [record.id, index]));
     const copied = new Set();
     const problems = [];
@@ -304,16 +372,23 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
                 });
             }
             if (index === undefined) {
+                let added = { ...op, id };
+                if (op.kind === 'quest' && !accepts({ key: op.key, fields: op.fields ?? {} }, op)) {
+                    added = { ...added, kind: 'hook' };
+                    offered(op, added);
+                }
                 indexById.set(id, records.length);
                 copied.add(records.length);
-                records.push(newRecord({ ...op, id }, at));
+                records.push(newRecord(added, at));
                 continue;
             }
             const record = edit(index);
             if (record.status === 'active') {
                 // (0.9.9) "+ quest Key" on a hook or event already tracked (one the planner
                 // offered) is the job taken on: it becomes the quest, as a ~ with its parts does.
-                if (op.kind === 'quest' && BECOMES_QUEST.has(record.kind)) {
+                if (op.kind === 'quest' && BECOMES_QUEST.has(record.kind) && !accepts(record, op)) {
+                    offered(op, record);
+                } else if (op.kind === 'quest' && BECOMES_QUEST.has(record.kind)) {
                     problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
                     record.kind = 'quest';
                 } else {
@@ -326,7 +401,7 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
                     `"${op.key}" was ${record.status}; it is active again.`));
                 // A reopened record is described afresh, so stale dates from before it was
                 // closed cannot make it due at once. Identity, history and pin are kept.
-                record.kind = op.kind || record.kind;
+                record.kind = op.kind === 'quest' && !accepts({ key: record.key, fields: op.fields ?? {} }, op) ? 'hook' : op.kind || record.kind;
                 record.status = 'active';
                 record.resolved = null;
                 record.fields = blankFields();
@@ -373,7 +448,9 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
         // (0.9.13) A job taken on is not over: the `-` turns a hook or event into the quest, and
         // on a quest (most often the `+ quest` just above it) it changes nothing.
         if (op.op === '-' && record.status === 'active' && takenOn(String(op.reason ?? ''))) {
-            if (BECOMES_QUEST.has(record.kind)) {
+            if (BECOMES_QUEST.has(record.kind) && !accepts(record)) {
+                offered(op, record);
+            } else if (BECOMES_QUEST.has(record.kind)) {
                 problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
                 record.kind = 'quest';
                 touch(record, op, at);
@@ -392,6 +469,12 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
             continue;
         }
         const over = (op.op === '~' || op.op === '!') ? overByChange(record, op) : null;
+        // (0.9.15) Giving a job up or turning it down is the reader's choice, not the model's.
+        const ending = op.op === '-' ? String(op.reason ?? '') : over;
+        if (gated && closing && ending !== null && CHOSEN_END.test(ending) && (record.kind === 'quest' || isJob(record)) && !chose(record)) {
+            problems.push(finding('not-chosen', 'info', op, `"${record.key}" stays open: giving it up or turning it down is {{user}}'s choice, and their message did not make it.`));
+            continue;
+        }
         if (over !== null) {
             const { status: _s, state: _st, outcome: _o, result: _r, progress: _p, ...extra } = op.extra ?? {};
             const fields = Object.fromEntries(Object.entries(op.fields ?? {}).filter(([name, value]) => !(QUEST_OVER_FIELDS.includes(name) && OVER_VALUE.test(String(value ?? '').trim()))));
@@ -404,7 +487,10 @@ export function applyOps(tracker, ops, { message, time = null } = {}) {
         }
         if (op.op === '~') {
             let change = op;
-            if (takesOnQuest(record, op)) {
+            const moving = ['step', 'now'].some(name => String(op.fields?.[name] ?? '').trim() && !NOT_STARTED.test(String(op.fields[name])));
+            if (takesOnQuest(record, op) && gated && !moving && !accepts(record)) {
+                offered(op, record);
+            } else if (takesOnQuest(record, op)) {
                 problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
                 record.kind = 'quest';
                 // `type: quest` only said what it is; a category (bounty, contract…) stays its type.
@@ -490,7 +576,7 @@ export function replay(entries, { seed = null } = {}) {
         const at = { message: entry.message, time };
         if (entry.text) tracker = markSeen(tracker, entry.text, at);
         if (entry.ops?.length) {
-            const result = applyOps(tracker, entry.ops, at);
+            const result = applyOps(tracker, entry.ops, entry.said === undefined ? at : { ...at, said: entry.said, chosen: entry.chosen ?? [] });
             tracker = result.tracker;
             for (const problem of result.problems) {
                 problems.push({ ...problem, text: problem.message, message: entry.message });

@@ -686,3 +686,56 @@ test('a line keyed by a label ("! Encounter — …") is skipped quietly and nev
     assert.equal(findRecord(applyOps(named, ops('! Encounter — the stranger speaks'), { message: 2 }).tracker, 'Encounter').fields.now, '');
     assert.equal(applyOps(named, ops('! Encounter — the stranger speaks'), { message: 2 }).problems.length, 0);
 });
+
+test('choices are the reader\'s: a + quest counts only when their message took the job on (0.9.15)', async () => {
+    const { isOffer, offersChosenIn } = await import('../src/tracker.js');
+    const offerLines = '+ quest Rat Culling — Kill granary rats | type: side | giver: Danique | reward: 8 copper a sack\n+ quest Wolf Hunt — Kill ridge wolves | type: side | giver: Danique | reward: 4 silver';
+    // Danique only offered them: both stay offers, not quests.
+    const offeredOnly = applyOps(emptyTracker(), ops(offerLines), { message: 1, said: 'I pay the fee and ask what work there is.' });
+    assert.deepEqual(offeredOnly.tracker.records.map(r => [r.key, r.kind, isOffer(r)]), [['Rat Culling', 'hook', true], ['Wolf Hunt', 'hook', true]]);
+    assert.ok(offeredOnly.problems.every(p => p.kind === 'offered'));
+    // Taking one on by name: only that one is a quest.
+    const took = applyOps(emptyTracker(), ops(offerLines), { message: 1, said: 'Accept the sheep-fold wolf hunt contract and head past the ditch.' });
+    assert.deepEqual(took.tracker.records.map(r => r.kind), ['hook', 'quest']);
+    // One job offered: "I'll take it" is enough. A refusal or a negation is not acceptance.
+    const single = '+ quest Wolf Hunt — Kill ridge wolves | giver: Danique | reward: 4 silver';
+    assert.equal(applyOps(emptyTracker(), ops(single), { message: 1, said: 'Fine. I\'ll take it.' }).tracker.records[0].kind, 'quest');
+    assert.equal(applyOps(emptyTracker(), ops(single), { message: 1, said: 'I won\'t take it.' }).tracker.records[0].kind, 'hook');
+    assert.equal(applyOps(emptyTracker(), ops(single), { message: 1, said: null }).tracker.records[0].kind, 'hook', 'no message: an offer');
+    // A main quest is the story's to give.
+    assert.equal(applyOps(emptyTracker(), ops('+ quest The bond — pay it off | type: main'), { message: 1, said: null }).tracker.records[0].kind, 'quest');
+    // Later: the reader accepts, and the model's + quest (or "- … accepted") now counts.
+    const later = applyOps(offeredOnly.tracker, ops('+ quest Wolf Hunt — Kill ridge wolves'), { message: 3, said: 'I\'ll do the wolf job.' }).tracker;
+    assert.equal(findRecord(later, 'Wolf Hunt').kind, 'quest');
+    assert.equal(findRecord(applyOps(offeredOnly.tracker, ops('- Wolf Hunt — accepted by Wessel'), { message: 3, said: 'What does it pay?' }).tracker, 'Wolf Hunt').kind, 'hook');
+    // The story moving it on means the character is doing it; "0/1" is not under way.
+    assert.equal(findRecord(applyOps(offeredOnly.tracker, ops('~ Wolf Hunt — step: tracking the pack past the ditch'), { message: 3, said: 'I head out.' }).tracker, 'Wolf Hunt').kind, 'quest');
+    assert.equal(findRecord(applyOps(offeredOnly.tracker, ops('~ Wolf Hunt — step: 0/1'), { message: 3, said: 'Hm.' }).tracker, 'Wolf Hunt').kind, 'hook');
+    // Without the gate (no reader message given), the old behaviour.
+    assert.equal(applyOps(emptyTracker(), ops(single), { message: 1 }).tracker.records[0].kind, 'quest');
+    // offersChosenIn reads a message for the note.
+    assert.deepEqual(offersChosenIn(offeredOnly.tracker, 'I accept the rat work.'), ['Rat Culling']);
+    assert.deepEqual(offersChosenIn(offeredOnly.tracker, 'No thanks to the wolves.', 'refuse'), ['Wolf Hunt']);
+});
+
+test('giving a job up or turning it down needs the reader\'s word; failing it is the story\'s (0.9.15)', () => {
+    const start = applyOps(emptyTracker(), ops('+ quest Wolf Hunt — Kill ridge wolves | giver: Danique | reward: 4 silver'), { message: 1, said: 'I take the wolf hunt.' }).tracker;
+    const kept = applyOps(start, ops('- Wolf Hunt — abandoned'), { message: 3, said: 'I look around the fold.' });
+    assert.equal(findRecord(kept.tracker, 'Wolf Hunt').status, 'active');
+    assert.equal(kept.problems[0].kind, 'not-chosen');
+    assert.equal(findRecord(applyOps(start, ops('~ Wolf Hunt — status: abandoned'), { message: 3, said: 'Onward.' }).tracker, 'Wolf Hunt').status, 'active');
+    // The reader said so (in words, or with the Abandon button's line).
+    assert.equal(findRecord(applyOps(start, ops('- Wolf Hunt — abandoned'), { message: 3, said: 'I give up on the wolf hunt, it is hopeless.' }).tracker, 'Wolf Hunt').status, 'resolved');
+    // The Abandon flag: the reader's choice stamped on the reply, whatever their message says.
+    assert.equal(findRecord(applyOps(start, ops('- Wolf Hunt — abandoned'), { message: 3, said: 'Onward.', chosen: ['wolf hunt'] }).tracker, 'Wolf Hunt').status, 'resolved');
+    const replayed = replay([{ message: 3, ops: ops('- Wolf Hunt — abandoned'), text: '', time: null, said: 'Onward.', chosen: ['wolf hunt'] }], { seed: start });
+    assert.equal(findRecord(replayed.tracker, 'Wolf Hunt').status, 'resolved');
+    // Outcomes stay the story's.
+    for (const reason of ['failed, the wolves scattered the flock', 'expired at sundown', 'done, ears delivered']) {
+        assert.equal(findRecord(applyOps(start, ops(`- Wolf Hunt — ${reason}`), { message: 3, said: 'Hm.' }).tracker, 'Wolf Hunt').status, 'resolved', reason);
+    }
+    // An offer turned down only on the reader's word too.
+    const offer = applyOps(emptyTracker(), ops('+ quest Rat Culling — rats | giver: Danique | reward: 8 copper'), { message: 1, said: 'Tell me more.' }).tracker;
+    assert.equal(findRecord(applyOps(offer, ops('- Rat Culling — declined'), { message: 3, said: 'Okay.' }).tracker, 'Rat Culling').status, 'active');
+    assert.equal(findRecord(applyOps(offer, ops('- Rat Culling — declined'), { message: 3, said: 'I decline the rat job.' }).tracker, 'Rat Culling').status, 'resolved');
+});

@@ -115,3 +115,31 @@ test('Abandon gives a quest up after asking twice; no Done or Failed: the story 
     assert.deepEqual(calls, ['sheep-killer']);
     assert.equal(render({ quests: [quest('Herb run')] }).querySelector('.story-director-quest-abandon'), null, 'none without a handler');
 });
+
+test('jobs only offered fold away under Offered, with no buttons (0.9.15)', () => {
+    const offer = quest('Wolf Hunt', { goal: 'kill ridge wolves', giver: 'Danique', reward: '4 silver', difficulty: 'hard' }, { kind: 'hook' });
+    const pane = render({ quests: [quest('The bond', { type: 'main', goal: 'pay it off' })], offered: [offer], onAbandon: () => {} });
+    const fold = pane.querySelector('details.story-director-fold.is-offered');
+    assert.ok(fold);
+    assert.equal(fold.open, false);
+    assert.equal(subText(fold.querySelector('.story-director-sub')), 'Offered');
+    assert.equal(fold.querySelector('.story-director-count').textContent, '1');
+    const card = fold.querySelector('.story-director-record.is-offered');
+    assert.equal(card.querySelector('.story-director-quest-goal').textContent, 'kill ridge wolves');
+    assert.equal(card.querySelector('button'), null, 'no Abandon, no Take it');
+    assert.equal(card.querySelector('.story-director-tag.is-difficulty'), null);
+    assert.match(fold.textContent, /Say in the story that your character takes one on, or turns it down/);
+    // The open quest keeps its Abandon flag.
+    assert.ok(pane.querySelector('.story-director-section .story-director-quest-abandon'));
+    assert.equal(render({ quests: [] }).querySelector('.is-offered'), null);
+});
+
+test('a quest given up with the next reply shows "giving up" and a Keep button (0.9.15)', () => {
+    const kept = [];
+    const pane = render({ quests: [quest('Wolf Hunt', { goal: 'kill ridge wolves' })], abandoning: new Set(['wolf hunt']), onAbandon: () => {}, onKeep: id => kept.push(id) });
+    const card = pane.querySelector('.story-director-record.is-quest');
+    assert.match(card.querySelector('.story-director-record-head').textContent, /giving up/);
+    assert.equal(card.querySelector('.story-director-quest-abandon'), null);
+    card.querySelector('.story-director-quest-keep').click();
+    assert.deepEqual(kept, ['wolf hunt']);
+});

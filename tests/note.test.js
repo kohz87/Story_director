@@ -227,7 +227,7 @@ test('no records gives the instruction alone', () => {
 test('CHANGE_INSTRUCTION: about 165 tokens, the four ops, kinds, fields and the rules', () => {
     const tokens = estimateTokens(CHANGE_INSTRUCTION);
     assert.ok(tokens >= 100 && tokens <= 165, `${tokens} tokens`);
-    assert.match(CHANGE_INSTRUCTION, /a hook they take on: ~ it with giver, reward/);
+    assert.match(CHANGE_INSTRUCTION, /a job only offered: \+ hook with giver, reward/);
     assert.match(CHANGE_INSTRUCTION, /<Director>/);
     assert.match(CHANGE_INSTRUCTION, /^\+ kind Key — summary \| label: value/m);
     assert.match(CHANGE_INSTRUCTION, /^~ Key — label: value/m);
@@ -279,7 +279,7 @@ test('quests: their own line, deadline wording when due, and the instruction nam
     assert.ok(note.includes(PACING), 'a deadline is a schedule');
     const due = buildNote(selection({ due: [bounty] }), { calendar });
     assert.ok(lines(due).includes('Due now: Bounty on Kettle Jack — deadline Goldwane 30 reached (bring him in alive)'));
-    assert.match(CHANGE_INSTRUCTION, /quest \(a job \{\{user\}\} accepted, not an errand; a hook they take on: ~ it with giver, reward; done or failed: - it\): type, giver, goal, reward, step, due, difficulty\./);
+    assert.match(CHANGE_INSTRUCTION, /quest \(a job \{\{user\}\} accepted, not an errand; a job only offered: \+ hook with giver, reward; done or failed: - it\): type, giver, goal, reward, step, due, difficulty\./);
 });
 
 test('quest difficulty: shown with the type unless it is normal', () => {
@@ -462,4 +462,22 @@ test('a quest deadline goes out at the clock time the calendar sets, never "suns
     assert.ok(lines(note).includes('Quests: Wolves — drive off the wolves · by Goldwane 30, 07:00 pm · Bond — drive off the wolves · by Goldwane 30, 11:59 pm · Ferry — drive off the wolves · by Goldwane 18, 06:15 am · Vague — drive off the wolves · by before the frost'));
     const due = buildNote(selection({ now, due: [quest('Wolves', 'Goldwane 16 dawn')] }), { calendar: real });
     assert.ok(lines(due).includes('Due now: Wolves — deadline Goldwane 16, 06:00 am reached (drive off the wolves)'));
+});
+
+test('quest check: an offer the reader takes on or turns down asks the story to record it (0.9.15)', () => {
+    const offer = record({ key: 'Wolf Hunt', kind: 'hook', fields: { giver: 'Danique', reward: '4 silver' } });
+    const note = buildNote(selection({ relevant: [offer] }), { calendar, taking: ['Wolf Hunt'], declining: ['Rat Culling'] });
+    const check = lines(note).find(line => line.startsWith('Quest check:'));
+    assert.match(check, /\{\{user\}\} may be taking on Wolf Hunt\. If they do, write \+ quest Key with its parts; if not, leave it an offer\./);
+    assert.match(check, /\{\{user\}\} may be turning down Rat Culling\. If they do, close it with - Key — declined; if not, leave it\./);
+    // Even with nothing else to say, and never where capture writes the lines.
+    assert.match(buildNote(selection(), { calendar, taking: ['Wolf Hunt'] }), /may be taking on Wolf Hunt/);
+    assert.doesNotMatch(buildNote(selection({ relevant: [offer] }), { calendar, taking: ['Wolf Hunt'], instruction: '' }), /Quest check/);
+});
+
+test('a quest given up with the Abandon flag is told behind the scenes (0.9.15)', () => {
+    const note = buildNote(selection(), { calendar, abandoning: ['Wolf Hunt'] });
+    assert.ok(lines(note).includes('Abandoned: {{user}} gives up Wolf Hunt. Show it in this reply, and close each with - Key — abandoned.'));
+    // With capture writing the lines, the story is only told to show it.
+    assert.match(buildNote(selection(), { calendar, abandoning: ['Wolf Hunt'], instruction: '' }), /Abandoned: \{\{user\}\} gives up Wolf Hunt\. Show it in this reply\./);
 });

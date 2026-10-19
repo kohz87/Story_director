@@ -31,7 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { activeRecords, emptyTracker, givenUpIn, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
+import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.14';
+const VERSION = '0.9.15';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -247,12 +247,24 @@ function signature(message) {
     const text = String(message?.mes ?? '');
     let hash = 5381;
     for (let index = 0; index < text.length; index++) hash = ((hash * 33) ^ text.charCodeAt(index)) >>> 0;
-    return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}`;
+    // (0.9.15) The reader's abandon stamp is part of what a reply says.
+    const stamp = abandonedStamp(message).join('|');
+    return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}${stamp ? `:${stamp}` : ''}`;
 }
 
 // One replay entry per message: its change lines (assistant replies only), its narration
 // (for "seen"), and the story time its scene block states.
-function entryFor(message, index, sb, cal, own, reference) {
+// (0.9.15) The reader's message(s) a reply answers: every user message since the reply before
+// it, or null when there is none (a greeting, a reply after another reply).
+function saidBefore(chat, index) {
+    const said = [];
+    for (let at = index - 1; at >= 0 && !isAssistant(chat[at]); at--) {
+        if (chat[at]?.is_user) said.unshift(visibleText(chat[at]));
+    }
+    return said.length ? said.join('\n') : null;
+}
+
+function entryFor(message, index, sb, cal, own, reference, said = null) {
     const assistant = isAssistant(message);
     const block = assistant ? sb.blockInText(message.mes, BLOCK.tag) : null;
     const parsed = block ? parseChanges(block.text) : { ops: [], errors: [] };
@@ -260,7 +272,7 @@ function entryFor(message, index, sb, cal, own, reference) {
     const timeText = scene ? sceneTimeText(scene.text) : '';
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
-        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null },
+        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said, chosen: abandonedStamp(message) } : {}) },
         location: scene ? headerCell(scene.text, 'loc|location|place') : '',
         hadBlock: Boolean(block),
         parseErrors: parsed.errors,
@@ -288,7 +300,7 @@ function trackerAt(upTo) {
     if (start < cache.entries.length) cache.entries.length = start;
     for (let index = start; index <= last; index++) {
         const seed = cache.entries[index - 1]?.tracker ?? emptyTracker();
-        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null);
+        const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index));
         const result = replay([read.entry], { seed });
         cache.entries[index] = {
             sig: signature(chat[index]),
@@ -411,12 +423,15 @@ function noteOptions(ctx, tracker, upTo) {
     if (asks) fixes.push(...latestReplyCorrections(upTo));
     // (0.9.3) While the scene block's Off-Screen carries the agendas, the note does not repeat them.
     const offscreenInBlock = Boolean(settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx)) && storyBlock()?.getBlock?.(settings(ctx).sceneTag)?.text);
-    // (0.9.6) The reader's latest message and the reply before it, read for a job given up.
+    // (0.9.6) The reader's latest message, read for a job given up; (0.9.15) only theirs, and
+    // for an offer taken on or turned down too: choices are the reader's.
     const chat = ctx?.chat ?? [];
     const lastUser = [...chat].reverse().find(message => message?.is_user);
-    const lastReply = [...chat].reverse().find(isAssistant);
-    const givenUp = asks ? givenUpIn(tracker, `${visibleText(lastReply)}\n${visibleText(lastUser)}`) : [];
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, ...instructionless };
+    const said = visibleText(lastUser);
+    const givenUp = asks ? givenUpIn(tracker, said) : [];
+    const taking = asks ? offersChosenIn(tracker, said, 'accept') : [];
+    const declining = asks ? offersChosenIn(tracker, said, 'refuse') : [];
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, ...instructionless };
 }
 
 /**
@@ -443,7 +458,8 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
             return;
         }
         const { selection, tracker, upTo } = situation(type);
-        const note = buildNote(selection, noteOptions(ctx, tracker, upTo));
+        const slot = replacesLastReply(ctx.chat ?? [], type) ? (ctx.chat?.length ?? 1) - 1 : ctx.chat?.length ?? 0;
+        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo), abandoning: abandoningFor(slot, tracker) });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -627,6 +643,7 @@ async function onReply({ messageIndex }) {
     try {
         // Capture first, so the checks below see the changes it wrote.
         if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
+        await closeAbandoned(index);
         const before = trackerAt(index - 1).tracker;
         const { tracker: after, problems, info } = trackerAt(index);
         const block = sb.blockInText(chat[index].mes, BLOCK.tag);
@@ -1167,7 +1184,9 @@ function questRecords() {
     const active = quests.filter(record => record.status === 'active');
     const finished = quests.filter(record => record.status !== 'active')
         .sort((a, b) => (b.resolved?.message ?? -1) - (a.resolved?.message ?? -1));
-    return { active, finished, now };
+    // (0.9.15) Jobs offered and not taken on yet: shown apart, until their deadline passes.
+    const offered = tracker.records.filter(isOffer);
+    return { active, finished, offered, now };
 }
 
 function questStatus(now) {
@@ -1187,34 +1206,114 @@ function questStatus(now) {
 function questsTabKey() {
     const ctx = context();
     const chat = ctx?.chat ?? [];
-    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar)].join('|');
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(',')].join('|');
 }
 
 function renderQuestsTab(pane) {
-    const { active, finished, now } = questRecords();
+    const { active, finished, offered, now } = questRecords();
     // (0.9.12) Each deadline at the clock time the calendar sets: "Goldwane 12 sunset" reads
     // "Goldwane 12, 07:00 pm", a date alone its last minute.
     const cal = calendar();
     const formatDate = value => cal.withClock(value, { reference: now });
-    renderQuests(pane, { quests: active, finished, formatDate, status: questStatus(now), onAbandon: id => void abandonQuest(id) });
+    const status = questStatus(now);
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
 }
 
 /**
- * (0.9.5) The reader gives a quest up from the Quests tab, the one closing that is theirs to
- * make: `- Key — abandoned` goes into the latest reply like any change (a failure, so RPG Battle
- * offers no quest XP), and deleting or swiping that reply takes it back. Finishing or failing a
- * quest is the story's to tell.
+ * (0.9.5) The reader gives a quest up from the Quests tab, the one quest choice with a button.
+ * (0.9.15) Like RPG Battle's fight hand-off, behind the scenes: the click (asked twice) marks
+ * it, the next reply's note tells the story that {{user}} gives it up, and that reply records
+ * it (`- Key — abandoned`, written for the story if it left the line out; a failure, so no
+ * quest XP) with the reader's choice stamped on the message. A swipe of that reply is told
+ * again; deleting it takes the abandon back. Until the reply comes, a second click keeps it.
+ * State: chatMetadata[SETTINGS_KEY].abandon = { keys: [record id], attachedTo, sentFor }.
  */
-async function abandonQuest(id) {
+function abandonedStamp(message) {
+    const list = message?.extra?.storyDirector?.abandoned;
+    return Array.isArray(list) ? list.map(String) : [];
+}
+
+function abandonState(ctx = context()) {
+    const meta = chatMeta(ctx);
+    const state = meta?.[SETTINGS_KEY]?.abandon;
+    if (!state || !Array.isArray(state.keys) || !state.keys.length) return null;
+    const attachedTo = Number.isInteger(state.attachedTo) ? state.attachedTo : null;
+    // The reply it went with was deleted: the abandon is taken back.
+    if (attachedTo !== null && !isAssistant(ctx?.chat?.[attachedTo])) {
+        setAbandonState(null, ctx);
+        return null;
+    }
+    return { keys: state.keys.map(String), attachedTo, sentFor: Number.isInteger(state.sentFor) ? state.sentFor : null };
+}
+
+function setAbandonState(state, ctx = context()) {
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), abandon: state && state.keys?.length ? state : null };
+    ctx.saveMetadataDebounced?.();
+}
+
+/** Quests the reader is giving up with the next reply (not yet sent with one). */
+function pendingAbandons(ctx = context()) {
+    const state = abandonState(ctx);
+    return new Set(state && state.attachedTo === null ? state.keys : []);
+}
+
+function abandonQuest(id) {
     const record = questRecords().active.find(entry => entry.id === id);
     if (!record) return;
-    try {
-        await appendDirectorLines(`- ${record.key} — abandoned`);
-        notify('info', `${record.key} is abandoned. Delete or swipe the latest reply to take it back.`);
-    } catch (error) {
-        notify('error', error instanceof Error ? error.message : String(error));
-    }
+    const state = abandonState() ?? { keys: [], attachedTo: null, sentFor: null };
+    // A new choice after the last one was sent starts afresh.
+    const keys = state.attachedTo === null ? state.keys : [];
+    if (!keys.includes(record.id)) keys.push(record.id);
+    setAbandonState({ keys, attachedTo: null, sentFor: null });
+    notify('info', `${record.key} is given up with your next reply. Click Keep on it to change your mind.`);
     storyBlock()?.refresh?.();
+}
+
+function keepQuest(id) {
+    const state = abandonState();
+    if (!state || state.attachedTo !== null) return;
+    setAbandonState({ ...state, keys: state.keys.filter(key => key !== id) });
+    storyBlock()?.refresh?.();
+}
+
+/**
+ * The quests the reply being generated (at chat index `slot`) gives up: [key], for the note.
+ * A pending choice goes with the next reply; one already sent goes again with a swipe of its
+ * reply, and is done once a later reply is written.
+ */
+function abandoningFor(slot, tracker) {
+    const state = abandonState();
+    if (!state) return [];
+    if (state.attachedTo !== null && slot > state.attachedTo) {
+        setAbandonState(null);
+        return [];
+    }
+    if (state.attachedTo !== null && slot !== state.attachedTo) return [];
+    if (state.sentFor !== slot) setAbandonState({ ...state, sentFor: slot });
+    return state.keys.map(id => findRecord(tracker, id)?.key).filter(Boolean);
+}
+
+/** After the reply the abandon went with: stamp the reader's choice, and close what the story left open. */
+async function closeAbandoned(index) {
+    const ctx = context();
+    const sb = storyBlock();
+    const state = abandonState(ctx);
+    if (!state || state.sentFor !== index) return false;
+    const message = ctx.chat[index];
+    message.extra = { ...(message.extra ?? {}), storyDirector: { ...(message.extra?.storyDirector ?? {}), abandoned: state.keys } };
+    setAbandonState({ ...state, attachedTo: index }, ctx);
+    const { tracker } = trackerAt(index);
+    const open = state.keys.map(id => findRecord(tracker, id)).filter(record => record && record.status === 'active');
+    if (open.length) {
+        const existing = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
+        const lines = open.map(record => `- ${record.key} — abandoned`).join('\n');
+        await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
+    } else {
+        await ctx.saveChat?.();
+    }
+    return true;
 }
 
 function tabBadge() {
