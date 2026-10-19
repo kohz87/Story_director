@@ -1,7 +1,7 @@
 // Tests for src/relevance.js: due, arriving, dormant and the priority order of classify.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, estimateTokens, dateOf, isDue, isArriving, isDormant, classify, encountersIn } from '../src/relevance.js';
+import { AWAY_GAP_MINUTES, DEFAULTS, awayIn, estimateTokens, dateOf, isDue, isArriving, isDormant, classify, encountersIn } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
 // tests; the real calendar.js is tested on its own.
@@ -345,4 +345,37 @@ test('encountersIn: a fight is reached only in the reply that fired it (0.9.18)'
     const selection = classify(tracker([fired], 8), { calendar, now, message: 8 });
     assert.deepEqual(encountersIn(selection, { calendar, now, message: 8 }).map(item => [item.key, item.reached]), [['Drunken guards sack the Stray Oar', true]]);
     assert.deepEqual(encountersIn(selection, { calendar, now, message: 9 }).map(item => item.reached), [], 'a later reply: no longer reached');
+});
+
+test('awayIn: what came due between the reply before and now, after a jump of 12 hours or more (0.9.19)', () => {
+    assert.equal(AWAY_GAP_MINUTES, 720);
+    const from = at('Haywane 12, 08:00 pm');
+    const now = at('Haywane 15, 07:00 am');
+    const sacked = record({ key: 'Stray Oar', kind: 'event', fields: { then: 'sacked', on: 'Haywane 13' } });
+    const evening = record({ key: 'Toast', fields: { on: 'Haywane 12, 09:00 pm' } });
+    const waiting = record({ key: 'Sale', fields: { on: 'Haywane 12' } });
+    const early = record({ key: 'Early', fields: { on: 'Haywane 12, 07:00 pm' } });
+    const collector = record({ key: 'Collector', fields: { arrive: 'Haywane 14' } });
+    const already = record({ key: 'Courier', fields: { arrive: 'Haywane 11' } });
+    const bounty = record({ key: 'Bounty', kind: 'quest', fields: { due: 'Haywane 14' } });
+    const ferry = record({ key: 'Ferry', kind: 'quest', fields: { due: 'Haywane 15' } });
+    const heir = record({ key: 'The heir', kind: 'secret', fields: { on: 'Haywane 13' } });
+    const later = record({ key: 'Later', fields: { on: 'Haywane 20' } });
+    const selection = classify(tracker([sacked, evening, waiting, early, collector, already, bounty, ferry, heir, later], 5), { calendar, now, message: 5 });
+    const away = awayIn(selection, { calendar, from });
+    assert.deepEqual({ ...away, due: keys(away.due), arriving: keys(away.arriving) },
+        { from, to: now, due: ['Stray Oar', 'Toast', 'Bounty'], arriving: ['Collector'] });
+    // Records come through as they are, so the note can tell them apart from the rest of Due now.
+    assert.equal(away.due[0], sacked);
+    // A secret never comes up, even handed in as due.
+    assert.deepEqual(keys(awayIn({ now, due: [heir, sacked] }, { calendar, from }).due), ['Stray Oar']);
+
+    // No jump: a small gap, time going back, or no time or calendar.
+    assert.equal(awayIn(selection, { calendar, from: now - 11 * 60 }), null);
+    assert.ok(awayIn(selection, { calendar, from: now - 12 * 60 }));
+    assert.equal(awayIn(selection, { calendar, from: now + 60 }), null);
+    assert.equal(awayIn(selection, { calendar, from: null }), null);
+    assert.equal(awayIn(selection, { calendar: null, from }), null);
+    assert.equal(awayIn({ ...selection, now: null }, { calendar, from }), null);
+    assert.ok(awayIn(selection, { calendar, from: now - 60, minMinutes: 30 }), 'the threshold can be given');
 });

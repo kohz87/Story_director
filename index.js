@@ -412,6 +412,18 @@ function latestReplyCorrections(upTo) {
     return [];
 }
 
+// (0.9.19) The story time before the newest assistant reply at or before `upTo`: where the
+// note's While away part measures a jump from (to the scene's time now). Null before any reply
+// or any known time.
+function timeBeforeLatestReply(upTo) {
+    trackerAt(upTo);
+    const chat = context()?.chat ?? [];
+    for (let index = Math.min(Number(upTo), cache.entries.length - 1); index >= 0; index--) {
+        if (isAssistant(chat[index])) return cache.entries[index - 1]?.tracker?.time ?? null;
+    }
+    return null;
+}
+
 // How the note is built for a reply: the same for the injected note and for its token count.
 function noteOptions(ctx, tracker, upTo) {
     const cal = calendar();
@@ -431,7 +443,10 @@ function noteOptions(ctx, tracker, upTo) {
     const givenUp = asks ? givenUpIn(tracker, said) : [];
     const taking = asks ? offersChosenIn(tracker, said, 'accept') : [];
     const declining = asks ? offersChosenIn(tracker, said, 'refuse') : [];
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, ...instructionless };
+    // (0.9.19) What came due while the story skipped ahead, told as a recap: with or without
+    // change lines, since it is about the narration.
+    const previousTime = timeBeforeLatestReply(upTo);
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, ...instructionless };
 }
 
 /**
