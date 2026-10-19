@@ -56,6 +56,8 @@ const ITEM_SEPARATOR = ' · ';
 export const NOTE_PART_WORDS = Object.freeze({
     now: 12, then: 12, on: 12, due: 12, arrive: 12,
     desc: 16, goal: 16, step: 16, reward: 16, giver: 16, encounter: 16, type: 16, shown: 16,
+    // (0.9.19) A beat's reach, on Due now only: enough for one consequence and who it falls on.
+    reach: 16,
 });
 const DEFAULT_PART_WORDS = 16;
 const ELLIPSIS = '…';
@@ -178,7 +180,7 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
     const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
     const clock = text => (text && typeof calendar?.withClock === 'function' ? calendar.withClock(text, { reference: now }) : text);
-    addLine(parts, 'Due now', due.map(record => withFight(dueItem(record, clock), record)));
+    addLine(parts, 'Due now', due.map(record => withReach(withFight(dueItem(record, clock), record), record)));
     addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
         const items = relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record, clock));
@@ -242,6 +244,15 @@ function encounterOf(record) {
 function withFight(item, record) {
     const foes = encounterOf(record);
     return foes ? `${item} (fight: ${foes})` : item;
+}
+
+// (0.9.19) "… · reach: the inn shuts for repairs": what a due beat changes for {{user}} wherever
+// they are, so a story away from it has concrete aftermath to show rather than nothing. Due
+// now only: a beat still ahead keeps its reach off the Beats line, so the note stays short and
+// the story is not handed an aftermath before the beat has happened.
+function withReach(item, record) {
+    const reach = fieldOf(record, 'reach');
+    return reach ? `${item}${ITEM_SEPARATOR}reach: ${reach}` : item;
 }
 
 // The compact form for the kind lines: the fight is planned, not happening yet.
