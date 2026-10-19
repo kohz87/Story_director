@@ -601,7 +601,7 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         guard.addEventListener('change', () => commit(next => { next.spoilerGuard = Boolean(guard.checked); }));
         return el('div', { className: 'story-suite-quickbar' }, [
             row('Track the story', 'Read <Director> change lines and add the note before each reply.', enabled, { id: 'story_director_enabled' }),
-            row('Hide behind the scenes', 'The Director tab keeps agendas, planned beats, clocks and secrets hidden until you press Reveal.', guard, { id: 'story_director_spoiler' }),
+            row('Hide behind the scenes', 'The Director tab keeps agendas, planned beats, clocks and secrets hidden until you press Reveal; problems about anything else still show.', guard, { id: 'story_director_spoiler' }),
             el('div', { className: 'story-suite-actions' }, [
                 onPlanArc ? button('Plan arc', 'story-director-plan', { iconName: 'fa-wand-magic-sparkles', onClick: () => onPlanArc() }) : null,
                 button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', title: 'Turn the latest World State’s Off-Screen, World, Hooks and Clocks lines into records', onClick: () => onSeed?.() }),

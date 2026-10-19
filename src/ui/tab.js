@@ -245,6 +245,16 @@ function renderProblems(findings) {
     ]);
 }
 
+// The records the lock keeps hidden: what the story has planned, not what the reader has seen.
+const HIDDEN_KINDS = new Set(['agenda', 'beat', 'clock', 'secret']);
+const keyOf = key => String(key ?? '').toLowerCase().replace(/['’‘`]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+function hiddenKeys(selection) {
+    const lists = ['due', 'arriving', 'relevant', 'dormant', 'secrets', 'resolvedRecently'];
+    const records = lists.flatMap(name => (selection?.[name] ?? []).map(entry => entry?.record ?? entry)).filter(Boolean);
+    return new Set(records.filter(record => HIDDEN_KINDS.has(record.kind)).map(record => keyOf(record.key)));
+}
+
 // Defensive: whatever built the selection, a secret only ever shows behind its fold.
 const nonSecret = list => (Array.isArray(list) ? list : []).filter(record => record && record.kind !== 'secret');
 
@@ -477,7 +487,7 @@ function renderLock(counts, onReveal) {
     const facts = [
         counts.due ? `${counts.due} due` : null,
         plural(counts.tracked, 'tracked record'),
-        counts.problems ? plural(counts.problems, 'problem') : null,
+        counts.problems ? `${plural(counts.problems, 'problem')} behind the scenes` : null,
     ].filter(Boolean).join(' · ');
     return section('is-locked', [
         el('div', { className: 'story-director-lock' }, [
@@ -534,7 +544,13 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
                 button('Seed from World State', 'story-director-seed', { iconName: 'fa-seedling', onClick: () => onSeed?.() }),
             ]));
         }
-        root.append(renderLock(countsOf(selection, list), spoiler.onReveal));
+        // (0.9.17) Problems are read without revealing: only those about what is behind the
+        // scenes (an agenda, a planned beat, a clock, a secret) stay hidden, and are counted.
+        const hidden = hiddenKeys(selection);
+        const behind = list.filter(finding => finding?.key && hidden.has(keyOf(finding.key)));
+        root.append(renderLock(countsOf(selection, behind), spoiler.onReveal));
+        const openProblems = renderProblems(list.filter(finding => !behind.includes(finding)));
+        if (openProblems) root.append(openProblems);
         // Where the story has been is no secret: the reader was there.
         const placesFold = places ? renderPlaces(places) : null;
         if (placesFold) root.append(placesFold);
