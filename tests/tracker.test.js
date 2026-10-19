@@ -47,7 +47,7 @@ test('+ creates a full record', () => {
         fields: {
             desc: '', now: 'District Bailiff Court', then: 'argues with magistrates',
             on: 'Haywane 12, 05:45 pm', due: '', shown: '', leg: '', arrive: '', place: '',
-            people: 'Kade, Al', encounter: '', type: '', giver: '', goal: '', reward: '', step: '', difficulty: '',
+            people: 'Kade, Al', encounter: '', reach: '', type: '', giver: '', goal: '', reward: '', step: '', difficulty: '',
         },
         extra: {},
         created: { message: 4, time: 1000 },
@@ -300,6 +300,18 @@ test('an encounter is a field like any other: set, changed, and closed with its 
     assert.equal(findRecord(tracker, 'Ambush at the weir').fields.encounter, '4 bandit, bandit captain (boss)');
     const fought = replay([...steps, { message: 2, time: 1120, text: '', ops: parseChanges('- Ambush at the weir — the bandits fled').ops }]).tracker;
     assert.equal(findRecord(fought, 'Ambush at the weir').status, 'resolved');
+});
+
+// (0.9.19)
+test('a reach is a field like any other: stored on the record, changed with ~, not an extra', () => {
+    const steps = [
+        { message: 0, time: 1000, text: '', ops: parseChanges('+ beat Guards sack the Stray Oar — convoy guards wreck the taproom | on: Goldwane 13 | reach: the inn shuts for repairs').ops },
+        { message: 1, time: 1060, text: '', ops: parseChanges('~ Guards sack the Stray Oar — reach: the inn shuts; Marrit is out of work').ops },
+    ];
+    const first = findRecord(replay(steps.slice(0, 1)).tracker, 'Guards sack the Stray Oar');
+    assert.equal(first.fields.reach, 'the inn shuts for repairs');
+    assert.deepEqual(first.extra, {});
+    assert.equal(findRecord(replay(steps).tracker, 'Guards sack the Stray Oar').fields.reach, 'the inn shuts; Marrit is out of work');
 });
 
 test('questsDoneIn: the quests a reply finished, not earlier ones, failures or other kinds', () => {

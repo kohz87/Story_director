@@ -34,7 +34,7 @@ function only(text) {
 
 test('exports the kinds, fields and aliases of the contract', () => {
     assert.deepEqual(KINDS, ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc']);
-    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'type', 'giver', 'goal', 'reward', 'step', 'difficulty']);
+    assert.deepEqual(FIELDS, ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'reach', 'type', 'giver', 'goal', 'reward', 'step', 'difficulty']);
     assert.equal(KIND_ALIASES.bounty, 'quest');
     assert.equal(KIND_ALIASES.contract, 'quest');
     assert.equal(KIND_ALIASES.offscreen, 'agenda');

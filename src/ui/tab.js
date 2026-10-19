@@ -30,7 +30,7 @@ const KIND_GROUPS = [
 
 // Labelled rows in this order; desc heads the record as a plain line (it is what the
 // record is), and labels the tracker does not know follow as written.
-const FACT_FIELDS = ['goal', 'step', 'giver', 'reward', 'difficulty', 'now', 'then', 'on', 'due', 'leg', 'arrive', 'place', 'encounter', 'people', 'shown'];
+const FACT_FIELDS = ['goal', 'step', 'giver', 'reward', 'difficulty', 'now', 'then', 'on', 'due', 'leg', 'arrive', 'place', 'encounter', 'reach', 'people', 'shown'];
 const DATE_FIELDS = new Set(['on', 'due', 'arrive']);
 
 const SEVERITIES = [

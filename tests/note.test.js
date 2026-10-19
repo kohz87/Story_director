@@ -293,6 +293,27 @@ test('quest difficulty: shown with the type unless it is normal', () => {
     assert.ok(lines(note).includes('Quests: Kettle Jack (bounty, hard) — bring him in · Drowned Crown (nightmare) — bring him in · Rat cellar (side) — bring him in · Herb run — bring him in'));
 });
 
+// (0.9.19)
+test('reach: a due beat says how it touches {{user}}, a beat still ahead does not', () => {
+    const sack = record({ key: 'Guards sack the Stray Oar', kind: 'beat', fields: {
+        desc: 'drunken convoy guards wreck the taproom', on: 'Goldwane 16, 10:30 pm', place: 'Stray Oar',
+        reach: 'the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter' } });
+    const due = buildNote(selection({ due: [sack] }), { calendar });
+    assert.equal(lines(due)[1], 'Due now: Guards sack the Stray Oar (Goldwane 16, 10:30 pm) · reach: the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter');
+
+    const fight = record({ key: 'Ambush at the weir', kind: 'beat', fields: { on: 'Goldwane 16', encounter: '3 bandit', reach: 'the weir road closes' } });
+    assert.equal(lines(buildNote(selection({ due: [fight] }), { calendar }))[1], 'Due now: Ambush at the weir (Goldwane 16) (fight: 3 bandit) · reach: the weir road closes');
+
+    const ahead = buildNote(selection({ relevant: [record({ ...sack, fields: { ...sack.fields, on: 'Goldwane 19' } })] }), { calendar });
+    assert.ok(lines(ahead).some(line => line.startsWith('Beats: Guards sack the Stray Oar')));
+    assert.doesNotMatch(ahead, /reach/);
+
+    // A long reach ends in "…" in the note only.
+    const long = record({ ...sack, fields: { ...sack.fields, reach: Array.from({ length: 30 }, (_, i) => `w${i}`).join(' ') } });
+    assert.match(lines(buildNote(selection({ due: [long] }), { calendar }))[1], / · reach: w0 .* w15…$/);
+    assert.equal(NOTE_PART_WORDS.reach, 16);
+});
+
 test('encounters: a due fight names its foes, the kind lines show them compactly', () => {
     const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { desc: 'bandits hit the road', on: 'Goldwane 16', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' } });
     const due = buildNote(selection({ due: [ambush] }), { calendar });

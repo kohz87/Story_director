@@ -95,7 +95,8 @@ that: its line is skipped quietly (since 0.9.14), with no warning and nothing in
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
-foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
+foes of a planned fight), `reach` (how a beat touches your character wherever they are, since
+0.9.19; see [Arc planning](#arc-planning)); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
 `difficulty`. Dates go only in `on`, `due` and `arrive`, with a clock time. The note tells the
 model all of this in about 165 tokens.
 
@@ -604,6 +605,21 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
 - **Beats leave room:** the planner is told that a beat's date is when the world acts, not an
   appointment for your character. Every beat must work whether or not you are there, and may
   slip; the note's Pacing line tells the storyteller the same every reply.
+- **Every beat reaches you** (since 0.9.19): each `BEAT` line carries a `reach:` part, how the
+  beat touches your character if they are somewhere else: a price, a door shut or opened,
+  someone's mood, a danger or an opening. It is the world's side only; what you do about it
+  stays yours.
+
+  ```
+  BEAT: Guards sack the Stray Oar — drunken convoy guards wreck the taproom | on: Goldwane 13, 10:30 pm | place: Stray Oar, Bluewatch Village | reach: the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter
+  ```
+
+  It becomes a `reach` field on the beat (the Director tab shows it as a row). When the beat is
+  due, the note's Due line adds it, so a story that is elsewhere still has concrete aftermath to
+  show: `Due now: Guards sack the Stray Oar (Goldwane 13, 10:30 pm) · reach: the inn shuts for
+  repairs; …` (16 words at most in the note). A beat still ahead keeps its reach off the Beats
+  line: the note stays short, and the story is not handed the aftermath before it happens. A
+  model can write or change one like any field (`~ Key — reach: …`).
 - **Review:** the plan waits in the Director tab as editable change lines; **Accept** writes them
   into the latest reply (deleting that reply undoes the plan), **Discard** drops it, **Plan
   again** asks for another. Turn on *Use plans without review* to skip this.
