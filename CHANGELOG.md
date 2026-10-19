@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.16
+
+- **A made-up name for a tracked job still finds it.** A model wrote `! Fold Wolf Contract — …` for a job tracked under another name, and the line was ignored with a warning. When the usual matching finds nothing, a looser reading now tries: plurals folded (*wolves* is *wolf*), job words set aside (*contract*, *bounty*, *quest*…), and a word inside a longer one (*fold* in *sheepfold*). Then it tries every word of the name found in one record's own name, goal or description (*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Only a single match is taken. With two, the warning names both and neither changes.
+
 ## 0.9.15
 
 - **Quest choices are yours.** A model wrote `+ quest` for two jobs a clerk had only offered ("What's it going to be?"), and both showed as active quests. Taking a job on, turning it down and giving it up now come only from your own message, the one the reply answers. Finishing and failing stay with the story.

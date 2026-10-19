@@ -1,4 +1,4 @@
-# Story Director v0.9.15
+# Story Director v0.9.16
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -80,7 +80,11 @@ A `~`, `!` or `-` on a key that is not tracked goes to the one active record it 
 the same words once case, punctuation, a leading *the/a/an* and small words (*in, at, of, on,
 to, for, from, and*) are set aside, or one key's words inside the other's (two words or more),
 or three quarters of the words shared; `~ Footing in Bluewatch — …` changes *Footing at
-Bluewatch*, and the Director tab notes it. Two such records are never guessed between. With
+Bluewatch*, and the Director tab notes it. Failing those (since 0.9.16), a looser reading:
+plurals folded (*wolves* is *wolf*), job words set aside (*contract*, *bounty*, *quest*…) and a
+word inside a longer one (*fold* in *sheepfold*), so `! Fold Wolf Contract — …` reaches
+*Sheepfold Wolves*; then every word of the key found in one record's name, goal or description
+(*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Two such records are never guessed between. With
 none, a `~` that carries something becomes a new hook (a `type:` that names a kind, such as
 `type: clock`, sets that kind instead), a `-` does nothing, and any other line is ignored: a
 warning in the Director tab, and one line in the next note's `Corrections:` (`"Key" is not
