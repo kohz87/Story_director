@@ -739,3 +739,20 @@ test('giving a job up or turning it down needs the reader\'s word; failing it is
     assert.equal(findRecord(applyOps(offer, ops('- Rat Culling — declined'), { message: 3, said: 'Okay.' }).tracker, 'Rat Culling').status, 'active');
     assert.equal(findRecord(applyOps(offer, ops('- Rat Culling — declined'), { message: 3, said: 'I decline the rat job.' }).tracker, 'Rat Culling').status, 'resolved');
 });
+
+test('a made-up name for a tracked job still finds it: plurals, compounds, job words, its description (0.9.16)', () => {
+    const rec = (key, fields = {}) => ({ key, id: key.toLowerCase(), status: 'active', kind: 'quest', fields: { desc: '', goal: '', ...fields } });
+    const sheep = [rec('Sheepfold Wolves'), rec('Rat Culling', { desc: 'Kill granary rats' })];
+    assert.deepEqual(nearMatches(sheep, 'Fold Wolf Contract').map(m => m.record.key), ['Sheepfold Wolves']);
+    const ridge = [rec('Wolf Hunt', { desc: 'Kill ridge wolves threatening the sheep fold' }), rec('Rat Culling', { desc: 'Kill granary rats' })];
+    assert.deepEqual(nearMatches(ridge, 'Fold Wolf Contract').map(m => m.record.key), ['Wolf Hunt']);
+    assert.deepEqual(nearMatches(ridge, 'Granary Rats').map(m => m.record.key), ['Rat Culling']);
+    // A job word alone says nothing; two that fit are both named, neither taken.
+    assert.deepEqual(nearMatches(ridge, 'The Contract'), []);
+    const two = [rec('Sheepfold Wolves'), rec('Wolves of the Fold')];
+    assert.equal(nearMatches(two, 'Fold Wolf Bounty').length, 2);
+    // Applied: the ! goes to the one it means.
+    const start = applyOps(emptyTracker(), ops('+ quest Wolf Hunt — Kill ridge wolves threatening the sheep fold | giver: Danique | reward: 4 silver'), { message: 1 }).tracker;
+    const { problems } = applyOps(start, ops('! Fold Wolf Contract — the pack broke the hurdles again'), { message: 2 });
+    assert.equal(problems[0].kind, 'near-key');
+});
