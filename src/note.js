@@ -7,7 +7,7 @@
 // writes no part longer than NOTE_PART_WORDS (the tracker keeps the whole text).
 
 import { questDifficulty } from './changes.js';
-import { estimateTokens } from './relevance.js';
+import { awayIn, estimateTokens } from './relevance.js';
 import { looksFinished } from './tracker.js';
 
 // About 165 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
@@ -37,6 +37,14 @@ export const ENCOUNTER_CUE = 'A due fight starts when the scene reaches it: show
 // about 20 tokens after the instruction (and in the planner's and capture's request), so an
 // agenda never restates a dossier the reader keeps there.
 export const NPC_PLANS_ONLY = 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.';
+// (0.9.19) After the While away list, about 20 tokens: what came due in a skipped stretch of
+// time already happened, so the story tells its outcome rather than staging it now.
+export const AWAY_CUE = 'Show what came of them as news, signs or aftermath, not as scenes {{user}} lived through.';
+// Added only where the model writes change lines: about 10 tokens, 10 more with an arrival and
+// 20 more with a passed deadline.
+export const AWAY_RECORD = 'Record each with ! Key — what came of it.';
+export const AWAY_ARRIVAL = 'An arrival: ~ Key — now: where it is.';
+export const AWAY_DEADLINE = 'A passed deadline: - Key — failed, or ~ Key — due: later if it still stands.';
 
 // Kind lines, in the order the note shows them.
 const KIND_LINES = [
@@ -56,6 +64,8 @@ const ITEM_SEPARATOR = ' · ';
 export const NOTE_PART_WORDS = Object.freeze({
     now: 12, then: 12, on: 12, due: 12, arrive: 12,
     desc: 16, goal: 16, step: 16, reward: 16, giver: 16, encounter: 16, type: 16, shown: 16,
+    // (0.9.19) A beat's reach, on Due now only: enough for one consequence and who it falls on.
+    reach: 16,
 });
 const DEFAULT_PART_WORDS = 16;
 const ELLIPSIS = '…';
@@ -96,13 +106,20 @@ export function buildNote(selection, options = {}) {
 
 /**
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
- * before `text`, so joining them gives buildNote exactly. Labels: Header, Due now, Arriving,
- * Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
- * Corrections, Quest check, Pacing, Encounter cue, Change instruction, NPC plans only.
+ * before `text`, so joining them gives buildNote exactly. Labels: Header, While away, Due now,
+ * Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats (headed by the current arc), Do not reveal,
+ * Corrections, Quest check, Abandoned, Slipped, Lapsed, Pacing, Encounter cue, Change
+ * instruction, NPC plans only.
  *
  * `offscreenInBlock` (0.9.3): the scene block's Off-Screen section already carries every active
  * agenda (Story Director mirrors it there and keeps the timeline), so the note leaves its
  * Off-screen line out; an agenda due or arriving is still on Due now / Arriving.
+ *
+ * `previousTime` (0.9.19): the story time before the latest reply. When the selection's now is
+ * at least AWAY_GAP_MINUTES past it, what came due or arrived in between goes on one While away
+ * line (relevance.js awayIn) and not on Due now / Arriving.
+ * `slipped` and `lapsed` (0.9.19): what the latest reply closed because time ran past it, as
+ * `[{ key, on, giver }]` (lapses.lapsesIn): beats that slipped, offers that lapsed.
  */
 export function noteParts(selection, {
     calendar,
@@ -115,6 +132,9 @@ export function noteParts(selection, {
     taking = [],
     declining = [],
     abandoning = [],
+    previousTime = null,
+    slipped = [],
+    lapsed = [],
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -125,16 +145,17 @@ export function noteParts(selection, {
     const relevant = (selection?.relevant ?? []).filter(entry => !(offscreenInBlock && entry?.record?.kind === 'agenda'));
     const secrets = selection?.secrets ?? [];
     const fixes = (corrections ?? []).map(item => typeof item === 'string' ? item : item?.message ?? '').filter(Boolean);
+    const away = awayIn(selection, { calendar, from: previousTime });
 
     // The model still needs to know how to add records when there are none yet.
-    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length;
+    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length || slipped?.length || lapsed?.length;
     if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc && !choices) {
         return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning, away, slipped, lapsed });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -173,13 +194,21 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [] }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], away = null, slipped = [], lapsed = [] }) {
     const parts = [part('Header', header(selection, calendar))];
     // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
     const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
     const clock = text => (text && typeof calendar?.withClock === 'function' ? calendar.withClock(text, { reference: now }) : text);
-    addLine(parts, 'Due now', due.map(record => withFight(dueItem(record, clock), record)));
-    addLine(parts, 'Arriving', arriving.map(record => withFight(arrivalItem(record), record)));
+    // (0.9.19) What came due while the story skipped ahead is told once, as a recap, and not
+    // again on Due now / Arriving.
+    const awayDue = new Set(away?.due ?? []);
+    const awayArriving = new Set(away?.arriving ?? []);
+    const awayLine = awayPart(away, calendar, clock, instruction);
+    if (awayLine) parts.push(part('While away', awayLine));
+    const dueNow = due.filter(record => !awayDue.has(record));
+    const arrivingNow = arriving.filter(record => !awayArriving.has(record));
+    addLine(parts, 'Due now', dueNow.map(record => withReach(withFight(dueItem(record, clock), record), record)));
+    addLine(parts, 'Arriving', arrivingNow.map(record => withFight(arrivalItem(record), record)));
     for (const [kind, label] of KIND_LINES) {
         const items = relevant.filter(entry => entry.record.kind === kind).map(entry => recordItem(entry.record, clock));
         if (kind === 'beat') addBeats(parts, selection?.arc, items);
@@ -208,12 +237,44 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     if (giving.length) {
         parts.push(part('Abandoned', `Abandoned: {{user}} gives up ${giving.join(', ')}. Show it in this reply${instruction ? ', and close each with - Key — abandoned' : ''}.`));
     }
+    // (0.9.19) What time closed in the latest reply, told once, in the note right after it: the
+    // story need not stage a beat that slipped or a job that went to someone else, only not
+    // contradict it.
+    const slips = lapseItems(slipped, entry => `${entry.key}${entry.on ? ` (${notePart(entry.on, 'on')})` : ''}`);
+    if (slips.length) {
+        const one = slips.length === 1;
+        parts.push(part('Slipped', `Slipped: ${slips.join(', ')} — ${one ? 'it' : 'they'} happened off-screen or not at all; mention ${one ? 'it' : 'them'} only where ${one ? 'it fits' : 'they fit'}.`));
+    }
+    const lapses = lapseItems(lapsed, entry => `${entry.key}${giverName(entry.giver) ? ` (${giverName(entry.giver)}'s offer)` : ''}`);
+    if (lapses.length) {
+        const givers = [...new Set(lapsed.map(entry => giverName(entry?.giver)).filter(Boolean))];
+        const who = lapses.length === 1 ? givers[0] || '' : '';
+        const after = who ? `${who} may mention it` : lapses.length === 1 ? 'it may come up in passing' : 'whoever offered them may mention it';
+        parts.push(part('Lapsed', `Lapsed: ${lapses.join(', ')} went to someone else; ${after}.`));
+    }
     if (scheduled(selection, due, arriving, relevant)) {
         parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
-        if ([...due, ...arriving].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));
+        // A fight on the While away line already happened off-screen: no first blow to stop at.
+        if ([...dueNow, ...arrivingNow].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));
     }
     // No instruction when a capture call writes the changes instead of the model.
     return [...parts, ...asks];
+}
+
+// One item per record, once each by key.
+function lapseItems(entries, item) {
+    const seen = new Set();
+    return (entries ?? []).filter(entry => {
+        const key = String(entry?.key ?? '').trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).map(item);
+}
+
+// A giver by name only: "Danique, the rat-catcher's widow" is Danique.
+function giverName(giver) {
+    return notePart(String(giver ?? '').split(/[,(;—–]/)[0], 'giver');
 }
 
 // Anything with a date or a plan behind it: an arc, something due or arriving, a beat or a
@@ -242,6 +303,15 @@ function encounterOf(record) {
 function withFight(item, record) {
     const foes = encounterOf(record);
     return foes ? `${item} (fight: ${foes})` : item;
+}
+
+// (0.9.19) "… · reach: the inn shuts for repairs": what a due beat changes for {{user}} wherever
+// they are, so a story away from it has concrete aftermath to show rather than nothing. Due
+// now only: a beat still ahead keeps its reach off the Beats line, so the note stays short and
+// the story is not handed an aftermath before the beat has happened.
+function withReach(item, record) {
+    const reach = fieldOf(record, 'reach');
+    return reach ? `${item}${ITEM_SEPARATOR}reach: ${reach}` : item;
 }
 
 // The compact form for the kind lines: the fight is planned, not happening yet.
@@ -287,11 +357,45 @@ function dueItem(record, clock = text => text) {
     return `${record.key}${what ? ` — ${what}` : ''}${when ? ` (${when})` : ''}`;
 }
 
+// (0.9.19) "While away (Goldwane 12, 08:00 pm → Goldwane 15, 07:00 am): Stray Oar — sacked
+// (Goldwane 13) · Bond collector reached Hollin's Reach (Goldwane 14) · Bounty — deadline
+// Goldwane 14, 11:59 pm passed. Show what came of them …". A planned fight in the gap was fought
+// off-screen. '' with nothing in the gap.
+function awayPart(away, calendar, clock, instruction) {
+    const items = [
+        // A beat's reach is the aftermath to show: most needed here, where it happened unseen.
+        ...(away?.due ?? []).map(record => withReach(withAwayFight(awayDueItem(record, clock), record), record)),
+        ...(away?.arriving ?? []).filter(record => !(away?.due ?? []).includes(record)).map(record => withAwayFight(arrivalItem(record, 'reached'), record)),
+    ].filter(Boolean);
+    if (!items.length) return '';
+    const span = `${calendar.format(away.from, { era: false })} → ${calendar.format(away.to, { era: false })}`;
+    const record = instruction
+        ? [AWAY_RECORD, away.arriving?.length ? AWAY_ARRIVAL : '', (away.due ?? []).some(entry => entry.kind === 'quest') ? AWAY_DEADLINE : '']
+        : [];
+    const list = items.join(ITEM_SEPARATOR);
+    // A list ending in a trimmed part ("…") needs no full stop after it.
+    return [`While away (${span}): ${list}${/[.…]$/u.test(list) ? '' : '.'}`, AWAY_CUE, ...record].filter(Boolean).join(' ');
+}
+
+// A due item as it reads in the past: a quest's deadline "passed", not "reached".
+function awayDueItem(record, clock) {
+    if (record.kind !== 'quest') return dueItem(record, clock);
+    const f = noteFields(record);
+    return `${record.key} — deadline${f.due ? ` ${clock(f.due)}` : ''} passed${f.goal ? ` (${f.goal})` : ''}`;
+}
+
+function withAwayFight(item, record) {
+    const foes = encounterOf(record);
+    return foes ? `${item} (fought off-screen: ${foes})` : item;
+}
+
 // "Courier arrives Varnhold Watch (Goldwane 16, morning)".
-function arrivalItem(record) {
+function arrivalItem(record, verb = 'arrives') {
     const f = noteFields(record);
     const where = destination(f.leg);
-    return `${record.key} arrives${where ? ` ${where}` : ''}${f.arrive ? ` (${f.arrive})` : ''}`;
+    // With nowhere to reach, an arrival in the past just "arrived".
+    const said = where ? verb : verb === 'reached' ? 'arrived' : verb;
+    return `${record.key} ${said}${where ? ` ${where}` : ''}${f.arrive ? ` (${f.arrive})` : ''}`;
 }
 
 // "Geva — Bailiff Court → files the warrant (Goldwane 17)",

@@ -58,7 +58,9 @@ export function questDifficulty(value) {
 // A planned fight: who the foes are, as free text in RPG Battle's shape (`3 bandit, bandit
 // captain (boss)`, `2 x dire wolf rank D`). Story Director only stores and schedules it; the
 // fight itself is resolved by another extension, so the text is never parsed here.
-export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', ...QUEST_FIELDS];
+// (0.9.19) `reach`: how a beat touches {{user}} wherever they are (a price, a door shut, a
+// mood), free text the planner writes; the note shows it once the beat is due.
+export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'reach', ...QUEST_FIELDS];
 // A comma or semicolon before one of the format's fields ("…, giver: Nelke"), for runs written without "|".
 const FIELD_RUN = new RegExp(`\\s*[,;]\\s*(?=(?:${FIELDS.join('|')})\\s*:)`, 'i');
 

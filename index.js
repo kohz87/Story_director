@@ -37,24 +37,28 @@ import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
 import { buildNote, noteParts, noteTokens } from './src/note.js';
 import { checkReply } from './src/checks.js';
+import { lapseLines, lapsedOffers, lapsesIn, slippedBeats } from './src/lapses.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
+import { renderJournal } from './src/ui/journal.js';
+import { buildJournal } from './src/journal.js';
 import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
-import { buildPlannerMessages, DEFAULT_PLANNER_PROMPT, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
+import { arcBeats, autoPlanReason, buildPlannerMessages, DEFAULT_LOW_THREADS, DEFAULT_PLANNER_PROMPT, DEFAULT_STALL_DAYS, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
 import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.18';
+const VERSION = '0.9.19';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
 const TAB_ID = 'story-director';
 const QUESTS_TAB_ID = 'story-director-quests';
+const JOURNAL_TAB_ID = 'story-director-journal';
 const EXTENSION_PROMPT_IN_CHAT = 1;
 const EXTENSION_PROMPT_ROLE_SYSTEM = 0;
 const MIN_STORY_BLOCK_API = 1;
@@ -75,7 +79,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     // The tracker is the story behind the scenes: hidden in the tab until the reader asks.
     spoilerGuard: true,
     calendar: PRESETS.gregorian,
-    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
+    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: DEFAULT_STALL_DAYS, lowThreads: DEFAULT_LOW_THREADS, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
     // How to read map coordinates: which way north and east run, km per unit, road winding.
     map: DEFAULT_MAP,
@@ -412,6 +416,27 @@ function latestReplyCorrections(upTo) {
     return [];
 }
 
+// (0.9.19) The story time before the newest assistant reply at or before `upTo`: where the
+// note's While away part measures a jump from (to the scene's time now). Null before any reply
+// or any known time.
+function timeBeforeLatestReply(upTo) {
+    trackerAt(upTo);
+    const chat = context()?.chat ?? [];
+    for (let index = Math.min(Number(upTo), cache.entries.length - 1); index >= 0; index--) {
+        if (isAssistant(chat[index])) return cache.entries[index - 1]?.tracker?.time ?? null;
+    }
+    return null;
+}
+
+// The newest assistant reply at or before `upTo` (-1 when there is none).
+function latestReplyAt(upTo) {
+    const chat = context()?.chat ?? [];
+    for (let index = Math.min(Number(upTo), chat.length - 1); index >= 0; index--) {
+        if (isAssistant(chat[index])) return index;
+    }
+    return -1;
+}
+
 // How the note is built for a reply: the same for the injected note and for its token count.
 function noteOptions(ctx, tracker, upTo) {
     const cal = calendar();
@@ -431,7 +456,12 @@ function noteOptions(ctx, tracker, upTo) {
     const givenUp = asks ? givenUpIn(tracker, said) : [];
     const taking = asks ? offersChosenIn(tracker, said, 'accept') : [];
     const declining = asks ? offersChosenIn(tracker, said, 'refuse') : [];
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, ...instructionless };
+    // (0.9.19) What came due while the story skipped ahead, told as a recap: with or without
+    // change lines, since it is about the narration.
+    const previousTime = timeBeforeLatestReply(upTo);
+    // (0.9.19) Beats that slipped and offers that lapsed in the latest reply: in this note only.
+    const { slipped, lapsed } = lapsesIn(tracker, latestReplyAt(upTo));
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, slipped, lapsed, ...instructionless };
 }
 
 /**
@@ -644,6 +674,7 @@ async function onReply({ messageIndex }) {
         // Capture first, so the checks below see the changes it wrote.
         if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
         await closeAbandoned(index);
+        await closeLapsed(index);
         const before = trackerAt(index - 1).tracker;
         const { tracker: after, problems, info } = trackerAt(index);
         const block = sb.blockInText(chat[index].mes, BLOCK.tag);
@@ -811,9 +842,27 @@ function setArcDraft(draft) {
     ctx.saveMetadataDebounced?.();
 }
 
-function arcBeats(tracker, arc) {
-    const beats = tracker.records.filter(record => record.kind === 'beat' && arc && record.arc === arc.arc);
-    return { done: beats.filter(record => record.status !== 'active').length, total: beats.length, active: beats.filter(record => record.status === 'active') };
+// (0.9.19) Where the last plan was asked for: { chatId, message } (the latest reply then), so
+// "running low" waits for the story to move on instead of asking again every reply.
+function lastPlan(ctx = context()) {
+    const mark = chatMeta(ctx)?.[SETTINGS_KEY]?.lastPlan;
+    return mark && typeof mark === 'object' && mark.chatId === chatIdOf(ctx) && Number.isInteger(mark.message) ? mark : null;
+}
+
+function markPlanned(ctx = context()) {
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), lastPlan: { chatId: chatIdOf(ctx), message: latestAssistantIndex(ctx?.chat ?? []) } };
+    ctx.saveMetadataDebounced?.();
+}
+
+// Replies written since the last plan; after a delete below that point, counted from the end.
+function repliesSincePlan(ctx = context()) {
+    const mark = lastPlan(ctx);
+    if (!mark) return Infinity;
+    const chat = ctx?.chat ?? [];
+    const from = Math.min(mark.message, chat.length - 1);
+    return chat.slice(from + 1).filter(isAssistant).length;
 }
 
 function arcView(selection, tracker) {
@@ -883,6 +932,8 @@ async function planArc({ reason = 'manual' } = {}) {
     const own = settings(ctx);
     planning = true;
     planError = '';
+    // Asked for, whatever comes of it: a failed or discarded plan waits too.
+    markPlanned(ctx);
     storyBlock()?.refresh?.();
     // Planning reads a long stretch of chat and can take a while: a toast stays up until it
     // is done, wherever the reader is (the tab may be closed or hidden).
@@ -1060,32 +1111,26 @@ async function endArc() {
     if (settings().arc.trigger === 'auto') await planArc({ reason: 'arc-end' });
 }
 
-// Automatic: plan when there is no arc, when every beat of the arc is done, or when no beat
-// is due within the stall window. Never while a plan waits for review.
+// Automatic: plan when there is no arc, when every beat of the arc is done, when no beat is
+// due within the stall window, or (0.9.19) when open threads run low (autoPlanReason). Never
+// while a plan waits for review.
 async function maybePlanAutomatically(tracker) {
     if (planning || arcDraft()) return;
     const own = settings();
-    const cal = calendar();
     const { selection, now } = situation('normal');
     const arc = selection.arc;
-    if (!arc) {
-        // Only once the story has something to plan from.
-        if (tracker.records.length) await planArc({ reason: 'no-arc' });
-        return;
-    }
-    const { total, active } = arcBeats(tracker, arc);
-    if (total && !active.length) {
-        await appendDirectorLines(`- ${arc.key} — every beat played out`).catch(() => {});
-        await planArc({ reason: 'arc-end' });
-        return;
-    }
-    if (now === null || !active.length) return;
-    const horizon = cal.addDays(now, Number(own.arc.stallDays) || 7);
-    const upcoming = active.some(beat => {
-        const date = beat.fields.on ? cal.parse(beat.fields.on, { reference: now }) : null;
-        return !date || date.abs <= horizon;
+    const reason = autoPlanReason({
+        tracker,
+        arc,
+        now,
+        calendar: calendar(),
+        stallDays: own.arc.stallDays,
+        lowThreads: own.arc.lowThreads,
+        repliesSincePlan: repliesSincePlan(),
     });
-    if (!upcoming) await planArc({ reason: 'stalled' });
+    if (!reason) return;
+    if (reason === 'arc-end') await appendDirectorLines(`- ${arc.key} — every beat played out`).catch(() => {});
+    await planArc({ reason });
 }
 
 // ---------------------------------------------------------------------------
@@ -1219,6 +1264,30 @@ function renderQuestsTab(pane) {
     renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
 }
 
+// (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
+// in the replay cache and the place book, up to the newest message on screen.
+function journalData() {
+    const ctx = context();
+    const chat = ctx?.chat ?? [];
+    if (!storyBlock() || !chatIdOf(ctx) || !chat.length) return buildJournal({});
+    const last = chat.length - 1;
+    const book = placeBookAt(last);
+    const trackers = cache.entries.slice(0, last + 1).map(entry => entry?.tracker ?? null);
+    return buildJournal({ trackers, places: book?.places ?? [], calendar: calendar() });
+}
+
+// Another chat, another reply or a changed one, or a calendar that names days differently.
+function journalTabKey() {
+    const ctx = context();
+    const chat = ctx?.chat ?? [];
+    const pack = worldPack();
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().sceneTag, JSON.stringify(settings().calendar), pack ? packSummary(pack) : ''].join('|');
+}
+
+function renderJournalTab(pane) {
+    renderJournal(pane, journalData());
+}
+
 /**
  * (0.9.5) The reader gives a quest up from the Quests tab, the one quest choice with a button.
  * (0.9.15) Like RPG Battle's fight hand-off, behind the scenes: the click (asked twice) marks
@@ -1313,6 +1382,27 @@ async function closeAbandoned(index) {
     } else {
         await ctx.saveChat?.();
     }
+    return true;
+}
+
+/**
+ * (0.9.19) After the latest reply: the beats its story time left more than SLIP_GRACE_DAYS
+ * behind without firing them, and the offers whose deadline it passed, are closed in its own
+ * Director block (`- Key — slipped`, `- Key — offer lapsed`), so deleting or swiping the reply
+ * takes the closing back. Neither is a choice of the reader's, nor a quest's outcome.
+ */
+async function closeLapsed(index) {
+    const ctx = context();
+    const sb = storyBlock();
+    const chat = ctx?.chat ?? [];
+    // Only the newest reply: an older one edited later keeps what it said.
+    if (index !== latestAssistantIndex(chat)) return false;
+    const { tracker } = trackerAt(index);
+    const options = { calendar: calendar(), now: tracker.time };
+    const lines = lapseLines({ slipped: slippedBeats(tracker, options), lapsed: lapsedOffers(tracker, options) });
+    if (!lines.length) return false;
+    const existing = sb.blockInText(chat[index].mes, BLOCK.tag)?.text ?? '';
+    await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines.join('\n')}` : lines.join('\n'));
     return true;
 }
 
@@ -1481,6 +1571,22 @@ function registerWithStoryBlock() {
             }
         },
         render: pane => renderQuestsTab(pane),
+    });
+    // (0.9.19) The player's side of the story: always there, with an empty state to begin with.
+    sb.registerTab({
+        id: JOURNAL_TAB_ID,
+        label: 'Journal',
+        icon: '📖',
+        order: 88,
+        isAvailable: () => {
+            try {
+                return Boolean(settings().enabled);
+            } catch {
+                return false;
+            }
+        },
+        key: journalTabKey,
+        render: pane => renderJournalTab(pane),
     });
     sb.onReply(payload => void onReply(payload));
     registered = true;

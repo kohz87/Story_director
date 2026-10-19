@@ -37,7 +37,7 @@ export function checkReply({
 
     if (timed) {
         for (const record of after?.records ?? []) {
-            if (touched.has(record.id) || !isDue(record, { calendar, now })) continue;
+            if (written(record, touched) || !isDue(record, { calendar, now })) continue;
             if (overdueMinutes(record, calendar, now) > MISSED_AFTER_MINUTES) {
                 findings.push(finding('missed', 'warn', record.key, `${record.key} was due ${dueText(record)} and has not happened`));
             } else if (beforeById.has(record.id) && isDue(beforeById.get(record.id), { calendar, now })) {
@@ -75,10 +75,15 @@ function byId(tracker) {
     return new Map((tracker?.records ?? []).map(record => [record.id, record]));
 }
 
+// (0.9.19) Whether one of `ids` is the record's: its own, or a name it was reached by (an alias).
+function written(record, ids) {
+    return ids.has(record.id) || (record.aliases ?? []).some(alias => ids.has(alias));
+}
+
 // The active records an op wrote to; a resolved record has nothing left to tidy.
 function changedRecords(after, ops) {
     const ids = new Set((ops ?? []).filter(op => op?.op !== '-').map(opId));
-    return (after?.records ?? []).filter(record => record.status === 'active' && ids.has(record.id));
+    return (after?.records ?? []).filter(record => record.status === 'active' && written(record, ids));
 }
 
 // How long ago the earliest due date passed; a day-level date passes at the end of its day.

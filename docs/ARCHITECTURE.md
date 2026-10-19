@@ -251,6 +251,22 @@ Selection = {
   way, also inside `now`/`leg`); 4 key or people in `sceneText`/`recentText`; 5 changed in the
   last 3 messages; 6 everything else that is not dormant.
 
+## `src/lapses.js` (v0.9.19): what time closes
+
+```js
+export const SLIP_GRACE_DAYS = 2;  // story days a beat may run late before it slips
+export function slippedBeats(tracker, { calendar, now, graceDays = 2 }) → [Record]  // open beats past on (else due) + grace, not fired since dated
+export function lapsedOffers(tracker, { calendar, now }) → [Record]                // isOffer records whose due has passed
+export function lapseLines({ slipped, lapsed }) → [string]                          // '- Key — slipped', '- Key — offer lapsed'
+export function lapsesIn(tracker, message) → { slipped: [{ key, on, giver }], lapsed: [{ key, on, giver }] }
+```
+
+A date without a time counts to the end of its day. Nothing is closed here: index.js
+(`closeLapsed`, after `closeAbandoned` in onReply, latest reply only) writes the lines into
+that reply's Director block, and the next note reads them back with `lapsesIn` (by reason, on
+`resolved.message`) for its Slipped and Lapsed parts. Neither reason matches `FAILED`,
+`SUPERSEDED` or `CHOSEN_END`, and neither record is a quest, so `questsDoneIn` never lists them.
+
 ## `src/note.js`
 
 ```js
@@ -276,13 +292,22 @@ its destination is shown). The records are not changed, so the tabs, `encounters
 `noteTokens` (`api.manage.tokens()`) count the trimmed note.
 
 (v0.8.2) `buildNote` is `noteParts` joined (each part's `join`, `'\n'` or `' '` for the
-Encounter cue on the Pacing line, goes before its text). Labels, in order: Header, Arc, Due
-now, Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
+Encounter cue on the Pacing line, goes before its text). Labels, in order: Header, Arc,
+While away (v0.9.19), Due now, Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
 Pacing, Encounter cue, Change instruction, NPC plans only. `noteTokens`: each non-empty part's
 `estimateTokens` (≈ 4 characters a token) as its `input`; the Change instruction part also
 carries `output` = `DIRECTOR_OUTPUT_TOKENS`, a rough allowance for the `<Director>` block it
 asks the model to write (two tags and about two change lines of 20–25 tokens); `input` and
 `output` are the sums.
+
+(v0.9.19) `previousTime` (index.js: the tracker's time before the newest assistant reply at
+or before `upTo`) and `relevance.js` `awayIn(selection, { calendar, from, to = selection.now,
+minMinutes = AWAY_GAP_MINUTES (720) })`: when the story time moved forward by 12 hours or more,
+the due and arriving records not yet due or arriving at `from` (a quest only once its deadline,
+counted to the end of its day, is past `to`; never a secret) go on one While away part,
+`While away (<from> → <to>): … . AWAY_CUE` (+ `AWAY_RECORD`, `AWAY_ARRIVAL`, `AWAY_DEADLINE`
+with an instruction), and leave Due now / Arriving; a fight among them reads `fought
+off-screen` and adds no Encounter cue. The budget never drops it.
 
 `npcPlansOnly` (Story Suite: NPC State Delta is the source of truth for `npc`) appends
 `NPC_PLANS_ONLY` as a line after a non-empty instruction; with `instruction: ''` nothing is

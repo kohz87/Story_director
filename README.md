@@ -1,4 +1,4 @@
-# Story Director v0.9.18
+# Story Director v0.9.19
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -84,8 +84,11 @@ Bluewatch*, and the Director tab notes it. Failing those (since 0.9.16), a loose
 plurals folded (*wolves* is *wolf*), job words set aside (*contract*, *bounty*, *quest*…) and a
 word inside a longer one (*fold* in *sheepfold*), so `! Fold Wolf Contract — …` reaches
 *Sheepfold Wolves*; then every word of the key found in one record's name, goal or description
-(*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Two such records are never guessed between. With
-none, a `~` that carries something becomes a new hook (a `type:` that names a kind, such as
+(*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Two such records are never guessed between.
+A name read so is remembered on the record (since 0.9.19): later lines with it, a `+` among
+them, are that record's as its own key would be, with no new note, and the Director tab lists
+it under *also called* (the newest eight; a name two records could claim stays the first's). With
+no record meant, a `~` that carries something becomes a new hook (a `type:` that names a kind, such as
 `type: clock`, sets that kind instead), a `-` does nothing, and any other line is ignored: a
 warning in the Director tab, and one line in the next note's `Corrections:` (`"Key" is not
 tracked: add it with "+ kind Key — …" before changing it.`), only for the latest reply.
@@ -95,7 +98,8 @@ that: its line is skipped quietly (since 0.9.14), with no warning and nothing in
 
 Fields: `now`, `then`, `on` (when `then` happens), `due` (when a clock fires), `shown`
 (`none`/`sign`/`warning`), `leg` and `arrive` (travel), `place`, `people`, `encounter` (the
-foes of a planned fight); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
+foes of a planned fight), `reach` (how a beat touches your character wherever they are, since
+0.9.19; see [Arc planning](#arc-planning)); for a quest also `type`, `giver`, `goal`, `reward`, `step` and
 `difficulty`. Dates go only in `on`, `due` and `arrive`, with a clock time. The note tells the
 model all of this in about 165 tokens.
 
@@ -168,6 +172,13 @@ Battle offers quest XP by difficulty when a quest is finished.
   parts; if not, leave it an offer."). Offers fold under **Offered** in the Quests tab, without
   buttons, until taken on, turned down or past their deadline. Messages in other languages, or
   a job taken on without saying so, leave it an offer until the story moves it on.
+- **An offer lapses at its deadline** (since 0.9.19). When a reply's story time passes an
+  offer's `due` (a date alone runs to the end of its day, as for a quest's deadline), that reply
+  closes it: `- Rat Culling — offer lapsed` is written into its Director block, so deleting or
+  swiping the reply takes it back. The note right after it, and only that one, says so once:
+  "Lapsed: Rat Culling (Danique's offer) went to someone else; Danique may mention it." It is
+  nobody's choice and no quest's outcome: never blocked as a decision only you can make, never
+  quest XP. Only offers lapse; a quest taken on keeps its deadline for the story to deal with.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
@@ -262,10 +273,35 @@ is due or arriving is still on *Due now* or *Arriving*. With Story Block 0.9.5 o
 World State itself then leaves out Unresolved Threads, Planted Seeds, Consequence Timers and Arc
 Phase: hooks, clocks and the arc are Story Director's, so the model gets them from one place.
 
+**While away** (since 0.9.19). When the story skips ahead (a night's sleep, days on the road)
+and the scene's time is 12 hours or more past the reply before it, what came due or arrived in
+between is told once, on a line of its own before *Due now*, and not repeated there:
+
+```
+While away (Goldwane 12, 08:00 pm → Goldwane 15, 07:00 am): Stray Oar — sacked by the guild (Goldwane 13) · Bond collector reached Hollin's Reach (Goldwane 14) · Bounty on Kettle Jack — deadline Goldwane 14, 11:59 pm passed (bring him in alive). Show what came of them as news, signs or aftermath, not as scenes {{user}} lived through.
+```
+
+What was already due before the jump stays on *Due now*, and so does a quest whose deadline is
+later the same day. A planned fight in the gap reads *fought off-screen* (RPG Battle offers no
+**Fight?** for it, since no reply reached it). Secrets never appear here. While the model writes
+the change lines, the line also asks it to record each (`! Key — what came of it`, an arrival
+with `~ Key — now:`, a passed deadline with `- Key — failed` or a new `due:`); with capture
+writing them, it only asks for the narration. The note's budget never cuts it.
+
 Whenever something is scheduled, a short **Pacing** line says how a schedule meets a scene:
 bring a due item in only where it fits (on-screen if your character is there, otherwise later
 as news, signs or aftermath), never cut into or bend the current scene for a beat, never decide
 what your character does, and let what cannot fit happen off-screen or slip to a later date.
+
+**A beat that slips closes itself** (since 0.9.19). A beat whose date went by without the story
+firing it (`!`) would otherwise sit on *Due now* for ever. Once a reply's story time is more
+than **2 story days** past the beat's date (a date alone counts to the end of its day, so a
+beat on Goldwane 13 slips on Goldwane 16), that reply closes it: `- Guards sack the Stray Oar —
+slipped` is written into its Director block, so deleting or swiping the reply takes it back.
+The note right after it, and only that one, adds: "Slipped: Guards sack the Stray Oar
+(Goldwane 13) — it happened off-screen or not at all; mention it only where it fits." Only
+beats slip; events, clocks, agendas and quests keep their dates. A beat fired with parts
+(`! Key — … | now: …`) has played out and never slips; give it a new `on` and it can.
 
 **Long parts are trimmed in the note only.** A part runs to at most 12 words for what a record
 is doing and when (`now`, `then`, `on`, `due`, `arrive`) and 16 for what it is (`desc`, a
@@ -587,8 +623,13 @@ Places section: if it is upside down, change **North is**.
 Tracking and the note happen every reply, in code. **Planning is one model call per arc.**
 
 - **When:** *Manual* (the **Plan arc** / **End arc** buttons in the Director tab), or
-  *Automatic*: when there is no arc yet, when every beat of the arc has played out, or when no
-  beat is due within the stall window (7 story days by default). The buttons work in both.
+  *Automatic*: when there is no arc yet, when every beat of the arc has played out, when no
+  beat is due within the stall window (7 story days by default), or when the story is
+  **running low** (since 0.9.19): fewer than 3 threads open (*Running low at*; 0 turns it off),
+  counting active hooks, clocks and the arc's beats still to play. Offers of work are not
+  counted, since they wait for you to take them; nor are quests (yours), agendas, events or
+  secrets. After a plan is asked for, running low waits 5 replies before asking again, so a
+  plan you discarded is not asked for every reply. The buttons work in both.
 - **Model:** *Same as chat*, or any SillyTavern **connection profile** (its own API and model; a
   cheaper or faster one is fine). A missing profile fails with a message; it never falls back
   to another model.
@@ -603,7 +644,24 @@ Tracking and the note happen every reply, in code. **Planning is one model call 
   ready; a failure (the API refused, the answer was unusable) says why in a red notice.
 - **Beats leave room:** the planner is told that a beat's date is when the world acts, not an
   appointment for your character. Every beat must work whether or not you are there, and may
-  slip; the note's Pacing line tells the storyteller the same every reply.
+  slip; the note's Pacing line tells the storyteller the same every reply. One left unplayed
+  more than two story days past its date is closed as slipped (since 0.9.19; see
+  [The note](#the-note)).
+- **Every beat reaches you** (since 0.9.19): each `BEAT` line carries a `reach:` part, how the
+  beat touches your character if they are somewhere else: a price, a door shut or opened,
+  someone's mood, a danger or an opening. It is the world's side only; what you do about it
+  stays yours.
+
+  ```
+  BEAT: Guards sack the Stray Oar — drunken convoy guards wreck the taproom | on: Goldwane 13, 10:30 pm | place: Stray Oar, Bluewatch Village | reach: the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter
+  ```
+
+  It becomes a `reach` field on the beat (the Director tab shows it as a row). When the beat is
+  due, the note's Due line adds it, so a story that is elsewhere still has concrete aftermath to
+  show: `Due now: Guards sack the Stray Oar (Goldwane 13, 10:30 pm) · reach: the inn shuts for
+  repairs; …` (16 words at most in the note). A beat still ahead keeps its reach off the Beats
+  line: the note stays short, and the story is not handed the aftermath before it happens. A
+  model can write or change one like any field (`~ Key — reach: …`).
 - **Review:** the plan waits in the Director tab as editable change lines; **Accept** writes them
   into the latest reply (deleting that reply undoes the plan), **Discard** drops it, **Plan
   again** asks for another. Turn on *Use plans without review* to skip this.
@@ -664,7 +722,7 @@ closed; the ones you open are remembered in this browser.
 | Source of truth | Automatic | Calendar, timeline and NPCs: who keeps each when other story extensions are installed (see [Working with the other story extensions](#working-with-the-other-story-extensions)) |
 | Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |
 | World pack | none | Optional roads: places, edges, paces and travel rules, as JSON |
-| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, review, genre and tone, Director's note (used once, or kept), prompt |
+| Arc planning | manual, same as chat | When to plan, which model, how much chat it reads, answer length, stall window, running low, review, genre and tone, Director's note (used once, or kept), prompt |
 | Capture | off | Off, when a reply has no `<Director>` block, or always; its model and answer length |
 
 ## The Director tab
@@ -692,6 +750,24 @@ or reload; hidden text is not put on the page at all. Problems and notes show wh
 (since 0.9.17), except those about an agenda, a planned beat, a clock or a secret: those are
 counted on the lock (*2 problems behind the scenes*). Turn this off with **Hide behind the
 scenes** in the settings' quick bar.
+
+## The Journal tab
+
+*Since 0.9.19.* A recap for coming back to a chat after a break: what your character saw and
+heard, grouped by story day (as your calendar writes it), newest first. The last week of
+story days is open; older ones fold under **Earlier days**.
+
+- **What happened**: a beat, event, hook or clock the story fired (`! Key — what happened`),
+  with that line's own words; an event or hook the story closed, with its reason; a sign the
+  story showed (`shown:`) of an event or hook.
+- **Quests**: taken on (with the goal and giver as they were then), their `!` moments, and
+  done, failed or abandoned.
+- **Places**: each place on the day of its first visit, from the scene block's location.
+
+It never shows what is still behind the scenes, so it needs no Reveal: no agendas (an NPC's
+plans, and what they did off-screen), no secrets, no arc, no beat or clock that has not fired
+(a beat closed without firing was a plan dropped), no `then:`, `on:` or `now:` from any line,
+and no job only offered or turned down. People met are not listed yet.
 
 ## Roadmap
 

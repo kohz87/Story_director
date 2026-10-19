@@ -542,6 +542,13 @@ test('a planned fight: an encounter row and a fight tag in the record head', () 
     assert.equal(itemFor(pane, 'Council session opens').querySelector('.story-director-tag.is-fight'), null, 'no foes, no tag');
 });
 
+// (0.9.19)
+test('a beat\'s reach is a row on its record, after the encounter', () => {
+    const sack = record('Guards sack the Stray Oar', 'beat', { desc: 'convoy guards wreck the taproom', on: 'Goldwane 16', encounter: '4 guard', reach: 'the inn shuts for repairs' });
+    const pane = render({ selection: selection({ relevant: [{ record: sack, reason: 'beat', priority: 2 }] }) });
+    assert.deepEqual(facts(itemFor(pane, 'Guards sack the Stray Oar')), [['', 'convoy guards wreck the taproom'], ['on', 'Goldwane 16'], ['encounter', '4 guard'], ['reach', 'the inn shuts for repairs']]);
+});
+
 test('an offered quest (a hook) with a difficulty shows it as a row after the reward', () => {
     const offer = record('Wolf pelts offer', 'hook', { desc: 'the tanner wants pelts', reward: '2 silver each', difficulty: 'hard' });
     const pane = render({ selection: selection({ relevant: [{ record: offer, reason: 'hook', priority: 1 }] }) });
@@ -567,4 +574,12 @@ test('spoiler guard: problems are read without revealing, except those about wha
     assert.match(all, /Wolf Hunt: the deadline has no date/);
     assert.ok(!all.includes('leg starts') && !all.includes('Kade'), 'hidden records\' problems stay hidden');
     assert.match(pane.querySelector('.story-director-lock-counts').textContent, /2 problems behind the scenes/);
+});
+
+test('a record shows the other names the story reached it by, last (0.9.19)', () => {
+    const hunt = record('Wolf Hunt', 'hook', { desc: 'ridge wolves', now: 'at the den' }, { aliases: ['fold wolf contract', 'the ridge job'] });
+    const pane = render({ selection: selection({ relevant: [{ record: hunt, reason: '', priority: 1 }] }) });
+    assert.deepEqual(facts(itemFor(pane, 'Wolf Hunt')), [['', 'ridge wolves'], ['now', 'at the den'], ['also called', 'fold wolf contract, the ridge job']]);
+    // None (or a tracker from before aliases): no row.
+    assert.deepEqual(facts(itemFor(render(), 'Senior Listener Geva')).map(([label]) => label), ['now', 'then', 'on']);
 });

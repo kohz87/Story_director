@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NOTE_PART_WORDS, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote, notePart, noteParts, noteTokens } from '../src/note.js';
+import { AWAY_ARRIVAL, AWAY_CUE, AWAY_DEADLINE, AWAY_RECORD, CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NOTE_PART_WORDS, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote, notePart, noteParts, noteTokens } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -25,10 +25,10 @@ function fakeCalendar() {
         fromAbs,
         dayIndex: abs => Math.floor(abs / DAY),
         addDays: (abs, days) => abs + days * DAY,
-        format(abs) {
+        format(abs, { era = true } = {}) {
             const { year, month, day, minutes } = fromAbs(abs);
             const hour = Math.floor(minutes / 60);
-            return `CY ${year}, ${MONTHS[month]} ${day}, ${pad(hour % 12 || 12)}:${pad(minutes % 60)} ${hour < 12 ? 'am' : 'pm'}`;
+            return `${era ? `CY ${year}, ` : ''}${MONTHS[month]} ${day}, ${pad(hour % 12 || 12)}:${pad(minutes % 60)} ${hour < 12 ? 'am' : 'pm'}`;
         },
         parse(text, { reference = null } = {}) {
             for (const match of String(text).matchAll(DATE)) {
@@ -293,6 +293,27 @@ test('quest difficulty: shown with the type unless it is normal', () => {
     assert.ok(lines(note).includes('Quests: Kettle Jack (bounty, hard) — bring him in · Drowned Crown (nightmare) — bring him in · Rat cellar (side) — bring him in · Herb run — bring him in'));
 });
 
+// (0.9.19)
+test('reach: a due beat says how it touches {{user}}, a beat still ahead does not', () => {
+    const sack = record({ key: 'Guards sack the Stray Oar', kind: 'beat', fields: {
+        desc: 'drunken convoy guards wreck the taproom', on: 'Goldwane 16, 10:30 pm', place: 'Stray Oar',
+        reach: 'the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter' } });
+    const due = buildNote(selection({ due: [sack] }), { calendar });
+    assert.equal(lines(due)[1], 'Due now: Guards sack the Stray Oar (Goldwane 16, 10:30 pm) · reach: the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter');
+
+    const fight = record({ key: 'Ambush at the weir', kind: 'beat', fields: { on: 'Goldwane 16', encounter: '3 bandit', reach: 'the weir road closes' } });
+    assert.equal(lines(buildNote(selection({ due: [fight] }), { calendar }))[1], 'Due now: Ambush at the weir (Goldwane 16) (fight: 3 bandit) · reach: the weir road closes');
+
+    const ahead = buildNote(selection({ relevant: [record({ ...sack, fields: { ...sack.fields, on: 'Goldwane 19' } })] }), { calendar });
+    assert.ok(lines(ahead).some(line => line.startsWith('Beats: Guards sack the Stray Oar')));
+    assert.doesNotMatch(ahead, /reach/);
+
+    // A long reach ends in "…" in the note only.
+    const long = record({ ...sack, fields: { ...sack.fields, reach: Array.from({ length: 30 }, (_, i) => `w${i}`).join(' ') } });
+    assert.match(lines(buildNote(selection({ due: [long] }), { calendar }))[1], / · reach: w0 .* w15…$/);
+    assert.equal(NOTE_PART_WORDS.reach, 16);
+});
+
 test('encounters: a due fight names its foes, the kind lines show them compactly', () => {
     const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { desc: 'bandits hit the road', on: 'Goldwane 16', place: 'Weir road', encounter: '3 bandit, bandit captain (boss)' } });
     const due = buildNote(selection({ due: [ambush] }), { calendar });
@@ -480,4 +501,92 @@ test('a quest given up with the Abandon flag is told behind the scenes (0.9.15)'
     assert.ok(lines(note).includes('Abandoned: {{user}} gives up Wolf Hunt. Show it in this reply, and close each with - Key — abandoned.'));
     // With capture writing the lines, the story is only told to show it.
     assert.match(buildNote(selection(), { calendar, abandoning: ['Wolf Hunt'], instruction: '' }), /Abandoned: \{\{user\}\} gives up Wolf Hunt\. Show it in this reply\./);
+});
+
+// (0.9.19) While away: what came due while the story skipped ahead.
+
+test('while away: a jump of 12 hours or more tells what came due in the gap once, before Due now', () => {
+    const from = at('Goldwane 12, 08:00 pm');
+    const now = at('Goldwane 15, 07:00 am');
+    const oar = record({ key: 'Stray Oar', kind: 'event', fields: { then: 'sacked by the guild', on: 'Goldwane 13' } });
+    const collector = record({ key: 'Bond collector', fields: { leg: "Shorn → Hollin's Reach 40 B, ride 60/day → 1", arrive: 'Goldwane 14' } });
+    const ambush = record({ key: 'Ambush at the weir', kind: 'beat', fields: { on: 'Goldwane 14, 09:00 am', encounter: '3 bandit' } });
+    // Already due before the jump: it was waiting, so it stays on Due now.
+    const waiting = record({ key: "Saartje's sale", fields: { on: 'Goldwane 12' } });
+    const sel = selection({ now, due: [oar, ambush, waiting], arriving: [collector], relevant: [geva] });
+    const parts = noteParts(sel, { calendar, previousTime: from });
+    assert.deepEqual(parts.map(entry => entry.label).slice(0, 3), ['Header', 'While away', 'Due now']);
+    assert.equal(parts[1].text, "While away (Goldwane 12, 08:00 pm → Goldwane 15, 07:00 am): Stray Oar — sacked by the guild (Goldwane 13) · Ambush at the weir (Goldwane 14, 09:00 am) (fought off-screen: 3 bandit) · Bond collector reached Hollin's Reach (Goldwane 14). "
+        + `${AWAY_CUE} ${AWAY_RECORD} ${AWAY_ARRIVAL}`);
+    assert.equal(parts[2].text, "Due now: Saartje's sale (Goldwane 12)");
+    assert.ok(!parts.some(entry => entry.label === 'Arriving'), 'an arrival in the gap is not repeated');
+    assert.ok(!parts.some(entry => entry.label === 'Encounter cue'), 'a fight in the gap was fought off-screen');
+    assert.ok(parts.some(entry => entry.label === 'Pacing'));
+    assert.equal(joined(parts), buildNote(sel, { calendar, previousTime: from }));
+    // The recap is about the narration: it stays when capture writes the change lines, without asking for them.
+    const captured = noteParts(sel, { calendar, previousTime: from, instruction: '' }).find(entry => entry.label === 'While away');
+    assert.ok(captured.text.endsWith(`(Goldwane 14). ${AWAY_CUE}`));
+    // It is counted like any other part, and kept by the budget like Due now.
+    assert.ok(noteTokens(parts).parts.some(entry => entry.label === 'While away' && entry.input > 0));
+    assert.ok(noteParts(sel, { calendar, previousTime: from, budgetTokens: 10 }).some(entry => entry.label === 'While away'));
+    assert.ok(estimateTokens(`${AWAY_CUE} ${AWAY_RECORD}`) <= 35);
+});
+
+test('while away: a small gap, no earlier time or no calendar changes nothing', () => {
+    const oar = record({ key: 'Stray Oar', kind: 'event', fields: { then: 'sacked', on: 'Goldwane 16, 08:00 am' } });
+    const sel = selection({ now: at('Goldwane 16, 09:00 am'), due: [oar] });
+    const plain = buildNote(sel, { calendar });
+    for (const previousTime of [at('Goldwane 15, 10:00 pm'), null, at('Goldwane 17, 09:00 am')]) {
+        assert.equal(buildNote(sel, { calendar, previousTime }), plain, String(previousTime));
+    }
+    assert.equal(buildNote(sel, { calendar: null, previousTime: at('Goldwane 10') }), buildNote(sel, { calendar: null }));
+    // Exactly 12 hours is a jump.
+    assert.match(buildNote(sel, { calendar, previousTime: at('Goldwane 15, 09:00 pm') }), /^While away \(Goldwane 15, 09:00 pm → Goldwane 16, 09:00 am\): Stray Oar — sacked/m);
+});
+
+test('while away: secrets never appear, only on Do not reveal', () => {
+    const from = at('Goldwane 12, 08:00 pm');
+    const plot = record({ key: 'The heir', kind: 'secret', fields: { desc: 'Ren is the heir', on: 'Goldwane 13' } });
+    const oar = record({ key: 'Stray Oar', kind: 'event', fields: { then: 'sacked', on: 'Goldwane 13' } });
+    // Even a secret slipped into the due list by mistake stays out of the recap.
+    const note = buildNote(selection({ now: at('Goldwane 15, 07:00 am'), due: [oar, plot], secrets: [plot] }), { calendar, previousTime: from });
+    const away = lines(note).find(line => line.startsWith('While away'));
+    assert.ok(away && !away.includes('The heir') && !away.includes('Ren is the heir'));
+    assert.ok(lines(note).includes('Do not reveal: The heir'));
+});
+
+test('while away: a quest deadline in the gap passed; one later today is still only reached', () => {
+    const from = at('Goldwane 12, 08:00 pm');
+    const now = at('Goldwane 15, 07:00 am');
+    const bounty = record({ key: 'Bounty on Kettle Jack', kind: 'quest', fields: { goal: 'bring him in alive', due: 'Goldwane 14' } });
+    const ferry = record({ key: 'Ferry', kind: 'quest', fields: { goal: 'catch the ferry', due: 'Goldwane 15' } });
+    const note = buildNote(selection({ now, due: [bounty, ferry] }), { calendar, previousTime: from });
+    const away = lines(note).find(line => line.startsWith('While away'));
+    assert.match(away, /: Bounty on Kettle Jack — deadline Goldwane 14 passed \(bring him in alive\)\./);
+    assert.ok(away.endsWith(`${AWAY_RECORD} ${AWAY_DEADLINE}`));
+    assert.ok(lines(note).includes('Due now: Ferry — deadline Goldwane 15 reached (catch the ferry)'));
+    assert.ok(!buildNote(selection({ now, due: [bounty] }), { calendar, previousTime: from, instruction: '' }).includes(AWAY_DEADLINE));
+});
+
+test('a beat that slipped in the latest reply is told once, as off-screen or not at all (0.9.19)', () => {
+    const slipped = [{ key: 'Guards sack the Stray Oar', on: 'Goldwane 13', giver: '' }];
+    // Even with nothing else tracked, and where capture writes the lines too.
+    const note = buildNote(selection(), { calendar, slipped });
+    assert.ok(lines(note).includes('Slipped: Guards sack the Stray Oar (Goldwane 13) — it happened off-screen or not at all; mention it only where it fits.'));
+    assert.match(buildNote(selection(), { calendar, slipped, instruction: '' }), /^Slipped: Guards sack/m);
+    const two = buildNote(selection({ relevant: [geva] }), { calendar, slipped: [...slipped, { key: 'Toll riders', on: '', giver: '' }, slipped[0]] });
+    assert.ok(lines(two).includes('Slipped: Guards sack the Stray Oar (Goldwane 13), Toll riders — they happened off-screen or not at all; mention them only where they fit.'));
+    assert.doesNotMatch(buildNote(selection(), { calendar }), /Slipped/);
+    assert.deepEqual(buildNote(selection(), { calendar, slipped: [] }), CHANGE_INSTRUCTION, 'nothing to say: the instruction alone');
+});
+
+test('an offer that lapsed in the latest reply gets one line, its giver by name (0.9.19)', () => {
+    const note = buildNote(selection(), { calendar, lapsed: [{ key: 'Rat Culling', on: '', giver: 'Danique, the rat-catcher\'s widow' }] });
+    assert.ok(lines(note).includes('Lapsed: Rat Culling (Danique\'s offer) went to someone else; Danique may mention it.'));
+    assert.ok(lines(buildNote(selection(), { calendar, lapsed: [{ key: 'Ferry', on: '', giver: '' }] })).includes('Lapsed: Ferry went to someone else; it may come up in passing.'));
+    const two = buildNote(selection(), { calendar, instruction: '', lapsed: [{ key: 'Rat Culling', giver: 'Danique' }, { key: 'Ferry', giver: '' }] });
+    assert.ok(lines(two).includes('Lapsed: Rat Culling (Danique\'s offer), Ferry went to someone else; whoever offered them may mention it.'));
+    // Labelled parts, after Abandoned and before the instruction.
+    const labels = noteParts(selection(), { calendar, abandoning: ['Wolf Hunt'], slipped: [{ key: 'Riders', on: 'Goldwane 13' }], lapsed: [{ key: 'Ferry' }] }).map(entry => entry.label);
+    assert.deepEqual(labels, ['Header', 'Abandoned', 'Slipped', 'Lapsed', 'Change instruction']);
 });

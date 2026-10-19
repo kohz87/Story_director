@@ -11,7 +11,11 @@ import { NPC_PLANS_ONLY } from '../src/note.js';
 import { replay } from '../src/tracker.js';
 import {
     DEFAULT_PLANNER_PROMPT,
+    LOW_THREADS_REPLIES,
+    arcBeats,
+    autoPlanReason,
     buildPlannerMessages,
+    openThreads,
     noteAfterAccept,
     parsePlan,
     planToOps,
@@ -389,7 +393,8 @@ test('the default prompt asks for the plan lines and assumes no setting', () => 
         assert.ok(DEFAULT_PLANNER_PROMPT.includes(label), label);
     }
     assert.match(DEFAULT_PLANNER_PROMPT, /<plan>[\s\S]*<\/plan>/);
-    assert.ok(DEFAULT_PLANNER_PROMPT.split(/\s+/).length <= 600);
+    // (0.9.19) 640: the reach part and its rule.
+    assert.ok(DEFAULT_PLANNER_PROMPT.split(/\s+/).length <= 640);
 
     // The template's own example block is itself a readable plan.
     const example = parsePlan(DEFAULT_PLANNER_PROMPT.slice(DEFAULT_PLANNER_PROMPT.indexOf('<plan>')));
@@ -436,17 +441,60 @@ test('an ENCOUNTER line is a beat with its foes, from encounter:, the descriptio
     assert.equal(plan.items[0].fields.on, 'Haywane 13, 07:00 pm');
 });
 
-test('the default prompt plans fights sparingly, and stays within 600 words', () => {
+test('the default prompt plans fights sparingly, and stays within 640 words', () => {
     const rule = DEFAULT_PLANNER_PROMPT.split('\n').find(line => line.includes('encounter:'));
     assert.ok(rule, 'a rule for fights');
     assert.match(rule, /BEAT/);
     assert.match(rule, /at most 1 or 2 per arc/);
     assert.match(rule, /named as the story names them/);
     const words = DEFAULT_PLANNER_PROMPT.split(/\s+/).length;
-    assert.ok(words <= 600, `${words} words`);
+    assert.ok(words <= 640, `${words} words`);
     // The rule's example is itself readable as a fight beat.
     const example = rule.match(/"(\| encounter: [^"]+)"/)[1];
     assert.equal(parsePlan(`BEAT: Ambush ${example}`).items[0].fields.encounter, '3 bandit, bandit captain (boss)');
+});
+
+// --- reach (0.9.19) -------------------------------------------------------------------------
+
+test('the default prompt asks every beat for its reach, and leaves the response to {{user}}', () => {
+    const format = DEFAULT_PLANNER_PROMPT.split('\n').find(line => line.startsWith('BEAT:'));
+    assert.match(format, /\| reach: how it touches \{\{user\}\} if they are elsewhere$/);
+    const rule = DEFAULT_PLANNER_PROMPT.split('\n').find(line => line.startsWith('- Every beat reaches'));
+    assert.ok(rule, 'a rule for reach');
+    assert.match(rule, /\{\{user\}\} wherever they are/);
+    assert.match(rule, /the response stays \{\{user\}\}'s/);
+    // The format line's own example keeps its reach.
+    const example = parsePlan(DEFAULT_PLANNER_PROMPT.slice(DEFAULT_PLANNER_PROMPT.indexOf('<plan>')));
+    assert.equal(example.items.find(item => item.kind === 'beat').fields.reach, 'how it touches {{user}} if they are elsewhere');
+});
+
+test('parsePlan and planToOps carry a beat\'s reach into the + beat line and the tracker', () => {
+    const plan = parsePlan([
+        '<plan>',
+        'ARC: Convoy season — the guards run the village',
+        '**BEAT:** Guards sack the Stray Oar — drunken convoy guards wreck the taproom | on: tomorrow at dusk | place: Stray Oar, Bluewatch Village | reach: the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter',
+        'BEAT: Toll on the ford — the guards charge for the crossing | after: Guards sack the Stray Oar | reach: every crossing costs a silver',
+        '</plan>',
+    ].join('\n'), { calendar, now });
+    assert.deepEqual(plan.errors, []);
+    const [sack, toll] = plan.items;
+    assert.deepEqual(sack.fields, {
+        desc: 'drunken convoy guards wreck the taproom', on: 'Haywane 13, 07:00 pm', place: 'Stray Oar, Bluewatch Village',
+        reach: 'the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter',
+    });
+    assert.equal(toll.fields.reach, 'every crossing costs a silver');
+    assert.deepEqual(toll.extra, { after: 'Guards sack the Stray Oar' });
+    assert.deepEqual(validatePlan(plan, { calendar, now, userName: 'Wessel' }), []);
+
+    const [, op, tollOp] = planToOps(plan, { arcId: 'arc-4' });
+    assert.equal(op.raw, '+ beat Guards sack the Stray Oar — drunken convoy guards wreck the taproom | on: Haywane 13, 07:00 pm | place: Stray Oar, Bluewatch Village | reach: the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter | arc: arc-4');
+    assert.equal(tollOp.raw, '+ beat Toll on the ford — the guards charge for the crossing | reach: every crossing costs a silver | after: Guards sack the Stray Oar | arc: arc-4');
+    const { ops: back } = parseChanges([op.raw, tollOp.raw].join('\n'));
+    assert.equal(back[0].fields.reach, 'the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter');
+    const { tracker } = replay([{ message: 0, time: now, text: '', ops: back }]);
+    assert.equal(tracker.records[0].fields.reach, 'the inn shuts for repairs; Marrit is out of work and asks Wessel for a charter');
+    assert.equal(tracker.records[1].fields.reach, 'every crossing costs a silver');
+    assert.equal(tracker.records[1].extra.reach, undefined, 'a field, not an extra');
 });
 
 test('summarizeTracker marks a planned fight', () => {
@@ -471,4 +519,82 @@ test('the Director\'s note is spent once the arc it shaped is accepted', () => {
     assert.equal(noteAfterAccept('Slow down for a while.', ''), 'Slow down for a while.');
     assert.equal(noteAfterAccept('', ''), '');
     assert.equal(noteAfterAccept(undefined, 'x'), '');
+});
+
+// (0.9.19) When Automatic planning plans: the three old reasons, and running low.
+function story(...replies) {
+    const { tracker } = replay(replies.map((text, message) => ({ message, time: now, text: '', ops: parseChanges(text).ops })));
+    const arc = tracker.records.filter(record => record.kind === 'arc' && record.status === 'active').at(-1) ?? null;
+    return { tracker, arc };
+}
+
+const ARC = '+ arc The Weir Bullion — who sold the weir route | arc: arc-1';
+const SOON = '+ beat Council session opens — on: Haywane 14 | arc: arc-1';
+const FAR = '+ beat The vote — on: Emberwane 20 | arc: arc-1';
+const reasonOf = ({ tracker, arc }, options = {}) => autoPlanReason({ tracker, arc, now, calendar, ...options });
+
+test('autoPlanReason: no arc yet plans once the story has records', () => {
+    assert.equal(reasonOf(story()), null, 'nothing to plan from');
+    assert.equal(reasonOf(story('+ hook River stranger — who pulled Ren from the sump')), 'no-arc');
+    // Not held back by the running-low wait.
+    assert.equal(reasonOf(story('+ hook River stranger — who pulled Ren from the sump'), { repliesSincePlan: 0 }), 'no-arc');
+});
+
+test('autoPlanReason: every beat played out ends the arc', () => {
+    const played = story([ARC, SOON].join('\n'), '- Council session opens — it happened');
+    assert.equal(arcBeats(played.tracker, played.arc).total, 1);
+    assert.equal(reasonOf(played), 'arc-end');
+    assert.equal(reasonOf(played, { lowThreads: 0, repliesSincePlan: 0 }), 'arc-end');
+    // An arc with no beats at all is not over (it may still be running low).
+    assert.equal(reasonOf(story(ARC), { lowThreads: 0 }), null);
+});
+
+test('autoPlanReason: stalled when no beat is due within the stall window', () => {
+    const late = story([ARC, '+ beat The vote — on: Haywane 22 | arc: arc-1', '+ hook A', '+ hook B', '+ clock C — the dead rise | due: Haywane 28'].join('\n'));
+    assert.equal(reasonOf(late), 'stalled', '10 days off, 7-day window');
+    assert.equal(reasonOf(late, { stallDays: 14 }), null);
+    assert.equal(reasonOf(late, { stallDays: 0 }), 'stalled', '0 is the 7-day default, as before');
+    assert.equal(reasonOf(late, { repliesSincePlan: 0 }), 'stalled', 'not held back by the running-low wait');
+    // A beat without a date counts as due; without a scene time there is no stall check.
+    assert.equal(reasonOf(story([ARC, '+ beat Someday — it comes | arc: arc-1', '+ hook A', '+ hook B'].join('\n'))), null);
+    assert.equal(autoPlanReason({ ...late, now: null, calendar }), null);
+});
+
+test('autoPlanReason: running low when fewer than lowThreads hooks, clocks and beats are open', () => {
+    const thin = story([ARC, SOON, '+ hook River stranger — who pulled Ren from the sump'].join('\n'));
+    assert.equal(openThreads(thin.tracker, thin.arc), 2);
+    assert.equal(reasonOf(thin), 'running-low', '2 open, default 3');
+    assert.equal(reasonOf(thin, { lowThreads: 2 }), null, 'fewer than, not at');
+    assert.equal(reasonOf(thin, { lowThreads: 0 }), null, '0 is off');
+    const enough = story([ARC, SOON, '+ hook River stranger — who pulled Ren', "+ clock Hollin's Reach graves — the dead rise | due: Haywane 28"].join('\n'));
+    assert.equal(openThreads(enough.tracker, enough.arc), 3);
+    assert.equal(reasonOf(enough), null);
+    assert.equal(reasonOf(enough, { lowThreads: 4 }), 'running-low');
+});
+
+test('autoPlanReason: offers, quests, agendas, events, secrets and other arcs do not count as open threads', () => {
+    const lines = [
+        ARC, SOON, '+ hook River stranger — who pulled Ren',
+        '+ hook Wolf pelts — the tanner pays for pelts | reward: 2 silver each',
+        '+ hook Escort job — guard the barge | giver: Nelke',
+        '+ quest Find the twins — they went north',
+        '+ agenda Geva — now: Bailiff Court | then: files the warrant | on: Haywane 17',
+        '+ event Canal Street fires — curfew in force',
+        '+ secret Brant is the informer — he sold the route',
+        '+ beat Old business — on: Haywane 13 | arc: arc-0',
+        '+ hook Gone quiet — nobody asks any more',
+    ];
+    const busy = story(lines.join('\n'), '- Gone quiet — settled');
+    assert.equal(openThreads(busy.tracker, busy.arc), 2, 'one beat, one hook that is not an offer');
+    assert.equal(reasonOf(busy), 'running-low');
+});
+
+test('autoPlanReason: running low waits for the story to move on after a plan', () => {
+    const thin = story([ARC, FAR].join('\n'));
+    assert.equal(reasonOf(thin, { stallDays: 365 }), 'running-low', 'no plan yet');
+    assert.equal(reasonOf(thin, { stallDays: 365, repliesSincePlan: 0 }), null);
+    assert.equal(reasonOf(thin, { stallDays: 365, repliesSincePlan: LOW_THREADS_REPLIES - 1 }), null);
+    assert.equal(reasonOf(thin, { stallDays: 365, repliesSincePlan: LOW_THREADS_REPLIES }), 'running-low');
+    // Far beats with nothing else open: stalled comes first when the window is short.
+    assert.equal(reasonOf(thin), 'stalled');
 });
