@@ -40,6 +40,8 @@ import { checkReply } from './src/checks.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
+import { renderJournal } from './src/ui/journal.js';
+import { buildJournal } from './src/journal.js';
 import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, planRoute } from './src/routes.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { buildPlannerMessages, DEFAULT_PLANNER_PROMPT, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
@@ -55,6 +57,7 @@ const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
 const TAB_ID = 'story-director';
 const QUESTS_TAB_ID = 'story-director-quests';
+const JOURNAL_TAB_ID = 'story-director-journal';
 const EXTENSION_PROMPT_IN_CHAT = 1;
 const EXTENSION_PROMPT_ROLE_SYSTEM = 0;
 const MIN_STORY_BLOCK_API = 1;
@@ -1219,6 +1222,30 @@ function renderQuestsTab(pane) {
     renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
 }
 
+// (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
+// in the replay cache and the place book, up to the newest message on screen.
+function journalData() {
+    const ctx = context();
+    const chat = ctx?.chat ?? [];
+    if (!storyBlock() || !chatIdOf(ctx) || !chat.length) return buildJournal({});
+    const last = chat.length - 1;
+    const book = placeBookAt(last);
+    const trackers = cache.entries.slice(0, last + 1).map(entry => entry?.tracker ?? null);
+    return buildJournal({ trackers, places: book?.places ?? [], calendar: calendar() });
+}
+
+// Another chat, another reply or a changed one, or a calendar that names days differently.
+function journalTabKey() {
+    const ctx = context();
+    const chat = ctx?.chat ?? [];
+    const pack = worldPack();
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().sceneTag, JSON.stringify(settings().calendar), pack ? packSummary(pack) : ''].join('|');
+}
+
+function renderJournalTab(pane) {
+    renderJournal(pane, journalData());
+}
+
 /**
  * (0.9.5) The reader gives a quest up from the Quests tab, the one quest choice with a button.
  * (0.9.15) Like RPG Battle's fight hand-off, behind the scenes: the click (asked twice) marks
@@ -1481,6 +1508,22 @@ function registerWithStoryBlock() {
             }
         },
         render: pane => renderQuestsTab(pane),
+    });
+    // (0.9.19) The player's side of the story: always there, with an empty state to begin with.
+    sb.registerTab({
+        id: JOURNAL_TAB_ID,
+        label: 'Journal',
+        icon: '📖',
+        order: 88,
+        isAvailable: () => {
+            try {
+                return Boolean(settings().enabled);
+            } catch {
+                return false;
+            }
+        },
+        key: journalTabKey,
+        render: pane => renderJournalTab(pane),
     });
     sb.onReply(payload => void onReply(payload));
     registered = true;

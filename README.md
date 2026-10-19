@@ -693,6 +693,24 @@ or reload; hidden text is not put on the page at all. Problems and notes show wh
 counted on the lock (*2 problems behind the scenes*). Turn this off with **Hide behind the
 scenes** in the settings' quick bar.
 
+## The Journal tab
+
+*Since 0.9.19.* A recap for coming back to a chat after a break: what your character saw and
+heard, grouped by story day (as your calendar writes it), newest first. The last week of
+story days is open; older ones fold under **Earlier days**.
+
+- **What happened**: a beat, event, hook or clock the story fired (`! Key — what happened`),
+  with that line's own words; an event or hook the story closed, with its reason; a sign the
+  story showed (`shown:`) of an event or hook.
+- **Quests**: taken on (with the goal and giver as they were then), their `!` moments, and
+  done, failed or abandoned.
+- **Places**: each place on the day of its first visit, from the scene block's location.
+
+It never shows what is still behind the scenes, so it needs no Reveal: no agendas (an NPC's
+plans, and what they did off-screen), no secrets, no arc, no beat or clock that has not fired
+(a beat closed without firing was a plan dropped), no `then:`, `on:` or `now:` from any line,
+and no job only offered or turned down. People met are not listed yet.
+
 ## Roadmap
 
 | Version | Adds |

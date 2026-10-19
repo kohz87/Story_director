@@ -859,3 +859,41 @@
     padding: 0.2rem 0.5rem;
     font-size: 0.8em;
 }
+
+/* (0.9.19) The Journal: a day per section, each entry a small icon, the key and a quiet tag,
+   and what happened under it. Endings take the accent; a quest failed or given up the warning. */
+.story-director-tab .story-director-journal-icon {
+    flex: none;
+    width: 1.1em;
+    font-size: 0.8em;
+    text-align: center;
+    opacity: 0.55;
+}
+
+.story-director-tab .story-director-record.is-journal-item.is-fired .story-director-journal-icon,
+.story-director-tab .story-director-record.is-journal-item.is-done .story-director-journal-icon,
+.story-director-tab .story-director-record.is-journal-item.is-taken .story-director-journal-icon {
+    color: var(--sd-accent);
+    opacity: 0.9;
+}
+
+.story-director-tab .story-director-record.is-journal-item.is-failed .story-director-journal-icon,
+.story-director-tab .story-director-record.is-journal-item.is-abandoned .story-director-journal-icon {
+    color: var(--sd-warn);
+    opacity: 0.9;
+}
+
+.story-director-tab .story-director-journal-text {
+    margin-top: 0.15rem;
+    padding-left: calc(1.1em * 0.8 + 0.45rem);
+    line-height: 1.4;
+    opacity: 0.85;
+}
+
+.story-director-tab .story-director-record.is-journal-item .story-director-quest-meta {
+    padding-left: calc(1.1em * 0.8 + 0.45rem);
+}
+
+.story-director-tab .story-director-section.is-journal-day.is-undated > .story-director-sub {
+    font-style: italic;
+}
