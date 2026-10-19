@@ -34,8 +34,8 @@ test('tripRange: the quickest and slowest way by the roads; nothing for the same
 test('distancesFor: the places the reply and the reader name, and a time said far off the map', () => {
     const reply = '"And the ferryman at Ledgerford sent word about river-leeches fouling the haul-chains, but that’s three days downstream." Auvoth lies a day or two east.';
     const found = distancesFor(pack, 'Bluewatch Village | Adventurer Guild Branch', { reply, message: 'I ask about Glassdock and Bluewatch Village.' });
-    assert.deepEqual(found.map(entry => [entry.place, entry.said?.text ?? null]), [['Ledgerford', 'three days'], ['Auvoth', null], ['Glassdock', null]],
-        'three days to Ledgerford is far too short; a day or two to Auvoth is close enough; the reader is never corrected; here is left out');
+    assert.deepEqual(found.map(entry => [entry.place, entry.said?.text ?? null]), [['Glassdock', null], ['Ledgerford', 'three days'], ['Auvoth', null]],
+        'the reader\'s places first; three days to Ledgerford is far too short; a day or two to Auvoth is close enough; here is left out');
     assert.deepEqual(distancesFor(pack, 'Nowhere known', { reply }), [], 'no starting point on the map');
     // A sentence naming two places says nothing about either one's distance.
     assert.equal(distancesFor(pack, 'Bluewatch Village', { reply: 'Glassdock and Auvoth are both three days away.' }).some(entry => entry.said), false);
@@ -51,4 +51,16 @@ test('the note gives the distances, and says to keep to them when the reply was 
     const plain = noteParts(selection, { distances: distancesFor(pack, 'Bluewatch Village', { message: 'Is Auvoth far?' }), distanceFrom: 'Bluewatch Village' }).find(entry => entry.label === 'Distances');
     assert.doesNotMatch(plain.text, /Keep to these/);
     assert.equal(noteParts(selection, {}).some(entry => entry.label === 'Distances'), false);
+});
+
+test('places in play (0.9.23): open records and the recent chat too, after the newest, six at most', () => {
+    const found = distancesFor(pack, 'Bluewatch Village', {
+        message: 'I head out.',
+        reply: 'Verna talks of Glassdock.',
+        records: ['Bond collector. now: on a barge from Brightwater Lock', 'River-leeches. giver: the ferryman at Ledgerford'],
+        recent: ['A rumour from Northbarge and Siltbarrow.', 'Auvoth lies east.', 'Lockswell, far off.'],
+    });
+    assert.deepEqual(found.map(entry => entry.place), ['Glassdock', 'Brightwater Lock', 'Ledgerford', 'Northbarge', 'Siltbarrow', 'Auvoth']);
+    assert.ok(found.every(entry => entry.said === null), 'only the latest reply is checked');
+    assert.equal(tripRange(pack, 'Bluewatch Village', 'Glassdock'), tripRange(pack, 'Bluewatch Village', 'Glassdock'), 'a route is planned once');
 });

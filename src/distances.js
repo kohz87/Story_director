@@ -12,7 +12,8 @@ const TRIP_MODES = Object.freeze(['boat', 'ride', 'wagon', 'foot']);
 // A said time this far outside the routes' range is wrong, not a rounding.
 const TOO_SHORT = 0.5;
 const TOO_LONG = 2;
-const MAX_PLACES = 4;
+// (0.9.23) The places in play the note gives distances for, at most.
+const MAX_PLACES = 6;
 
 const NUMBER_WORDS = Object.freeze({
     a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -44,9 +45,20 @@ export function saidDuration(sentence) {
     return { days: Math.min(first, second) * per, most: Math.max(first, second) * per, text: m[0].trim() };
 }
 
+// Routes per pack, worked out once: the note asks for the same few on every reply.
+const RANGES = new WeakMap();
+
 /** The quickest and the slowest way from `from` to `to` by the pack's roads, or null. */
 export function tripRange(pack, from, to) {
     if (!pack || !from || !to || from === to || pack.era === 'modern' || pack.rules?.unit === 'hour') return null;
+    if (!RANGES.has(pack)) RANGES.set(pack, new Map());
+    const known = RANGES.get(pack);
+    const key = `${from}\u0000${to}`;
+    if (!known.has(key)) known.set(key, planRange(pack, from, to));
+    return known.get(key);
+}
+
+function planRange(pack, from, to) {
     const trips = TRIP_MODES.map(mode => {
         const plan = planRoute(pack, from, to, { mode });
         return plan && Number.isFinite(plan.days) && plan.days > 0 ? { mode: plan.mode, days: plan.days, km: plan.km } : null;
@@ -61,16 +73,19 @@ export function tripRange(pack, from, to) {
 const sentencesOf = text => String(text ?? '').replace(/\s+/g, ' ').split(/(?<=[.!?…]["”’']?)\s+(?=["“'‘(]?[\p{Lu}\d])/u);
 
 /**
- * The distances for the next note: each place on the pack's roads that `texts` name (the
- * latest reply first, then the reader's message), other than `here`, with its quickest and
- * slowest trip, and what the reply said when that is far off (`said`). At most four.
- * [{ place, fastest: { mode, days }, slowest: { mode, days }, said: { days, text } | null }]
+ * The distances for the next note: the places in play on the pack's roads, other than `here`,
+ * each with its quickest and slowest trip, and what the latest reply said when that is far off
+ * (`said`). (0.9.23) In play, in this order until there are six: named in the reader's message,
+ * in the latest reply, in an open record (`records`, one text each), in the recent chat
+ * (`recent`, newest first).
+ * [{ place, fastest: { mode, days }, slowest: { mode, days }, said: { days, most, text } | null }]
  */
-export function distancesFor(pack, here, { reply = '', message = '' } = {}) {
+export function distancesFor(pack, here, { reply = '', message = '', records = [], recent = [] } = {}) {
     const from = here ? placesIn(pack, here)[0] ?? null : null;
     if (!pack || !from) return [];
     const out = new Map();
-    for (const [text, checks] of [[reply, true], [message, false]]) {
+    const sources = [[message, false], [reply, true], ...[...records, ...recent].map(text => [text, false])];
+    for (const [text, checks] of sources) {
         for (const sentence of sentencesOf(text)) {
             const named = placesIn(pack, sentence).filter(name => name !== from);
             for (const place of named) {

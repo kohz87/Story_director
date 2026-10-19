@@ -53,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.22';
+const VERSION = '0.9.23';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -439,6 +439,9 @@ function latestReplyAt(upTo) {
 }
 
 // How the note is built for a reply: the same for the injected note and for its token count.
+// (0.9.23) How far back the note looks for places in play.
+const RECENT_DISTANCE_MESSAGES = 10;
+
 function noteOptions(ctx, tracker, upTo, place = '') {
     const cal = calendar();
     // With capture writing every reply's changes, the model is not asked to.
@@ -466,7 +469,14 @@ function noteOptions(ctx, tracker, upTo, place = '') {
     // (0.9.22) How far the places the story and the reader just named really are, by the
     // world pack's roads, and whether the reply said otherwise.
     const pack = worldPack();
-    const distances = pack ? distancesFor(pack, place, { reply: latest >= 0 ? visibleText(chat[latest]) : '', message: said }) : [];
+    // (0.9.23) On every reply, for the places in play: also those of the open records (most
+    // recently seen first; never a secret's) and of the last few messages.
+    const records = pack ? tracker.records
+        .filter(record => record.status === 'active' && record.kind !== 'secret')
+        .sort((a, b) => (b.seen?.message ?? -1) - (a.seen?.message ?? -1))
+        .map(record => [record.key, ...Object.values(record.fields ?? {})].join('. ')) : [];
+    const recent = pack ? chat.slice(Math.max(0, upTo - RECENT_DISTANCE_MESSAGES + 1), upTo + 1).reverse().filter(message => message !== chat[latest]).map(visibleText) : [];
+    const distances = pack ? distancesFor(pack, place, { reply: latest >= 0 ? visibleText(chat[latest]) : '', message: said, records, recent }) : [];
     const distanceFrom = distances.length ? placesIn(pack, place)[0] : '';
     return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, slipped, lapsed, distances, distanceFrom, ...instructionless };
 }

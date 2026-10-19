@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.23
+
+- **Distances for every place in play, on every reply.** The Distances line no longer waits for a place to be named in the latest exchange. Every note now carries the real trip to up to six places in play:
+  - places your message names;
+  - places the latest reply names;
+  - places tied to an open quest, hook or agenda (a giver's town, a road an agent is on), never a secret's;
+  - places named in the last ten messages.
+
+  So when the story brings a place back, or an NPC mentions where a job is, the figures are already in front of it. Routes are worked out once per world pack and reused, and the line costs about 15 tokens a place.
+
 ## 0.9.22
 
 - **The story is told how far places really are.** Story Director already checked travel times on its own records, but never what the story itself said. So Verna could call Ninebarge Crossing "three days downstream" when the world pack's routes make it 22 to 40 days. Now, with a world pack, the note after a reply lists the places that reply or your message named, with the real trip from where the scene is, from the quickest way to the slowest: *Distances from Bluewatch Village: Ninebarge Crossing 22–40 days (boat to foot)*. If the reply said a time far off the map (under half the quickest trip, or over twice the slowest), it adds *not three days* and asks the story to keep to the map when the trip comes up again. Your own message is never corrected, and nothing is written into the reply.
