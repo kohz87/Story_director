@@ -547,3 +547,24 @@ test('an offered quest (a hook) with a difficulty shows it as a row after the re
     const pane = render({ selection: selection({ relevant: [{ record: offer, reason: 'hook', priority: 1 }] }) });
     assert.deepEqual(facts(itemFor(pane, 'Wolf pelts offer')), [['', 'the tanner wants pelts'], ['reward', '2 silver each'], ['difficulty', 'hard']]);
 });
+
+test('spoiler guard: problems are read without revealing, except those about what is behind the scenes (0.9.17)', () => {
+    const record = (key, kind, fields = {}) => ({ key, id: key.toLowerCase(), kind, status: 'active', fields: { desc: '', now: '', then: '', on: '', due: '', shown: '', leg: '', arrive: '', place: '', people: '', ...fields }, extra: {}, pinned: false, history: [] });
+    const selection = {
+        due: [record('Geva', 'agenda', { then: 'reissues the warrants' })], arriving: [],
+        relevant: [{ record: record('Wolf Hunt', 'quest') }], dormant: [], secrets: [record('Kade sold the route', 'secret')], resolvedRecently: [],
+    };
+    const findings = [
+        { severity: 'warn', key: 'Fold Wolf Contract', message: '"Fold Wolf Contract" is not tracked; the ! line was ignored.' },
+        { severity: 'warn', key: 'Wolf Hunt', message: 'Wolf Hunt: the deadline has no date' },
+        { severity: 'warn', key: 'Geva', message: 'Geva: the leg starts at Shorn' },
+        { severity: 'warn', key: 'Kade sold the route', message: 'Kade sold the route: written twice' },
+    ];
+    const pane = doc.createElement('div');
+    renderTab(pane, { selection, findings, spoiler: { locked: true, onReveal: () => {} } });
+    const all = pane.textContent;
+    assert.match(all, /Fold Wolf Contract" is not tracked/);
+    assert.match(all, /Wolf Hunt: the deadline has no date/);
+    assert.ok(!all.includes('leg starts') && !all.includes('Kade'), 'hidden records\' problems stay hidden');
+    assert.match(pane.querySelector('.story-director-lock-counts').textContent, /2 problems behind the scenes/);
+});

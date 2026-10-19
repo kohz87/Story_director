@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.17
+
+- **Problems read without Reveal.** With *Hide behind the scenes* on, the Director tab only counted problems, so reading a warning such as *"Fold Wolf Contract" is not tracked* meant revealing every agenda, beat and secret. Problems and notes now show while the tab is hidden. Only those about an agenda, a planned beat, a clock or a secret stay hidden, counted on the lock as *N problems behind the scenes*.
+
 ## 0.9.16
 
 - **A made-up name for a tracked job still finds it.** A model wrote `! Fold Wolf Contract — …` for a job tracked under another name, and the line was ignored with a warning. When the usual matching finds nothing, a looser reading now tries: plurals folded (*wolves* is *wolf*), job words set aside (*contract*, *bounty*, *quest*…), and a word inside a longer one (*fold* in *sheepfold*). Then it tries every word of the name found in one record's own name, goal or description (*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Only a single match is taken. With two, the warning names both and neither changes.

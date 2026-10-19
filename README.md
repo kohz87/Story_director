@@ -1,4 +1,4 @@
-# Story Director v0.9.16
+# Story Director v0.9.17
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -685,7 +685,9 @@ records. Folds you open stay open while you play; only *Do not reveal* closes ag
 **It starts hidden.** The tracker is the story behind the scenes, so by default the tab shows
 only the time and place, counts and what you can do (plan or end an arc, accept a waiting plan
 without reading it, seed, route). **Reveal** opens it for that chat until you **Hide** it again
-or reload; hidden text is not put on the page at all. Turn this off with **Hide behind the
+or reload; hidden text is not put on the page at all. Problems and notes show while hidden
+(since 0.9.17), except those about an agenda, a planned beat, a clock or a secret: those are
+counted on the lock (*2 problems behind the scenes*). Turn this off with **Hide behind the
 scenes** in the settings' quick bar.
 
 ## Roadmap
