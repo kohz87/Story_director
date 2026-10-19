@@ -928,3 +928,53 @@ test('findRecord finds a record by a name it was reached by (0.9.19)', () => {
     assert.equal(findRecord(tracker, 'wolf hunt').key, 'Wolf Hunt');
     assert.equal(findRecord(tracker, 'Fold Wolf'), null, 'an alias is matched whole');
 });
+
+test('an offer the story says is done closes as the quest {{user}} finished, when they spoke of it (0.9.27)', () => {
+    const offer = '+ hook Barrow-Viper Clearing — clear the viper pit by the barrow | giver: Verna | reward: 2 silver';
+    const start = applyOps(emptyTracker(), ops(offer), { message: 1, said: 'I ask Verna for work.' }).tracker;
+    assert.equal(findRecord(start, 'Barrow-Viper Clearing').kind, 'hook');
+    // The reader went and did it, never saying "I accept".
+    const went = applyOps(start, ops('~ Barrow-Viper Clearing — now: at the pit'), { message: 3, said: 'I head out to the barrow and clear the vipers.' }).tracker;
+    assert.ok(findRecord(went, 'Barrow-Viper Clearing').engaged, 'naming the job marks it spoken of');
+    const { tracker, problems } = applyOps(went, ops('! Barrow-Viper Clearing — cleared pit, 10 skins turned in to Verna'), { message: 5, said: 'I hand Verna the skins.' });
+    const done = findRecord(tracker, 'Barrow-Viper Clearing');
+    assert.equal(done.kind, 'quest');
+    assert.equal(done.status, 'resolved');
+    assert.deepEqual(questsDoneIn(tracker, 5).map(quest => quest.name), ['Barrow-Viper Clearing']);
+    assert.ok(problems.some(problem => problem.kind === 'done-offer'));
+    // `~ … step: completed` and `- … — done` say the same.
+    assert.equal(findRecord(applyOps(went, ops('~ Barrow-Viper Clearing — step: completed, voucher paid'), { message: 5, said: 'I collect my pay.' }).tracker, 'Barrow-Viper Clearing').kind, 'quest');
+    assert.equal(questsDoneIn(applyOps(went, ops('- Barrow-Viper Clearing — skins handed in, bounty paid'), { message: 5, said: 'I wait.' }).tracker, 5).length, 1);
+    // Never spoken of: the offer still closes (it is off the Offered list), but it was no quest of theirs.
+    const elsewhere = applyOps(start, ops('! Barrow-Viper Clearing — completed by the Hollin brothers'), { message: 3, said: 'I sleep in.' }).tracker;
+    assert.equal(findRecord(elsewhere, 'Barrow-Viper Clearing').status, 'resolved');
+    assert.equal(findRecord(elsewhere, 'Barrow-Viper Clearing').kind, 'hook');
+    assert.deepEqual(questsDoneIn(elsewhere, 3), []);
+    // Failed, given up or lapsed is no quest done; a `!` that is only news changes nothing.
+    assert.equal(findRecord(applyOps(went, ops('- Barrow-Viper Clearing — offer lapsed'), { message: 5 }).tracker, 'Barrow-Viper Clearing').kind, 'hook');
+    assert.equal(findRecord(applyOps(went, ops('- Barrow-Viper Clearing — the job failed, the pit collapsed'), { message: 5, said: 'I look.' }).tracker, 'Barrow-Viper Clearing').kind, 'hook');
+    assert.equal(findRecord(applyOps(went, ops('! Barrow-Viper Clearing — the guide withdrew'), { message: 5, said: 'I look.' }).tracker, 'Barrow-Viper Clearing').status, 'active', 'a `!` on an offer closes it only when it says done');
+    assert.equal(findRecord(applyOps(went, ops('! Barrow-Viper Clearing — a viper bites the guide'), { message: 5, said: 'I look.' }).tracker, 'Barrow-Viper Clearing').status, 'active');
+});
+
+test('a `~` reading as over on nothing tracked makes no record (0.9.27)', () => {
+    const { tracker, problems } = applyOps(emptyTracker(), ops('~ Quests: North Levee Vipers — step: completed, voucher paid'), { message: 2, said: 'I collect.' });
+    assert.equal(tracker.records.length, 0);
+    assert.ok(problems.some(problem => problem.kind === 'unknown-key' && problem.severity === 'info'));
+    // One that is not over still adds a hook, as before.
+    assert.equal(applyOps(emptyTracker(), ops('~ Levee Vipers — step: hunting'), { message: 2 }).tracker.records.length, 1);
+});
+
+test('taking a job: "we" as well as "I", joining, and a plain yes to the one new quest (0.9.27)', () => {
+    const hook = '+ hook Wolfhound Hunt — run down the wolfhounds | giver: Burl | reward: 1 gold';
+    const start = applyOps(emptyTracker(), ops(hook), { message: 1, said: 'Hello.' }).tracker;
+    const take = (said, line = '+ quest Wolfhound Hunt — run down the wolfhounds | giver: Burl | reward: 1 gold') => findRecord(applyOps(start, ops(line), { message: 3, said }).tracker, 'Wolfhound Hunt').kind;
+    assert.equal(take("We'll join the wolfhound hunt."), 'quest');
+    assert.equal(take('Count us in, Burl.'), 'quest');
+    assert.equal(take("Sure, I'm up for it."), 'quest');
+    assert.equal(take('Yes.'), 'quest', 'a plain yes to the reply\'s one new quest');
+    assert.equal(take('I look at the map.'), 'hook');
+    assert.equal(take("I won't join the hunt."), 'hook');
+    // A plain yes with two new quests in the reply says which one only by name.
+    assert.equal(take('Yes.', '+ quest Wolfhound Hunt — run down the wolfhounds | giver: Burl\n+ quest Ferry Run — row the ferry | giver: Ola'), 'hook');
+});

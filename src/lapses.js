@@ -63,14 +63,18 @@ export function slippedBeats(tracker, { calendar, now, graceDays = SLIP_GRACE_DA
 /**
  * The offers (jobs not taken on, tracker.isOffer) whose deadline (`due`) has passed, in tracker
  * order: the records to close as lapsed. A deadline without a time runs to the end of its day,
- * and is passed at that minute, as the Quests tab marks it overdue.
+ * and is passed at that minute, as the Quests tab marks it overdue. (0.9.27) An offer the reader
+ * has spoken of (`engaged`) is often the job's own day ("the hunt sets out on Goldwane 15"), so
+ * it gets a beat's grace, `graceDays` more, for the story to play it.
  */
-export function lapsedOffers(tracker, { calendar, now } = {}) {
+export function lapsedOffers(tracker, { calendar, now, graceDays = SLIP_GRACE_DAYS } = {}) {
     if (!calendar || !isNumber(now)) return [];
+    const grace = Number(graceDays) >= 0 ? Number(graceDays) : SLIP_GRACE_DAYS;
     return (tracker?.records ?? []).filter(record => {
         if (!isOffer(record)) return false;
         const end = dateEnd(record, 'due', { calendar, now });
-        return end !== null && end <= now;
+        if (end === null) return false;
+        return (record.engaged ? calendar.addDays(end, grace) : end) <= now;
     });
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.27
+
+- **A job you went and did counts as done.** An offer only became your quest when your message used words like *accept* or *I'll take it*, so a job you simply went and did stayed under **Offered** even after the story finished it: *! Barrow-Viper Clearing — cleared pit, 10 skins turned in to Verna* changed nothing. Now, when the story says an offer is done (a `!`, a `~ … step: completed` or a `-` that reads as finished) and your messages have spoken of it, it closes as your finished quest, and RPG Battle awards its quest XP. An offer you never spoke of still leaves the Offered list, but as news with no XP (someone else did it). Failed, given up or lapsed is never a quest done.
+- **More ways to take a job on.** *We'll join the hunt*, *count us in* and *I'm up for it* now take a job, and so does a plain *yes*, *sure* or *aye* when the reply has only one new quest.
+- **An offer you talked about no longer vanishes on its date.** Offers lapse when their deadline passes, but a job's `due` is often the day it happens (*the hunt rides out on Goldwane 15*). That is how the wolfhound hunt you were waiting for got closed as *offer lapsed*. Now an offer your messages have spoken of gets two more story days, the same grace a late beat gets, and stays under Offered with its date shown as overdue. An offer nobody mentioned still lapses on time.
+- A `~` line that reads as over, on a name nothing is tracked by (*~ Quests: North Levee Vipers — step: completed*), no longer creates a new, never-closed hook.
+- The Quests tab now shows once there is an offer, not only once there is a quest.
+
 ## 0.9.26
 
 - **The Off-Screen mirror keeps the story's own lines.** With *Mirror Off-Screen* on, Story Director rewrote the World State's whole Off-Screen section from its tracked agendas, so the story's own lines were dropped: *Jor — crying in the granary alley*, *Lefty — hiding aboard the Kettle Wife*. Now the agendas come first and the story's lines for people the tracker has no agenda for stay after them. A line for an agenda that has been closed still goes, and so does one written under a name the agenda was also called by. NPC State Delta 1.2.10 reads this section to tell who has left the scene, so keeping these lines also keeps those people off its Present cards.

@@ -53,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.26';
+const VERSION = '0.9.27';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1352,7 +1352,8 @@ function renderQuestsTab(pane) {
     const cal = calendar();
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
+    // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
@@ -1649,7 +1650,7 @@ function registerWithStoryBlock() {
         badge: tabBadge,
         render: pane => renderDirectorTab(pane),
     });
-    // Only once the story has a quest, so a chat without any is not given an empty tab.
+    // Only once the story has a quest or an offer, so a chat without any is not given an empty tab.
     sb.registerTab({
         id: QUESTS_TAB_ID,
         label: 'Quests',
@@ -1658,8 +1659,9 @@ function registerWithStoryBlock() {
         isAvailable: () => {
             try {
                 if (!settings().enabled) return false;
-                const { active, finished } = questRecords();
-                return active.length + finished.length > 0;
+                // (0.9.27) Or a job on offer, so an offer has somewhere to be seen.
+                const { active, finished, offered } = questRecords();
+                return active.length + finished.length + offered.length > 0;
             } catch {
                 return false;
             }

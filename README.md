@@ -1,4 +1,4 @@
-# Story Director v0.9.26
+# Story Director v0.9.27
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -163,9 +163,10 @@ Battle offers quest XP by difficulty when a quest is finished.
 - **Your choices are yours** (since 0.9.15). Taking a job on, turning it down and giving it up
   come from **your own message**, the one the reply answers; finishing and failing are the
   story's. A `+ quest` counts only when your message accepts the job (*accept*, *take it*, *I'll
-  do*, *agree to*, *sign up*, *count me in*, *deal*…) in a sentence naming it, its giver or a
-  word of its name (*the wolf job* is Wolf Hunt), or with only one job in question; otherwise it
-  is kept as an **offer**. A main quest (`type: main`) is the story's to give, and an offer the
+  do*, *we'll join*, *agree to*, *sign up*, *count us in*, *I'm up for it*, *deal*…) in a sentence
+  naming it, its giver or a word of its name (*the wolf job* is Wolf Hunt), or with only one job
+  in question, when a plain *yes*, *sure* or *aye* also counts (since 0.9.27); otherwise it is
+  kept as an **offer**. A main quest (`type: main`) is the story's to give, and an offer the
   story moves on (`~ Wolf Hunt — step: tracking the pack`; a `step: 0/1` is not under way) is
   one your character is already doing: both start at once. A model line that gives a job up or
   turns it down (*abandoned*, *gave up*, *declined*, *refused*…) changes nothing unless your
@@ -174,6 +175,13 @@ Battle offers quest XP by difficulty when a quest is finished.
   parts; if not, leave it an offer."). Offers fold under **Offered** in the Quests tab, without
   buttons, until taken on, turned down or past their deadline. Messages in other languages, or
   a job taken on without saying so, leave it an offer until the story moves it on.
+- **An offer done is a quest done** (since 0.9.27). Going and doing a job without the words to
+  take it on is still doing it: when the story says an offer is finished (`! Barrow-Viper
+  Clearing — 10 skins turned in to Verna`, `~ … — step: completed`, `- … — bounty paid`) and
+  your messages have spoken of it (its name, a word of it or its giver), it closes as your quest,
+  finished, with its quest XP. One you never spoke of closes too, as news (someone else did it),
+  without XP; failed, given up or lapsed is never a quest done. A `~` that reads as over on a
+  name nothing is tracked by (`~ North Levee Vipers — step: completed`) makes no new record.
 - **An offer lapses at its deadline** (since 0.9.19). When a reply's story time passes an
   offer's `due` (a date alone runs to the end of its day, as for a quest's deadline), that reply
   closes it: `- Rat Culling — offer lapsed` is written into its Director block, so deleting or
@@ -181,6 +189,9 @@ Battle offers quest XP by difficulty when a quest is finished.
   "Lapsed: Rat Culling (Danique's offer) went to someone else; Danique may mention it." It is
   nobody's choice and no quest's outcome: never blocked as a decision only you can make, never
   quest XP. Only offers lapse; a quest taken on keeps its deadline for the story to deal with.
+  An offer your messages have spoken of (since 0.9.27) is often the job's own day (*the hunt
+  rides out on Goldwane 15*), so it gets two more story days, as a late beat does, and stays
+  under **Offered** meanwhile. The Quests tab shows once there is an offer, not only a quest.
 - **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
