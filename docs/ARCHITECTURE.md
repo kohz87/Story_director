@@ -251,6 +251,22 @@ Selection = {
   way, also inside `now`/`leg`); 4 key or people in `sceneText`/`recentText`; 5 changed in the
   last 3 messages; 6 everything else that is not dormant.
 
+## `src/lapses.js` (v0.9.19): what time closes
+
+```js
+export const SLIP_GRACE_DAYS = 2;  // story days a beat may run late before it slips
+export function slippedBeats(tracker, { calendar, now, graceDays = 2 }) → [Record]  // open beats past on (else due) + grace, not fired since dated
+export function lapsedOffers(tracker, { calendar, now }) → [Record]                // isOffer records whose due has passed
+export function lapseLines({ slipped, lapsed }) → [string]                          // '- Key — slipped', '- Key — offer lapsed'
+export function lapsesIn(tracker, message) → { slipped: [{ key, on, giver }], lapsed: [{ key, on, giver }] }
+```
+
+A date without a time counts to the end of its day. Nothing is closed here: index.js
+(`closeLapsed`, after `closeAbandoned` in onReply, latest reply only) writes the lines into
+that reply's Director block, and the next note reads them back with `lapsesIn` (by reason, on
+`resolved.message`) for its Slipped and Lapsed parts. Neither reason matches `FAILED`,
+`SUPERSEDED` or `CHOSEN_END`, and neither record is a quest, so `questsDoneIn` never lists them.
+
 ## `src/note.js`
 
 ```js

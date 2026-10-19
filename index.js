@@ -37,6 +37,7 @@ import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
 import { buildNote, noteParts, noteTokens } from './src/note.js';
 import { checkReply } from './src/checks.js';
+import { lapseLines, lapsedOffers, lapsesIn, slippedBeats } from './src/lapses.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
 import { renderQuests } from './src/ui/quests.js';
@@ -424,6 +425,15 @@ function timeBeforeLatestReply(upTo) {
     return null;
 }
 
+// The newest assistant reply at or before `upTo` (-1 when there is none).
+function latestReplyAt(upTo) {
+    const chat = context()?.chat ?? [];
+    for (let index = Math.min(Number(upTo), chat.length - 1); index >= 0; index--) {
+        if (isAssistant(chat[index])) return index;
+    }
+    return -1;
+}
+
 // How the note is built for a reply: the same for the injected note and for its token count.
 function noteOptions(ctx, tracker, upTo) {
     const cal = calendar();
@@ -446,7 +456,9 @@ function noteOptions(ctx, tracker, upTo) {
     // (0.9.19) What came due while the story skipped ahead, told as a recap: with or without
     // change lines, since it is about the narration.
     const previousTime = timeBeforeLatestReply(upTo);
-    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, ...instructionless };
+    // (0.9.19) Beats that slipped and offers that lapsed in the latest reply: in this note only.
+    const { slipped, lapsed } = lapsesIn(tracker, latestReplyAt(upTo));
+    return { calendar: cal, budgetTokens: relevanceSettings().budgetTokens, corrections: fixes, npcPlansOnly: !isSource('npc'), offscreenInBlock, givenUp, taking, declining, previousTime, slipped, lapsed, ...instructionless };
 }
 
 /**
@@ -659,6 +671,7 @@ async function onReply({ messageIndex }) {
         // Capture first, so the checks below see the changes it wrote.
         if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
         await closeAbandoned(index);
+        await closeLapsed(index);
         const before = trackerAt(index - 1).tracker;
         const { tracker: after, problems, info } = trackerAt(index);
         const block = sb.blockInText(chat[index].mes, BLOCK.tag);
@@ -1342,6 +1355,27 @@ async function closeAbandoned(index) {
     } else {
         await ctx.saveChat?.();
     }
+    return true;
+}
+
+/**
+ * (0.9.19) After the latest reply: the beats its story time left more than SLIP_GRACE_DAYS
+ * behind without firing them, and the offers whose deadline it passed, are closed in its own
+ * Director block (`- Key — slipped`, `- Key — offer lapsed`), so deleting or swiping the reply
+ * takes the closing back. Neither is a choice of the reader's, nor a quest's outcome.
+ */
+async function closeLapsed(index) {
+    const ctx = context();
+    const sb = storyBlock();
+    const chat = ctx?.chat ?? [];
+    // Only the newest reply: an older one edited later keeps what it said.
+    if (index !== latestAssistantIndex(chat)) return false;
+    const { tracker } = trackerAt(index);
+    const options = { calendar: calendar(), now: tracker.time };
+    const lines = lapseLines({ slipped: slippedBeats(tracker, options), lapsed: lapsedOffers(tracker, options) });
+    if (!lines.length) return false;
+    const existing = sb.blockInText(chat[index].mes, BLOCK.tag)?.text ?? '';
+    await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines.join('\n')}` : lines.join('\n'));
     return true;
 }
 

@@ -567,3 +567,26 @@ test('while away: a quest deadline in the gap passed; one later today is still o
     assert.ok(lines(note).includes('Due now: Ferry — deadline Goldwane 15 reached (catch the ferry)'));
     assert.ok(!buildNote(selection({ now, due: [bounty] }), { calendar, previousTime: from, instruction: '' }).includes(AWAY_DEADLINE));
 });
+
+test('a beat that slipped in the latest reply is told once, as off-screen or not at all (0.9.19)', () => {
+    const slipped = [{ key: 'Guards sack the Stray Oar', on: 'Goldwane 13', giver: '' }];
+    // Even with nothing else tracked, and where capture writes the lines too.
+    const note = buildNote(selection(), { calendar, slipped });
+    assert.ok(lines(note).includes('Slipped: Guards sack the Stray Oar (Goldwane 13) — it happened off-screen or not at all; mention it only where it fits.'));
+    assert.match(buildNote(selection(), { calendar, slipped, instruction: '' }), /^Slipped: Guards sack/m);
+    const two = buildNote(selection({ relevant: [geva] }), { calendar, slipped: [...slipped, { key: 'Toll riders', on: '', giver: '' }, slipped[0]] });
+    assert.ok(lines(two).includes('Slipped: Guards sack the Stray Oar (Goldwane 13), Toll riders — they happened off-screen or not at all; mention them only where they fit.'));
+    assert.doesNotMatch(buildNote(selection(), { calendar }), /Slipped/);
+    assert.deepEqual(buildNote(selection(), { calendar, slipped: [] }), CHANGE_INSTRUCTION, 'nothing to say: the instruction alone');
+});
+
+test('an offer that lapsed in the latest reply gets one line, its giver by name (0.9.19)', () => {
+    const note = buildNote(selection(), { calendar, lapsed: [{ key: 'Rat Culling', on: '', giver: 'Danique, the rat-catcher\'s widow' }] });
+    assert.ok(lines(note).includes('Lapsed: Rat Culling (Danique\'s offer) went to someone else; Danique may mention it.'));
+    assert.ok(lines(buildNote(selection(), { calendar, lapsed: [{ key: 'Ferry', on: '', giver: '' }] })).includes('Lapsed: Ferry went to someone else; it may come up in passing.'));
+    const two = buildNote(selection(), { calendar, instruction: '', lapsed: [{ key: 'Rat Culling', giver: 'Danique' }, { key: 'Ferry', giver: '' }] });
+    assert.ok(lines(two).includes('Lapsed: Rat Culling (Danique\'s offer), Ferry went to someone else; whoever offered them may mention it.'));
+    // Labelled parts, after Abandoned and before the instruction.
+    const labels = noteParts(selection(), { calendar, abandoning: ['Wolf Hunt'], slipped: [{ key: 'Riders', on: 'Goldwane 13' }], lapsed: [{ key: 'Ferry' }] }).map(entry => entry.label);
+    assert.deepEqual(labels, ['Header', 'Abandoned', 'Slipped', 'Lapsed', 'Change instruction']);
+});
