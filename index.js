@@ -44,7 +44,7 @@ import { renderQuests } from './src/ui/quests.js';
 import { renderJournal } from './src/ui/journal.js';
 import { buildJournal } from './src/journal.js';
 import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, placesIn, planRoute } from './src/routes.js';
-import { distancesFor } from './src/distances.js';
+import { distancesFor, withFixedDistance, wrongDistances } from './src/distances.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
 import { arcBeats, autoPlanReason, buildPlannerMessages, DEFAULT_LOW_THREADS, DEFAULT_PLANNER_PROMPT, DEFAULT_STALL_DAYS, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
@@ -53,7 +53,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.23';
+const VERSION = '0.9.24';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -708,7 +708,12 @@ async function onReply({ messageIndex }) {
         });
         // Legs the reply wrote or changed, against the map.
         lastFindings.push(...travelFindings(after, { pack: worldPack(), calendar: calendar(), previous: before, onlyChanged: true }));
-        const serious = lastFindings.filter(finding => finding.severity !== 'info');
+        // (0.9.24) Travel times the reply's story just said, against the map, the moment it
+        // arrives: a warning with a Fix that puts the map's figure into the reply.
+        const wrong = worldPack() ? wrongDistances(worldPack(), situationAt(index, sceneTextAt(index)).place, visibleText(chat[index])) : [];
+        lastFindings.push(...wrong.map(entry => ({ kind: 'distance', severity: 'warn', key: entry.place, message: distanceMessage(entry) })));
+        wrong.slice(0, 2).forEach(entry => toastDistance(index, entry));
+        const serious = lastFindings.filter(finding => finding.severity !== 'info' && finding.kind !== 'distance');
         if (serious.length) {
             // A problem's wording names agendas and plans; while hidden, only say there is one.
             const message = isLocked()
@@ -725,6 +730,55 @@ async function onReply({ messageIndex }) {
         console.error('[Story Director] reply check failed', error);
     }
     sb.refresh?.();
+}
+
+// (0.9.24) "“three days” to Ledgerford: by the map it is 18–33 days from Bluewatch Village (riding to wagon)."
+function distanceMessage({ place, from, said, fastest, slowest, mode, days: tripDays }) {
+    const days = value => (value < 3 ? Math.round(value * 2) / 2 : Math.round(value));
+    const range = days(fastest.days) === days(slowest.days) ? `${days(fastest.days)} days by ${fastest.mode}` : `${days(fastest.days)}–${days(slowest.days)} days (${fastest.mode} to ${slowest.mode})`;
+    // The way the sentence meant ("downstream": by boat), when it is not the quickest.
+    const meant = mode && mode !== fastest.mode && Number.isFinite(tripDays) ? `; by ${mode}, ${days(tripDays)}` : '';
+    return `“${said.text}” to ${place}: by the map it is ${range} from ${from}${meant}.`;
+}
+
+const htmlText = text => String(text ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+
+function toastDistance(index, entry) {
+    const html = `${htmlText(distanceMessage(entry))}<div class="story-director-toast-actions"><button type="button" class="menu_button story-director-fix-distance">Fix: “${htmlText(entry.fix)}”</button></div>`;
+    const toast = notify('warning', html, { escapeHtml: false, timeOut: 20000, extendedTimeOut: 8000, closeButton: true });
+    try {
+        const button = toast?.find?.('.story-director-fix-distance');
+        button?.on?.('click', event => {
+            event?.stopPropagation?.();
+            void fixDistance(index, entry);
+            globalThis.toastr?.clear?.(toast);
+        });
+    } catch (error) {
+        console.warn('[Story Director] the distance fix could not be offered', error);
+    }
+}
+
+/** The reader's Fix: the map's figure written into the reply where the story put its own. */
+async function fixDistance(index, entry) {
+    const ctx = context();
+    const message = ctx?.chat?.[index];
+    const text = isAssistant(message) ? withFixedDistance(message.mes, entry) : null;
+    if (text === null) {
+        notify('info', 'That reply has changed since; nothing was fixed.');
+        return;
+    }
+    message.mes = text;
+    if (Array.isArray(message.swipes) && message.swipes.length) message.swipes[Number(message.swipe_id) || 0] = text;
+    try {
+        ctx.updateMessageBlock?.(index, message);
+        await ctx.saveChat?.();
+        const events = ctx.eventTypes ?? ctx.event_types ?? {};
+        if (events.MESSAGE_EDITED) await ctx.eventSource?.emit?.(events.MESSAGE_EDITED, index);
+        notify('success', `Fixed: ${entry.place} is now ${entry.fix} away in the story.`);
+    } catch (error) {
+        console.error('[Story Director] the distance fix failed', error);
+        notify('error', 'The fix could not be saved.');
+    }
 }
 
 function findingsKey(index) {

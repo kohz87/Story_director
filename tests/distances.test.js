@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadWorldPack, placesIn } from '../src/routes.js';
-import { distancesFor, saidDuration, tripRange } from '../src/distances.js';
+import { daysInWords, distancesFor, saidDuration, tripRange, withFixedDistance, wrongDistances } from '../src/distances.js';
 import { noteParts } from '../src/note.js';
 
 const { pack } = loadWorldPack(JSON.parse(readFileSync(new URL('./fixtures/world-pack.json', import.meta.url), 'utf8')));
@@ -63,4 +63,25 @@ test('places in play (0.9.23): open records and the recent chat too, after the n
     assert.deepEqual(found.map(entry => entry.place), ['Glassdock', 'Brightwater Lock', 'Ledgerford', 'Northbarge', 'Siltbarrow', 'Auvoth']);
     assert.ok(found.every(entry => entry.said === null), 'only the latest reply is checked');
     assert.equal(tripRange(pack, 'Bluewatch Village', 'Glassdock'), tripRange(pack, 'Bluewatch Village', 'Glassdock'), 'a route is planned once');
+});
+
+test('wrongDistances (0.9.24): a time the reply just said, far off the map, with the trip the sentence means', () => {
+    const reply = '"The ferryman at Ledgerford sent word, but that’s three days downstream." She smiled. "Auvoth? A day or two east."\n\n<!-- STORY_BLOCKS_V1\n<Blocks>three days to Ledgerford</Blocks>\n-->';
+    const wrong = wrongDistances(pack, 'Bluewatch Village | Guild', reply);
+    assert.equal(wrong.length, 1, 'a day or two to Auvoth is close enough');
+    const [entry] = wrong;
+    assert.deepEqual([entry.place, entry.from, entry.said.text, entry.mode], ['Ledgerford', 'Bluewatch Village', 'three days', 'boat'], '"downstream" is by boat');
+    assert.equal(entry.fix, daysInWords(entry.days));
+    const fixed = withFixedDistance(reply, entry);
+    assert.match(fixed, new RegExp(`that’s ${entry.fix} downstream\\.`));
+    assert.match(fixed, /<Blocks>three days to Ledgerford<\/Blocks>/, 'the hidden blocks are left alone');
+    assert.equal(withFixedDistance('Nothing like it here.', entry), null);
+    // Without a word for the way, the quickest trip.
+    const plain = wrongDistances(pack, 'Bluewatch Village', 'Ledgerford is a week away.')[0];
+    assert.equal(plain.mode, tripRange(pack, 'Bluewatch Village', 'Ledgerford').fastest.mode);
+    assert.deepEqual(wrongDistances(pack, 'Bluewatch Village', 'Ledgerford is three weeks away.'), [], 'close enough to the map');
+});
+
+test('daysInWords says a trip the way a storyteller would', () => {
+    assert.deepEqual([0.5, 1, 2, 2.5, 7, 21, 33, 140].map(daysInWords), ['half a day', 'a day', 'two days', 'two and a half days', 'seven days', 'twenty-one days', 'thirty-three days', '140 days']);
 });

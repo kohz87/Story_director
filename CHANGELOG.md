@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.24
+
+- **A wrong distance is caught the moment the reply arrives.** Until now, a travel time the story got wrong was only corrected in the note for the next reply, so it sat in the reply you were reading. Now each new reply is checked as it comes in. If it names a place on the world pack's roads and says a time far off the map, a warning shows at once: *“three days” to Ledgerford: by the map it is 18–33 days (ride to wagon) from Bluewatch Village; by boat, 21.* The warning has a **Fix** button that writes the map's figure into the reply (*…twenty-one days downstream*), using the way the sentence names (downstream: by boat) or else the quickest. The warning is also listed in the Director tab. Nothing changes unless you press Fix.
+
 ## 0.9.23
 
 - **Distances for every place in play, on every reply.** The Distances line no longer waits for a place to be named in the latest exchange. Every note now carries the real trip to up to six places in play:
