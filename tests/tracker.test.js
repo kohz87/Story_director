@@ -726,7 +726,10 @@ test('giving a job up or turning it down needs the reader\'s word; failing it is
     assert.equal(findRecord(applyOps(start, ops('~ Wolf Hunt — status: abandoned'), { message: 3, said: 'Onward.' }).tracker, 'Wolf Hunt').status, 'active');
     // The reader said so (in words, or with the Abandon button's line).
     assert.equal(findRecord(applyOps(start, ops('- Wolf Hunt — abandoned'), { message: 3, said: 'I give up on the wolf hunt, it is hopeless.' }).tracker, 'Wolf Hunt').status, 'resolved');
-    assert.equal(findRecord(applyOps(start, ops('- Wolf Hunt — abandoned'), { message: 3, said: '[Abandon quest: Wolf Hunt]' }).tracker, 'Wolf Hunt').status, 'resolved');
+    // The Abandon flag: the reader's choice stamped on the reply, whatever their message says.
+    assert.equal(findRecord(applyOps(start, ops('- Wolf Hunt — abandoned'), { message: 3, said: 'Onward.', chosen: ['wolf hunt'] }).tracker, 'Wolf Hunt').status, 'resolved');
+    const replayed = replay([{ message: 3, ops: ops('- Wolf Hunt — abandoned'), text: '', time: null, said: 'Onward.', chosen: ['wolf hunt'] }], { seed: start });
+    assert.equal(findRecord(replayed.tracker, 'Wolf Hunt').status, 'resolved');
     // Outcomes stay the story's.
     for (const reason of ['failed, the wolves scattered the flock', 'expired at sundown', 'done, ears delivered']) {
         assert.equal(findRecord(applyOps(start, ops(`- Wolf Hunt — ${reason}`), { message: 3, said: 'Hm.' }).tracker, 'Wolf Hunt').status, 'resolved', reason);

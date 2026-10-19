@@ -247,7 +247,9 @@ function signature(message) {
     const text = String(message?.mes ?? '');
     let hash = 5381;
     for (let index = 0; index < text.length; index++) hash = ((hash * 33) ^ text.charCodeAt(index)) >>> 0;
-    return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}`;
+    // (0.9.15) The reader's abandon stamp is part of what a reply says.
+    const stamp = abandonedStamp(message).join('|');
+    return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}${stamp ? `:${stamp}` : ''}`;
 }
 
 // One replay entry per message: its change lines (assistant replies only), its narration
@@ -270,7 +272,7 @@ function entryFor(message, index, sb, cal, own, reference, said = null) {
     const timeText = scene ? sceneTimeText(scene.text) : '';
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
-        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said } : {}) },
+        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said, chosen: abandonedStamp(message) } : {}) },
         location: scene ? headerCell(scene.text, 'loc|location|place') : '',
         hadBlock: Boolean(block),
         parseErrors: parsed.errors,
@@ -456,7 +458,8 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
             return;
         }
         const { selection, tracker, upTo } = situation(type);
-        const note = buildNote(selection, noteOptions(ctx, tracker, upTo));
+        const slot = replacesLastReply(ctx.chat ?? [], type) ? (ctx.chat?.length ?? 1) - 1 : ctx.chat?.length ?? 0;
+        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo), abandoning: abandoningFor(slot, tracker) });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -1203,7 +1206,7 @@ function questStatus(now) {
 function questsTabKey() {
     const ctx = context();
     const chat = ctx?.chat ?? [];
-    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar)].join('|');
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(',')].join('|');
 }
 
 function renderQuestsTab(pane) {
@@ -1213,50 +1216,103 @@ function renderQuestsTab(pane) {
     const cal = calendar();
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, onAbandon: id => abandonQuest(id) });
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
 }
 
 /**
  * (0.9.5) The reader gives a quest up from the Quests tab, the one quest choice with a button.
- * (0.9.15) It puts `[Abandon quest: Key]` into the message box rather than editing a reply:
- * the giving up is the reader's own words, sent with their next message, and the story shows
- * it and closes the quest (`- Key — abandoned`, a failure, so no quest XP). Remove the line
- * before sending to keep the quest. Swiping or deleting that reply takes it back.
+ * (0.9.15) Like RPG Battle's fight hand-off, behind the scenes: the click (asked twice) marks
+ * it, the next reply's note tells the story that {{user}} gives it up, and that reply records
+ * it (`- Key — abandoned`, written for the story if it left the line out; a failure, so no
+ * quest XP) with the reader's choice stamped on the message. A swipe of that reply is told
+ * again; deleting it takes the abandon back. Until the reply comes, a second click keeps it.
+ * State: chatMetadata[SETTINGS_KEY].abandon = { keys: [record id], attachedTo, sentFor }.
  */
-const ABANDON_MARK = /\[Abandon quest:\s*([^\]\n]+?)\s*\]/gi;
+function abandonedStamp(message) {
+    const list = message?.extra?.storyDirector?.abandoned;
+    return Array.isArray(list) ? list.map(String) : [];
+}
+
+function abandonState(ctx = context()) {
+    const meta = chatMeta(ctx);
+    const state = meta?.[SETTINGS_KEY]?.abandon;
+    if (!state || !Array.isArray(state.keys) || !state.keys.length) return null;
+    const attachedTo = Number.isInteger(state.attachedTo) ? state.attachedTo : null;
+    // The reply it went with was deleted: the abandon is taken back.
+    if (attachedTo !== null && !isAssistant(ctx?.chat?.[attachedTo])) {
+        setAbandonState(null, ctx);
+        return null;
+    }
+    return { keys: state.keys.map(String), attachedTo, sentFor: Number.isInteger(state.sentFor) ? state.sentFor : null };
+}
+
+function setAbandonState(state, ctx = context()) {
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), abandon: state && state.keys?.length ? state : null };
+    ctx.saveMetadataDebounced?.();
+}
+
+/** Quests the reader is giving up with the next reply (not yet sent with one). */
+function pendingAbandons(ctx = context()) {
+    const state = abandonState(ctx);
+    return new Set(state && state.attachedTo === null ? state.keys : []);
+}
 
 function abandonQuest(id) {
     const record = questRecords().active.find(entry => entry.id === id);
     if (!record) return;
-    const box = globalThis.document?.querySelector?.('#send_textarea');
-    if (!box) {
-        notify('error', 'The message box is not there to write in.');
-        return;
-    }
-    const line = `[Abandon quest: ${record.key}]`;
-    const current = String(box.value ?? '');
-    if (!current.includes(line)) box.value = current.trim() ? `${current.trimEnd()}\n${line}` : line;
-    box.dispatchEvent?.(new Event('input', { bubbles: true }));
-    box.focus?.();
-    notify('info', `${record.key} is given up with your next message. Remove the line from the message box to keep it.`);
+    const state = abandonState() ?? { keys: [], attachedTo: null, sentFor: null };
+    // A new choice after the last one was sent starts afresh.
+    const keys = state.attachedTo === null ? state.keys : [];
+    if (!keys.includes(record.id)) keys.push(record.id);
+    setAbandonState({ keys, attachedTo: null, sentFor: null });
+    notify('info', `${record.key} is given up with your next reply. Click Keep on it to change your mind.`);
+    storyBlock()?.refresh?.();
+}
+
+function keepQuest(id) {
+    const state = abandonState();
+    if (!state || state.attachedTo !== null) return;
+    setAbandonState({ ...state, keys: state.keys.filter(key => key !== id) });
+    storyBlock()?.refresh?.();
 }
 
 /**
- * (0.9.15) A reply to `[Abandon quest: Key]` that did not close the quest: the reader chose,
- * so the closing goes into that reply's own <Director> block (swipe or delete takes it back).
+ * The quests the reply being generated (at chat index `slot`) gives up: [key], for the note.
+ * A pending choice goes with the next reply; one already sent goes again with a swipe of its
+ * reply, and is done once a later reply is written.
  */
+function abandoningFor(slot, tracker) {
+    const state = abandonState();
+    if (!state) return [];
+    if (state.attachedTo !== null && slot > state.attachedTo) {
+        setAbandonState(null);
+        return [];
+    }
+    if (state.attachedTo !== null && slot !== state.attachedTo) return [];
+    if (state.sentFor !== slot) setAbandonState({ ...state, sentFor: slot });
+    return state.keys.map(id => findRecord(tracker, id)?.key).filter(Boolean);
+}
+
+/** After the reply the abandon went with: stamp the reader's choice, and close what the story left open. */
 async function closeAbandoned(index) {
     const ctx = context();
     const sb = storyBlock();
-    const said = saidBefore(ctx?.chat ?? [], index) ?? '';
-    const keys = [...said.matchAll(ABANDON_MARK)].map(match => match[1]);
-    if (!keys.length) return false;
+    const state = abandonState(ctx);
+    if (!state || state.sentFor !== index) return false;
+    const message = ctx.chat[index];
+    message.extra = { ...(message.extra ?? {}), storyDirector: { ...(message.extra?.storyDirector ?? {}), abandoned: state.keys } };
+    setAbandonState({ ...state, attachedTo: index }, ctx);
     const { tracker } = trackerAt(index);
-    const open = keys.map(key => findRecord(tracker, key)).filter(record => record && record.status === 'active');
-    if (!open.length) return false;
-    const existing = sb.blockInText(ctx.chat[index].mes, BLOCK.tag)?.text ?? '';
-    const lines = open.map(record => `- ${record.key} — abandoned`).join('\n');
-    await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
+    const open = state.keys.map(id => findRecord(tracker, id)).filter(record => record && record.status === 'active');
+    if (open.length) {
+        const existing = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
+        const lines = open.map(record => `- ${record.key} — abandoned`).join('\n');
+        await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
+    } else {
+        await ctx.saveChat?.();
+    }
     return true;
 }
 

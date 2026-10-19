@@ -474,3 +474,10 @@ test('quest check: an offer the reader takes on or turns down asks the story to 
     assert.match(buildNote(selection(), { calendar, taking: ['Wolf Hunt'] }), /may be taking on Wolf Hunt/);
     assert.doesNotMatch(buildNote(selection({ relevant: [offer] }), { calendar, taking: ['Wolf Hunt'], instruction: '' }), /Quest check/);
 });
+
+test('a quest given up with the Abandon flag is told behind the scenes (0.9.15)', () => {
+    const note = buildNote(selection(), { calendar, abandoning: ['Wolf Hunt'] });
+    assert.ok(lines(note).includes('Abandoned: {{user}} gives up Wolf Hunt. Show it in this reply, and close each with - Key — abandoned.'));
+    // With capture writing the lines, the story is only told to show it.
+    assert.match(buildNote(selection(), { calendar, abandoning: ['Wolf Hunt'], instruction: '' }), /Abandoned: \{\{user\}\} gives up Wolf Hunt\. Show it in this reply\./);
+});

@@ -328,7 +328,7 @@ function newRecord(op, at) {
  * becomes a new hook, and anything else is reported and ignored.
  * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
  */
-export function applyOps(tracker, ops, { message, time = null, said } = {}) {
+export function applyOps(tracker, ops, { message, time = null, said, chosen = [] } = {}) {
     const records = [...tracker.records];
     // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.
     const gated = said !== undefined;
@@ -336,7 +336,10 @@ export function applyOps(tracker, ops, { message, time = null, said } = {}) {
     const accepts = (record, op = null) => !gated
         || lineKey(op?.fields?.type ?? record.fields?.type ?? '') === 'main'
         || saidAbout(said, record, ACCEPT_WORDS, { alone: quests.length === 1 && (!op || quests.includes(op)) });
-    const chose = record => saidAbout(said, record, GIVE_UP, { alone: false }) || saidAbout(said, record, REFUSE_WORDS, { alone: false });
+    // `chosen`: records the reader gave up with the Abandon flag (ids stamped on the reply).
+    const picked = new Set((chosen ?? []).map(key => lineKey(key)));
+    const chose = record => picked.has(record.id) || picked.has(lineKey(record.key))
+        || saidAbout(said, record, GIVE_UP, { alone: false }) || saidAbout(said, record, REFUSE_WORDS, { alone: false });
     const offered = (op, record) => problems.push(finding('offered', 'info', op, `"${record.key}" was offered, not taken on: it stays an offer until {{user}} accepts it.`));
     const indexById = new Map(records.map((record, index) => [record.id, index]));
     const copied = new Set();
@@ -573,7 +576,7 @@ export function replay(entries, { seed = null } = {}) {
         const at = { message: entry.message, time };
         if (entry.text) tracker = markSeen(tracker, entry.text, at);
         if (entry.ops?.length) {
-            const result = applyOps(tracker, entry.ops, entry.said === undefined ? at : { ...at, said: entry.said });
+            const result = applyOps(tracker, entry.ops, entry.said === undefined ? at : { ...at, said: entry.said, chosen: entry.chosen ?? [] });
             tracker = result.tracker;
             for (const problem of result.problems) {
                 problems.push({ ...problem, text: problem.message, message: entry.message });

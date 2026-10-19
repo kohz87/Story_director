@@ -840,3 +840,22 @@
     font-weight: 600;
     opacity: 1;
 }
+
+/* (0.9.15) A quest given up with the next reply: the flag reads Keep until then. */
+.story-director-tab .story-director-tag.is-giving-up {
+    color: #d46a6a;
+    font-weight: 600;
+    opacity: 1;
+}
+
+.story-director-tab .menu_button.story-director-quest-keep {
+    display: inline-flex;
+    flex: none;
+    gap: 0.3rem;
+    align-items: center;
+    align-self: center;
+    min-height: 2rem;
+    margin: 0 0 0 auto;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8em;
+}

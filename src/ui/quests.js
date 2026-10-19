@@ -5,8 +5,8 @@
 // (main, side, bounty, contract…), each with its goal, step, giver, reward and deadline, and
 // its difficulty when it is not normal; a deadline that has passed or is close is marked. Finished quests fold away
 // underneath. A quest closes when the story closes it; the reader's one decision here is to
-// Abandon one (0.9.5, asked twice): (0.9.15) the glue puts `[Abandon quest: Key]` into the
-// message box, so it is given up with the reader's next message. Jobs only offered (0.9.15)
+// Abandon one (0.9.5, asked twice): (0.9.15) it is given up with the next reply, told behind
+// the scenes; until then the flag reads Keep, and deleting that reply takes it back. Jobs only offered (0.9.15)
 // fold away under Offered, without buttons: taking one on or turning it down is said in the story.
 // Everything arrives as parameters; this module only draws, and fills every node through
 // textContent (the values are written by the model).
@@ -102,14 +102,22 @@ function difficultyTag(record) {
 }
 
 // A quiet flag at the end of the key line; a click asks again, in words, before it writes.
-function abandonButton(record, onAbandon) {
+function abandonButton(record, onAbandon, { pending = false, onKeep = null } = {}) {
     if (typeof onAbandon !== 'function') return null;
+    // (0.9.15) Given up with the next reply: one click keeps it.
+    if (pending) {
+        return button('Keep', 'story-director-quest-keep', {
+            iconName: 'fa-rotate-left',
+            title: `${record.key} is given up with your next reply. Click to keep it.`,
+            onClick: () => onKeep?.(record.id),
+        });
+    }
     const armed = abandonArmed === record.id;
     return button(armed ? 'Abandon?' : '', `story-director-quest-abandon${armed ? ' is-armed' : ''}`, {
         iconName: 'fa-flag',
         title: armed
             ? `Click again to give up ${record.key} (no quest XP).`
-            : `Abandon ${record.key}: puts "[Abandon quest: ${record.key}]" into your message box, so your character gives it up with your next message (no quest XP).`,
+            : `Abandon ${record.key}: your character gives it up in the next reply (no quest XP). Delete that reply to take it back.`,
         onClick: () => {
             if (!armed) {
                 abandonArmed = record.id;
@@ -134,8 +142,9 @@ function metaPart(field, value) {
  * when there is no goal), the next step, then who, what for, by when and where on one quiet
  * line, and a longer description last, cut to two lines until it is clicked.
  */
-function renderQuest(record, { formatDate, status, onAbandon }) {
+function renderQuest(record, { formatDate, status, onAbandon, abandoning = null, onKeep = null }) {
     const state = status?.(record) ?? '';
+    const pending = Boolean(abandoning?.has?.(record.id));
     const item = el('li', { className: `story-director-record is-quest${state ? ` is-${state}` : ''}` });
     item.dataset.recordId = record.id;
     item.append(el('div', { className: 'story-director-record-head' }, [
@@ -143,7 +152,8 @@ function renderQuest(record, { formatDate, status, onAbandon }) {
         difficultyTag(record),
         state === 'overdue' ? el('span', { className: 'story-director-tag is-overdue', text: 'deadline passed' }) : null,
         state === 'soon' ? el('span', { className: 'story-director-tag is-soon', text: 'deadline soon' }) : null,
-        abandonButton(record, onAbandon),
+        pending ? el('span', { className: 'story-director-tag is-giving-up', text: 'giving up' }) : null,
+        abandonButton(record, onAbandon, { pending, onKeep }),
     ]));
     const goal = text(record.fields?.goal);
     const desc = text(record.fields?.desc);
@@ -229,8 +239,8 @@ function renderFinished(finished) {
  * `status(record)` → 'overdue' | 'soon' | '' marks deadlines;
  * `onAbandon(id)` when the reader gives one up (no button without it).
  */
-export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, onAbandon = null } = {}) {
-    lastArgs = [pane, { quests, finished, offered, formatDate, status, onAbandon }];
+export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null } = {}) {
+    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep }];
     const root = el('div', { className: 'story-director-tab story-director-quests' });
     if (!quests.length) {
         root.append(el('div', { className: 'story-director-empty' }, [
@@ -241,7 +251,7 @@ export function renderQuests(pane, { quests = [], finished = [], offered = [], f
     for (const [type, list] of groups(quests)) {
         root.append(el('section', { className: `story-director-section is-quest-group${type ? ` is-${type}` : ''}` }, [
             sub(typeLabel(type), type === 'bounty' ? 'fa-coins' : type === 'main' ? 'fa-crown' : 'fa-scroll', list.length),
-            el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon }))),
+            el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon, abandoning, onKeep }))),
         ]));
     }
     if (offered.length) root.append(renderOffered(offered, { formatDate, status }));

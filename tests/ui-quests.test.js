@@ -133,3 +133,13 @@ test('jobs only offered fold away under Offered, with no buttons (0.9.15)', () =
     assert.ok(pane.querySelector('.story-director-section .story-director-quest-abandon'));
     assert.equal(render({ quests: [] }).querySelector('.is-offered'), null);
 });
+
+test('a quest given up with the next reply shows "giving up" and a Keep button (0.9.15)', () => {
+    const kept = [];
+    const pane = render({ quests: [quest('Wolf Hunt', { goal: 'kill ridge wolves' })], abandoning: new Set(['wolf hunt']), onAbandon: () => {}, onKeep: id => kept.push(id) });
+    const card = pane.querySelector('.story-director-record.is-quest');
+    assert.match(card.querySelector('.story-director-record-head').textContent, /giving up/);
+    assert.equal(card.querySelector('.story-director-quest-abandon'), null);
+    card.querySelector('.story-director-quest-keep').click();
+    assert.deepEqual(kept, ['wolf hunt']);
+});

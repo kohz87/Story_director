@@ -186,11 +186,12 @@ Battle offers quest XP by difficulty when a quest is finished.
   they do, close it with - Key — abandoned; if not, leave it." A negation ("I won't give up")
   does not count, and nothing is closed by the message itself.
 - **Abandon** (the flag at the end of each open quest's name in the Quests tab, asks twice)
-  puts `[Abandon quest: Wolf Hunt]` into your message box (since 0.9.15): your character gives
-  the job up with your next message, and the story shows it. Remove the line before sending to
-  keep the quest. If the reply does not close it, Story Director writes `- Key — abandoned`
-  into that reply, so deleting or swiping it takes it back; it counts as a failure, so RPG
-  Battle offers no quest XP for it.
+  works behind the scenes, like RPG Battle's fight hand-off (since 0.9.15). The quest shows
+  *giving up* and a **Keep** button until your next reply; that reply's note tells the story
+  "Ren gives up Wolf Hunt. Show it in this reply, and close each with - Key — abandoned.", and
+  the reply records it: the choice is stamped on the message, and `- Key — abandoned` is
+  written into its Director block if the story left it out. A swipe of that reply is told again;
+  deleting it takes the abandon back. It counts as a failure, so RPG Battle offers no quest XP.
 - `due` is the **deadline**: when it is reached, the note says so ("deadline Haywane 30
   reached"), and the story decides what that costs.
 - Quests **never go dormant**. A quest untouched for forty replies stays in the note, and its

@@ -114,6 +114,7 @@ export function noteParts(selection, {
     givenUp = [],
     taking = [],
     declining = [],
+    abandoning = [],
 } = {}) {
     // Only where the model writes change lines: with none asked for, there is nothing to steer.
     const asks = [];
@@ -126,14 +127,14 @@ export function noteParts(selection, {
     const fixes = (corrections ?? []).map(item => typeof item === 'string' ? item : item?.message ?? '').filter(Boolean);
 
     // The model still needs to know how to add records when there are none yet.
-    const choices = instruction && (givenUp?.length || taking?.length || declining?.length);
+    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length;
     if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc && !choices) {
         return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -172,7 +173,7 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [] }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [] }) {
     const parts = [part('Header', header(selection, calendar))];
     // (0.9.12) A quest deadline goes out at a clock time the calendar sets, never "evening".
     const now = typeof selection?.now === 'number' && Number.isFinite(selection.now) ? selection.now : null;
@@ -201,6 +202,12 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
         instruction && declining?.length ? `{{user}} may be turning down ${[...new Set(declining)].join(', ')}. If they do, close it with - Key — declined; if not, leave it.` : '',
     ].filter(Boolean);
     if (checks.length) parts.push(part('Quest check', `Quest check: ${checks.join(' Also: ')}`));
+    // (0.9.15) The reader gave a quest up with the Abandon flag: told behind the scenes, like a
+    // fight's hand-off. The reply records it whether or not the story writes the line.
+    const giving = [...new Set(abandoning ?? [])];
+    if (giving.length) {
+        parts.push(part('Abandoned', `Abandoned: {{user}} gives up ${giving.join(', ')}. Show it in this reply${instruction ? ', and close each with - Key — abandoned' : ''}.`));
+    }
     if (scheduled(selection, due, arriving, relevant)) {
         parts.push(part('Pacing', instruction ? PACING : PACING_NO_CHANGES));
         if ([...due, ...arriving].some(encounterOf)) parts.push(part('Encounter cue', ENCOUNTER_CUE, ' '));

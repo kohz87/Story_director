@@ -9,7 +9,7 @@
   - When your message takes an offer on or turns one down, the note asks the story to write the line.
   - The change instruction now says an offered job is `+ hook` with its giver and reward.
 - **Offered** jobs fold away in the Quests tab, with no buttons, until taken on, turned down or past their deadline.
-- **Abandon puts the choice in your message.** The flag no longer edits the latest reply. It puts `[Abandon quest: Key]` into your message box, so you give the job up with your next message and the story shows it. If that reply does not close the quest, Story Director closes it in that reply, so a swipe still takes it back.
+- **Abandon works behind the scenes, like a fight's hand-off.** The flag no longer edits the latest reply. The quest shows *giving up* with a **Keep** button until your next reply. That reply's note tells the story you give it up, and the reply records it: your choice is stamped on the message, and the closing line is added if the story left it out. A swipe is told again; deleting that reply takes the abandon back.
 - Chats already played are re-read the same way on the next refresh, so jobs that were only offered move to Offered.
 
 ## 0.9.14
