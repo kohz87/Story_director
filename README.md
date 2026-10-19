@@ -84,8 +84,11 @@ Bluewatch*, and the Director tab notes it. Failing those (since 0.9.16), a loose
 plurals folded (*wolves* is *wolf*), job words set aside (*contract*, *bounty*, *quest*…) and a
 word inside a longer one (*fold* in *sheepfold*), so `! Fold Wolf Contract — …` reaches
 *Sheepfold Wolves*; then every word of the key found in one record's name, goal or description
-(*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Two such records are never guessed between. With
-none, a `~` that carries something becomes a new hook (a `type:` that names a kind, such as
+(*Wolf Hunt — kill ridge wolves threatening the sheep fold*). Two such records are never guessed between.
+A name read so is remembered on the record (since 0.9.19): later lines with it, a `+` among
+them, are that record's as its own key would be, with no new note, and the Director tab lists
+it under *also called* (the newest eight; a name two records could claim stays the first's). With
+no record meant, a `~` that carries something becomes a new hook (a `type:` that names a kind, such as
 `type: clock`, sets that kind instead), a `-` does nothing, and any other line is ignored: a
 warning in the Director tab, and one line in the next note's `Corrections:` (`"Key" is not
 tracked: add it with "+ kind Key — …" before changing it.`), only for the latest reply.

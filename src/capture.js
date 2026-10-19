@@ -78,7 +78,8 @@ export function parseCapture(text, tracker) {
     body = (block ? block[1] : body).replace(FENCE, '');
 
     const { ops, errors } = parseChanges(body);
-    const known = new Set((tracker?.records ?? []).map(record => record.id));
+    // (0.9.19) A name a record was reached by before (an alias) is known too.
+    const known = new Set((tracker?.records ?? []).flatMap(record => [record.id, ...(record.aliases ?? [])]));
     const kept = [];
     const dropped = [];
     for (const op of ops) {

@@ -140,6 +140,9 @@ function factsOf(record, formatDate) {
         if (label === 'settled' && isSettled(record)) continue;
         if (text(value)) facts.push({ label, value: text(value) });
     }
+    // (0.9.19) The other names the story reached it by, last: what the model called it.
+    const aliases = (record.aliases ?? []).map(text).filter(Boolean);
+    if (aliases.length) facts.push({ label: 'also called', value: aliases.join(', ') });
     return facts;
 }
 

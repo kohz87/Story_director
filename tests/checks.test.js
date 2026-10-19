@@ -172,3 +172,11 @@ test('date-in-text: a part of day that shares a prefix with a month is not a dat
     assert.equal(dated.length, 1, 'only the real date is flagged');
     assert.match(dated[0].message, /then/);
 });
+
+test('a line on a name the record was reached by counts as touching it (0.9.19)', () => {
+    const late = record({ key: 'Geva', fields: { then: 'files the warrant', on: 'Haywane 12, 09:00 am' }, aliases: ['the listener'] });
+    const state = tracker([late], 5);
+    assert.deepEqual(kinds(check({ before: state, after: state, ops: [op('~', 'The Listener', { now: 'at court' })] })), [], 'not missed: the line was about it');
+    const dated = tracker([record({ key: 'Geva', fields: { then: 'files the warrant on Haywane 14' }, aliases: ['the listener'] })], 6);
+    assert.deepEqual(kinds(check({ after: dated, ops: [op('~', 'The Listener', { then: 'files the warrant on Haywane 14' })] })), ['date-in-text']);
+});

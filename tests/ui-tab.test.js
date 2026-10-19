@@ -575,3 +575,11 @@ test('spoiler guard: problems are read without revealing, except those about wha
     assert.ok(!all.includes('leg starts') && !all.includes('Kade'), 'hidden records\' problems stay hidden');
     assert.match(pane.querySelector('.story-director-lock-counts').textContent, /2 problems behind the scenes/);
 });
+
+test('a record shows the other names the story reached it by, last (0.9.19)', () => {
+    const hunt = record('Wolf Hunt', 'hook', { desc: 'ridge wolves', now: 'at the den' }, { aliases: ['fold wolf contract', 'the ridge job'] });
+    const pane = render({ selection: selection({ relevant: [{ record: hunt, reason: '', priority: 1 }] }) });
+    assert.deepEqual(facts(itemFor(pane, 'Wolf Hunt')), [['', 'ridge wolves'], ['now', 'at the den'], ['also called', 'fold wolf contract, the ridge job']]);
+    // None (or a tracker from before aliases): no row.
+    assert.deepEqual(facts(itemFor(render(), 'Senior Listener Geva')).map(([label]) => label), ['now', 'then', 'on']);
+});
