@@ -323,13 +323,26 @@ test('encountersIn: due and arriving fights first, then those within the due-soo
     const selection = classify(tracker([wolves, far, bounty, council, pack, ambush, raiders], 5), { calendar, now, message: 5 });
 
     assert.deepEqual(encountersIn(selection, { calendar, now }), [
-        { key: 'Ambush at the weir', id: 'ambush at the weir', kind: 'beat', encounter: '3 bandit, bandit captain (boss)', place: 'Weir road', on: 'Haywane 13', status: 'due' },
-        { key: 'Raiders', id: 'raiders', kind: 'agenda', encounter: '2 x raider rank D', place: '', on: 'Haywane 13, morning', status: 'due' },
-        { key: 'Wolf pack', id: 'wolf pack', kind: 'clock', encounter: '4 wolf', place: '', on: 'Haywane 14, dusk', status: 'soon' },
-        { key: 'Wolves on the ridge', id: 'wolves on the ridge', kind: 'beat', encounter: '2 x dire wolf rank D', place: '', on: 'Haywane 16', status: 'soon' },
+        { key: 'Ambush at the weir', id: 'ambush at the weir', kind: 'beat', encounter: '3 bandit, bandit captain (boss)', place: 'Weir road', on: 'Haywane 13', status: 'due', reached: false },
+        { key: 'Raiders', id: 'raiders', kind: 'agenda', encounter: '2 x raider rank D', place: '', on: 'Haywane 13, morning', status: 'due', reached: false },
+        { key: 'Wolf pack', id: 'wolf pack', kind: 'clock', encounter: '4 wolf', place: '', on: 'Haywane 14, dusk', status: 'soon', reached: false },
+        { key: 'Wolves on the ridge', id: 'wolves on the ridge', kind: 'beat', encounter: '2 x dire wolf rank D', place: '', on: 'Haywane 16', status: 'soon', reached: false },
     ]);
     assert.deepEqual(encountersIn(selection, { calendar, now, dueSoonDays: 2 }).map(item => item.key), ['Ambush at the weir', 'Raiders', 'Wolf pack']);
     // Without a calendar only what the selection already holds as due.
     assert.deepEqual(encountersIn(selection).map(item => item.status), ['due', 'due']);
     assert.deepEqual(encountersIn(null), []);
+});
+
+test('encountersIn: a fight is reached only in the reply that fired it (0.9.18)', () => {
+    const now = at('Goldwane 13, 10:45 pm');
+    const sack = record({ key: 'Drunken guards sack the Stray Oar', kind: 'beat', fields: { on: 'Goldwane 13, 10:30 pm', place: 'Bluewatch Village', encounter: '3 desperate drover, mercenary veteran (boss)' } });
+    const due = classify(tracker([sack], 7), { calendar, now, message: 7 });
+    // Due, but the scene never got there: listed, not reached.
+    assert.deepEqual(encountersIn(due, { calendar, now, message: 7 }).map(item => [item.status, item.reached]), [['due', false]]);
+    // The reply at message 8 fired it: reached there, even with its date cleared by the !.
+    const fired = { ...sack, fields: { ...sack.fields, on: '' }, history: [{ message: 8, op: '!', text: '! Drunken guards sack the Stray Oar — they kick in the door' }] };
+    const selection = classify(tracker([fired], 8), { calendar, now, message: 8 });
+    assert.deepEqual(encountersIn(selection, { calendar, now, message: 8 }).map(item => [item.key, item.reached]), [['Drunken guards sack the Stray Oar', true]]);
+    assert.deepEqual(encountersIn(selection, { calendar, now, message: 9 }).map(item => item.reached), [], 'a later reply: no longer reached');
 });

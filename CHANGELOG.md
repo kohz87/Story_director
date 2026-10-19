@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.18
+
+- **A planned fight is reached by the scene, not the clock.** `encountersAt` now says, per fight, whether the reply fired it (`reached`: a `! Key — …` line in that reply). A fight fired there is listed even though firing cleared its date. RPG Battle 0.5.18 offers a planned fight only when it is reached. A brawl at the Stray Oar while your character sits at the guild post no longer pops up as a fight; the story brings it in as news, as the Pacing line asks.
+
 ## 0.9.17
 
 - **Problems read without Reveal.** With *Hide behind the scenes* on, the Director tab only counted problems, so reading a warning such as *"Fold Wolf Contract" is not tracked* meant revealing every agenda, beat and secret. Problems and notes now show while the tab is hidden. Only those about an agenda, a planned beat, a clock or a secret stay hidden, counted on the lock as *N problems behind the scenes*.

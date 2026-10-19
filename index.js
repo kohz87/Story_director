@@ -49,7 +49,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.17';
+const VERSION = '0.9.18';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -521,7 +521,7 @@ const API = Object.freeze({
             const at = Math.min(Number(index), chat.length - 1);
             if (!(at >= 0)) return [];
             const { selection, now } = situationAt(at, sceneTextAt(at));
-            return encountersIn(selection, { calendar: calendar(), now, dueSoonDays: relevanceSettings().dueSoonDays });
+            return encountersIn(selection, { calendar: calendar(), now, dueSoonDays: relevanceSettings().dueSoonDays, message: at });
         } catch {
             return [];
         }

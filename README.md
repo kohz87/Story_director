@@ -1,4 +1,4 @@
-# Story Director v0.9.17
+# Story Director v0.9.18
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -225,8 +225,11 @@ bounty's target) or a clock (one that fires as an attack) can carry one too.
 - **When it is due** (or arriving), the note's Due line says who is coming: `Due now: Ambush at
   the weir (Haywane 14) (fight: 3 bandit, bandit captain (boss))`, and the Pacing line adds one
   sentence: the fight starts when the scene reaches it, the foes appear, and the reply stops at
-  the first blow, because the fight is resolved outside the story. RPG Battle then offers a
-  **Fight?** notice filled in with the foes.
+  the first blow, because the fight is resolved outside the story. When the reply gets there and
+  fires the record (`! Ambush at the weir — the bandits break cover`), RPG Battle offers a
+  **Fight?** notice filled in with the foes (since 0.9.18; before, being due was enough). A due
+  fight the scene never reaches (your character is elsewhere) is no fight: the story brings it in
+  later as news or aftermath, as the Pacing line asks.
 - **Before then**, the kind lines show it compactly (`Beats: Ambush at the weir (Haywane 14) ·
   fight: 3 bandit, bandit captain (boss)`), and the Director tab shows an `encounter` row and a
   `fight` tag.
@@ -756,11 +759,14 @@ shares through the Story Suite (`StorySuite.api('story-director')`):
   ```js
   [
       { key: 'Ambush at the weir', id: 'ambush at the weir', kind: 'beat',
-        encounter: '3 bandit, bandit captain (boss)', place: 'Weir road', on: 'Haywane 14', status: 'due' },
+        encounter: '3 bandit, bandit captain (boss)', place: 'Weir road', on: 'Haywane 14', status: 'due', reached: true },
       { key: 'Wolves on the ridge', id: 'wolves on the ridge', kind: 'beat',
-        encounter: '2 x dire wolf rank D', place: '', on: 'Haywane 16', status: 'soon' },
+        encounter: '2 x dire wolf rank D', place: '', on: 'Haywane 16', status: 'soon', reached: false },
   ]
   ```
+
+  `reached` (since 0.9.18) is true when the reply at `index` fired the record (`! Key — …`):
+  the scene got to the fight. A fight fired there is listed even though firing cleared its date.
 
   It returns `[]` when there are none, or when anything goes wrong. There is nothing to report
   back: the model closes the record with `!` or `-` when it narrates the outcome.
