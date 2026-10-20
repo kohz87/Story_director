@@ -14,24 +14,10 @@
 
 import { makeCalendar, parseWeek } from '../calendar.js';
 import { button, el, icon } from './dom.js';
+import { DEFAULT_SETTINGS } from '../defaults.js';
 
-const DEFAULTS = {
-    enabled: true,
-    sceneTag: 'World_State',
-    depth: 0,
-    budgetTokens: 1000,
-    dormantReplies: 15,
-    dormantDays: 30,
-    dueSoonDays: 3,
-    mirrorOffscreen: true,
-    spoilerGuard: true,
-    giverPresent: true,
-    calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
-    arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, lowThreads: 3, autoAccept: false, genre: '', note: '', prompt: '' },
-    capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
-    map: { north: 'up', east: 'right', kmPerUnit: 1, roadFactor: 1.25, era: 'pre-modern' },
-    sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' },
-};
+// (0.9.39) The runtime's defaults, one copy: the panel never fills a value differently.
+const DEFAULTS = DEFAULT_SETTINGS;
 
 // The Story Suite areas Story Director shares, and what each choice means here.
 const SOURCE_AREAS = [
