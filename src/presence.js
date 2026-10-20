@@ -2,8 +2,8 @@
 //
 // (0.9.34) Taking a job on is done in front of whoever offers it: the Quests tab's Take on is
 // there while the giver is in the scene, read from the scene block's "NPCs Present" (Story
-// Block's World State) or, failing that, from the latest reply naming them. The reader can
-// always say they are with them; turning a job down needs no one.
+// Block's World State), else NPC State Delta's present cast, else the latest reply naming them.
+// (0.9.35) The tab only asks before taking a job on away from its giver; turning one down needs no one.
 
 // Titles and kinship words that do not tell one giver from another ("Brother Aldo" is Aldo).
 const TITLES = new Set([
@@ -40,13 +40,17 @@ export function presentPart(sceneText) {
 const names = (text, name) => new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'iu').test(text);
 
 /**
- * Whether `giver` is in the scene: true when the scene block's NPCs Present (`scene`) or the
- * latest reply (`reply`) names them, false when neither does, null when there is no giver to
- * look for (no check then).
+ * Whether `giver` is in the scene, from the first source there is, in this order (0.9.36): the
+ * scene block's NPCs Present (`scene`), NPC State Delta's present cast (`present`: names), the
+ * latest reply naming them (`reply`). True or false from that source; null when there is no
+ * giver to look for (no check then).
  */
-export function giverPresent(giver, { scene = '', reply = '' } = {}) {
+export function giverPresent(giver, { scene = '', present = null, reply = '' } = {}) {
     const list = giverNames(giver);
     if (!list.length) return null;
-    const present = presentPart(scene);
-    return list.some(name => (present && names(present, name)) || names(String(reply ?? ''), name));
+    const board = presentPart(scene);
+    if (board) return list.some(name => names(board, name));
+    const cast = (Array.isArray(present) ? present : []).map(name => String(name ?? '').trim()).filter(Boolean);
+    if (cast.length) return list.some(name => cast.some(member => names(member, name)));
+    return list.some(name => names(String(reply ?? ''), name));
 }

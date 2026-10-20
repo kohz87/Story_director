@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.36
+
+- **Who is in the scene, from one place at a time.** An offer's *here* / *not here* badge now asks, in order:
+  1. the scene block's *NPCs Present* (World State);
+  2. NPC State Delta's present cast, when it is installed;
+  3. the latest reply naming the giver.
+
+  The first that has anything decides. A reply that mentions someone the scene board doesn't list no longer counts them as present.
+
 ## 0.9.35
 
 - **Offers read more simply.** In 0.9.34 an offer whose giver was away showed four things for one decision: a disabled Take on, Turn down, an "I'm with them" box and a hint. Now the card carries a badge, *Elke · here* or *Elke · not here*, and Take on is always there. While the giver is away it asks once, inline: *Elke isn't here — take it anyway?* **Take on** / **Cancel**. Turn down never asks.

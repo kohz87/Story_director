@@ -22,14 +22,18 @@ test('a giver goes by their name, not their title or who they act for', () => {
     assert.deepEqual(giverNames(''), []);
 });
 
-test('present when NPCs Present or the latest reply names them; Off-Screen never counts', () => {
+test('the first source there is decides: NPCs Present, then NPC State Delta\'s cast, then the latest reply (0.9.36)', () => {
     assert.match(presentPart(SCENE), /Elke/);
     assert.doesNotMatch(presentPart(SCENE), /Kaelen|Aldo/);
     assert.equal(giverPresent('Elke (for Watch-Captain)', { scene: SCENE }), true);
     assert.equal(giverPresent('Convoy Master Kaelen', { scene: SCENE }), false);
-    assert.equal(giverPresent('Brother Aldo', { scene: SCENE, reply: 'Brother Aldo waves you over from the shrine steps.' }), true);
-    // No World State: the latest reply alone.
-    assert.equal(giverPresent('Reeve Hollis', { reply: 'Hollis taps the slip.' }), true);
+    // The scene board decides: a reply naming someone off it does not bring them in.
+    assert.equal(giverPresent('Brother Aldo', { scene: SCENE, present: ['Aldo'], reply: 'Brother Aldo waves from the shrine.' }), false);
+    // No scene board: NPC State Delta's present cast.
+    assert.equal(giverPresent('Brother Aldo', { present: ['Aldo', 'Elke'], reply: '' }), true);
+    assert.equal(giverPresent('Reeve Hollis', { present: ['Aldo'], reply: 'Hollis taps the slip.' }), false);
+    // Neither: the latest reply.
+    assert.equal(giverPresent('Reeve Hollis', { present: [], reply: 'Hollis taps the slip.' }), true);
     assert.equal(giverPresent('Reeve Hollis', { reply: 'The hall is empty.' }), false);
     // No giver: nothing to look for.
     assert.equal(giverPresent('', { scene: SCENE }), null);

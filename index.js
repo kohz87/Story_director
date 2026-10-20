@@ -55,7 +55,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.35';
+const VERSION = '0.9.36';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1468,12 +1468,23 @@ function questsTabKey() {
     return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(','), JSON.stringify(abandonState(ctx) ?? null)].join('|');
 }
 
+// (0.9.36) NPC State Delta's present cast (names), when it is here: the second source for who
+// is in the scene, after the scene block's NPCs Present. Null when it is not, or says nothing.
+function npcStateDeltaPresent() {
+    try {
+        const list = globalThis.NPCStateDelta?.injectionPreview?.()?.presentNpcs;
+        return Array.isArray(list) ? list.map(String) : null;
+    } catch {
+        return null;
+    }
+}
+
 // (0.9.35) Whether an offer's giver is in the scene: { name, here }, null when there is nobody
 // to look for or with the setting off.
-function giverPresence(record, { scene, reply }) {
+function giverPresence(record, { scene, present, reply }) {
     if (settings().giverPresent === false) return null;
     const giver = record?.fields?.giver;
-    const here = giverPresent(giver, { scene, reply });
+    const here = giverPresent(giver, { scene, present, reply });
     return here === null ? null : { name: String(giver).split(/[,(;—–]/)[0].trim(), here };
 }
 
@@ -1481,7 +1492,7 @@ function renderQuestsTab(pane) {
     const { active, finished, offered, now } = questRecords();
     const chat = context()?.chat ?? [];
     const latest = latestAssistantIndex(chat);
-    const where = { scene: storyBlock()?.getBlock?.(settings().sceneTag)?.text ?? '', reply: latest >= 0 ? visibleText(chat[latest]) : '' };
+    const where = { scene: storyBlock()?.getBlock?.(settings().sceneTag)?.text ?? '', present: npcStateDeltaPresent(), reply: latest >= 0 ? visibleText(chat[latest]) : '' };
     // (0.9.12) Each deadline at the clock time the calendar sets: "Goldwane 12 sunset" reads
     // "Goldwane 12, 07:00 pm", a date alone its last minute.
     const cal = calendar();
