@@ -37,7 +37,7 @@ import { seedFromWorldState } from './src/seed.js';
 import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
-import { CHANGE_INSTRUCTION, noteParts, noteTokens, staticNote, tailNote } from './src/note.js';
+import { CHANGE_INSTRUCTION, noteParts, noteTokens, staticNote, tailNote, withFixedNote } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { lapseLines, lapsedOffers, lapsesIn, slippedBeats } from './src/lapses.js';
 import { renderSettings } from './src/ui/settings.js';
@@ -510,10 +510,22 @@ function setNote(note) {
     if (typeof ctx?.setExtensionPrompt !== 'function') return;
     const { fixed = '', tail = '' } = typeof note === 'string' ? { tail: note } : note ?? {};
     const depth = Math.max(0, Math.min(20, Number(settings(ctx).depth) || 0));
+    sentFixed = substituteFixed(ctx, fixed);
     ctx.setExtensionPrompt(STATIC_KEY, fixed, EXTENSION_PROMPT_IN_PROMPT, 0, false, EXTENSION_PROMPT_ROLE_SYSTEM);
     ctx.setExtensionPrompt(TAIL_KEY, tail, EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
     // The single key before 0.9.38 never carries a copy.
     ctx.setExtensionPrompt(PROMPT_KEY, '', EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
+}
+
+// (0.9.38) The fixed part as the prompt carries it, for the check at prompt-ready.
+let sentFixed = '';
+const substituteFixed = (ctx, text) => (text && typeof ctx?.substituteParams === 'function' ? ctx.substituteParams(text) : String(text ?? ''));
+
+/** At prompt-ready: a chat completion whose preset dropped the in-prompt part gets it back, early. */
+function keepFixedNote(eventData) {
+    if (!sentFixed || eventData?.dryRun === true || !Array.isArray(eventData?.chat)) return;
+    const next = withFixedNote(eventData.chat, sentFixed);
+    if (next !== eventData.chat) eventData.chat.splice(0, eventData.chat.length, ...next);
 }
 
 /** The note for the next reply in its two parts, `{ fixed, tail }`, macros substituted. */
@@ -1961,6 +1973,7 @@ function registerEvents() {
     // pass) never carries it and nothing in it is told twice. The next reply builds its own. Not
     // on GENERATION_ENDED: a quiet call another extension makes while the reply is being put
     // together ends too, and would take the note away before the reply is sent.
+    if (events.CHAT_COMPLETION_PROMPT_READY) ctx.eventSource.on(events.CHAT_COMPLETION_PROMPT_READY, keepFixedNote);
     for (const event of [events.MESSAGE_RECEIVED, events.GENERATION_STOPPED]) {
         if (event) ctx.eventSource.on(event, () => setNote(''));
     }

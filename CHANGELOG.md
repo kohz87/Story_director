@@ -6,6 +6,7 @@
   - **The fixed part** goes right after the main prompt and is the same text every reply: the change instruction, the NPC plans line, and Pacing. Pacing used to come only when something was scheduled; a part that comes and goes would break the cached start, so it is always there now (about 70 tokens, cached).
   - **The part for this reply** (the header with the story time and place, what is due and arriving, the records, the checks and your choices) goes at the very end, after your message, at depth 0 by default. It is cleared once its reply is in.
   - Measured on two consecutive replies in the test chat: the identical start of the prompt grew from 4,816 to 5,900 characters, now including the whole instruction. What still breaks it early is another extension's state, not Story Director's.
+- **Kept when a preset turns the Main Prompt off.** SillyTavern drops in-prompt extension text with chat completion when the preset's Main Prompt is off; the fixed part is then put in after the leading system messages, still early and in the same place every reply, so the change instruction is never lost.
 - **Depth.** The setting now places the part for this reply. A depth left at the old default (1) moves to 0 once; one you set yourself stays. The note's old single prompt key is cleared, so no copy from an earlier version lingers.
 
 ## 0.9.37

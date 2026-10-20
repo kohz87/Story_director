@@ -657,3 +657,15 @@ test('cache-friendly: the fixed part is byte-identical reply to reply, the rest 
     assert.equal(staticNote({ instruction: '' }), PACING_NO_CHANGES);
     assert.equal(staticNote({ npcPlansOnly: true }), `${CHANGE_INSTRUCTION}\n${NPC_PLANS_ONLY}\n${PACING}`);
 });
+
+test('a preset with its Main Prompt off drops in-prompt parts: the fixed part is put back early (0.9.38)', async () => {
+    const { withFixedNote } = await import('../src/note.js');
+    const fixed = `${CHANGE_INSTRUCTION}\n${PACING}`;
+    const messages = [{ role: 'system', content: 'Character card' }, { role: 'system', content: 'World info' }, { role: 'user', content: 'hi' }];
+    const kept = withFixedNote(messages, fixed);
+    assert.deepEqual(kept.map(message => message.role), ['system', 'system', 'system', 'user']);
+    assert.equal(kept[2].content, fixed);
+    // Already there (the Main Prompt is on): the same array, untouched.
+    assert.equal(withFixedNote(kept, fixed), kept);
+    assert.equal(withFixedNote(messages, ''), messages);
+});

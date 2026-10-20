@@ -122,6 +122,21 @@ export function staticNote({ instruction = CHANGE_INSTRUCTION, npcPlansOnly = fa
     ].filter(Boolean).join('\n');
 }
 
+/**
+ * (0.9.38) `messages` (a chat completion's) with `fixed` in them: as they are when some message
+ * already holds it, else with it as a system message after the leading system messages, still
+ * early and in the same place every reply. SillyTavern drops in-prompt extension prompts when a
+ * preset turns its Main Prompt off; this keeps the instruction then. A new array when it adds.
+ */
+export function withFixedNote(messages, fixed) {
+    const text = String(fixed ?? '').trim();
+    if (!text || !Array.isArray(messages)) return messages;
+    if (messages.some(message => typeof message?.content === 'string' && message.content.includes(text))) return messages;
+    let at = 0;
+    while (at < messages.length && messages[at]?.role === 'system') at += 1;
+    return [...messages.slice(0, at), { role: 'system', content: text }, ...messages.slice(at)];
+}
+
 /** The note's part for this reply alone: noteParts without the fixed ones ('' when nothing is left). */
 export function tailNote(parts) {
     const kept = (parts ?? []).filter(entry => !STATIC_LABELS.includes(entry.label));
