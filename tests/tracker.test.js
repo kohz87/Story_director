@@ -1002,3 +1002,25 @@ test('"- Key — failed: deadline passed" is a failure, not a quest done (0.9.28
     const done = applyOps(start, ops('- Wolves — done: pack slain'), { message: 3 }).tracker;
     assert.equal(questsDoneIn(done, 3).length, 1);
 });
+
+test('"took down all three contracts" takes on the three offers shown last; turning them all down does not (0.9.32)', () => {
+    const old = applyOps(emptyTracker(), ops('+ hook Mill Pond Eel — drive off the eel | giver: Miller Bram | reward: 4 silver'), { message: 1 }).tracker;
+    const board = [
+        '+ hook Wicker Bed Hogs — drive the hogs off the wicker beds | giver: Reeve Hollis | reward: 6 silver',
+        '+ hook Granary Rats — clear the second granary | giver: Factor Dunn | reward: 5 silver',
+        '+ hook Lost Ledger — find the tithe ledger | giver: Brother Aldo | reward: 3 silver',
+    ].join('\n');
+    const start = applyOps(old, ops(board), { message: 3 }).tracker;
+    const said = 'I nodded and took down all three contracts and head south to the wicker beds with a rented handcart, it wasn\'t hard to spot when the hogs are still digging there.';
+    const taken = ['~ Wicker Bed Hogs — accepted | type: bounty', '~ Granary Rats — accepted | type: bounty', '~ Lost Ledger — accepted | type: bounty', '~ Mill Pond Eel — accepted'].join('\n');
+    const { tracker } = applyOps(start, ops(taken), { message: 5, said });
+    for (const key of ['Wicker Bed Hogs', 'Granary Rats', 'Lost Ledger']) assert.equal(findRecord(tracker, key).kind, 'quest', key);
+    // The older offer was not among the three on the board.
+    assert.notEqual(findRecord(tracker, 'Mill Pond Eel').kind, 'quest');
+    // "Both jobs" is the two shown last; no word for taking them on is still no choice.
+    const two = applyOps(start, ops(taken), { message: 5, said: 'I take both jobs.' }).tracker;
+    assert.deepEqual(['Wicker Bed Hogs', 'Granary Rats', 'Lost Ledger'].map(key => findRecord(two, key).kind === 'quest').filter(Boolean).length, 2);
+    const looked = applyOps(start, ops(taken), { message: 5, said: 'I read all three contracts twice.' }).tracker;
+    assert.ok(['Wicker Bed Hogs', 'Granary Rats', 'Lost Ledger'].every(key => findRecord(looked, key).kind !== 'quest'));
+    assert.ok(['Wicker Bed Hogs', 'Granary Rats'].every(key => findRecord(applyOps(start, ops(taken), { message: 5, said: "I don't take any of them; I turned them all down." }).tracker, key).kind !== 'quest'));
+});
