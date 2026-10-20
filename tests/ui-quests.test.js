@@ -201,3 +201,12 @@ test('an offer says where it was made; elsewhere, Take on asks once inline; Turn
     // Nothing tells: no badge.
     assert.equal(render({ ...options, presence: () => null }).querySelector('.story-director-tag.is-giver'), null);
 });
+
+test('the Quests badge counts the offers the tab shows (0.9.39)', async () => {
+    const { offersShown } = await import('../src/ui/quests.js');
+    const offers = [quest('A', {}, { kind: 'hook' }), quest('B', {}, { kind: 'hook' }), quest('C', {}, { kind: 'hook', engaged: { message: 3 } })];
+    const status = record => (record.key === 'A' ? '' : 'overdue');
+    assert.deepEqual(offersShown(offers, status).map(record => record.key), ['A', 'C'], 'past its deadline only while spoken of');
+    assert.equal(offersShown(offers).length, 3);
+    assert.deepEqual(offersShown(null), []);
+});

@@ -281,6 +281,14 @@ function renderFinished(finished) {
 }
 
 /**
+ * (0.9.39) The offers the tab shows, so its badge counts the same ones: those still open, and
+ * one past its deadline only while the reader has spoken of it (lapses.js gives it a grace).
+ */
+export function offersShown(offered, status = null) {
+    return (offered ?? []).filter(record => record?.engaged || typeof status !== 'function' || status(record) !== 'overdue');
+}
+
+/**
  * Draws the Quests tab into `pane`. `quests`: active quest records; `finished`: resolved
  * ones, most recent first; `offered`: jobs not taken on yet (0.9.15), folded under Offered;
  * `status(record)` → 'overdue' | 'soon' | 'pay' | '' marks deadlines ('pay': only the pay is left);
