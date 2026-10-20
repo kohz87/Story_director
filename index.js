@@ -32,6 +32,7 @@
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
 import { offerPresence } from './src/presence.js';
+import { renderViews } from './src/ui/views.js';
 import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections, waitsForPay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
@@ -59,9 +60,7 @@ const VERSION = '0.9.37';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
-const TAB_ID = 'story-director';
 const QUESTS_TAB_ID = 'story-director-quests';
-const JOURNAL_TAB_ID = 'story-director-journal';
 const EXTENSION_PROMPT_IN_CHAT = 1;
 const EXTENSION_PROMPT_ROLE_SYSTEM = 0;
 const MIN_STORY_BLOCK_API = 1;
@@ -1699,6 +1698,75 @@ async function closeLapsed(index) {
     return true;
 }
 
+// (prototype) The one tab's views, and which one each chat last showed (a UI preference kept
+// in the browser; without storage, for this session).
+const VIEWS = Object.freeze([
+    Object.freeze({ id: 'quests', label: 'Quests' }),
+    Object.freeze({ id: 'journal', label: 'Journal' }),
+    Object.freeze({ id: 'director', label: 'Director' }),
+]);
+const viewMemory = new Map();
+
+function viewStoreKey() {
+    return `storyDirector.view.${chatIdOf(context()) ?? ''}`;
+}
+
+function currentView() {
+    const key = viewStoreKey();
+    let saved = viewMemory.get(key) ?? null;
+    try {
+        saved = globalThis.localStorage?.getItem(key) ?? saved;
+    } catch {
+        // Storage blocked: the session's memory only.
+    }
+    return VIEWS.some(view => view.id === saved) ? saved : 'quests';
+}
+
+function setView(id) {
+    const key = viewStoreKey();
+    viewMemory.set(key, id);
+    try {
+        globalThis.localStorage?.setItem(key, id);
+    } catch {
+        // Storage blocked: the session's memory only.
+    }
+}
+
+// Offers waiting, for the Quests view and the tab.
+function offersWaiting() {
+    try {
+        return questRecords().offered.length;
+    } catch {
+        return 0;
+    }
+}
+
+function groupedBadge() {
+    return offersWaiting() + tabBadge();
+}
+
+function groupedTabKey() {
+    const view = currentView();
+    const inner = view === 'director' ? tabKey() : view === 'journal' ? journalTabKey() : questsTabKey();
+    return [view, offersWaiting(), tabBadge(), inner].join('§');
+}
+
+function renderGroupedTab(pane, { focus = false } = {}) {
+    const view = currentView();
+    const counts = { quests: offersWaiting(), journal: 0, director: tabBadge() };
+    const nav = renderViews(VIEWS.map(entry => ({ ...entry, count: counts[entry.id] })), view, (id, options = {}) => {
+        setView(id);
+        renderGroupedTab(pane, options);
+    });
+    const body = document.createElement('div');
+    body.className = `story-director-view-body is-${view}`;
+    pane.replaceChildren(nav, body);
+    if (view === 'director') renderDirectorTab(body);
+    else if (view === 'journal') renderJournalTab(body);
+    else renderQuestsTab(body);
+    if (focus) nav.querySelector('.story-director-view.is-current')?.focus?.();
+}
+
 function tabBadge() {
     try {
         const { selection } = situation('normal');
@@ -1841,17 +1909,8 @@ function registerWithStoryBlock() {
         registered = true;
         return true;
     }
-    sb.registerTab({
-        id: TAB_ID,
-        label: 'Director',
-        icon: BLOCK.icon,
-        order: 90,
-        isAvailable: () => settings().enabled,
-        key: tabKey,
-        badge: tabBadge,
-        render: pane => renderDirectorTab(pane),
-    });
-    // Only once the story has a quest or an offer, so a chat without any is not given an empty tab.
+    // (prototype) One tab, three views: Quests, Journal and Director, chosen on a quiet line at
+    // the top of its pane (src/ui/views.js); each view draws as its own tab did.
     sb.registerTab({
         id: QUESTS_TAB_ID,
         label: 'Quests',
@@ -1859,39 +1918,14 @@ function registerWithStoryBlock() {
         order: 89,
         isAvailable: () => {
             try {
-                if (!settings().enabled) return false;
-                // (0.9.27) Or a job on offer, so an offer has somewhere to be seen.
-                const { active, finished, offered } = questRecords();
-                return active.length + finished.length + offered.length > 0;
-            } catch {
-                return false;
-            }
-        },
-        key: questsTabKey,
-        badge: () => {
-            try {
-                return questRecords().active.length;
-            } catch {
-                return 0;
-            }
-        },
-        render: pane => renderQuestsTab(pane),
-    });
-    // (0.9.19) The player's side of the story: always there, with an empty state to begin with.
-    sb.registerTab({
-        id: JOURNAL_TAB_ID,
-        label: 'Journal',
-        icon: '📖',
-        order: 88,
-        isAvailable: () => {
-            try {
                 return Boolean(settings().enabled);
             } catch {
                 return false;
             }
         },
-        key: journalTabKey,
-        render: pane => renderJournalTab(pane),
+        key: groupedTabKey,
+        badge: groupedBadge,
+        render: pane => renderGroupedTab(pane),
     });
     sb.onReply(payload => void onReply(payload));
     registered = true;
