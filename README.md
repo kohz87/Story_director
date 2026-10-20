@@ -1,4 +1,4 @@
-# Story Director v0.9.30
+# Story Director v0.9.31
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -768,7 +768,7 @@ closed; the ones you open are remembered in this browser.
 | Dormant after | 15 replies or 30 story days unseen | Left out of the note until mentioned again |
 | Due soon | 3 days | Anything due this soon is never dormant |
 | Calendar | Gregorian | Or your own months and era, and optionally a week of your own day names with the day the story is on (the note's header then shows today's weekday; Gregorian shows the real one) |
-| Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for readers who keep that section in Story Block's World State (once tracking has started). The story's own lines for people with no agenda stay after them (since 0.9.26); a closed agenda's line goes |
+| Mirror Off-Screen | on | Writes active agendas into the scene block's Off-Screen section, for readers who keep that section in Story Block's World State (once tracking has started). The story's own lines for people with no agenda stay after them (since 0.9.26); a closed agenda's line goes. Since 0.9.31 each agenda is one short line, *Courier — rides south from Shorn; arrives Haywane 13, morning; next: delivers the writ*, without the travel leg's arithmetic, which stays in the tracker and the Director tab |
 | Source of truth | Automatic | Calendar, timeline and NPCs: who keeps each when other story extensions are installed (see [Working with the other story extensions](#working-with-the-other-story-extensions)) |
 | Map | north up, east right, 1 km per unit, roads × 1.25 | How the scene's coordinates read (see Places and the map) |
 | World pack | none | Optional roads: places, edges, paces and travel rules, as JSON |

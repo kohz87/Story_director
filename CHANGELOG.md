@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.31
+
+- **Off-Screen lines are short and readable.** With *Mirror Off-Screen* on, each agenda was written into the World State as a full dump of its fields: *Bond collector — now: … | then: … | on: Goldwane 30, 06:40 am | leg: Glassdock → Bluewatch Village 440 km W, upstream 25/day → 18 days | arrive: Goldwane 30, 06:40 am*. It was hard to read and cost tokens on every reply. Now each agenda is one line that reads like the story's own: *Bond collector — on a supply barge up the Bluewatch Branch; arrives Goldwane 30, 06:40 am; next, on arrival: questions the quay inspector*, or *Marrit — at the customs shed; next: drinking at the Stray Oar (Goldwane 12, 01:00 pm)*. The travel leg's arithmetic stays in the tracker and the Director tab, where travel is checked. What each agenda does next, and when, is still there, because the note leaves agendas to this section. Seeding from a World State reads these lines back into their parts.
+
 ## 0.9.30
 
 - **The tracker is kept at the back of the chat.** Until now, Story Director rebuilt quests, hooks and agendas by re-reading every reply from the very first message. So any old message that went missing could take a quest with it. Now it keeps a **checkpoint**: one copy of the tracker as it stood ten replies back, saved in the chat's own hidden data (not in any message, never sent to the model). The tracker is that copy plus the last few replies. Messages before it are never read again, so hiding them, summarising them away (Summarybook and the like) or deleting them changes nothing. A new checkpoint is taken every ten replies and the newest four are kept, about 7 KB each.
