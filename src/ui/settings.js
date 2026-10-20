@@ -24,6 +24,7 @@ const DEFAULTS = {
     dueSoonDays: 3,
     mirrorOffscreen: true,
     spoilerGuard: true,
+    giverPresent: true,
     calendar: { preset: 'custom', era: '', months: [], daysPerMonth: 30 },
     arc: { trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: 7, lowThreads: 3, autoAccept: false, genre: '', note: '', prompt: '' },
     capture: { mode: 'off', model: { source: 'chat' }, maxTokens: 800 },
@@ -317,10 +318,15 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const budget = numberInput('story_director_budget', current.budgetTokens, LIMITS.budgetTokens);
         bindNumber(budget, 'budgetTokens');
 
+        // (0.9.34) Take on in front of whoever offers the job.
+        const giver = toggle('story_director_giver_present', current.giverPresent !== false, 'Take on only with the giver there');
+        giver.addEventListener('change', () => commit(next => { next.giverPresent = Boolean(giver.checked); }));
+
         return [
             row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene' }),
             row('Note depth', 'How many messages from the end the note goes in.', withUnit(depth, 'messages'), { id: 'story_director_depth' }),
             row('Note budget', 'Most tokens the note may use; the least relevant records go first.', withUnit(budget, 'tokens'), { id: 'story_director_budget' }),
+            row('Take on only with the giver there', 'The Quests tab offers Take on while whoever offered the job is in the scene (NPCs Present, or named in the latest reply); “I’m with them” lets you take it anyway.', giver, { id: 'story_director_giver_present' }),
         ];
     }
 

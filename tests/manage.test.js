@@ -166,3 +166,10 @@ test('manage.tokens: a clean copy of what the next reply costs, and nothing on a
     assert.deepEqual(fakeHost({}, () => ({ input: -3, output: 'x', parts: [null, { label: 7, input: 2.6 }] })).manage.tokens(),
         { input: 0, output: 0, parts: [{ label: '7', input: 3, output: 0 }] });
 });
+
+test('manage.preview: the next reply\'s note as text, a plain copy, never throws (0.9.34)', () => {
+    const manage = makeManage({ areas: AREAS, read: () => ({}), save() {}, preview: () => ({ label: 'Story Director note', text: 'Due now: x', tokens: 4.4 }) });
+    assert.deepEqual(manage.preview(), { label: 'Story Director note', text: 'Due now: x', tokens: 4 });
+    assert.deepEqual(makeManage({ areas: AREAS, read: () => ({}), save() {}, preview: () => { throw new Error('x'); } }).preview(), { label: '', text: '', tokens: 0 });
+    assert.deepEqual(makeManage({ areas: AREAS, read: () => ({}), save() {} }).preview(), { label: '', text: '', tokens: 0 });
+});

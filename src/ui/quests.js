@@ -195,8 +195,14 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
  * (0.9.15) Jobs offered and not taken on: the same card as a quest (goal, giver, reward,
  * deadline), no Abandon and no difficulty, folded. Saying yes or no is the story's business.
  */
+// (0.9.34) Offers whose "I'm with them" the reader ticked: Take on is there for them though
+// the giver was not seen in the scene. Kept across redraws, until that offer is taken on.
+const withGiver = new Set();
+
 // (0.9.33) Take on / Turn down under an offer, or, once chosen, what goes with the next reply and Undo.
-function offerActions(record, { choosing = null, onTake = null, onDecline = null, onUndo = null } = {}) {
+// (0.9.34) `away(record)`: the giver's name when they are not in the scene (Take on waits for
+// them, or for "I'm with them"); '' when they are, or nobody is looked for.
+function offerActions(record, { choosing = null, onTake = null, onDecline = null, onUndo = null, away = null } = {}) {
     if (typeof onTake !== 'function' && typeof onDecline !== 'function') return null;
     const taking = choosing?.take?.has?.(record.id);
     const declining = choosing?.decline?.has?.(record.id);
@@ -206,13 +212,40 @@ function offerActions(record, { choosing = null, onTake = null, onDecline = null
             button('Undo', 'story-director-offer-undo', { iconName: 'fa-rotate-left', title: 'Change your mind before the next reply.', onClick: () => onUndo?.(record.id) }),
         ]);
     }
-    return el('div', { className: 'story-director-offer-actions' }, [
-        button('Take on', 'story-director-offer-take', { iconName: 'fa-check', title: `Take on ${record.key}: your next reply tells it, and it becomes your quest.`, onClick: () => onTake?.(record.id) }),
+    const giver = typeof away === 'function' ? away(record) : '';
+    const waiting = Boolean(giver) && !withGiver.has(record.id);
+    const take = button('Take on', 'story-director-offer-take', {
+        iconName: 'fa-check',
+        title: waiting ? `${giver} isn't here. Find ${giver}, or tick "I'm with them".` : `Take on ${record.key}: your next reply tells it, and it becomes your quest.`,
+        onClick: () => {
+            if (waiting) return;
+            withGiver.delete(record.id);
+            onTake?.(record.id);
+        },
+    });
+    if (waiting) {
+        take.disabled = true;
+        take.setAttribute('aria-disabled', 'true');
+    }
+    const row = [
+        take,
         button('Turn down', 'story-director-offer-decline', { iconName: 'fa-xmark', title: `Turn down ${record.key}: your next reply tells it.`, onClick: () => onDecline?.(record.id) }),
-    ]);
+    ];
+    if (giver) {
+        const box = el('input', { className: 'story-director-offer-with', attrs: { type: 'checkbox' } });
+        box.checked = withGiver.has(record.id);
+        box.addEventListener('change', () => {
+            if (box.checked) withGiver.add(record.id);
+            else withGiver.delete(record.id);
+            if (lastArgs) renderQuests(...lastArgs);
+        });
+        row.push(el('label', { className: 'story-director-offer-with-label', attrs: { title: `Your character is with ${giver}, though the scene does not say so.` } }, [box, el('span', { text: "I'm with them" })]));
+        if (waiting) row.push(el('span', { className: 'story-director-empty-hint story-director-offer-away', text: `${giver} isn't here. Find ${giver}, or tick "I'm with them".` }));
+    }
+    return el('div', { className: 'story-director-offer-actions' }, row);
 }
 
-function renderOffered(offered, { formatDate, status, choosing = null, onTake = null, onDecline = null, onUndo = null }) {
+function renderOffered(offered, { formatDate, status, choosing = null, onTake = null, onDecline = null, onUndo = null, away = null }) {
     const buttons = typeof onTake === 'function' || typeof onDecline === 'function';
     const body = el('div', { className: 'story-director-fold-body' }, [
         el('p', { className: 'story-director-empty-hint', text: buttons ? 'Offered, not taken on. Take one on or turn it down here, or say so in the story.' : 'Offered, not taken on. Say in the story that your character takes one on, or turns it down.' }),
@@ -220,7 +253,7 @@ function renderOffered(offered, { formatDate, status, choosing = null, onTake = 
             const item = renderQuest(record, { formatDate, status, onAbandon: null });
             item.classList.add('is-offered');
             item.querySelector('.story-director-tag.is-difficulty')?.remove();
-            const actions = offerActions(record, { choosing, onTake, onDecline, onUndo });
+            const actions = offerActions(record, { choosing, onTake, onDecline, onUndo, away });
             if (actions) item.append(actions);
             return item;
         })),
@@ -264,10 +297,11 @@ function renderFinished(finished) {
  * `status(record)` → 'overdue' | 'soon' | 'pay' | '' marks deadlines ('pay': only the pay is left);
  * `onAbandon(id)` when the reader gives one up (no button without it); (0.9.33) `onTake(id)`,
  * `onDecline(id)` and `onUndo(id)` for an offer, `choosing`: { take, decline } (Sets of ids)
- * chosen for the next reply.
+ * chosen for the next reply; (0.9.34) `away(record)`: the giver's name while they are not in
+ * the scene (Take on waits, with "I'm with them"), '' otherwise.
  */
-export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null } = {}) {
-    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo }];
+export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null, away = null } = {}) {
+    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo, away }];
     const root = el('div', { className: 'story-director-tab story-director-quests' });
     if (!quests.length) {
         root.append(el('div', { className: 'story-director-empty' }, [
@@ -281,7 +315,7 @@ export function renderQuests(pane, { quests = [], finished = [], offered = [], f
             el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon, abandoning, onKeep }))),
         ]));
     }
-    if (offered.length) root.append(renderOffered(offered, { formatDate, status, choosing, onTake, onDecline, onUndo }));
+    if (offered.length) root.append(renderOffered(offered, { formatDate, status, choosing, onTake, onDecline, onUndo, away }));
     if (finished.length) root.append(renderFinished(finished));
     pane.replaceChildren(root);
 }

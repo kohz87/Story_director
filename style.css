@@ -938,3 +938,36 @@
 .story-director-tab .story-director-section.is-journal-day.is-undated > .story-director-sub {
     font-style: italic;
 }
+
+/* (0.9.34) What's sent: the note as text, wrapped, quiet. */
+.story-director-tab .story-director-sent-text {
+    margin: 0.3rem 0 0;
+    padding: 0.4rem 0.5rem;
+    border-radius: 6px;
+    background: var(--sd-hover-bg);
+    font-size: 0.8em;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 22rem;
+    overflow-y: auto;
+}
+
+/* (0.9.34) "I'm with them" beside Take on, and why Take on waits. */
+.story-director-tab .story-director-offer-with-label {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+.story-director-tab .story-director-offer-away {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+.story-director-tab .story-director-offer-actions .menu_button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}

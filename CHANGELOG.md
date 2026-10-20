@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.34
+
+- **Take on waits for the giver.** A job is taken on in front of whoever offers it.
+  - Take on is there while the giver is in the scene: under *NPCs Present* in the scene block (its Off-Screen list never counts), or named in the latest reply.
+  - Until then it reads *Elke isn't here. Find Elke, or tick "I'm with them"*. The box lets you take it anyway, and Turn down never waits.
+  - The wait can be turned off in Settings → Tracking & note.
+- **What's sent.** The Director tab has a fold with the note the next reply gets, word for word, and its size. While Behind the scenes is hidden, only the size shows, since the note names agendas and secrets. The note is built only while the fold is open. Story Suite's overlay can read it too, through `manage.preview()` or `StoryDirector.preview()`.
+- **The note is cleared once its reply is in.** It was rebuilt for every reply but stayed set afterwards, so other extensions' background calls (a quiet prompt, a capture pass) carried it too. Now it goes when the reply arrives or you stop it, so nothing in it (*Taken on*, *Abandoned*, *Slipped*…) can be told twice. It still sits one message from the end, where RPG Battle puts its hand-off.
+
 ## 0.9.33
 
 - **Take on and Turn down buttons on offers.** You no longer have to find the words to take a job: each offer under **Offered** in the Quests tab has **Take on** and **Turn down**. The choice goes with your next reply, the way Abandon does:

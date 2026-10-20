@@ -1,4 +1,4 @@
-# Story Director v0.9.33
+# Story Director v0.9.34
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -176,7 +176,11 @@ Battle offers quest XP by difficulty when a quest is finished.
   Bats. Show it in this reply as part of the scene, in the story's own voice*), your choice is
   stamped on it, and the lines are written for the story if it left them out. So the offer
   becomes your quest (or closes as declined) whatever the story wrote, a swipe is told again,
-  and deleting that reply takes the choice back. A main quest (`type: main`) is the story's to give, and an offer the
+  and deleting that reply takes the choice back. Since 0.9.34 **Take on** waits for whoever
+  offered the job to be in the scene: named under *NPCs Present* in the scene block (never
+  its Off-Screen list) or in the latest reply. Until then it reads *Elke isn't here. Find
+  Elke, or tick "I'm with them"*; the box takes it anyway, and **Turn down** never waits.
+  Settings → Tracking & note → *Take on only with the giver there* turns the wait off. A main quest (`type: main`) is the story's to give, and an offer the
   story moves on (`~ Wolf Hunt — step: tracking the pack`; a `step: 0/1` is not under way) is
   one your character is already doing: both start at once. A model line that gives a job up or
   turns it down (*abandoned*, *gave up*, *declined*, *refused*…) changes nothing unless your

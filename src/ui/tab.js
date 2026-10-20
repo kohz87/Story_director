@@ -535,7 +535,26 @@ function renderArcLocked({ current = null, beats = null, draft = null, busy = fa
     return section('is-arc', children);
 }
 
-export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null, spoiler = null, places = null } = {}) {
+/**
+ * (0.9.34) What's sent: the note the next reply gets, folded. `sent()` builds it ({ text,
+ * tokens }), only while the fold is open. Behind the scenes hidden (`locked`), only its size:
+ * the note names agendas and secrets.
+ */
+function renderSent(sent, { locked = false } = {}) {
+    if (typeof sent !== 'function') return null;
+    return fold('is-sent', "What's sent", 'fa-paper-plane', null, () => {
+        const { text: note = '', tokens = 0 } = sent() ?? {};
+        if (!note) return [el('p', { className: 'story-director-empty-hint', text: 'No note goes with the next reply.' })];
+        const size = `~${Number(tokens) || 0} tokens, added to the next reply near the end of the prompt, then cleared.`;
+        if (locked) return [el('p', { className: 'story-director-empty-hint', text: `${size} It names what is behind the scenes: Reveal to read it.` })];
+        return [
+            el('p', { className: 'story-director-empty-hint', text: size }),
+            el('pre', { className: 'story-director-sent-text', text: note }),
+        ];
+    }, { lazy: true });
+}
+
+export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null, route = null, arc = null, spoiler = null, places = null, sent = null } = {}) {
     const root = el('div', { className: 'story-director-tab' });
     const options = { formatDate, onPin };
     const now = renderNow(timeText || '', place || selection?.place || '');
@@ -562,6 +581,8 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
         const placesFold = places ? renderPlaces(places) : null;
         if (placesFold) root.append(placesFold);
         if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
+        const sentLocked = renderSent(sent, { locked: true });
+        if (sentLocked) root.append(sentLocked);
         pane.replaceChildren(root);
         return;
     }
@@ -629,5 +650,7 @@ export function renderTab(pane, { timeText = '', place = '', selection, findings
     const placesFold = places ? renderPlaces(places) : null;
     if (placesFold) root.append(placesFold);
     if (route && typeof route.onRoute === 'function') root.append(renderRoute(route));
+    const sentFold = renderSent(sent);
+    if (sentFold) root.append(sentFold);
     pane.replaceChildren(root);
 }
