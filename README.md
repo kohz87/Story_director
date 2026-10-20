@@ -1,4 +1,4 @@
-# Story Director v0.9.36
+# Story Director v0.9.37
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -176,13 +176,14 @@ Battle offers quest XP by difficulty when a quest is finished.
   Bats. Show it in this reply as part of the scene, in the story's own voice*), your choice is
   stamped on it, and the lines are written for the story if it left them out. So the offer
   becomes your quest (or closes as declined) whatever the story wrote, a swipe is told again,
-  and deleting that reply takes the choice back. Since 0.9.35 each offer says whether whoever
-  offered the job is in the scene (*Elke · here* / *Elke · not here*), from the first of these
-  that is there: *NPCs Present* in the scene block (never its Off-Screen list), NPC State
-  Delta's present cast (since 0.9.36), the latest reply naming them. While they
-  are not, **Take on** asks once, inline: *Elke isn't here — take it anyway?* **Turn down**
-  never asks. Settings → Tracking & note → *Ask before taking on a job away from its giver*
-  turns the question off. A main quest (`type: main`) is the story's to give, and an offer the
+  and deleting that reply takes the choice back. Since 0.9.37 each offer says **where it was
+  offered**: the settlement of the scene's Loc at the reply that first showed it (*Bluewatch
+  Village · here* while the story is anywhere in Bluewatch Village, *offered in Bluewatch
+  Village* elsewhere). Its giver in the scene counts as here too (*Elke · here*), read from
+  the scene block's *NPCs Present*, else NPC State Delta's present cast, else the latest reply.
+  Elsewhere, **Take on** asks once, inline: *You're not in Bluewatch Village — take it
+  anyway?* **Turn down** never asks. Settings → Tracking & note → *Ask before taking on a job
+  away from where it was offered* turns the question off. A main quest (`type: main`) is the story's to give, and an offer the
   story moves on (`~ Wolf Hunt — step: tracking the pack`; a `step: 0/1` is not under way) is
   one your character is already doing: both start at once. A model line that gives a job up or
   turns it down (*abandoned*, *gave up*, *declined*, *refused*…) changes nothing unless your
