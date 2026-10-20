@@ -503,6 +503,13 @@ test('a quest given up with the Abandon flag is told behind the scenes (0.9.15)'
     assert.match(buildNote(selection(), { calendar, abandoning: ['Wolf Hunt'], instruction: '' }), /Abandoned: \{\{user\}\} gives up Wolf Hunt\. Show it in this reply\./);
 });
 
+test('an offer taken on or turned down with the buttons is told the same way (0.9.33)', () => {
+    const note = buildNote(selection(), { calendar, takingOn: ['Wicker Bed Hogs'], turningDown: ['Lime Kiln Bats'] });
+    assert.ok(lines(note).includes("Taken on: {{user}} takes on Wicker Bed Hogs. Show it in this reply as part of the scene, in the story's own voice, and write ~ Key — accepted for each."));
+    assert.ok(lines(note).includes('Turned down: {{user}} turns down Lime Kiln Bats. Show it in this reply, and close each with - Key — declined.'));
+    assert.match(buildNote(selection(), { calendar, takingOn: ['Wicker Bed Hogs'], instruction: '' }), /Taken on: \{\{user\}\} takes on Wicker Bed Hogs\. Show it in this reply as part of the scene, in the story's own voice\./);
+});
+
 // (0.9.19) While away: what came due while the story skipped ahead.
 
 test('while away: a jump of 12 hours or more tells what came due in the gap once, before Due now', () => {

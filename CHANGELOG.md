@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.33
+
+- **Take on and Turn down buttons on offers.** You no longer have to find the words to take a job: each offer under **Offered** in the Quests tab has **Take on** and **Turn down**. The choice goes with your next reply, the way Abandon does:
+  - until then the offer reads *taken on with your next reply* (or *turned down*), with **Undo**;
+  - the reply is told behind the scenes (*Taken on: Ren takes on Lime Kiln Bats. Show it in this reply as part of the scene, in the story's own voice*), so the story narrates it without menus or game words;
+  - your choice is stamped on that reply, and the change lines are written for the story if it left them out. The offer becomes your quest, or closes as declined, whatever the story wrote;
+  - a swipe of that reply is told again, and deleting it takes the choice back.
+
+  Saying it in the story still works too.
+
 ## 0.9.32
 
 - **Taking several jobs at once counts.** *"I nodded and took down all three contracts and head south to the wicker beds…"* left all three quests stuck under Offered. Story Director takes a job on only when your message accepts it and names it. *Took down* was not a phrase it knew for that, and *all three contracts* names no job. Now:

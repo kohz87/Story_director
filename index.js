@@ -54,7 +54,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.32';
+const VERSION = '0.9.33';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -265,7 +265,7 @@ function signature(message) {
     let hash = 5381;
     for (let index = 0; index < text.length; index++) hash = ((hash * 33) ^ text.charCodeAt(index)) >>> 0;
     // (0.9.15) The reader's abandon stamp is part of what a reply says.
-    const stamp = abandonedStamp(message).join('|');
+    const stamp = [...abandonedStamp(message), ...takenStamp(message).map(id => `+${id}`)].join('|');
     return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}${stamp ? `:${stamp}` : ''}`;
 }
 
@@ -289,7 +289,7 @@ function entryFor(message, index, sb, cal, own, reference, said = null) {
     const timeText = scene ? sceneTimeText(scene.text) : '';
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
-        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said, chosen: abandonedStamp(message) } : {}) },
+        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said, chosen: abandonedStamp(message), taken: takenStamp(message) } : {}) },
         location: scene ? headerCell(scene.text, 'loc|location|place') : '',
         hadBlock: Boolean(block),
         parseErrors: parsed.errors,
@@ -598,7 +598,7 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
         }
         const { selection, tracker, upTo } = situation(type);
         const slot = replacesLastReply(ctx.chat ?? [], type) ? (ctx.chat?.length ?? 1) - 1 : ctx.chat?.length ?? 0;
-        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo, selection.place), abandoning: abandoningFor(slot, tracker) });
+        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(slot, tracker) });
         const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
         setNote(text);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
@@ -1436,7 +1436,7 @@ function questStatus(now) {
 function questsTabKey() {
     const ctx = context();
     const chat = ctx?.chat ?? [];
-    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(',')].join('|');
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(','), JSON.stringify(abandonState(ctx) ?? null)].join('|');
 }
 
 function renderQuestsTab(pane) {
@@ -1447,7 +1447,7 @@ function renderQuestsTab(pane) {
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
     // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id) });
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id) });
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
@@ -1483,28 +1483,39 @@ function renderJournalTab(pane) {
  * again; deleting it takes the abandon back. Until the reply comes, a second click keeps it.
  * State: chatMetadata[SETTINGS_KEY].abandon = { keys: [record id], attachedTo, sentFor }.
  */
+// (0.9.33) Offers taken on or turned down with the Quests tab's buttons go the same way:
+// `take` and `decline` beside `keys` (the quests given up), stamped on the reply as
+// `taken` and (with what was given up) `abandoned`.
 function abandonedStamp(message) {
     const list = message?.extra?.storyDirector?.abandoned;
     return Array.isArray(list) ? list.map(String) : [];
 }
 
+function takenStamp(message) {
+    const list = message?.extra?.storyDirector?.taken;
+    return Array.isArray(list) ? list.map(String) : [];
+}
+
+const idList = value => (Array.isArray(value) ? value.map(String) : []);
+const anyChoice = state => Boolean(state && (state.keys?.length || state.take?.length || state.decline?.length));
+
 function abandonState(ctx = context()) {
     const meta = chatMeta(ctx);
     const state = meta?.[SETTINGS_KEY]?.abandon;
-    if (!state || !Array.isArray(state.keys) || !state.keys.length) return null;
+    if (!anyChoice(state)) return null;
     const attachedTo = Number.isInteger(state.attachedTo) ? state.attachedTo : null;
-    // The reply it went with was deleted: the abandon is taken back.
+    // The reply it went with was deleted: the choice is taken back.
     if (attachedTo !== null && !isAssistant(ctx?.chat?.[attachedTo])) {
         setAbandonState(null, ctx);
         return null;
     }
-    return { keys: state.keys.map(String), attachedTo, sentFor: Number.isInteger(state.sentFor) ? state.sentFor : null };
+    return { keys: idList(state.keys), take: idList(state.take), decline: idList(state.decline), attachedTo, sentFor: Number.isInteger(state.sentFor) ? state.sentFor : null };
 }
 
 function setAbandonState(state, ctx = context()) {
     const meta = chatMeta(ctx);
     if (!meta) return;
-    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), abandon: state && state.keys?.length ? state : null };
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), abandon: anyChoice(state) ? state : null };
     ctx.saveMetadataDebounced?.();
 }
 
@@ -1514,14 +1525,43 @@ function pendingAbandons(ctx = context()) {
     return new Set(state && state.attachedTo === null ? state.keys : []);
 }
 
+/** (0.9.33) Offers the reader is taking on or turning down with the next reply: { take, decline } (Sets). */
+function pendingOffers(ctx = context()) {
+    const state = abandonState(ctx);
+    const open = state && state.attachedTo === null;
+    return { take: new Set(open ? state.take : []), decline: new Set(open ? state.decline : []) };
+}
+
+/** (0.9.33) Take on (`choice` 'take') or turn down ('decline') an offer with the next reply. */
+function chooseOffer(id, choice) {
+    const record = questRecords().offered.find(entry => entry.id === id);
+    if (!record) return;
+    const state = abandonState() ?? { keys: [], take: [], decline: [], attachedTo: null, sentFor: null };
+    const fresh = state.attachedTo === null ? state : { keys: [], take: [], decline: [], attachedTo: null, sentFor: null };
+    const take = fresh.take.filter(key => key !== id);
+    const decline = fresh.decline.filter(key => key !== id);
+    (choice === 'take' ? take : decline).push(id);
+    setAbandonState({ ...fresh, take, decline, attachedTo: null, sentFor: null });
+    notify('info', `${record.key}: ${choice === 'take' ? 'taken on' : 'turned down'} with your next reply. Click Undo on it to change your mind.`);
+    storyBlock()?.refresh?.();
+}
+
+function undoOffer(id) {
+    const state = abandonState();
+    if (!state || state.attachedTo !== null) return;
+    setAbandonState({ ...state, take: state.take.filter(key => key !== id), decline: state.decline.filter(key => key !== id) });
+    storyBlock()?.refresh?.();
+}
+
 function abandonQuest(id) {
     const record = questRecords().active.find(entry => entry.id === id);
     if (!record) return;
     const state = abandonState() ?? { keys: [], attachedTo: null, sentFor: null };
     // A new choice after the last one was sent starts afresh.
-    const keys = state.attachedTo === null ? state.keys : [];
+    const open = state.attachedTo === null;
+    const keys = open ? state.keys : [];
     if (!keys.includes(record.id)) keys.push(record.id);
-    setAbandonState({ keys, attachedTo: null, sentFor: null });
+    setAbandonState({ keys, take: open ? state.take : [], decline: open ? state.decline : [], attachedTo: null, sentFor: null });
     notify('info', `${record.key} is given up with your next reply. Click Keep on it to change your mind.`);
     storyBlock()?.refresh?.();
 }
@@ -1538,16 +1578,18 @@ function keepQuest(id) {
  * A pending choice goes with the next reply; one already sent goes again with a swipe of its
  * reply, and is done once a later reply is written.
  */
-function abandoningFor(slot, tracker) {
+function choicesFor(slot, tracker) {
+    const none = { abandoning: [], takingOn: [], turningDown: [] };
     const state = abandonState();
-    if (!state) return [];
+    if (!state) return none;
     if (state.attachedTo !== null && slot > state.attachedTo) {
         setAbandonState(null);
-        return [];
+        return none;
     }
-    if (state.attachedTo !== null && slot !== state.attachedTo) return [];
+    if (state.attachedTo !== null && slot !== state.attachedTo) return none;
     if (state.sentFor !== slot) setAbandonState({ ...state, sentFor: slot });
-    return state.keys.map(id => findRecord(tracker, id)?.key).filter(Boolean);
+    const keys = list => list.map(id => findRecord(tracker, id)?.key).filter(Boolean);
+    return { abandoning: keys(state.keys), takingOn: keys(state.take), turningDown: keys(state.decline) };
 }
 
 /** After the reply the abandon went with: stamp the reader's choice, and close what the story left open. */
@@ -1557,13 +1599,19 @@ async function closeAbandoned(index) {
     const state = abandonState(ctx);
     if (!state || state.sentFor !== index) return false;
     const message = ctx.chat[index];
-    message.extra = { ...(message.extra ?? {}), storyDirector: { ...(message.extra?.storyDirector ?? {}), abandoned: state.keys } };
+    // A turned-down offer is the reader's choice as a given-up quest is: stamped with them.
+    message.extra = { ...(message.extra ?? {}), storyDirector: { ...(message.extra?.storyDirector ?? {}), abandoned: [...state.keys, ...state.decline], taken: state.take } };
     setAbandonState({ ...state, attachedTo: index }, ctx);
     const { tracker } = trackerAt(index);
-    const open = state.keys.map(id => findRecord(tracker, id)).filter(record => record && record.status === 'active');
-    if (open.length) {
+    const still = ids => ids.map(id => findRecord(tracker, id)).filter(record => record && record.status === 'active');
+    // What the story left out is written for it: a choice made with a button always holds.
+    const lines = [
+        ...still(state.keys).map(record => `- ${record.key} — abandoned`),
+        ...still(state.take).filter(record => record.kind !== 'quest').map(record => `~ ${record.key} — accepted`),
+        ...still(state.decline).map(record => `- ${record.key} — declined`),
+    ].join('\n');
+    if (lines) {
         const existing = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
-        const lines = open.map(record => `- ${record.key} — abandoned`).join('\n');
         await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
     } else {
         await ctx.saveChat?.();

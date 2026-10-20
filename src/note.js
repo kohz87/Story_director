@@ -132,6 +132,8 @@ export function noteParts(selection, {
     taking = [],
     declining = [],
     abandoning = [],
+    takingOn = [],
+    turningDown = [],
     previousTime = null,
     slipped = [],
     lapsed = [],
@@ -150,14 +152,14 @@ export function noteParts(selection, {
     const away = awayIn(selection, { calendar, from: previousTime });
 
     // The model still needs to know how to add records when there are none yet.
-    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length || slipped?.length || lapsed?.length || (distances?.length && distanceFrom);
+    const choices = (instruction && (givenUp?.length || taking?.length || declining?.length)) || abandoning?.length || takingOn?.length || turningDown?.length || slipped?.length || lapsed?.length || (distances?.length && distanceFrom);
     if (!due.length && !arriving.length && !relevant.length && !secrets.length && !fixes.length && !selection?.arc && !choices) {
         return asks;
     }
 
     // relevant is sorted highest priority first, so the cheapest cut is from the end.
     let kept = relevant.length;
-    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning, away, slipped, lapsed, distances, distanceFrom });
+    const build = () => compose({ selection, calendar, due, arriving, relevant: relevant.slice(0, kept), secrets, fixes, instruction, asks, givenUp, taking, declining, abandoning, takingOn, turningDown, away, slipped, lapsed, distances, distanceFrom });
     let parts = build();
     while (kept > 0 && estimateTokens(joinParts(parts)) > budgetTokens) {
         kept -= 1;
@@ -196,7 +198,7 @@ function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
 
-function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], away = null, slipped = [], lapsed = [], distances = [], distanceFrom = '' }) {
+function compose({ selection, calendar, due, arriving, relevant, secrets, fixes, instruction, asks, givenUp = [], taking = [], declining = [], abandoning = [], takingOn = [], turningDown = [], away = null, slipped = [], lapsed = [], distances = [], distanceFrom = '' }) {
     const parts = [part('Header', header(selection, calendar))];
     const noWeek = noWeekLine(selection, calendar);
     if (noWeek) parts.push(part('No weekdays', noWeek, ' '));
@@ -240,6 +242,16 @@ function compose({ selection, calendar, due, arriving, relevant, secrets, fixes,
     const giving = [...new Set(abandoning ?? [])];
     if (giving.length) {
         parts.push(part('Abandoned', `Abandoned: {{user}} gives up ${giving.join(', ')}. Show it in this reply${instruction ? ', and close each with - Key — abandoned' : ''}.`));
+    }
+    // (0.9.33) Offers the reader took on or turned down with the Quests tab's buttons, told the
+    // same way: the choice is made, the reply shows it in the story's own voice.
+    const takes = [...new Set(takingOn ?? [])];
+    if (takes.length) {
+        parts.push(part('Taken on', `Taken on: {{user}} takes on ${takes.join(', ')}. Show it in this reply as part of the scene, in the story's own voice${instruction ? ', and write ~ Key — accepted for each' : ''}.`));
+    }
+    const refusals = [...new Set(turningDown ?? [])];
+    if (refusals.length) {
+        parts.push(part('Turned down', `Turned down: {{user}} turns down ${refusals.join(', ')}. Show it in this reply${instruction ? ', and close each with - Key — declined' : ''}.`));
     }
     // (0.9.19) What time closed in the latest reply, told once, in the note right after it: the
     // story need not stage a beat that slipped or a job that went to someone else, only not

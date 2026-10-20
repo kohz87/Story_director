@@ -7,7 +7,9 @@
 // underneath. A quest closes when the story closes it; the reader's one decision here is to
 // Abandon one (0.9.5, asked twice): (0.9.15) it is given up with the next reply, told behind
 // the scenes; until then the flag reads Keep, and deleting that reply takes it back. Jobs only offered (0.9.15)
-// fold away under Offered, without buttons: taking one on or turning it down is said in the story.
+// fold away under Offered; (0.9.33) each with Take on and Turn down, made the same way: the
+// choice goes with the next reply, which tells it, and until then it reads Undo. Saying it in
+// the story still works too.
 // Everything arrives as parameters; this module only draws, and fills every node through
 // textContent (the values are written by the model).
 
@@ -193,16 +195,38 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
  * (0.9.15) Jobs offered and not taken on: the same card as a quest (goal, giver, reward,
  * deadline), no Abandon and no difficulty, folded. Saying yes or no is the story's business.
  */
-function renderOffered(offered, { formatDate, status }) {
+// (0.9.33) Take on / Turn down under an offer, or, once chosen, what goes with the next reply and Undo.
+function offerActions(record, { choosing = null, onTake = null, onDecline = null, onUndo = null } = {}) {
+    if (typeof onTake !== 'function' && typeof onDecline !== 'function') return null;
+    const taking = choosing?.take?.has?.(record.id);
+    const declining = choosing?.decline?.has?.(record.id);
+    if (taking || declining) {
+        return el('div', { className: 'story-director-offer-actions is-chosen' }, [
+            el('span', { className: `story-director-tag ${taking ? 'is-taking' : 'is-turning-down'}`, text: taking ? 'taken on with your next reply' : 'turned down with your next reply' }),
+            button('Undo', 'story-director-offer-undo', { iconName: 'fa-rotate-left', title: 'Change your mind before the next reply.', onClick: () => onUndo?.(record.id) }),
+        ]);
+    }
+    return el('div', { className: 'story-director-offer-actions' }, [
+        button('Take on', 'story-director-offer-take', { iconName: 'fa-check', title: `Take on ${record.key}: your next reply tells it, and it becomes your quest.`, onClick: () => onTake?.(record.id) }),
+        button('Turn down', 'story-director-offer-decline', { iconName: 'fa-xmark', title: `Turn down ${record.key}: your next reply tells it.`, onClick: () => onDecline?.(record.id) }),
+    ]);
+}
+
+function renderOffered(offered, { formatDate, status, choosing = null, onTake = null, onDecline = null, onUndo = null }) {
+    const buttons = typeof onTake === 'function' || typeof onDecline === 'function';
     const body = el('div', { className: 'story-director-fold-body' }, [
-        el('p', { className: 'story-director-empty-hint', text: 'Offered, not taken on. Say in the story that your character takes one on, or turns it down.' }),
+        el('p', { className: 'story-director-empty-hint', text: buttons ? 'Offered, not taken on. Take one on or turn it down here, or say so in the story.' : 'Offered, not taken on. Say in the story that your character takes one on, or turns it down.' }),
         el('ul', { className: 'story-director-records' }, offered.map(record => {
             const item = renderQuest(record, { formatDate, status, onAbandon: null });
             item.classList.add('is-offered');
             item.querySelector('.story-director-tag.is-difficulty')?.remove();
+            const actions = offerActions(record, { choosing, onTake, onDecline, onUndo });
+            if (actions) item.append(actions);
             return item;
         })),
     ]);
+    // A choice waiting for the next reply keeps the fold open, so it stays in sight.
+    if (choosing?.take?.size || choosing?.decline?.size) offeredOpen = true;
     const details = el('details', { className: 'story-director-fold is-offered' }, [
         el('summary', { className: 'story-director-fold-summary' }, [sub('Offered', 'fa-hand-holding', offered.length)]),
         body,
@@ -238,10 +262,12 @@ function renderFinished(finished) {
  * Draws the Quests tab into `pane`. `quests`: active quest records; `finished`: resolved
  * ones, most recent first; `offered`: jobs not taken on yet (0.9.15), folded under Offered;
  * `status(record)` → 'overdue' | 'soon' | 'pay' | '' marks deadlines ('pay': only the pay is left);
- * `onAbandon(id)` when the reader gives one up (no button without it).
+ * `onAbandon(id)` when the reader gives one up (no button without it); (0.9.33) `onTake(id)`,
+ * `onDecline(id)` and `onUndo(id)` for an offer, `choosing`: { take, decline } (Sets of ids)
+ * chosen for the next reply.
  */
-export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null } = {}) {
-    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep }];
+export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null } = {}) {
+    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo }];
     const root = el('div', { className: 'story-director-tab story-director-quests' });
     if (!quests.length) {
         root.append(el('div', { className: 'story-director-empty' }, [
@@ -255,7 +281,7 @@ export function renderQuests(pane, { quests = [], finished = [], offered = [], f
             el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon, abandoning, onKeep }))),
         ]));
     }
-    if (offered.length) root.append(renderOffered(offered, { formatDate, status }));
+    if (offered.length) root.append(renderOffered(offered, { formatDate, status, choosing, onTake, onDecline, onUndo }));
     if (finished.length) root.append(renderFinished(finished));
     pane.replaceChildren(root);
 }
