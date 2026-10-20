@@ -32,7 +32,7 @@ export function renderViews(views, current, onSelect) {
         return node;
     });
     buttons.forEach((node, index) => {
-        if (index) nav.append(el('span', { className: 'story-director-view-sep', text: '·', attrs: { 'aria-hidden': 'true' } }));
+        if (index) nav.append(el('span', { className: 'story-director-view-sep', attrs: { 'aria-hidden': 'true' } }));
         nav.append(node);
     });
     return nav;
