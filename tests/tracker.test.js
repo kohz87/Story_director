@@ -586,6 +586,33 @@ test('a quest closed without a - line: step done, status completed, a ! that say
     assert.equal(findRecord(applyOps(agenda, ops('~ Geva — now: done.'), { message: 2 }).tracker, 'Geva').status, 'active');
 });
 
+test('a step that opens with the ending and confirms it closes the quest; one that goes on to more work does not (0.9.42)', () => {
+    const start = applyOps(emptyTracker(), ops('+ quest EastBluffWolves — hunt the crag wolves | giver: Fenna | step: find the pack | reward: 2 gold'), { message: 1 }).tracker;
+    const after = line => applyOps(start, ops(line), { message: 2 });
+    for (const line of [
+        '~ EastBluffWolves — goal: Hunt starved crag wolf pack | reward: Claimed 2 gold | step: Completed and turned in to Fenna',
+        '~ EastBluffWolves — step: Completed and turned in to Fenna',
+        '~ EastBluffWolves — step: Done — bounty paid by Fenna',
+        '~ EastBluffWolves — step: Finished and the reward collected',
+        '~ EastBluffWolves — step: Completed and reported | reward: Claimed 2 gold',
+    ]) {
+        const { tracker, problems } = after(line);
+        const quest = findRecord(tracker, 'EastBluffWolves');
+        assert.equal(quest.status, 'resolved', line);
+        assert.equal(problems[0].kind, 'closed-by-change', line);
+        assert.equal(questsDoneIn(tracker, 2).length, 1, line);
+    }
+    // Still work to do, or a reward only promised: open.
+    for (const line of [
+        '~ EastBluffWolves — step: done tracking, now the den',
+        '~ EastBluffWolves — step: Completed and heading back to Fenna',
+        '~ EastBluffWolves — step: Completed and heading back | reward: 2 gold, paid on return',
+        '~ EastBluffWolves — step: Finished the hunt, pelts to skin',
+    ]) {
+        assert.equal(findRecord(after(line).tracker, 'EastBluffWolves').status, 'active', line);
+    }
+});
+
 test('progress on a plain thread or a beat is not a quest; progress on an offered job is (0.9.2, 0.9.4)', () => {
     const start = applyOps(emptyTracker(), ops([
         '+ hook River stranger — who pulled Ren out',
