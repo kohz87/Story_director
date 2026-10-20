@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.42
+
+- **A quest whose step says it is done and turned in is closed.** A model wrote `~ EastBluffWolves — reward: Claimed 2 gold | step: Completed and turned in to Fenna` every reply instead of a `-` line, and the quest stayed on the Quests tab as active: a step only closed a quest when the ending stood alone or before punctuation (*completed — Garrow paid*). Now a step that opens with the ending and goes on to confirm it (*Completed and turned in to Fenna*, *Done — bounty paid*) closes the quest too, as does one whose line carries a reward already taken (*reward: Claimed 2 gold*). A step that goes on to more work (*done tracking, now the den*, *Completed and heading back to Fenna*) is still a step.
+
 ## 0.9.41
 
 - **The put-back instruction stays out of other extensions' calls.** Since 0.9.38 the note's fixed part is put back when a preset leaves the Main Prompt out of its prompt order (SillyTavern then drops in-prompt extension text; a Main Prompt merely switched off still carries it). That check ran on every prompt while a reply's note was out, so another extension's call made during the generation (NPC State Delta's dossier scan through generateRaw, a summary) got the change instruction too. Now it only goes into the story's own prompt: one that carries the chat's replies, never a dry run, and only between the reply's interceptor and the reply arriving or being stopped. The note's part for this reply never reached those calls (generateRaw leaves extension prompts out).

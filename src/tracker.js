@@ -13,6 +13,16 @@ const FAILED = /\b(?:fail|abandon|gave up|give up|given up|giving up|forfeit|qui
 // `status: completed`, `outcome: failed`. Only a value that is one of these words, alone or
 // before punctuation ("completed — the wolves are dead"): "complete the ritual" is a step.
 const OVER_VALUE = /^(?:done|complete|completed|finished|fulfilled|accomplished|resolved|succeeded|success|turned in|handed in|delivered|over|closed|failed|failure|abandoned|given up|gave up|forfeit|forfeited|quit|withdrawn|called off|expired|cancell?ed)\s*(?:$|[.,;:!—–(-])/i;
+// (0.9.42) A quest's step that opens with the ending and goes on to confirm it: "Completed and
+// turned in to Fenna" (the rest says turned in), or with a `reward:` that reads as paid in the
+// same line ("reward: Claimed 2 gold"). "done tracking, now the den" is still a step.
+const OVER_START = /^(?:done|completed|finished|fulfilled|accomplished|turned in|handed in|delivered|failed|abandoned)\b\s*(?:and|&|,|—|–|-|;)\s*(.+)$/i;
+const REWARD_TAKEN = /^(?:claimed|collected|received|paid|taken|pocketed|got)\b/i;
+const overStep = (value, op) => {
+    const rest = value.match(OVER_START)?.[1] ?? '';
+    if (!rest) return false;
+    return LOOKS_OVER.test(rest) || QUEST_OVER_TEXT.test(rest) || REWARD_TAKEN.test(String(op?.fields?.reward ?? op?.extra?.reward ?? '').trim());
+};
 // The labels such a value comes under: any record's status or outcome, and a quest's step or now.
 const OVER_LABELS = ['status', 'state', 'outcome', 'result', 'progress'];
 const QUEST_OVER_FIELDS = ['step', 'now'];
@@ -188,7 +198,7 @@ function overByChange(record, op) {
     if (record.kind === 'quest' || isJob(record) || takesOnQuest(record, op)) {
         for (const field of QUEST_OVER_FIELDS) {
             const value = String(op.fields?.[field] ?? '').trim();
-            if (OVER_VALUE.test(value)) return value;
+            if (OVER_VALUE.test(value) || overStep(value, op)) return value;
         }
     }
     return null;
@@ -672,7 +682,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         }
         if (over !== null) {
             const { status: _s, state: _st, outcome: _o, result: _r, progress: _p, ...extra } = op.extra ?? {};
-            const fields = Object.fromEntries(Object.entries(op.fields ?? {}).filter(([name, value]) => !(QUEST_OVER_FIELDS.includes(name) && OVER_VALUE.test(String(value ?? '').trim()))));
+            const fields = Object.fromEntries(Object.entries(op.fields ?? {}).filter(([name, value]) => !(QUEST_OVER_FIELDS.includes(name) && (OVER_VALUE.test(String(value ?? '').trim()) || overStep(String(value ?? '').trim(), op)))));
             applyFields(record, { ...op, fields, extra });
             doneOffer(record, over, op);
             record.status = 'resolved';

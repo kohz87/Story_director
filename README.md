@@ -1,4 +1,4 @@
-# Story Director v0.9.41
+# Story Director v0.9.42
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -231,8 +231,10 @@ Battle offers quest XP by difficulty when a quest is finished.
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
   `status:` / `outcome:` (any record) is just *done*, *completed*, *finished*, *failed*,
   *abandoned*… (alone or before punctuation: `step: completed — Garrow paid`; `step: complete
-  the hunt` is still a step), and a `!` on a quest that says it was completed, done, turned in,
-  rewarded or failed. A failure closes the quest without counting as done (no quest XP).
+  the hunt` is still a step; since 0.9.42 also a step that opens with the ending and goes on to
+  confirm it, `step: Completed and turned in to Fenna`, or comes with a reward already taken,
+  `reward: Claimed 2 gold`, while `step: done tracking, now the den` stays a step), and a `!` on
+  a quest that says it was completed, done, turned in, rewarded or failed. A failure closes the quest without counting as done (no quest XP).
 - **The story closes quests, not a click** (since 0.9.5). When an open quest's own `step` or
   `now` reads as over (*wolf slain, reward collected*, *delivered*, *failed*) but no line closed
   it, the note adds a **Quest check**: "the story may have finished Sheep-killer. If it has,
