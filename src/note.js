@@ -125,12 +125,16 @@ export function staticNote({ instruction = CHANGE_INSTRUCTION, npcPlansOnly = fa
 /**
  * (0.9.38) `messages` (a chat completion's) with `fixed` in them: as they are when some message
  * already holds it, else with it as a system message after the leading system messages, still
- * early and in the same place every reply. SillyTavern drops in-prompt extension prompts when a
- * preset turns its Main Prompt off; this keeps the instruction then. A new array when it adds.
+ * early and in the same place every reply. SillyTavern drops in-prompt extension prompts when the
+ * preset's Main Prompt is missing from its prompt order; this keeps the instruction then. A new
+ * array when it adds. (0.9.41) `story`: the chat has replies, so the story's own prompt carries
+ * some; a call without any (another extension's scan or summary while the reply is generated, a
+ * generateRaw) is left alone.
  */
-export function withFixedNote(messages, fixed) {
+export function withFixedNote(messages, fixed, { story = false } = {}) {
     const text = String(fixed ?? '').trim();
     if (!text || !Array.isArray(messages)) return messages;
+    if (story && !messages.some(message => message?.role === 'assistant')) return messages;
     if (messages.some(message => typeof message?.content === 'string' && message.content.includes(text))) return messages;
     let at = 0;
     while (at < messages.length && messages[at]?.role === 'system') at += 1;

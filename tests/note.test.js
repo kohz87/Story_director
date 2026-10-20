@@ -658,7 +658,7 @@ test('cache-friendly: the fixed part is byte-identical reply to reply, the rest 
     assert.equal(staticNote({ npcPlansOnly: true }), `${CHANGE_INSTRUCTION}\n${NPC_PLANS_ONLY}\n${PACING}`);
 });
 
-test('a preset with its Main Prompt off drops in-prompt parts: the fixed part is put back early (0.9.38)', async () => {
+test('a preset without its Main Prompt in the prompt order drops in-prompt parts: the fixed part is put back early (0.9.38)', async () => {
     const { withFixedNote } = await import('../src/note.js');
     const fixed = `${CHANGE_INSTRUCTION}\n${PACING}`;
     const messages = [{ role: 'system', content: 'Character card' }, { role: 'system', content: 'World info' }, { role: 'user', content: 'hi' }];
@@ -668,4 +668,19 @@ test('a preset with its Main Prompt off drops in-prompt parts: the fixed part is
     // Already there (the Main Prompt is on): the same array, untouched.
     assert.equal(withFixedNote(kept, fixed), kept);
     assert.equal(withFixedNote(messages, ''), messages);
+});
+
+test('the put-back fixed part goes only into the story\'s own prompt, never another extension\'s call (0.9.41)', async () => {
+    const { withFixedNote } = await import('../src/note.js');
+    const fixed = `${CHANGE_INSTRUCTION}\n${PACING}`;
+    // The reply's own prompt: the chat's replies are in it, so the part goes in once.
+    const story = [{ role: 'system', content: 'Card' }, { role: 'user', content: 'hi' }, { role: 'assistant', content: 'The wolves come.' }, { role: 'user', content: 'I draw.' }];
+    const kept = withFixedNote(story, fixed, { story: true });
+    assert.equal(kept.filter(message => message.content === fixed).length, 1);
+    assert.equal(withFixedNote(kept, fixed, { story: true }), kept, 'never twice');
+    // A scan or summary made while the reply is generated (generateRaw: system + user): untouched.
+    const scan = [{ role: 'system', content: 'You extract NPC dossiers as JSON.' }, { role: 'user', content: 'Transcript: …' }];
+    assert.equal(withFixedNote(scan, fixed, { story: true }), scan);
+    // A chat with no replies yet: its first prompt has none either, so the part still goes in.
+    assert.equal(withFixedNote(scan, fixed, { story: false }).filter(message => message.content === fixed).length, 1);
 });

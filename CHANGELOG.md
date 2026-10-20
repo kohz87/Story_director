@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.41
+
+- **The put-back instruction stays out of other extensions' calls.** Since 0.9.38 the note's fixed part is put back when a preset leaves the Main Prompt out of its prompt order (SillyTavern then drops in-prompt extension text; a Main Prompt merely switched off still carries it). That check ran on every prompt while a reply's note was out, so another extension's call made during the generation (NPC State Delta's dossier scan through generateRaw, a summary) got the change instruction too. Now it only goes into the story's own prompt: one that carries the chat's replies, never a dry run, and only between the reply's interceptor and the reply arriving or being stopped. The note's part for this reply never reached those calls (generateRaw leaves extension prompts out).
+
 ## 0.9.40
 
 - **One write after each reply.** The reader's choices that went with a reply (given up, taken on, turned down) and what its story time ran past (beats that slipped, offers that lapsed) used to be two separate writes to the reply's Director block, each saving the chat and redrawing the tabs. They are one write now. A record the reader just chose about is never also closed as lapsed.
@@ -18,7 +22,7 @@
   - **The fixed part** goes right after the main prompt and is the same text every reply: the change instruction, the NPC plans line, and Pacing. Pacing used to come only when something was scheduled; a part that comes and goes would break the cached start, so it is always there now (about 70 tokens, cached).
   - **The part for this reply** (the header with the story time and place, what is due and arriving, the records, the checks and your choices) goes at the very end, after your message, at depth 0 by default. It is cleared once its reply is in.
   - Measured on two consecutive replies in the test chat: the identical start of the prompt grew from 4,816 to 5,900 characters, now including the whole instruction. What still breaks it early is another extension's state, not Story Director's.
-- **Kept when a preset turns the Main Prompt off.** SillyTavern drops in-prompt extension text with chat completion when the preset's Main Prompt is off; the fixed part is then put in after the leading system messages, still early and in the same place every reply, so the change instruction is never lost.
+- **Kept when a preset leaves the Main Prompt out.** SillyTavern drops in-prompt extension text with chat completion when the Main Prompt is missing from the preset's prompt order (merely switched off, it still places it); the fixed part is then put in after the leading system messages, still early and in the same place every reply, so the change instruction is never lost.
 - **Depth.** The setting now places the part for this reply. A depth left at the old default (1) moves to 0 once; one you set yourself stays. The note's old single prompt key is cleared, so no copy from an earlier version lingers.
 
 ## 0.9.37
