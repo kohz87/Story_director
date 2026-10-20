@@ -870,6 +870,37 @@
     font-size: 0.8em;
 }
 
+/* (0.9.33) Take on / Turn down under an offer; once chosen, what goes with the next reply. */
+.story-director-tab .story-director-offer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    margin-top: 0.35rem;
+}
+
+.story-director-tab .story-director-offer-actions .menu_button {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    min-height: 2rem;
+    margin: 0;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.85em;
+}
+
+.story-director-tab .story-director-offer-actions .story-director-tag.is-taking {
+    color: var(--sd-accent, #6aa36f);
+    font-weight: 600;
+    opacity: 1;
+}
+
+.story-director-tab .story-director-offer-actions .story-director-tag.is-turning-down {
+    color: #d46a6a;
+    font-weight: 600;
+    opacity: 1;
+}
+
 /* (0.9.19) The Journal: a day per section, each entry a small icon, the key and a quiet tag,
    and what happened under it. Endings take the accent; a quest failed or given up the warning. */
 .story-director-tab .story-director-journal-icon {

@@ -152,3 +152,22 @@ test('a quest with only its pay left is marked "pay waiting", never "deadline pa
     assert.match(card.textContent, /pay waiting/);
     assert.doesNotMatch(card.textContent, /deadline passed/);
 });
+
+test('an offer can be taken on or turned down here; once chosen it reads Undo until the next reply (0.9.33)', () => {
+    const offer = quest('Wicker Bed Hogs', { type: 'bounty', giver: 'Reeve Hollis', reward: '6 silver' }, { kind: 'hook' });
+    const other = quest('Lime Kiln Bats', { giver: 'Elke', reward: '5 silver' }, { kind: 'hook' });
+    const calls = [];
+    const pane = render({ offered: [offer, other], onTake: id => calls.push(['take', id]), onDecline: id => calls.push(['decline', id]), onUndo: id => calls.push(['undo', id]) });
+    const cards = pane.querySelectorAll('.is-offered .story-director-record');
+    cards[0].querySelector('.story-director-offer-take').click();
+    cards[1].querySelector('.story-director-offer-decline').click();
+    assert.deepEqual(calls, [['take', 'wicker bed hogs'], ['decline', 'lime kiln bats']]);
+    const chosen = render({ offered: [offer, other], choosing: { take: new Set(['wicker bed hogs']), decline: new Set() }, onTake: () => {}, onDecline: () => {}, onUndo: id => calls.push(['undo', id]) });
+    const first = chosen.querySelectorAll('.is-offered .story-director-record')[0];
+    assert.equal(first.querySelector('.story-director-tag.is-taking').textContent, 'taken on with your next reply');
+    assert.equal(first.querySelector('.story-director-offer-take'), null);
+    first.querySelector('.story-director-offer-undo').click();
+    assert.deepEqual(calls.at(-1), ['undo', 'wicker bed hogs']);
+    // Without the handlers (an older caller): no buttons, the old hint.
+    assert.equal(render({ offered: [offer] }).querySelector('.story-director-offer-take'), null);
+});

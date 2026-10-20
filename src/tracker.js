@@ -445,7 +445,7 @@ function aliasIndexOf(records, indexById) {
  * as its own key would be, with no further finding.
  * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
  */
-export function applyOps(tracker, ops, { message, time = null, said, chosen = [] } = {}) {
+export function applyOps(tracker, ops, { message, time = null, said, chosen = [], taken = [] } = {}) {
     const records = [...tracker.records];
     // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.
     const gated = said !== undefined;
@@ -459,7 +459,10 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         const tracked = records.find(other => other.id === record.id || lineKey(other.key) === lineKey(record.key));
         return tracked ? inQuestion.has(tracked.id) : true;
     };
+    // (0.9.33) `taken`: offers the reader took on with the Take on button (ids stamped on the reply).
+    const tookOn = new Set((taken ?? []).map(key => lineKey(key)));
     const accepts = (record, op = null) => !gated
+        || tookOn.has(record.id) || tookOn.has(lineKey(record.key))
         || lineKey(op?.fields?.type ?? record.fields?.type ?? '') === 'main'
         || saidAbout(said, record, ACCEPT_WORDS, { alone: alone(op), among: among(record) })
         || (alone(op) && saidAbout(said, record, AGREE_WORDS, { alone: true }));
@@ -681,9 +684,11 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         if (op.op === '~') {
             let change = op;
             const moving = ['step', 'now'].some(name => String(op.fields?.[name] ?? '').trim() && !NOT_STARTED.test(String(op.fields[name])));
+            // (0.9.33) An offer taken on with the button: any ~ on it in that reply makes it the quest.
+            const button = BECOMES_QUEST.has(record.kind) && (tookOn.has(record.id) || tookOn.has(lineKey(record.key)));
             if (takesOnQuest(record, op) && gated && !moving && !accepts(record)) {
                 offered(op, record);
-            } else if (takesOnQuest(record, op)) {
+            } else if (takesOnQuest(record, op) || button) {
                 problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
                 record.kind = 'quest';
                 // `type: quest` only said what it is; a category (bounty, contract…) stays its type.
@@ -771,7 +776,7 @@ export function replay(entries, { seed = null } = {}) {
         if (entry.text) tracker = markSeen(tracker, entry.text, at);
         // (0.9.27) A reply with no change lines still reads the reader's message (offers spoken of).
         if (entry.ops?.length || (typeof entry.said === 'string' && entry.said)) {
-            const result = applyOps(tracker, entry.ops, entry.said === undefined ? at : { ...at, said: entry.said, chosen: entry.chosen ?? [] });
+            const result = applyOps(tracker, entry.ops, entry.said === undefined ? at : { ...at, said: entry.said, chosen: entry.chosen ?? [], taken: entry.taken ?? [] });
             tracker = result.tracker;
             for (const problem of result.problems) {
                 problems.push({ ...problem, text: problem.message, message: entry.message });

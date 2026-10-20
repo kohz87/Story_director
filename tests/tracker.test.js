@@ -1024,3 +1024,15 @@ test('"took down all three contracts" takes on the three offers shown last; turn
     assert.ok(['Wicker Bed Hogs', 'Granary Rats', 'Lost Ledger'].every(key => findRecord(looked, key).kind !== 'quest'));
     assert.ok(['Wicker Bed Hogs', 'Granary Rats'].every(key => findRecord(applyOps(start, ops(taken), { message: 5, said: "I don't take any of them; I turned them all down." }).tracker, key).kind !== 'quest'));
 });
+
+test('an offer taken on with the button is a quest on the reply\'s "~ Key — accepted", whatever the message said (0.9.33)', () => {
+    const start = applyOps(emptyTracker(), ops('+ hook Lime Kiln Bats — clear the bats | giver: Elke | reward: 5 silver\n+ hook Drake Shallows — kill the drake | giver: Elke | reward: 2 gold'), { message: 1 }).tracker;
+    const reply = '~ Lime Kiln Bats — accepted\n- Drake Shallows — declined';
+    const { tracker } = applyOps(start, ops(reply), { message: 3, said: 'I head for the Stray Oar.', taken: ['lime kiln bats'], chosen: ['drake shallows'] });
+    assert.equal(findRecord(tracker, 'Lime Kiln Bats').kind, 'quest');
+    assert.equal(findRecord(tracker, 'Drake Shallows').status, 'resolved');
+    // Without the stamps the same lines change nothing: the message chose neither.
+    const plain = applyOps(start, ops(reply), { message: 3, said: 'I head for the Stray Oar.' }).tracker;
+    assert.notEqual(findRecord(plain, 'Lime Kiln Bats').kind, 'quest');
+    assert.equal(findRecord(plain, 'Drake Shallows').status, 'active');
+});

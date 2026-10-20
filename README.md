@@ -1,4 +1,4 @@
-# Story Director v0.9.32
+# Story Director v0.9.33
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -169,7 +169,14 @@ Battle offers quest XP by difficulty when a quest is finished.
   kept as an **offer**. Since 0.9.32 taking a notice down (*took down*, *took them*) counts too,
   and so does taking several at once: *all three contracts*, *both jobs*, *all of them* mean the
   offers shown most lately (that many of them, newest first), so *I took down all three
-  contracts* takes on the three the board just showed, and *turned them all down* refuses them. A main quest (`type: main`) is the story's to give, and an offer the
+  contracts* takes on the three the board just showed, and *turned them all down* refuses them.
+  Since 0.9.33 each offer in the Quests tab also has **Take on** and **Turn down**. The choice
+  goes with your next reply, like Abandon: until then the offer reads *taken on with your next
+  reply* with **Undo**. The reply is told behind the scenes (*Taken on: Ren takes on Lime Kiln
+  Bats. Show it in this reply as part of the scene, in the story's own voice*), your choice is
+  stamped on it, and the lines are written for the story if it left them out. So the offer
+  becomes your quest (or closes as declined) whatever the story wrote, a swipe is told again,
+  and deleting that reply takes the choice back. A main quest (`type: main`) is the story's to give, and an offer the
   story moves on (`~ Wolf Hunt — step: tracking the pack`; a `step: 0/1` is not under way) is
   one your character is already doing: both start at once. A model line that gives a job up or
   turns it down (*abandoned*, *gave up*, *declined*, *refused*…) changes nothing unless your
