@@ -84,6 +84,25 @@ function isNone(item) {
     return /^none\.?$/i.test(item.replace(/[*_`]/g, '').trim());
 }
 
+// (0.9.31) An Off-Screen line as the mirror writes it ("Courier — rides south; arrives Haywane
+// 13; next: delivers the writ (Haywane 14)") read back into change-line parts, so a seeded agenda
+// keeps its now, then, on and arrive. Any other line is left as it is.
+const MIRROR_ARRIVES = /;\s*arrives\s+([^;]+)/i;
+const MIRROR_NEXT = /;\s*next(, on arrival)?:\s*([^;]+?)(?:\s*\(([^()]+)\))?\s*(?=;|$)/i;
+const MIRROR_ON = /;\s*on\s+([^;]+)/i;
+export function fromMirrorLine(item) {
+    const line = String(item ?? '');
+    const split = /^(.+?)\s+[—–]\s+(.+)$/.exec(line);
+    if (!split || line.includes('|') || !(MIRROR_ARRIVES.test(line) || MIRROR_NEXT.test(line) || MIRROR_ON.test(line))) return line;
+    const [, key, rest] = split;
+    const now = rest.split(';')[0].trim();
+    const arrive = MIRROR_ARRIVES.exec(rest)?.[1]?.trim() ?? '';
+    const next = MIRROR_NEXT.exec(rest);
+    const on = next?.[3]?.trim() || MIRROR_ON.exec(rest)?.[1]?.trim() || (next?.[1] ? arrive : '');
+    const parts = [now ? `now: ${now}` : '', next?.[2] ? `then: ${next[2].trim()}` : '', on ? `on: ${on}` : '', arrive ? `arrive: ${arrive}` : ''].filter(Boolean);
+    return `${key} — ${parts.join(' | ')}`;
+}
+
 /** `+` ops for every item of the block's list sections, with a count per kind. */
 export function seedFromWorldState(text) {
     const ops = [];
@@ -92,7 +111,7 @@ export function seedFromWorldState(text) {
 
     const take = item => {
         if (!item.trim() || isNone(item)) return;
-        const [op] = parseChanges(`+ ${kind} ${item.trim()}`).ops;
+        const [op] = parseChanges(`+ ${kind} ${kind === 'agenda' ? fromMirrorLine(item.trim()) : item.trim()}`).ops;
         if (!op) return;
         ops.push(op);
         counts[op.kind] += 1;

@@ -9,17 +9,27 @@ const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 // Sections that come after Off-Screen in a World_State block; a new section goes before them.
 const AFTER_OFFSCREEN_KINDS = new Set(['event', 'hook', 'clock']);
 const AFTER_OFFSCREEN_NAMES = new Set(['arcphase', 'scenephase']);
-const PARTS = ['now', 'then', 'on', 'leg', 'arrive'];
-
+// (0.9.31) One short line per agenda, read like the story's own: what they are doing, when they
+// arrive, and what they do next (and when). The leg's arithmetic (Shorn → Auvoth 70 F, wagon
+// 14/day → 5) stays in the tracker and the Director tab: travel is checked in code, and it made
+// each line a wall of labels. "* Courier — rides south from Shorn; arrives Haywane 13, morning;
+// next: delivers the writ".
 function agendaLine(record) {
     const fields = record.fields ?? {};
-    const parts = [];
+    const text = name => String(fields[name] ?? '').trim();
     // An agenda seeded from `* Key: desc` has no `now`; its one line of state is the desc.
-    if (!fields.now && fields.desc) parts.push(fields.desc);
-    for (const name of PARTS) {
-        if (fields[name]) parts.push(`${name}: ${fields[name]}`);
-    }
-    return parts.length ? `* ${record.key} — ${parts.join(' | ')}` : `* ${record.key}`;
+    const now = text('now') || text('desc');
+    const arrive = text('arrive');
+    const then = text('then');
+    const on = text('on');
+    const onArrival = Boolean(on && arrive && on === arrive);
+    const when = on && !onArrival ? on : '';
+    const parts = [];
+    if (now) parts.push(now);
+    if (arrive) parts.push(`arrives ${arrive}`);
+    if (then) parts.push(`${onArrival ? 'next, on arrival' : 'next'}: ${then}${when ? ` (${when})` : ''}`);
+    else if (when) parts.push(`on ${when}`);
+    return parts.length ? `* ${record.key} — ${parts.join('; ')}` : `* ${record.key}`;
 }
 
 // (0.9.26) "* Jor — crying in the granary alley": the name a story line starts with.

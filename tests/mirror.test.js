@@ -52,9 +52,10 @@ const AGENDAS = [
 
 const EXPECTED_SECTION = [
     '**📡 Off-Screen:**',
-    '* Senior Listener Geva — now: District Bailiff Court | then: files the warrant | on: Haywane 13, 09:00 am',
-    '* Courier — now: rides south from Shorn | then: delivers the writ | leg: Shorn → Varnhold Watch 35 B, courier 70/day → 0.5 | arrive: Haywane 13, morning',
-    '* Master Giertnow — Bluewatch market | then: sells the mules',
+    // (0.9.31) Short lines: what they do, when they arrive, what next (and when); no leg.
+    '* Senior Listener Geva — District Bailiff Court; next: files the warrant (Haywane 13, 09:00 am)',
+    '* Courier — rides south from Shorn; arrives Haywane 13, morning; next: delivers the writ',
+    '* Master Giertnow — Bluewatch market; next: sells the mules',
     '* Thys',
 ].join('\n');
 
@@ -86,7 +87,7 @@ test('the story\'s own lines for people with no agenda stay, after the agendas; 
 * Master Giertnow: Bluewatch market | then: sells the mules | on: Haywane 14${WORLD_STATE.slice(WORLD_START - 1)}`);
     const alley = 'Loc: Guild\n**📡 Off-Screen:**\n* Jor — crying in the granary alley\n* Bond collector — on a barge\n* None';
     assert.equal(mirrorOffscreen(alley, [agenda('Bond collector', { now: 'leaving Glassdock' })]),
-        'Loc: Guild\n**📡 Off-Screen:**\n* Bond collector — now: leaving Glassdock\n* Jor — crying in the granary alley');
+        'Loc: Guild\n**📡 Off-Screen:**\n* Bond collector — leaving Glassdock\n* Jor — crying in the granary alley');
     // A name the agenda was also called by is the agenda's too.
     assert.equal(mirrorOffscreen('**📡 Off-Screen:**\n* The collector — on a barge', [agenda('Bond collector', {}, { aliases: ['the collector'] })]),
         '**📡 Off-Screen:**\n* Bond collector');
@@ -128,11 +129,26 @@ test('the section ends at a rule or the end, keeps blank lines and CRLF, and tak
     assert.equal(mirrorOffscreen(atEnd, []), 'Loc: Auvoth\n**📡 Off-Screen:**\n* None');
 });
 
-test('mirrored lines read back through the seeder unchanged', () => {
+test('mirrored lines read back through the seeder with their parts (0.9.31: the leg stays in the tracker)', () => {
     const { ops, counts } = seedFromWorldState(mirrorOffscreen(WORLD_STATE, AGENDAS));
     assert.equal(counts.agenda, 4);
-    assert.deepEqual(ops[1].fields, {
-        now: 'rides south from Shorn', then: 'delivers the writ',
-        leg: 'Shorn → Varnhold Watch 35 B, courier 70/day → 0.5', arrive: 'Haywane 13, morning',
-    });
+    assert.deepEqual(ops[0].fields, { now: 'District Bailiff Court', then: 'files the warrant', on: 'Haywane 13, 09:00 am' });
+    assert.deepEqual(ops[1].fields, { now: 'rides south from Shorn', then: 'delivers the writ', arrive: 'Haywane 13, morning' });
+    assert.deepEqual(ops[2].fields, { now: 'Bluewatch market', then: 'sells the mules' });
+});
+
+test('a mirrored line is short: no leg, no labels; a date on the next step or alone (0.9.31)', () => {
+    const lines = mirrorOffscreen('', [
+        agenda('Bond collector', { now: 'on a supply barge up the Bluewatch Branch', then: 'questions the quay inspector', on: 'Goldwane 30, 06:40 am', leg: 'Glassdock → Bluewatch Village 440 km W, upstream 25/day → 18 days', arrive: 'Goldwane 30, 06:40 am' }),
+        agenda('Marrit', { now: 'at the customs shed', on: 'Goldwane 12, 01:00 pm' }),
+    ]).split('\n');
+    assert.deepEqual(lines.slice(1), [
+        '* Bond collector — on a supply barge up the Bluewatch Branch; arrives Goldwane 30, 06:40 am; next, on arrival: questions the quay inspector',
+        '* Marrit — at the customs shed; on Goldwane 12, 01:00 pm',
+    ]);
+    assert.ok(!lines.join('\n').includes('km'), 'the leg stays in the tracker');
+    // Read back, the date alone is the agenda's `on`, and an arrival with a next step is both.
+    const { ops } = seedFromWorldState(lines.join('\n'));
+    assert.deepEqual(ops[0].fields, { now: 'on a supply barge up the Bluewatch Branch', then: 'questions the quay inspector', on: 'Goldwane 30, 06:40 am', arrive: 'Goldwane 30, 06:40 am' });
+    assert.deepEqual(ops[1].fields, { now: 'at the customs shed', on: 'Goldwane 12, 01:00 pm' });
 });
