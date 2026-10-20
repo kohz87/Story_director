@@ -1,4 +1,4 @@
-# Story Director v0.9.31
+# Story Director v0.9.32
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -166,7 +166,10 @@ Battle offers quest XP by difficulty when a quest is finished.
   do*, *we'll join*, *agree to*, *sign up*, *count us in*, *I'm up for it*, *deal*…) in a sentence
   naming it, its giver or a word of its name (*the wolf job* is Wolf Hunt), or with only one job
   in question, when a plain *yes*, *sure* or *aye* also counts (since 0.9.27); otherwise it is
-  kept as an **offer**. A main quest (`type: main`) is the story's to give, and an offer the
+  kept as an **offer**. Since 0.9.32 taking a notice down (*took down*, *took them*) counts too,
+  and so does taking several at once: *all three contracts*, *both jobs*, *all of them* mean the
+  offers shown most lately (that many of them, newest first), so *I took down all three
+  contracts* takes on the three the board just showed, and *turned them all down* refuses them. A main quest (`type: main`) is the story's to give, and an offer the
   story moves on (`~ Wolf Hunt — step: tracking the pack`; a `step: 0/1` is not under way) is
   one your character is already doing: both start at once. A model line that gives a job up or
   turns it down (*abandoned*, *gave up*, *declined*, *refused*…) changes nothing unless your

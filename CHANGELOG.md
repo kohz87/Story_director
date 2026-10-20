@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.32
+
+- **Taking several jobs at once counts.** *"I nodded and took down all three contracts and head south to the wicker beds…"* left all three quests stuck under Offered. Story Director takes a job on only when your message accepts it and names it. *Took down* was not a phrase it knew for that, and *all three contracts* names no job. Now:
+  - *took down*, *took them* and *tore down* (a notice) count as taking a job on;
+  - *all three contracts*, *both jobs*, *all of them* and *them all* mean the offers shown most lately (that many of them, newest first).
+
+  So that message takes on the three the board just showed, and an older offer stays an offer. *Turned them all down* refuses them the same way. Reading a notice (*I read all three contracts*) still takes nothing.
+
 ## 0.9.31
 
 - **Off-Screen lines are short and readable.** With *Mirror Off-Screen* on, each agenda was written into the World State as a full dump of its fields: *Bond collector — now: … | then: … | on: Goldwane 30, 06:40 am | leg: Glassdock → Bluewatch Village 440 km W, upstream 25/day → 18 days | arrive: Goldwane 30, 06:40 am*. It was hard to read and cost tokens on every reply. Now each agenda is one line that reads like the story's own: *Bond collector — on a supply barge up the Bluewatch Branch; arrives Goldwane 30, 06:40 am; next, on arrival: questions the quay inspector*, or *Marrit — at the customs shed; next: drinking at the Stray Oar (Goldwane 12, 01:00 pm)*. The travel leg's arithmetic stays in the tracker and the Director tab, where travel is checked. What each agenda does next, and when, is still there, because the note leaves agendas to this section. Seeding from a World State reads these lines back into their parts.

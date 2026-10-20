@@ -78,7 +78,8 @@ export function givenUpIn(tracker, text) {
 // outcomes: done, failed, expired. A main quest is the story's to give, and a job the story
 // moves on (a step under way) is one the character is already doing.
 // (0.9.27) "We" as well as "I", and going along: "we'll join the hunt", "count us in".
-const ACCEPT_WORDS = /\b(?:accept(?:s|ed|ing)?|take (?:it|this|that|the|on|up)|takes (?:it|the|on|up)|took (?:it|the|on|up)|taking (?:it|the|on|up)|(?:i|we)(?:'?ll| will| shall) (?:take|do|handle|join|help|see to)|join(?:s|ed)? (?:the|you|your|in)|agree(?:s|d)? to|sign(?:s|ed)? (?:up|on)|count (?:me|us) in|(?:i'?m|we'?re) in|(?:i'?m|we'?re) up for|up for it|let'?s do (?:it|this)|deal|choose|chose|pick(?:s|ed)?)\b/i;
+// (0.9.32) Taking a notice off a board, or several at once: "took down all three contracts".
+const ACCEPT_WORDS = /\b(?:accept(?:s|ed|ing)?|take (?:it|this|that|the|on|up|them|down|all|both|these|those)|takes (?:it|the|on|up|them|down|all|both)|took (?:it|the|on|up|them|down|all|both|these|those)|taking (?:it|the|on|up|them|down|all|both)|(?:tore|pulled|ripped) (?:down|off) (?:the|all|both|them|these|those)|(?:i|we)(?:'?ll| will| shall) (?:take|do|handle|join|help|see to)|join(?:s|ed)? (?:the|you|your|in)|agree(?:s|d)? to|sign(?:s|ed)? (?:up|on)|count (?:me|us) in|(?:i'?m|we'?re) in|(?:i'?m|we'?re) up for|up for it|let'?s do (?:it|this)|deal|choose|chose|pick(?:s|ed)?)\b/i;
 // (0.9.27) Plain yes words: they take a job only when the reply's one new quest is the question.
 const AGREE_WORDS = /^\W*(?:yes|yeah|aye|sure|okay|ok|alright|all right|very well|of course|fine)\b/i;
 const REFUSE_WORDS = /\b(?:refuse[sd]?|refusing|declin(?:e|es|ed|ing)|turn(?:s|ed|ing)? (?:it |that |this |them )?down|no thanks|pass(?:es|ed)? on|not interested)\b/i;
@@ -88,6 +89,35 @@ const CHOSEN_END = /\b(?:abandon|gave up|give up|given up|giving up|forfeit|quit
 const GENERIC_WORDS = new Set(['quest', 'job', 'jobs', 'contract', 'bounty', 'task', 'work', 'mission', 'favour', 'favor', 'side', 'main']);
 // A step that has not started is not the story moving a job on.
 const NOT_STARTED = /^\s*(?:0\s*(?:\/|of)\s*\d+|0|none|not (?:yet )?started|pending|unstarted)\b/i;
+
+// (0.9.32) Every job in question at once: "all three contracts", "both jobs", "all of them".
+const COUNT_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6 };
+const JOB_NOUNS = '(?:contracts?|jobs?|quests?|bount(?:y|ies)|tasks?|postings?|notices?|offers?|commissions?|requests?|errands?)';
+const ALL_JOBS = new RegExp(`\\b(?:(?:all|both|every|each)(?:\\s+(?:of\\s+)?(?:the|these|those))?(?:\\s+(\\d+|two|three|four|five|six))?\\s+${JOB_NOUNS}|(?:all|both)(?:\\s+(\\d+|two|three|four|five|six))?\\s+of\\s+(?:them|those|these)|them\\s+(?:all|both))\\b`, 'i');
+
+/** How many jobs "all of them" means in `said`: { count } (null: as many as are in question), or null when it says none. */
+function allJobsIn(said) {
+    for (const sentence of sentencesOf(said)) {
+        const match = ALL_JOBS.exec(sentence);
+        if (!match) continue;
+        const word = String(match[1] ?? match[2] ?? '').toLowerCase();
+        const count = /^\d+$/.test(word) ? Number(word) : COUNT_WORDS[word] ?? (/\bboth\b/i.test(match[0]) ? 2 : null);
+        return { count };
+    }
+    return null;
+}
+
+/**
+ * The offers "all of them" means: the ones shown most lately before reply `message` (a
+ * count given: that many, newest first). [record]
+ */
+function offersInQuestion(records, message, count = null) {
+    const last = record => Math.max(...[record.seen, record.changed, record.created].map(at => (Number.isInteger(at?.message) && at.message < message ? at.message : -1)));
+    const offers = (records ?? []).filter(isOffer).map(record => ({ record, at: last(record) })).filter(entry => entry.at >= 0).sort((a, b) => b.at - a.at);
+    if (!offers.length) return [];
+    if (count) return offers.slice(0, count).map(entry => entry.record);
+    return offers.filter(entry => entry.at === offers[0].at).map(entry => entry.record);
+}
 
 const sentencesOf = text => String(text ?? '').split(/(?<=[.!?…\]])\s+|\n+/).filter(Boolean);
 
@@ -110,11 +140,12 @@ function namesJob(sentence, record) {
  * with one of them, not negated, naming the job, or any such sentence when `alone` (it is the
  * only job in question).
  */
-function saidAbout(said, record, words, { alone = false } = {}) {
+function saidAbout(said, record, words, { alone = false, among = false } = {}) {
     return sentencesOf(said).some(sentence => {
         const match = words.exec(sentence);
         if (!match || NOT_BEFORE.test(sentence.slice(0, match.index))) return false;
-        return alone || namesJob(sentence, record);
+        // (0.9.32) `among`: the job is one of those "all of them" in the same sentence means.
+        return alone || namesJob(sentence, record) || (among && ALL_JOBS.test(sentence));
     });
 }
 
@@ -130,7 +161,9 @@ export function isOffer(record) {
 export function offersChosenIn(tracker, text, choice = 'accept') {
     const offers = (tracker?.records ?? []).filter(isOffer);
     const words = choice === 'refuse' ? REFUSE_WORDS : ACCEPT_WORDS;
-    return offers.filter(record => saidAbout(text, record, words, { alone: offers.length === 1 })).map(record => record.key);
+    const all = allJobsIn(text);
+    const among = new Set(all ? offersInQuestion(offers, Number.POSITIVE_INFINITY, all.count).map(record => record.id) : []);
+    return offers.filter(record => saidAbout(text, record, words, { alone: offers.length === 1, among: among.has(record.id) })).map(record => record.key);
 }
 
 // A `-` line's reason with its labelled parts ("failed: deadline passed"), as written.
@@ -418,16 +451,24 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
     const gated = said !== undefined;
     const quests = (ops ?? []).filter(op => op.op === '+' && op.kind === 'quest');
     const alone = op => quests.length === 1 && (!op || quests.includes(op));
+    // (0.9.32) "Took down all three contracts": the offers shown last, or that many of them.
+    const all = gated ? allJobsIn(said) : null;
+    const inQuestion = new Set(all ? offersInQuestion(records, message, all.count).map(record => record.id) : []);
+    const among = record => {
+        if (!all) return false;
+        const tracked = records.find(other => other.id === record.id || lineKey(other.key) === lineKey(record.key));
+        return tracked ? inQuestion.has(tracked.id) : true;
+    };
     const accepts = (record, op = null) => !gated
         || lineKey(op?.fields?.type ?? record.fields?.type ?? '') === 'main'
-        || saidAbout(said, record, ACCEPT_WORDS, { alone: alone(op) })
+        || saidAbout(said, record, ACCEPT_WORDS, { alone: alone(op), among: among(record) })
         || (alone(op) && saidAbout(said, record, AGREE_WORDS, { alone: true }));
     // (0.9.27) Whether the reader has spoken of a job: in this reply's message, or before.
     const spokenOf = record => !gated || Boolean(record.engaged) || sentencesOf(said).some(sentence => namesJob(sentence, record));
     // `chosen`: records the reader gave up with the Abandon flag (ids stamped on the reply).
     const picked = new Set((chosen ?? []).map(key => lineKey(key)));
     const chose = record => picked.has(record.id) || picked.has(lineKey(record.key))
-        || saidAbout(said, record, GIVE_UP, { alone: false }) || saidAbout(said, record, REFUSE_WORDS, { alone: false });
+        || saidAbout(said, record, GIVE_UP, { alone: false, among: among(record) }) || saidAbout(said, record, REFUSE_WORDS, { alone: false, among: among(record) });
     const offered = (op, record) => problems.push(finding('offered', 'info', op, `"${record.key}" was offered, not taken on: it stays an offer until {{user}} accepts it.`));
     // (0.9.27) An offer the story closes as done ("! Barrow-Viper Clearing — skins turned in to
     // Verna") was done by {{user}}, who went and did it without the words to take it on: when
