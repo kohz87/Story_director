@@ -42,7 +42,7 @@ import { checkReply } from './src/checks.js';
 import { lapseLines, lapsedOffers, lapsesIn, slippedBeats } from './src/lapses.js';
 import { renderSettings } from './src/ui/settings.js';
 import { renderTab } from './src/ui/tab.js';
-import { renderQuests } from './src/ui/quests.js';
+import { offersShown, renderQuests } from './src/ui/quests.js';
 import { renderJournal } from './src/ui/journal.js';
 import { buildJournal } from './src/journal.js';
 import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, placesIn, planRoute } from './src/routes.js';
@@ -55,7 +55,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.38';
+const VERSION = '0.9.39';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -1540,7 +1540,7 @@ function renderQuestsTab(pane) {
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
     // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => offerHere(record, where) });
+    renderQuests(pane, { quests: active, finished, offered: offersShown(offered, status), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => offerHere(record, where) });
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
@@ -1903,9 +1903,11 @@ function registerWithStoryBlock() {
             }
         },
         key: questsTabKey,
+        // (0.9.39) The offers waiting for the reader's answer: what there is to do here.
         badge: () => {
             try {
-                return questRecords().active.length;
+                const { offered, now } = questRecords();
+                return offersShown(offered, questStatus(now)).length;
             } catch {
                 return 0;
             }

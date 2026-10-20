@@ -1,4 +1,4 @@
-# Story Director v0.9.38
+# Story Director v0.9.39
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -262,7 +262,7 @@ Battle offers quest XP by difficulty when a quest is finished.
   quest), grouped by type: Main, Side, Bounties, Contracts, Missions, Favours, then your own
   types. Each shows its difficulty, goal, step, giver, reward, deadline and place, marked when the
   deadline is close or has passed; finished quests fold away with how they ended. The badge is
-  the number of open quests. Nothing in it is hidden: quests are promises you made, not
+  the number of offers waiting for your answer (since 0.9.39; before, the open quests). Nothing in it is hidden: quests are promises you made, not
   spoilers.
 
 ### Encounters
@@ -826,7 +826,11 @@ scenes** in the settings' quick bar.
 
 *Since 0.9.19.* A recap for coming back to a chat after a break: what your character saw and
 heard, grouped by story day (as your calendar writes it), newest first. The last week of
-story days is open; older ones fold under **Earlier days**.
+story days is open; older ones fold under **Earlier days**. Since 0.9.39, once it holds more
+than 15 entries a **search box** sits on top: it filters as you type by name, what happened,
+giver or date (case and accents don't matter: *cafe* finds *Café*), shows *N of M*, opens
+every day that matches (folded ones too) and says so when nothing does. Esc or the box's ✕
+clears it; in the drawer or bottom sheet Esc closes the panel, as everywhere in it.
 
 - **What happened**: a beat, event, hook or clock the story fired (`! Key — what happened`),
   with that line's own words; an event or hook the story closed, with its reason; a sign the

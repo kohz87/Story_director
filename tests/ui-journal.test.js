@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { installFakeDom, texts } from './ui-fake-dom.js';
 
 const doc = installFakeDom();
-const { renderJournal } = await import('../src/ui/journal.js');
+const { journalMatches, renderJournal } = await import('../src/ui/journal.js');
 
 function render(data) {
     const pane = doc.createElement('div');
@@ -76,4 +76,35 @@ test('model-written text is drawn as text, an undated day is marked', () => {
     assert.equal(pane.querySelector('.story-director-journal-text').textContent, '<img src=x onerror=alert(1)>');
     assert.equal(pane.querySelector('b'), null);
     assert.equal(pane.querySelector('img'), null);
+});
+
+test('a long journal gets a search box: entries filter as you type, days without a match hide, Esc clears (0.9.39)', () => {
+    const many = Array.from({ length: 10 }, (_, index) => day(`Haywane ${20 - index}`, [
+        item('event', 'fired', `Beat ${index}`, { text: index === 3 ? 'the Café burned' : 'rain' }),
+        item('quest', 'taken', `Job ${index}`, { giver: index === 8 ? 'Reeve Hollis' : 'Elke' }),
+    ]));
+    const pane = render({ days: many });
+    const input = pane.querySelector('input.story-director-journal-search');
+    assert.ok(input, 'past 15 entries');
+    // Case and accents do not matter; a giver and a date are found too.
+    input.value = 'cafe';
+    input.dispatch('input');
+    assert.deepEqual(texts(pane, '.story-director-record-key'), ['Beat 3']);
+    assert.equal(pane.querySelector('.story-director-journal-count').textContent, '1 of 20');
+    assert.equal(pane.querySelectorAll('.story-director-section.is-journal-day').length, 1);
+    assert.equal(pane.querySelector('input.story-director-journal-search'), input, 'the box itself is kept while typing');
+    input.value = 'hollis';
+    input.dispatch('input');
+    assert.deepEqual(texts(pane, '.story-director-record-key'), ['Job 8'], 'an older, folded day is searched and shown open');
+    input.value = 'dragon';
+    input.dispatch('input');
+    assert.match(pane.querySelector('.is-journal-none').textContent, /Nothing in the journal matches “dragon”/);
+    const esc = input.dispatch('keydown', { key: 'Escape' });
+    assert.equal(esc.stopped, true);
+    assert.equal(input.value, '');
+    assert.equal(pane.querySelectorAll(':scope > .story-director-journal > .story-director-section').length, 7);
+    assert.equal(pane.querySelector('.story-director-journal-count').textContent, '');
+    // A short journal has no box.
+    assert.equal(render({ days: many.slice(0, 2) }).querySelector('input.story-director-journal-search'), null);
+    assert.equal(journalMatches({ key: 'Wolf Hunt', text: '' }, { label: 'Goldwane 12' }, 'goldwane wolf'), true);
 });

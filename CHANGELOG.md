@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.39
+
+- **Search the Journal.** A long story's Journal (more than 15 entries) now has a search box on top. It filters as you type by name, what happened, giver or date, ignoring case and accents (*cafe* finds *Café*). It shows *N of M* and opens every day that matches, folded ones included, or says nothing matches. Esc or the box's ✕ clears it; in the drawer or bottom sheet, Esc closes the panel as it does everywhere there.
+- **The Quests tab's badge counts the offers waiting for your answer**, the ones under Offered, instead of the open quests. It counts exactly what the tab shows; an offer past its deadline counts only while you've spoken of it.
+
 ## 0.9.38
 
 - **Cache-friendly note.** Providers cache the longest identical start of a prompt (OpenAI, DeepSeek and Gemini on their own, Claude with cache breakpoints), so what never changes should come early and stay byte-for-byte the same. The Director note is now sent in two parts:
