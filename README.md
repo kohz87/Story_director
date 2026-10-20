@@ -1,4 +1,4 @@
-# Story Director v0.9.37
+# Story Director v0.9.38
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -357,8 +357,12 @@ boundary (before an unclosed bracket, when it can). The tracker keeps every word
 and Quests tabs, the API and the capture and planner calls see the full text, so a long part is
 no longer reported as a problem.
 
-It is injected as a system message at a shallow depth (1 by default), so the cached history in
-front of it is untouched.
+Since 0.9.38 it is sent in two parts, so a provider's prompt cache keeps as much of the prompt
+as it can (Story Suite's layout). The fixed part (the change instruction, the NPC plans line and
+Pacing) goes early, right after the main prompt, and is the same text every reply. The part for
+this reply (the header, what is due and arriving, the records, the checks and choices) goes at
+the very end, as a system message at depth 0 by default, and is cleared once its reply is in. A
+depth left at the old default (1) moves to 0 once; one you set yourself stays.
 
 ## Places and the map
 
@@ -780,7 +784,7 @@ closed; the ones you open are remembered in this browser.
 |---|---|---|
 | Tracking | on | Off: no note, no checks |
 | Scene block | `World_State` | Where the time and place are read |
-| Depth | 1 | Chat depth of the note |
+| Depth | 0 | Chat depth of the note's part for this reply (the fixed part goes after the main prompt) |
 | Budget | 1000 tokens | Most the note may use; lowest-priority records drop first |
 | Dormant after | 15 replies or 30 story days unseen | Left out of the note until mentioned again |
 | Due soon | 3 days | Anything due this soon is never dormant |

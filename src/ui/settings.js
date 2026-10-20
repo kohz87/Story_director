@@ -18,7 +18,7 @@ import { button, el, icon } from './dom.js';
 const DEFAULTS = {
     enabled: true,
     sceneTag: 'World_State',
-    depth: 1,
+    depth: 0,
     budgetTokens: 1000,
     dormantReplies: 15,
     dormantDays: 30,

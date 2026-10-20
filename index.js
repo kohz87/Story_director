@@ -37,7 +37,7 @@ import { seedFromWorldState } from './src/seed.js';
 import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
-import { buildNote, noteParts, noteTokens } from './src/note.js';
+import { CHANGE_INSTRUCTION, noteParts, noteTokens, staticNote, tailNote } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { lapseLines, lapsedOffers, lapsesIn, slippedBeats } from './src/lapses.js';
 import { renderSettings } from './src/ui/settings.js';
@@ -55,9 +55,15 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.37';
+const VERSION = '0.9.38';
 const SETTINGS_KEY = 'storyDirector';
+// (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
+// prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
+// PROMPT_KEY is the one key before 0.9.38, cleared on load.
 const PROMPT_KEY = 'story_director';
+const STATIC_KEY = 'story_suite_static_story_director';
+const TAIL_KEY = 'story_suite_tail_2_story_director';
+const EXTENSION_PROMPT_IN_PROMPT = 0;
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
 const TAB_ID = 'story-director';
 const QUESTS_TAB_ID = 'story-director-quests';
@@ -73,7 +79,8 @@ const PANEL_ID = 'story_director_settings';
 const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
     sceneTag: 'World_State',
-    depth: 1,
+    // (0.9.38) The note's part for this reply goes at the very end (Story Suite's layout).
+    depth: 0,
     budgetTokens: DEFAULTS.budgetTokens,
     dormantReplies: DEFAULTS.dormantReplies,
     dormantDays: DEFAULTS.dormantDays,
@@ -167,9 +174,12 @@ function settings(ctx = context()) {
     const store = ctx?.extensionSettings;
     if (!store) return { ...DEFAULT_SETTINGS };
     const saved = store[SETTINGS_KEY] && typeof store[SETTINGS_KEY] === 'object' ? store[SETTINGS_KEY] : {};
+    // (0.9.38) A depth left at the old default (1) moves to the end, once; one set by hand stays.
+    const layout = saved.suiteLayout === 1 ? {} : { suiteLayout: 1, ...(saved.depth === undefined || Number(saved.depth) === 1 ? { depth: 0 } : {}) };
     store[SETTINGS_KEY] = {
         ...DEFAULT_SETTINGS,
         ...saved,
+        ...layout,
         calendar: normalizeCalendar(saved.calendar ?? DEFAULT_SETTINGS.calendar),
         arc: { ...DEFAULT_SETTINGS.arc, ...(saved.arc && typeof saved.arc === 'object' ? saved.arc : {}) },
         capture: { ...DEFAULT_SETTINGS.capture, ...(saved.capture && typeof saved.capture === 'object' ? saved.capture : {}) },
@@ -494,11 +504,24 @@ function situationAt(upTo, sceneText) {
 // ---------------------------------------------------------------------------
 // Before a reply: the note
 
-function setNote(text) {
+/** The note as sent: `{ fixed, tail }` ('' clears; a string sets the tail alone, fixed cleared). */
+function setNote(note) {
     const ctx = context();
     if (typeof ctx?.setExtensionPrompt !== 'function') return;
+    const { fixed = '', tail = '' } = typeof note === 'string' ? { tail: note } : note ?? {};
     const depth = Math.max(0, Math.min(20, Number(settings(ctx).depth) || 0));
-    ctx.setExtensionPrompt(PROMPT_KEY, text, EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
+    ctx.setExtensionPrompt(STATIC_KEY, fixed, EXTENSION_PROMPT_IN_PROMPT, 0, false, EXTENSION_PROMPT_ROLE_SYSTEM);
+    ctx.setExtensionPrompt(TAIL_KEY, tail, EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
+    // The single key before 0.9.38 never carries a copy.
+    ctx.setExtensionPrompt(PROMPT_KEY, '', EXTENSION_PROMPT_IN_CHAT, depth, false, EXTENSION_PROMPT_ROLE_SYSTEM);
+}
+
+/** The note for the next reply in its two parts, `{ fixed, tail }`, macros substituted. */
+function noteFor(ctx, selection, options) {
+    const substitute = typeof ctx.substituteParams === 'function' ? text => ctx.substituteParams(text) : text => text;
+    const parts = noteParts(selection, options);
+    const fixed = staticNote({ instruction: options.instruction ?? CHANGE_INSTRUCTION, npcPlansOnly: options.npcPlansOnly });
+    return { fixed: substitute(fixed), tail: substitute(tailNote(parts)) };
 }
 
 // Corrections for the `~`/`!` lines the newest assistant reply at or before `upTo` wrote on
@@ -601,8 +624,9 @@ function notePreview() {
         const ctx = context();
         if (!ctx || !chatIdOf(ctx) || !storyBlock() || !settings(ctx).enabled) return { label, text: '', tokens: 0 };
         const { selection, tracker, upTo } = situation('normal');
-        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(ctx.chat?.length ?? 0, tracker, { peek: true }) });
-        const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
+        const note = noteFor(ctx, selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(ctx.chat?.length ?? 0, tracker, { peek: true }) });
+        // Both parts, as the model reads them: the fixed one early in the prompt, the rest at the end.
+        const text = [note.fixed, note.tail].filter(Boolean).join('\n\n');
         return { label, text, tokens: text ? estimateTokens(text) : 0 };
     } catch (error) {
         console.error('[Story Director] preview failed', error);
@@ -620,11 +644,10 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
         }
         const { selection, tracker, upTo } = situation(type);
         const slot = replacesLastReply(ctx.chat ?? [], type) ? (ctx.chat?.length ?? 1) - 1 : ctx.chat?.length ?? 0;
-        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(slot, tracker) });
-        const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
-        setNote(text);
+        const note = noteFor(ctx, selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(slot, tracker) });
+        setNote(note);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
-        reportStatus(`Last reply: note sent (${counted} tracked ${counted === 1 ? 'item' : 'items'}, ~${estimateTokens(text)} tokens).`);
+        reportStatus(`Last reply: note sent (${counted} tracked ${counted === 1 ? 'item' : 'items'}, ~${estimateTokens(note.fixed) + estimateTokens(note.tail)} tokens, ~${estimateTokens(note.fixed)} of them fixed).`);
     } catch (error) {
         // A broken note must never block the reply.
         console.error('[Story Director] note failed', error);

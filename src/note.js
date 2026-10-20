@@ -104,6 +104,31 @@ export function buildNote(selection, options = {}) {
     return joinParts(noteParts(selection, options));
 }
 
+// (0.9.38) Cache-friendly: the parts that never change from reply to reply (the change
+// instruction, the NPC plans line, Pacing) go early in the prompt, byte-identical every reply,
+// so a provider's prompt cache keeps them; the rest of the note goes at the end, for this reply.
+export const STATIC_LABELS = Object.freeze(['Change instruction', 'NPC plans only', 'Pacing']);
+
+/**
+ * The note's fixed part: the change instruction (when the model writes change lines), the NPC
+ * plans line (while NPC State Delta keeps the NPCs), and Pacing, always (it used to come only
+ * when something was scheduled; a part that comes and goes would break the cached prefix).
+ */
+export function staticNote({ instruction = CHANGE_INSTRUCTION, npcPlansOnly = false } = {}) {
+    return [
+        instruction,
+        npcPlansOnly && instruction ? NPC_PLANS_ONLY : '',
+        instruction ? PACING : PACING_NO_CHANGES,
+    ].filter(Boolean).join('\n');
+}
+
+/** The note's part for this reply alone: noteParts without the fixed ones ('' when nothing is left). */
+export function tailNote(parts) {
+    const kept = (parts ?? []).filter(entry => !STATIC_LABELS.includes(entry.label));
+    // The encounter cue used to follow Pacing on its line; it starts its own now.
+    return joinParts(kept.map(entry => (entry.label === 'Encounter cue' ? { ...entry, join: '\n' } : entry)));
+}
+
 /**
  * The note in its sections, `[{ label, text, join }]`, in order; `join` ('\n' or ' ') goes
  * before `text`, so joining them gives buildNote exactly. Labels: Header, No weekdays, While away, Due now,
