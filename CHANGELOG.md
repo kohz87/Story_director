@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.37
+
+- **An offer is taken on where it was offered.** Whether you can take a job on now follows the place, not only the person.
+  - An offer is *here* while the story is in the settlement it was offered in: the first part of the scene's Loc at the reply that first showed it, so moving from the Guild Post to the Stray Oar is still Bluewatch Village.
+  - It is also *here* while its giver is in the scene.
+  - The badge reads *Bluewatch Village · here*, *Elke · here* or *offered in Bluewatch Village*.
+  - Elsewhere, Take on asks once: *You're not in Bluewatch Village — take it anyway?* Turn down never asks.
+  - An offer's `place:` field often names the job's site (*lower shallows*), so it is only used when nothing else says where it was offered.
+
 ## 0.9.36
 
 - **Who is in the scene, from one place at a time.** An offer's *here* / *not here* badge now asks, in order:

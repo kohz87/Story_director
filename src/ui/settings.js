@@ -293,15 +293,16 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const budget = numberInput('story_director_budget', current.budgetTokens, LIMITS.budgetTokens);
         bindNumber(budget, 'budgetTokens');
 
-        // (0.9.34) Take on in front of whoever offers the job; (0.9.35) asked, not blocked.
-        const giver = toggle('story_director_giver_present', current.giverPresent !== false, 'Ask before taking on a job away from its giver');
+        // (0.9.34) Take on in front of whoever offers the job; (0.9.35) asked, not blocked;
+        // (0.9.37) where the job was offered.
+        const giver = toggle('story_director_giver_present', current.giverPresent !== false, 'Ask before taking on a job away from where it was offered');
         giver.addEventListener('change', () => commit(next => { next.giverPresent = Boolean(giver.checked); }));
 
         return [
             row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene' }),
             row('Note depth', 'How many messages from the end the note goes in.', withUnit(depth, 'messages'), { id: 'story_director_depth' }),
             row('Note budget', 'Most tokens the note may use; the least relevant records go first.', withUnit(budget, 'tokens'), { id: 'story_director_budget' }),
-            row('Ask before taking on a job away from its giver', 'Each offer in the Quests tab says whether whoever offered it is in the scene (NPCs Present, or named in the latest reply); Take on asks “take it anyway?” once while they are not.', giver, { id: 'story_director_giver_present' }),
+            row('Ask before taking on a job away from where it was offered', 'Each offer in the Quests tab says where it was offered (“Bluewatch Village · here” / “offered in Bluewatch Village”); its giver in the scene counts as here too. Take on asks “take it anyway?” once while you are elsewhere.', giver, { id: 'story_director_giver_present' }),
         ];
     }
 

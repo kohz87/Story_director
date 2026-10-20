@@ -54,3 +54,55 @@ export function giverPresent(giver, { scene = '', present = null, reply = '' } =
     if (cast.length) return list.some(name => cast.some(member => names(member, name)));
     return list.some(name => names(String(reply ?? ''), name));
 }
+
+// (0.9.37) Where a job was offered, and whether the story is there now: an offer is taken on
+// where it was made. A place is compared by its settlement (the first part of the scene's Loc,
+// "Bluewatch Village | Guild Post" → Bluewatch), so moving between its spots stays "here".
+const SETTLEMENT_WORDS = new Set(['the', 'village', 'town', 'city', 'hamlet', 'outpost', 'port', 'of', 'settlement']);
+
+/** A place's settlement, as words to compare: "Bluewatch Village | Guild Post" → 'bluewatch'. */
+export function settlementKey(place) {
+    const first = String(place ?? '').replace(/\*\*/g, '').split(/\s*(?:\||·|—|–)\s*/)[0].replace(/\[[^\]]*\]/g, '');
+    return words(first).filter(word => !SETTLEMENT_WORDS.has(word)).join(' ');
+}
+
+/** The settlement's name as written, for the badge: "Bluewatch Village | Guild Post" → "Bluewatch Village". */
+export function settlementName(place) {
+    return String(place ?? '').replace(/\*\*/g, '').split(/\s*(?:\||·|—|–)\s*/)[0].replace(/\[[^\]]*\]/g, '').trim();
+}
+
+/**
+ * Where an offer was made: the scene's place at the reply that first showed it (`visits`:
+ * [{ message, text }], chat order), else where it was last seen, else its `place` field (which
+ * often names the job's site rather than where it was offered). '' when none is known.
+ */
+export function offerPlace(record, visits = []) {
+    const at = message => {
+        if (!Number.isInteger(message)) return '';
+        let found = '';
+        for (const visit of visits ?? []) if (Number.isInteger(visit?.message) && visit.message <= message && visit.text) found = visit.text;
+        return found;
+    };
+    return at(record?.created?.message) || at(record?.seen?.message) || String(record?.fields?.place ?? '').trim();
+}
+
+/**
+ * Whether an offer can be taken on here (0.9.37): { here, badge, ask }, or null when neither a
+ * place nor a giver can tell. Here when the story is in the settlement it was offered in, or
+ * its giver is in the scene (giverPresent); `ask` is the question Take on puts while not.
+ */
+export function offerPresence(record, { place = '', visits = [], scene = '', present = null, reply = '' } = {}) {
+    const offered = offerPlace(record, visits);
+    const where = settlementName(offered);
+    const giver = String(record?.fields?.giver ?? '').split(/[,(;—–]/)[0].trim();
+    const withGiver = giverPresent(record?.fields?.giver, { scene, present, reply });
+    if (where && settlementKey(offered) && settlementKey(place)) {
+        if (settlementKey(offered) === settlementKey(place)) return { here: true, badge: `${where} · here`, ask: '' };
+        if (withGiver) return { here: true, badge: `${giver} · here`, ask: '' };
+        return { here: false, badge: `offered in ${where}`, ask: `You're not in ${where} — take it anyway?` };
+    }
+    if (withGiver === null) return null;
+    return withGiver
+        ? { here: true, badge: `${giver} · here`, ask: '' }
+        : { here: false, badge: `${giver} · not here`, ask: `${giver} isn't here — take it anyway?` };
+}

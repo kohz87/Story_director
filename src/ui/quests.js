@@ -181,8 +181,8 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
 const confirming = new Set();
 
 // (0.9.33) Take on / Turn down under an offer, or, once chosen, what goes with the next reply and Undo.
-// (0.9.35) `presence(record)`: { name, here } for the giver, null when nobody is looked for.
-// Take on is always there; with the giver away it asks once, inline, before it takes.
+// (0.9.37) `presence(record)`: { here, badge, ask } (where it was offered, or its giver), null
+// when nothing tells. Take on is always there; while not here it asks once, inline, before it takes.
 function offerActions(record, { choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null } = {}) {
     if (typeof onTake !== 'function' && typeof onDecline !== 'function') return null;
     const taking = choosing?.take?.has?.(record.id);
@@ -194,15 +194,15 @@ function offerActions(record, { choosing = null, onTake = null, onDecline = null
             button('Undo', 'story-director-offer-undo', { iconName: 'fa-rotate-left', title: 'Change your mind before the next reply.', onClick: () => onUndo?.(record.id) }),
         ]);
     }
-    const giver = typeof presence === 'function' ? presence(record) : null;
+    const where = typeof presence === 'function' ? presence(record) : null;
     const redraw = () => { if (lastArgs) renderQuests(...lastArgs); };
     const take = () => {
         confirming.delete(record.id);
         onTake?.(record.id);
     };
-    if (confirming.has(record.id) && giver && !giver.here) {
+    if (confirming.has(record.id) && where && !where.here) {
         return el('div', { className: 'story-director-offer-actions is-confirming' }, [
-            el('span', { className: 'story-director-offer-ask', text: `${giver.name} isn't here — take it anyway?` }),
+            el('span', { className: 'story-director-offer-ask', text: where.ask }),
             button('Take on', 'story-director-offer-take is-confirm', { iconName: 'fa-check', onClick: take }),
             button('Cancel', 'story-director-offer-cancel', { onClick: () => { confirming.delete(record.id); redraw(); } }),
         ]);
@@ -212,7 +212,7 @@ function offerActions(record, { choosing = null, onTake = null, onDecline = null
             iconName: 'fa-check',
             title: `Take on ${record.key}: your next reply tells it, and it becomes your quest.`,
             onClick: () => {
-                if (giver && !giver.here) {
+                if (where && !where.here) {
                     confirming.add(record.id);
                     redraw();
                     return;
@@ -233,12 +233,13 @@ function renderOffered(offered, { formatDate, status, choosing = null, onTake = 
             item.classList.add('is-offered');
             item.querySelector('.story-director-tag.is-difficulty')?.remove();
             // (0.9.35) Whether the giver is in the scene, as a badge on the card.
-            const giver = typeof presence === 'function' ? presence(record) : null;
-            if (giver) {
+            // (0.9.37) Where it was offered, or its giver: "Bluewatch Village · here" / "offered in Bluewatch Village".
+            const where = typeof presence === 'function' ? presence(record) : null;
+            if (where) {
                 item.querySelector('.story-director-record-head')?.append(el('span', {
-                    className: `story-director-tag is-giver ${giver.here ? 'is-here' : 'is-away'}`,
-                    text: `${giver.name} · ${giver.here ? 'here' : 'not here'}`,
-                    attrs: { title: giver.here ? `${giver.name} is in the scene.` : `${giver.name} is not in the scene: Take on asks first.` },
+                    className: `story-director-tag is-giver ${where.here ? 'is-here' : 'is-away'}`,
+                    text: where.badge,
+                    attrs: { title: where.here ? 'You can take it on here.' : 'Take on asks first: you are not where it was offered.' },
                 }));
             }
             const actions = offerActions(record, { choosing, onTake, onDecline, onUndo, presence });
@@ -285,8 +286,8 @@ function renderFinished(finished) {
  * `status(record)` → 'overdue' | 'soon' | 'pay' | '' marks deadlines ('pay': only the pay is left);
  * `onAbandon(id)` when the reader gives one up (no button without it); (0.9.33) `onTake(id)`,
  * `onDecline(id)` and `onUndo(id)` for an offer, `choosing`: { take, decline } (Sets of ids)
- * chosen for the next reply; (0.9.35) `presence(record)`: { name, here } for the offer's giver
- * (a badge; Take on asks first while they are away), null when nobody is looked for.
+ * chosen for the next reply; (0.9.37) `presence(record)`: { here, badge, ask } for an offer (the
+ * badge; Take on asks `ask` first while not here), null when nothing tells.
  */
 export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null } = {}) {
     lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo, presence }];

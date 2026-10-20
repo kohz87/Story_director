@@ -31,7 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { giverPresent } from './src/presence.js';
+import { offerPresence } from './src/presence.js';
 import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections, waitsForPay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
@@ -55,7 +55,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.36';
+const VERSION = '0.9.37';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1479,27 +1479,33 @@ function npcStateDeltaPresent() {
     }
 }
 
-// (0.9.35) Whether an offer's giver is in the scene: { name, here }, null when there is nobody
-// to look for or with the setting off.
-function giverPresence(record, { scene, present, reply }) {
+// (0.9.37) Whether an offer can be taken on here: the story in the settlement it was offered
+// in, or its giver in the scene (presence.js). Null with the setting off, or nothing to tell.
+function offerHere(record, where) {
     if (settings().giverPresent === false) return null;
-    const giver = record?.fields?.giver;
-    const here = giverPresent(giver, { scene, present, reply });
-    return here === null ? null : { name: String(giver).split(/[,(;—–]/)[0].trim(), here };
+    return offerPresence(record, where);
 }
 
 function renderQuestsTab(pane) {
     const { active, finished, offered, now } = questRecords();
     const chat = context()?.chat ?? [];
     const latest = latestAssistantIndex(chat);
-    const where = { scene: storyBlock()?.getBlock?.(settings().sceneTag)?.text ?? '', present: npcStateDeltaPresent(), reply: latest >= 0 ? visibleText(chat[latest]) : '' };
+    const upTo = chat.length - 1;
+    const scene = storyBlock()?.getBlock?.(settings().sceneTag)?.text ?? '';
+    const where = {
+        place: scenePlace(scene),
+        visits: upTo >= 0 ? visitsUpTo(upTo) : [],
+        scene,
+        present: npcStateDeltaPresent(),
+        reply: latest >= 0 ? visibleText(chat[latest]) : '',
+    };
     // (0.9.12) Each deadline at the clock time the calendar sets: "Goldwane 12 sunset" reads
     // "Goldwane 12, 07:00 pm", a date alone its last minute.
     const cal = calendar();
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
     // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => giverPresence(record, where) });
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => offerHere(record, where) });
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
