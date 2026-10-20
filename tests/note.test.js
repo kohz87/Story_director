@@ -1,7 +1,7 @@
 // Tests for src/note.js: the note's format, its budget and the change-line instruction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AWAY_ARRIVAL, AWAY_CUE, AWAY_DEADLINE, AWAY_RECORD, CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NOTE_PART_WORDS, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, buildNote, notePart, noteParts, noteTokens } from '../src/note.js';
+import { AWAY_ARRIVAL, AWAY_CUE, AWAY_DEADLINE, AWAY_RECORD, CHANGE_INSTRUCTION, DIRECTOR_OUTPUT_TOKENS, ENCOUNTER_CUE, NOTE_PART_WORDS, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES, STATIC_LABELS, buildNote, notePart, noteParts, noteTokens, staticNote, tailNote } from '../src/note.js';
 import { estimateTokens } from '../src/relevance.js';
 
 // A small fake of the Calendar API (12 months of 30 days, abs in minutes), enough for these
@@ -631,4 +631,41 @@ test('a quest whose work is done and only the pay is left: its time is when the 
     // A step that is still the work keeps the deadline wording.
     const hunt = record({ key: 'Wolves', kind: 'quest', fields: { goal: 'drive off the wolves', step: 'return skins to Verna', due: 'Goldwane 16' } });
     assert.ok(lines(buildNote(selection({ due: [hunt] }), { calendar })).includes('Due now: Wolves — deadline Goldwane 16 reached (drive off the wolves)'));
+});
+
+test('cache-friendly: the fixed part is byte-identical reply to reply, the rest goes at the end (0.9.38)', () => {
+    const fight = record({ key: 'Drake Shallows', kind: 'event', fields: { on: 'Goldwane 16, 09:00 am', encounter: 'swamp drake' } });
+    const replies = [
+        { selection: selection(), options: { calendar } },
+        { selection: selection({ due: [fight], relevant: [record({ key: 'Brecht', fields: { now: 'at the Stray Oar' } })] }), options: { calendar, abandoning: ['Wolf Hunt'], takingOn: ['Lime Kiln Bats'] } },
+        { selection: selection({ now: at('Goldwane 18, 06:00 pm'), place: 'Bluewatch' }), options: { calendar, npcPlansOnly: true } },
+    ];
+    const fixed = replies.map(({ options }) => staticNote({ instruction: options.instruction ?? CHANGE_INSTRUCTION, npcPlansOnly: false }));
+    assert.equal(new Set(fixed).size, 1, 'the same text whatever the reply holds');
+    assert.equal(fixed[0], `${CHANGE_INSTRUCTION}\n${PACING}`);
+    // Pacing is always there now, the encounter cue and everything for this reply only in the tail.
+    const tails = replies.map(({ selection: s, options }) => tailNote(noteParts(s, options)));
+    for (const tail of tails) for (const label of STATIC_LABELS) assert.ok(!tail.includes(label === 'Pacing' ? 'Pacing:' : label === 'Change instruction' ? 'End your reply with one <Director>' : NPC_PLANS_ONLY), `${label} not in the tail`);
+    assert.equal(tails[0], '', 'nothing scheduled, nothing chosen: no tail at all');
+    assert.match(tails[1], /^\[Story Director · .*\]\n/);
+    assert.match(tails[1], /\nA due fight starts when the scene reaches it/);
+    assert.match(tails[1], /Abandoned: \{\{user\}\} gives up Wolf Hunt/);
+    // The whole note is still the two together, part for part.
+    const whole = buildNote(replies[1].selection, replies[1].options);
+    assert.ok(whole.includes(CHANGE_INSTRUCTION) && whole.includes('Abandoned:'));
+    // A capture call writes the lines: no instruction, Pacing without the change lines' words.
+    assert.equal(staticNote({ instruction: '' }), PACING_NO_CHANGES);
+    assert.equal(staticNote({ npcPlansOnly: true }), `${CHANGE_INSTRUCTION}\n${NPC_PLANS_ONLY}\n${PACING}`);
+});
+
+test('a preset with its Main Prompt off drops in-prompt parts: the fixed part is put back early (0.9.38)', async () => {
+    const { withFixedNote } = await import('../src/note.js');
+    const fixed = `${CHANGE_INSTRUCTION}\n${PACING}`;
+    const messages = [{ role: 'system', content: 'Character card' }, { role: 'system', content: 'World info' }, { role: 'user', content: 'hi' }];
+    const kept = withFixedNote(messages, fixed);
+    assert.deepEqual(kept.map(message => message.role), ['system', 'system', 'system', 'user']);
+    assert.equal(kept[2].content, fixed);
+    // Already there (the Main Prompt is on): the same array, untouched.
+    assert.equal(withFixedNote(kept, fixed), kept);
+    assert.equal(withFixedNote(messages, ''), messages);
 });
