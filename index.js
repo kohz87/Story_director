@@ -56,7 +56,7 @@ import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, n
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.40';
+const VERSION = '0.9.41';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -500,10 +500,17 @@ function setNote(note) {
 let sentFixed = '';
 const substituteFixed = (ctx, text) => (text && typeof ctx?.substituteParams === 'function' ? ctx.substituteParams(text) : String(text ?? ''));
 
-/** At prompt-ready: a chat completion whose preset dropped the in-prompt part gets it back, early. */
+/**
+ * At prompt-ready: a chat completion whose preset left the Main Prompt out of its prompt order
+ * (which drops the in-prompt part) gets it back, early. Only while a reply's note is out (from
+ * its interceptor until the reply is in or stopped), never for a dry run, and (0.9.41) only for
+ * the story's own prompt: one that carries the chat's replies. Another extension's call in that
+ * window (NPC State Delta's scan through generateRaw, a summary) is a system and user message of
+ * its own and is left alone.
+ */
 function keepFixedNote(eventData) {
     if (!sentFixed || eventData?.dryRun === true || !Array.isArray(eventData?.chat)) return;
-    const next = withFixedNote(eventData.chat, sentFixed);
+    const next = withFixedNote(eventData.chat, sentFixed, { story: (context()?.chat ?? []).some(isAssistant) });
     if (next !== eventData.chat) eventData.chat.splice(0, eventData.chat.length, ...next);
 }
 
