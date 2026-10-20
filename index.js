@@ -29,7 +29,8 @@
 //   State Delta is the source of truth for who an NPC is, agenda lines are asked for plans
 //   and timing only. Alone, everything works as before.
 
-import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
+import { makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
+import { DEFAULT_SETTINGS } from './src/defaults.js';
 import { formatOp, parseChanges } from './src/changes.js';
 import { offerPresence } from './src/presence.js';
 import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections, waitsForPay } from './src/tracker.js';
@@ -48,14 +49,14 @@ import { buildJournal } from './src/journal.js';
 import { MODERN_MODES, MODES, findPlace, formatRoute, loadWorldPack, packSummary, placesIn, planRoute } from './src/routes.js';
 import { distancesFor, withFixedDistance, wrongDistances } from './src/distances.js';
 import { corrections, nearbyPlaces, travelFindings } from './src/travel.js';
-import { arcBeats, autoPlanReason, buildPlannerMessages, DEFAULT_LOW_THREADS, DEFAULT_PLANNER_PROMPT, DEFAULT_STALL_DAYS, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
+import { arcBeats, autoPlanReason, buildPlannerMessages, DEFAULT_PLANNER_PROMPT, noteAfterAccept, parsePlan, planToOps, summarizeTracker, validatePlan } from './src/planner.js';
 import { buildCaptureMessages, parseCapture } from './src/capture.js';
 import { importWorldStateAlpha } from './src/wsa.js';
-import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
+import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, nearbyByCoords } from './src/places.js';
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.39';
+const VERSION = '0.9.40';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -76,28 +77,6 @@ const SUITE = Object.freeze({ id: 'story-director', name: 'Story Director', area
 // The settings panel's root under #extensions_settings, which Story Suite's overlay borrows.
 const PANEL_ID = 'story_director_settings';
 
-const DEFAULT_SETTINGS = Object.freeze({
-    enabled: true,
-    sceneTag: 'World_State',
-    // (0.9.38) The note's part for this reply goes at the very end (Story Suite's layout).
-    depth: 0,
-    budgetTokens: DEFAULTS.budgetTokens,
-    dormantReplies: DEFAULTS.dormantReplies,
-    dormantDays: DEFAULTS.dormantDays,
-    dueSoonDays: DEFAULTS.dueSoonDays,
-    mirrorOffscreen: true,
-    // The tracker is the story behind the scenes: hidden in the tab until the reader asks.
-    spoilerGuard: true,
-    // (0.9.34) Take on only while the offer's giver is in the scene (or "I'm with them").
-    giverPresent: true,
-    calendar: PRESETS.gregorian,
-    arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: DEFAULT_STALL_DAYS, lowThreads: DEFAULT_LOW_THREADS, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
-    capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
-    // How to read map coordinates: which way north and east run, km per unit, road winding.
-    map: DEFAULT_MAP,
-    // Per Story Suite area: 'auto' (the suite's order), 'mine' or 'theirs'.
-    sourceOfTruth: Object.freeze({ calendar: 'auto', timeline: 'auto', npc: 'auto' }),
-});
 
 let initialized = false;
 let registered = false;
@@ -842,11 +821,12 @@ async function onReply({ messageIndex }) {
     const index = Number(messageIndex);
     const chat = ctx.chat ?? [];
     if (!isAssistant(chat[index])) return;
+    let redraw = false;
     try {
         // Capture first, so the checks below see the changes it wrote.
         if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
-        await closeAbandoned(index);
-        await closeLapsed(index);
+        const closed = await closeReply(index);
+        if (closed.choosing && !closed.drawn) redraw = true;
         const before = trackerAt(index - 1).tracker;
         const { tracker: after, problems, info } = trackerAt(index);
         const block = sb.blockInText(chat[index].mes, BLOCK.tag);
@@ -880,11 +860,16 @@ async function onReply({ messageIndex }) {
         if (settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx))) await mirror(index, after);
         // After the mirror: it rewrites the reply's scene block, which changes its signature.
         lastFindingsKey = findingsKey(index);
+        // The tab shows this reply's findings only once they are marked current (just now).
+        if (lastFindings.some(finding => finding.kind !== 'distance')) redraw = true;
         if (settings(ctx).arc.trigger === 'auto') void maybePlanAutomatically(after);
     } catch (error) {
         console.error('[Story Director] reply check failed', error);
+        redraw = true;
     }
-    sb.refresh?.();
+    // (0.9.39) Story Block redraws the tabs as the reply comes in and after every block write;
+    // one more only for what it cannot see (this reply's findings, a choice stamped alone).
+    if (redraw) sb.refresh?.();
 }
 
 // (0.9.24) "“three days” to Ledgerford: by the map it is 18–33 days from Bluewatch Village (riding to wagon)."
@@ -1686,52 +1671,52 @@ function choicesFor(slot, tracker, { peek = false } = {}) {
     return { abandoning: keys(state.keys), takingOn: keys(state.take), turningDown: keys(state.decline) };
 }
 
-/** After the reply the abandon went with: stamp the reader's choice, and close what the story left open. */
-async function closeAbandoned(index) {
-    const ctx = context();
-    const sb = storyBlock();
-    const state = abandonState(ctx);
-    if (!state || state.sentFor !== index) return false;
-    const message = ctx.chat[index];
-    // A turned-down offer is the reader's choice as a given-up quest is: stamped with them.
-    message.extra = { ...(message.extra ?? {}), storyDirector: { ...(message.extra?.storyDirector ?? {}), abandoned: [...state.keys, ...state.decline], taken: state.take } };
-    setAbandonState({ ...state, attachedTo: index }, ctx);
-    const { tracker } = trackerAt(index);
-    const still = ids => ids.map(id => findRecord(tracker, id)).filter(record => record && record.status === 'active');
-    // What the story left out is written for it: a choice made with a button always holds.
-    const lines = [
-        ...still(state.keys).map(record => `- ${record.key} — abandoned`),
-        ...still(state.take).filter(record => record.kind !== 'quest').map(record => `~ ${record.key} — accepted`),
-        ...still(state.decline).map(record => `- ${record.key} — declined`),
-    ].join('\n');
-    if (lines) {
-        const existing = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
-        await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines}` : lines);
-    } else {
-        await ctx.saveChat?.();
-    }
-    return true;
-}
-
 /**
- * (0.9.19) After the latest reply: the beats its story time left more than SLIP_GRACE_DAYS
- * behind without firing them, and the offers whose deadline it passed, are closed in its own
- * Director block (`- Key — slipped`, `- Key — offer lapsed`), so deleting or swiping the reply
- * takes the closing back. Neither is a choice of the reader's, nor a quest's outcome.
+ * (0.9.39) After a reply, one write to its Director block: the reader's choices that went with
+ * it (stamped on the message; given up, taken on, turned down, written for the story if it left
+ * them out) and, on the newest reply, what its story time ran past (`- Key — slipped`, `- Key —
+ * offer lapsed`: neither a choice of the reader's nor a quest's outcome). Deleting or swiping
+ * the reply takes all of it back. Before 0.9.39 these were two writes and two saves.
  */
-async function closeLapsed(index) {
+async function closeReply(index) {
     const ctx = context();
     const sb = storyBlock();
     const chat = ctx?.chat ?? [];
-    // Only the newest reply: an older one edited later keeps what it said.
-    if (index !== latestAssistantIndex(chat)) return false;
+    const message = chat[index];
+    const state = abandonState(ctx);
+    const choosing = Boolean(state && state.sentFor === index);
+    if (choosing) {
+        // A turned-down offer is the reader's choice as a given-up quest is: stamped with them.
+        message.extra = { ...(message.extra ?? {}), storyDirector: { ...(message.extra?.storyDirector ?? {}), abandoned: [...state.keys, ...state.decline], taken: state.take } };
+        setAbandonState({ ...state, attachedTo: index }, ctx);
+    }
+    // After the stamp: the tracker reads the reader's choices with the reply.
     const { tracker } = trackerAt(index);
-    const options = { calendar: calendar(), now: tracker.time };
-    const lines = lapseLines({ slipped: slippedBeats(tracker, options), lapsed: lapsedOffers(tracker, options) });
-    if (!lines.length) return false;
-    const existing = sb.blockInText(chat[index].mes, BLOCK.tag)?.text ?? '';
-    await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines.join('\n')}` : lines.join('\n'));
-    return true;
+    const lines = [];
+    const chosen = new Set();
+    if (choosing) {
+        const still = ids => ids.map(id => findRecord(tracker, id)).filter(record => record && record.status === 'active');
+        // What the story left out is written for it: a choice made with a button always holds.
+        for (const record of still(state.keys)) lines.push(`- ${record.key} — abandoned`);
+        for (const record of still(state.take).filter(entry => entry.kind !== 'quest')) lines.push(`~ ${record.key} — accepted`);
+        for (const record of still(state.decline)) lines.push(`- ${record.key} — declined`);
+        for (const id of [...state.keys, ...state.take, ...state.decline]) chosen.add(id);
+    }
+    // (0.9.19) Only the newest reply closes what time ran past: an older one edited later keeps
+    // what it said. A record the reader just chose about is theirs, not a lapse.
+    if (index === latestAssistantIndex(chat)) {
+        const options = { calendar: calendar(), now: tracker.time };
+        const open = record => !chosen.has(record.id);
+        lines.push(...lapseLines({ slipped: slippedBeats(tracker, options).filter(open), lapsed: lapsedOffers(tracker, options).filter(open) }));
+    }
+    if (lines.length) {
+        const existing = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
+        await sb.setBlockText(index, BLOCK.tag, existing ? `${existing}\n${lines.join('\n')}` : lines.join('\n'));
+    } else if (choosing) {
+        await ctx.saveChat?.();
+    }
+    // `drawn`: Story Block redraws after a block write; a stamp alone it does not see.
+    return { choosing, drawn: lines.length > 0 };
 }
 
 function tabBadge() {

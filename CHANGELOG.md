@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.40
+
+- **One write after each reply.** The reader's choices that went with a reply (given up, taken on, turned down) and what its story time ran past (beats that slipped, offers that lapsed) used to be two separate writes to the reply's Director block, each saving the chat and redrawing the tabs. They are one write now. A record the reader just chose about is never also closed as lapsed.
+- **One redraw per reply.** Story Block already redraws the tabs as a reply comes in and after every block write; Story Director now redraws once more only for what Story Block cannot see (this reply's findings, a choice stamped without a line).
+- **One set of defaults.** The settings panel kept its own copy of the defaults, which had drifted (a missing *keep the Director's note* default, a different calendar fallback). Both now read one copy (`src/defaults.js`); the runtime's values won, so nothing changes for a saved setup.
+- **Not done: trimming the change instruction.** Dropping its kinds list (16 tokens) on replies that expect no new records would change the fixed part of the note on exactly those replies, which breaks the cached start of the prompt there and costs far more than it saves.
+
 ## 0.9.39
 
 - **Search the Journal.** A long story's Journal (more than 15 entries) now has a search box on top. It filters as you type by name, what happened, giver or date, ignoring case and accents (*cafe* finds *Café*). It shows *N of M* and opens every day that matches, folded ones included, or says nothing matches. Esc or the box's ✕ clears it; in the drawer or bottom sheet, Esc closes the panel as it does everywhere there.
