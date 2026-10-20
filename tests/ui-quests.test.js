@@ -172,27 +172,31 @@ test('an offer can be taken on or turned down here; once chosen it reads Undo un
     assert.equal(render({ offered: [offer] }).querySelector('.story-director-offer-take'), null);
 });
 
-test('Take on waits for the giver; "I\'m with them" lets the reader take it anyway; Turn down never waits (0.9.34)', () => {
+test('the giver\'s presence is a badge; away, Take on asks once inline; Turn down never asks; the empty line points at the offers (0.9.35)', () => {
     const offer = quest('Drake Shallows', { giver: 'Elke', reward: '2 gold' }, { kind: 'hook' });
     const calls = [];
-    const options = { offered: [offer], onTake: id => calls.push(['take', id]), onDecline: id => calls.push(['decline', id]), onUndo: () => {}, away: () => 'Elke' };
+    const options = { offered: [offer], onTake: id => calls.push(['take', id]), onDecline: id => calls.push(['decline', id]), onUndo: () => {}, presence: () => ({ name: 'Elke', here: false }) };
     const pane = render(options);
+    assert.equal(pane.querySelector('.story-director-empty-text').textContent, 'No quests yet — 1 offer below.');
     const card = () => pane.querySelector('.is-offered .story-director-record');
-    assert.equal(card().querySelector('.story-director-offer-take').disabled, true);
-    assert.match(card().querySelector('.story-director-offer-away').textContent, /Elke isn't here\. Find Elke, or tick "I'm with them"\./);
-    card().querySelector('.story-director-offer-take').click();
-    assert.deepEqual(calls, [], 'no take while the giver is away');
-    card().querySelector('.story-director-offer-decline').click();
-    assert.deepEqual(calls, [['decline', 'drake shallows']]);
-    const box = card().querySelector('.story-director-offer-with');
-    box.checked = true;
-    box.dispatch('change');
+    assert.equal(card().querySelector('.story-director-tag.is-giver').textContent, 'Elke · not here');
     assert.ok(!card().querySelector('.story-director-offer-take').disabled);
-    assert.equal(card().querySelector('.story-director-offer-away'), null);
     card().querySelector('.story-director-offer-take').click();
-    assert.deepEqual(calls.at(-1), ['take', 'drake shallows']);
-    // The giver in the scene: no box, Take on as before.
-    const here = render({ ...options, away: () => '' });
-    assert.equal(here.querySelector('.story-director-offer-with'), null);
-    assert.ok(!here.querySelector('.story-director-offer-take').disabled);
+    assert.deepEqual(calls, [], 'away: it asks first');
+    assert.equal(card().querySelector('.story-director-offer-ask').textContent, "Elke isn't here — take it anyway?");
+    card().querySelector('.story-director-offer-cancel').click();
+    assert.equal(card().querySelector('.story-director-offer-ask'), null);
+    card().querySelector('.story-director-offer-take').click();
+    card().querySelector('.story-director-offer-take.is-confirm').click();
+    assert.deepEqual(calls, [['take', 'drake shallows']]);
+    // Turn down never asks (a fresh draw, as the tab does after a choice).
+    render(options).querySelector('.is-offered .story-director-offer-decline').click();
+    assert.deepEqual(calls.at(-1), ['decline', 'drake shallows']);
+    // Here: the badge says so and Take on takes at once.
+    const here = render({ ...options, presence: () => ({ name: 'Elke', here: true }) });
+    assert.equal(here.querySelector('.story-director-tag.is-giver').textContent, 'Elke · here');
+    here.querySelector('.story-director-offer-take').click();
+    assert.equal(calls.length, 3);
+    // Nobody to look for: no badge.
+    assert.equal(render({ ...options, presence: () => null }).querySelector('.story-director-tag.is-giver'), null);
 });

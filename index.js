@@ -55,7 +55,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.34';
+const VERSION = '0.9.35';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -1468,12 +1468,13 @@ function questsTabKey() {
     return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(','), JSON.stringify(abandonState(ctx) ?? null)].join('|');
 }
 
-// (0.9.34) The giver's name while they are not in the scene (Take on waits), '' when they are,
-// when there is nobody to look for, or with the setting off.
-function giverAway(record, { scene, reply }) {
-    if (settings().giverPresent === false) return '';
+// (0.9.35) Whether an offer's giver is in the scene: { name, here }, null when there is nobody
+// to look for or with the setting off.
+function giverPresence(record, { scene, reply }) {
+    if (settings().giverPresent === false) return null;
     const giver = record?.fields?.giver;
-    return giverPresent(giver, { scene, reply }) === false ? String(giver).split(/[,(;—–]/)[0].trim() : '';
+    const here = giverPresent(giver, { scene, reply });
+    return here === null ? null : { name: String(giver).split(/[,(;—–]/)[0].trim(), here };
 }
 
 function renderQuestsTab(pane) {
@@ -1487,7 +1488,7 @@ function renderQuestsTab(pane) {
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
     // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), away: record => giverAway(record, where) });
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => giverPresence(record, where) });
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
