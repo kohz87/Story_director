@@ -595,3 +595,28 @@ test('a distance off the map shows with its Fix button, which does the fix (0.9.
     assert.equal(fixed, 1);
     assert.equal(render({ findings: [{ ...finding, fix: null }] }).querySelector('.story-director-problem-fix'), null, 'no fix, no button');
 });
+
+test("What's sent: the next reply's note, built only while open; locked, only its size (0.9.34)", () => {
+    let built = 0;
+    const sent = () => { built += 1; return { text: '[Story Director — tracked]\nTaken on: Ren takes on Lime Kiln Bats.', tokens: 18 }; };
+    const pane = render({ sent });
+    const fold = pane.querySelector('.story-director-fold.is-sent');
+    assert.equal(built, 0, 'not built while closed');
+    fold.open = true;
+    fold.dispatch('toggle');
+    assert.equal(built, 1);
+    assert.match(fold.querySelector('.story-director-sent-text').textContent, /Taken on: Ren takes on Lime Kiln Bats\./);
+    assert.match(fold.textContent, /~18 tokens/);
+    const locked = doc.createElement('div');
+    doc.body.appendChild(locked);
+    renderTab(locked, { selection: selection(), spoiler: { locked: true, onReveal() {} }, sent });
+    const closed = locked.querySelector('.story-director-fold.is-sent');
+    closed.open = true;
+    closed.dispatch('toggle');
+    assert.equal(closed.querySelector('.story-director-sent-text'), null);
+    assert.match(closed.textContent, /~18 tokens.*Reveal to read it/);
+    const none = render({ sent: () => ({ text: '', tokens: 0 }) }).querySelector('.story-director-fold.is-sent');
+    none.open = true;
+    none.dispatch('toggle');
+    assert.match(none.textContent, /No note goes with the next reply/);
+});

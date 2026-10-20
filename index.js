@@ -31,6 +31,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { formatOp, parseChanges } from './src/changes.js';
+import { giverPresent } from './src/presence.js';
 import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections, waitsForPay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
@@ -54,7 +55,7 @@ import { DEFAULT_MAP, buildPlaceBook, estimateTrip, findBookPlace, formatTrip, m
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.33';
+const VERSION = '0.9.34';
 const SETTINGS_KEY = 'storyDirector';
 const PROMPT_KEY = 'story_director';
 const BLOCK = { id: 'story-director', tag: 'Director', name: 'Story Director', icon: '🎬' };
@@ -80,6 +81,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     mirrorOffscreen: true,
     // The tracker is the story behind the scenes: hidden in the tab until the reader asks.
     spoilerGuard: true,
+    // (0.9.34) Take on only while the offer's giver is in the scene (or "I'm with them").
+    giverPresent: true,
     calendar: PRESETS.gregorian,
     arc: Object.freeze({ trigger: 'manual', model: { source: 'chat' }, recent: 60, maxTokens: 1500, stallDays: DEFAULT_STALL_DAYS, lowThreads: DEFAULT_LOW_THREADS, autoAccept: false, genre: '', note: '', keepNote: false, prompt: '' }),
     capture: Object.freeze({ mode: 'off', model: { source: 'chat' }, maxTokens: 800 }),
@@ -588,6 +591,25 @@ function nextReplyTokens() {
     return noteTokens(parts);
 }
 
+/**
+ * (0.9.34) What's sent: the note as the next ordinary reply would get it, built now and
+ * changing nothing: { label, text, tokens } ('' while no note is sent).
+ */
+function notePreview() {
+    const label = 'Story Director note';
+    try {
+        const ctx = context();
+        if (!ctx || !chatIdOf(ctx) || !storyBlock() || !settings(ctx).enabled) return { label, text: '', tokens: 0 };
+        const { selection, tracker, upTo } = situation('normal');
+        const note = buildNote(selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(ctx.chat?.length ?? 0, tracker, { peek: true }) });
+        const text = typeof ctx.substituteParams === 'function' ? ctx.substituteParams(note) : note;
+        return { label, text, tokens: text ? estimateTokens(text) : 0 };
+    } catch (error) {
+        console.error('[Story Director] preview failed', error);
+        return { label, text: '', tokens: 0 };
+    }
+}
+
 async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'normal') {
     try {
         if (isBackground(type)) return;
@@ -671,6 +693,10 @@ const API = Object.freeze({
      * normal, hard, nightmare. Quests finished in earlier replies are not listed, so a swipe
      * or an edit of that reply is read afresh. RPG Battle offers quest XP with it.
      */
+    /** (0.9.34) The note the next reply would get, as text: { label, text, tokens }. */
+    preview() {
+        return notePreview();
+    },
     questsDoneAt(index) {
         try {
             const chat = context()?.chat ?? [];
@@ -701,6 +727,8 @@ const MANAGE = makeManage({
     save: next => applySettings(next),
     panel: () => settingsPanel,
     tokens: () => nextReplyTokens(),
+    // (0.9.34) What's sent, for a suite overlay that shows it (an extra the contract allows).
+    preview: () => notePreview(),
 });
 // What the suite gets as `api`: globalThis.StoryDirector plus `manage`, built once, so the
 // global stays read-only and every announcement hands over the same object.
@@ -1006,6 +1034,7 @@ function renderDirectorTab(pane) {
         spoiler: settings().spoilerGuard !== false
             ? { locked: isLocked(), onReveal: () => setRevealed(true), onHide: () => setRevealed(false) }
             : null,
+        sent: () => notePreview(),
     });
 }
 
@@ -1439,15 +1468,26 @@ function questsTabKey() {
     return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(','), JSON.stringify(abandonState(ctx) ?? null)].join('|');
 }
 
+// (0.9.34) The giver's name while they are not in the scene (Take on waits), '' when they are,
+// when there is nobody to look for, or with the setting off.
+function giverAway(record, { scene, reply }) {
+    if (settings().giverPresent === false) return '';
+    const giver = record?.fields?.giver;
+    return giverPresent(giver, { scene, reply }) === false ? String(giver).split(/[,(;—–]/)[0].trim() : '';
+}
+
 function renderQuestsTab(pane) {
     const { active, finished, offered, now } = questRecords();
+    const chat = context()?.chat ?? [];
+    const latest = latestAssistantIndex(chat);
+    const where = { scene: storyBlock()?.getBlock?.(settings().sceneTag)?.text ?? '', reply: latest >= 0 ? visibleText(chat[latest]) : '' };
     // (0.9.12) Each deadline at the clock time the calendar sets: "Goldwane 12 sunset" reads
     // "Goldwane 12, 07:00 pm", a date alone its last minute.
     const cal = calendar();
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
     // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
-    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id) });
+    renderQuests(pane, { quests: active, finished, offered: offered.filter(record => record.engaged || status(record) !== 'overdue'), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), away: record => giverAway(record, where) });
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
@@ -1578,16 +1618,17 @@ function keepQuest(id) {
  * A pending choice goes with the next reply; one already sent goes again with a swipe of its
  * reply, and is done once a later reply is written.
  */
-function choicesFor(slot, tracker) {
+function choicesFor(slot, tracker, { peek = false } = {}) {
     const none = { abandoning: [], takingOn: [], turningDown: [] };
     const state = abandonState();
     if (!state) return none;
     if (state.attachedTo !== null && slot > state.attachedTo) {
-        setAbandonState(null);
+        if (!peek) setAbandonState(null);
         return none;
     }
     if (state.attachedTo !== null && slot !== state.attachedTo) return none;
-    if (state.sentFor !== slot) setAbandonState({ ...state, sentFor: slot });
+    // (0.9.34) `peek`: for What's sent, which shows the note without sending it.
+    if (!peek && state.sentFor !== slot) setAbandonState({ ...state, sentFor: slot });
     const keys = list => list.map(id => findRecord(tracker, id)?.key).filter(Boolean);
     return { abandoning: keys(state.keys), takingOn: keys(state.take), turningDown: keys(state.decline) };
 }
@@ -1873,6 +1914,14 @@ function registerEvents() {
     }
     for (const event of [events.APP_READY, events.EXTENSION_SETTINGS_LOADED]) {
         if (event) ctx.eventSource.on(event, ensureUi);
+    }
+    // (0.9.34) The note is for the reply it was built for: once that reply is in (or the reader
+    // stopped it), it goes, so a background call (another extension's quiet prompt, a capture
+    // pass) never carries it and nothing in it is told twice. The next reply builds its own. Not
+    // on GENERATION_ENDED: a quiet call another extension makes while the reply is being put
+    // together ends too, and would take the note away before the reply is sent.
+    for (const event of [events.MESSAGE_RECEIVED, events.GENERATION_STOPPED]) {
+        if (event) ctx.eventSource.on(event, () => setNote(''));
     }
 }
 

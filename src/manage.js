@@ -43,7 +43,7 @@ export function suiteAnnouncement({ id, name, version, areas, settings, storyBlo
  * ordinary reply, `{ input, output, parts: [{ label, input, output }] }` (src/note.js
  * noteTokens); manage.tokens() hands over a clean copy, and nothing at all on a failure.
  */
-export function makeManage({ areas, read, save, panel = () => null, tokens = () => null }) {
+export function makeManage({ areas, read, save, panel = () => null, tokens = () => null, preview = null }) {
     const known = Object.freeze([...areas]);
     return Object.freeze({
         areas: known,
@@ -69,6 +69,18 @@ export function makeManage({ areas, read, save, panel = () => null, tokens = () 
                 return tokenCopy(tokens());
             } catch {
                 return tokenCopy(null);
+            }
+        },
+        /**
+         * (0.9.34) What's sent: the note the next ordinary reply would get, as text,
+         * `{ label, text, tokens }`. Never throws; '' when nothing is sent or it cannot be built.
+         */
+        preview() {
+            try {
+                const report = typeof preview === 'function' ? preview() : null;
+                return { label: String(report?.label ?? ''), text: String(report?.text ?? ''), tokens: count(report?.tokens) };
+            } catch {
+                return { label: '', text: '', tokens: 0 };
             }
         },
         /** Flip the tracking switch, as the panel's own switch does. */
