@@ -953,21 +953,17 @@
     overflow-y: auto;
 }
 
-/* (0.9.34) "I'm with them" beside Take on, and why Take on waits. */
-.story-director-tab .story-director-offer-with-label {
-    display: inline-flex;
-    gap: 0.3rem;
-    align-items: center;
-    font-size: 0.85em;
-    cursor: pointer;
+/* (0.9.35) The giver's presence as a badge; Take on asking once, inline. */
+.story-director-tab .story-director-tag.is-giver.is-here {
+    color: var(--sd-accent);
+    opacity: 0.9;
 }
 
-.story-director-tab .story-director-offer-away {
+.story-director-tab .story-director-tag.is-giver.is-away {
+    opacity: 0.6;
+}
+
+.story-director-tab .story-director-offer-ask {
     flex-basis: 100%;
-    margin: 0;
-}
-
-.story-director-tab .story-director-offer-actions .menu_button:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
+    font-size: 0.85em;
 }

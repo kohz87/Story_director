@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.35
+
+- **Offers read more simply.** In 0.9.34 an offer whose giver was away showed four things for one decision: a disabled Take on, Turn down, an "I'm with them" box and a hint. Now the card carries a badge, *Elke · here* or *Elke · not here*, and Take on is always there. While the giver is away it asks once, inline: *Elke isn't here — take it anyway?* **Take on** / **Cancel**. Turn down never asks.
+- **No "No open quests" above a list of offers.** With offers waiting it now reads *No quests yet — 2 offers below.*
+
+### Cleanup
+
+- The tabs and the settings panel share one set of small page helpers (`src/ui/dom.js`) instead of four copies. The Quests tab keeps its own button, where the visible label stays the button's name.
+- `modesFor` in `src/routes.js`, which nothing used, is gone.
+
 ## 0.9.34
 
 - **Take on waits for the giver.** A job is taken on in front of whoever offers it.

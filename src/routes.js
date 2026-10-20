@@ -447,11 +447,6 @@ function normalizeMode(mode, pack = null) {
     return MODE_ALIASES[word] ?? null;
 }
 
-/** The modes a pack's travel knows: the modern ones for a modern pack. */
-export function modesFor(pack) {
-    return pack?.era === 'modern' ? MODERN_MODES : MODES;
-}
-
 /** What a road code is called ("bastion road", "railway"). */
 export function codeName(pack, code) {
     if (pack?.era === 'modern') return MODERN_CODES[code]?.name ?? 'road';

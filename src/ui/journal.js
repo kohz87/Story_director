@@ -7,6 +7,8 @@
 // fold away under Earlier days. Everything arrives as parameters; this module only draws, and
 // fills every node through textContent (the values are written by the model).
 
+import { el, icon, sub } from './dom.js';
+
 // The most recent days drawn open; the rest fold away.
 const DAYS_SHOWN = 7;
 // The quiet word after the key, and its icon, by what the item is.
@@ -22,27 +24,6 @@ const LOOK = {
     'quest:abandoned': { tag: 'quest abandoned', icon: 'fa-flag' },
 };
 const FALLBACK = { tag: '', icon: 'fa-feather' };
-
-function el(tag, { className, text, attrs } = {}, children = []) {
-    const node = globalThis.document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = String(text);
-    for (const [name, value] of Object.entries(attrs ?? {})) node.setAttribute(name, value);
-    for (const child of children) if (child) node.append(child);
-    return node;
-}
-
-function icon(name) {
-    return el('i', { className: `fa-solid ${name}`, attrs: { 'aria-hidden': 'true' } });
-}
-
-function sub(label, iconName, count = null) {
-    return el('div', { className: 'story-director-sub' }, [
-        icon(iconName),
-        el('span', { text: label }),
-        count === null ? null : el('span', { className: 'story-director-count', text: String(count) }),
-    ]);
-}
 
 const text = value => String(value ?? '').trim();
 

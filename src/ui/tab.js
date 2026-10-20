@@ -19,6 +19,7 @@
 // the text as written.
 
 import { bearing, distanceKm } from '../places.js';
+import { button, el, icon, sub } from './dom.js';
 
 const KIND_GROUPS = [
     { kind: 'agenda', label: 'Off-screen', icon: 'fa-satellite-dish' },
@@ -41,41 +42,6 @@ const SEVERITIES = [
 
 // ---------------------------------------------------------------------------
 // DOM helpers (the same shapes as Story Block's editor.js)
-
-function el(tag, { className, text, title, attrs } = {}, children = []) {
-    const node = globalThis.document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = String(text);
-    if (title) {
-        node.title = title;
-        node.setAttribute('aria-label', title);
-    }
-    for (const [name, value] of Object.entries(attrs ?? {})) node.setAttribute(name, value);
-    for (const child of children) if (child) node.append(child);
-    return node;
-}
-
-function icon(name) {
-    return el('i', { className: `fa-solid ${name}`, attrs: { 'aria-hidden': 'true' } });
-}
-
-function button(label, className, { iconName, title, onClick } = {}) {
-    const node = el('button', { className: `menu_button ${className}`, title });
-    node.type = 'button';
-    if (iconName) node.append(icon(iconName));
-    if (label) node.append(el('span', { text: label }));
-    if (onClick) node.addEventListener('click', onClick);
-    return node;
-}
-
-/** The quiet section label: an icon, then the name in small capitals. */
-function sub(label, iconName, count = null) {
-    return el('div', { className: 'story-director-sub' }, [
-        icon(iconName),
-        el('span', { text: label }),
-        count === null ? null : el('span', { className: 'story-director-count', text: String(count) }),
-    ]);
-}
 
 function section(className, children) {
     return el('section', { className: `story-director-section ${className}` }, children);

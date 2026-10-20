@@ -14,6 +14,7 @@
 // textContent (the values are written by the model).
 
 import { questDifficulty } from '../changes.js';
+import { el, icon, sub } from './dom.js';
 
 const TYPE_ORDER = ['main', 'side', 'bounty', 'contract', 'mission', 'favour'];
 const TYPE_LABELS = { main: 'Main', side: 'Side', bounty: 'Bounties', contract: 'Contracts', mission: 'Missions', favour: 'Favours' };
@@ -25,27 +26,6 @@ const META = {
     place: { label: 'place', icon: 'fa-location-dot' },
 };
 const FINISHED_SHOWN = 20;
-
-function el(tag, { className, text, attrs } = {}, children = []) {
-    const node = globalThis.document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = String(text);
-    for (const [name, value] of Object.entries(attrs ?? {})) node.setAttribute(name, value);
-    for (const child of children) if (child) node.append(child);
-    return node;
-}
-
-function icon(name) {
-    return el('i', { className: `fa-solid ${name}`, attrs: { 'aria-hidden': 'true' } });
-}
-
-function sub(label, iconName, count = null) {
-    return el('div', { className: 'story-director-sub' }, [
-        icon(iconName),
-        el('span', { text: label }),
-        count === null ? null : el('span', { className: 'story-director-count', text: String(count) }),
-    ]);
-}
 
 const text = value => String(value ?? '').trim();
 // "Bounties" and "bounty" are one group; "quest" says nothing beyond being a quest.
@@ -62,6 +42,7 @@ let offeredOpen = false;
 let abandonArmed = null;
 let lastArgs = null;
 
+// Here the title is only a tooltip: the visible label stays each button's accessible name.
 function button(label, className, { iconName, title, onClick } = {}) {
     const node = el('button', { className: `menu_button ${className}`, attrs: title ? { title } : {} });
     node.type = 'button';
@@ -195,65 +176,72 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
  * (0.9.15) Jobs offered and not taken on: the same card as a quest (goal, giver, reward,
  * deadline), no Abandon and no difficulty, folded. Saying yes or no is the story's business.
  */
-// (0.9.34) Offers whose "I'm with them" the reader ticked: Take on is there for them though
-// the giver was not seen in the scene. Kept across redraws, until that offer is taken on.
-const withGiver = new Set();
+// (0.9.35) Offers whose Take on asked "take it anyway?" (the giver not in the scene): the
+// question stays until it is answered or the tab is drawn for another chat.
+const confirming = new Set();
 
 // (0.9.33) Take on / Turn down under an offer, or, once chosen, what goes with the next reply and Undo.
-// (0.9.34) `away(record)`: the giver's name when they are not in the scene (Take on waits for
-// them, or for "I'm with them"); '' when they are, or nobody is looked for.
-function offerActions(record, { choosing = null, onTake = null, onDecline = null, onUndo = null, away = null } = {}) {
+// (0.9.35) `presence(record)`: { name, here } for the giver, null when nobody is looked for.
+// Take on is always there; with the giver away it asks once, inline, before it takes.
+function offerActions(record, { choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null } = {}) {
     if (typeof onTake !== 'function' && typeof onDecline !== 'function') return null;
     const taking = choosing?.take?.has?.(record.id);
     const declining = choosing?.decline?.has?.(record.id);
     if (taking || declining) {
+        confirming.delete(record.id);
         return el('div', { className: 'story-director-offer-actions is-chosen' }, [
             el('span', { className: `story-director-tag ${taking ? 'is-taking' : 'is-turning-down'}`, text: taking ? 'taken on with your next reply' : 'turned down with your next reply' }),
             button('Undo', 'story-director-offer-undo', { iconName: 'fa-rotate-left', title: 'Change your mind before the next reply.', onClick: () => onUndo?.(record.id) }),
         ]);
     }
-    const giver = typeof away === 'function' ? away(record) : '';
-    const waiting = Boolean(giver) && !withGiver.has(record.id);
-    const take = button('Take on', 'story-director-offer-take', {
-        iconName: 'fa-check',
-        title: waiting ? `${giver} isn't here. Find ${giver}, or tick "I'm with them".` : `Take on ${record.key}: your next reply tells it, and it becomes your quest.`,
-        onClick: () => {
-            if (waiting) return;
-            withGiver.delete(record.id);
-            onTake?.(record.id);
-        },
-    });
-    if (waiting) {
-        take.disabled = true;
-        take.setAttribute('aria-disabled', 'true');
+    const giver = typeof presence === 'function' ? presence(record) : null;
+    const redraw = () => { if (lastArgs) renderQuests(...lastArgs); };
+    const take = () => {
+        confirming.delete(record.id);
+        onTake?.(record.id);
+    };
+    if (confirming.has(record.id) && giver && !giver.here) {
+        return el('div', { className: 'story-director-offer-actions is-confirming' }, [
+            el('span', { className: 'story-director-offer-ask', text: `${giver.name} isn't here — take it anyway?` }),
+            button('Take on', 'story-director-offer-take is-confirm', { iconName: 'fa-check', onClick: take }),
+            button('Cancel', 'story-director-offer-cancel', { onClick: () => { confirming.delete(record.id); redraw(); } }),
+        ]);
     }
-    const row = [
-        take,
+    return el('div', { className: 'story-director-offer-actions' }, [
+        button('Take on', 'story-director-offer-take', {
+            iconName: 'fa-check',
+            title: `Take on ${record.key}: your next reply tells it, and it becomes your quest.`,
+            onClick: () => {
+                if (giver && !giver.here) {
+                    confirming.add(record.id);
+                    redraw();
+                    return;
+                }
+                take();
+            },
+        }),
         button('Turn down', 'story-director-offer-decline', { iconName: 'fa-xmark', title: `Turn down ${record.key}: your next reply tells it.`, onClick: () => onDecline?.(record.id) }),
-    ];
-    if (giver) {
-        const box = el('input', { className: 'story-director-offer-with', attrs: { type: 'checkbox' } });
-        box.checked = withGiver.has(record.id);
-        box.addEventListener('change', () => {
-            if (box.checked) withGiver.add(record.id);
-            else withGiver.delete(record.id);
-            if (lastArgs) renderQuests(...lastArgs);
-        });
-        row.push(el('label', { className: 'story-director-offer-with-label', attrs: { title: `Your character is with ${giver}, though the scene does not say so.` } }, [box, el('span', { text: "I'm with them" })]));
-        if (waiting) row.push(el('span', { className: 'story-director-empty-hint story-director-offer-away', text: `${giver} isn't here. Find ${giver}, or tick "I'm with them".` }));
-    }
-    return el('div', { className: 'story-director-offer-actions' }, row);
+    ]);
 }
 
-function renderOffered(offered, { formatDate, status, choosing = null, onTake = null, onDecline = null, onUndo = null, away = null }) {
+function renderOffered(offered, { formatDate, status, choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null }) {
     const buttons = typeof onTake === 'function' || typeof onDecline === 'function';
     const body = el('div', { className: 'story-director-fold-body' }, [
-        el('p', { className: 'story-director-empty-hint', text: buttons ? 'Offered, not taken on. Take one on or turn it down here, or say so in the story.' : 'Offered, not taken on. Say in the story that your character takes one on, or turns it down.' }),
+        el('p', { className: 'story-director-empty-hint', text: buttons ? 'Take one on or turn it down here, or say so in the story.' : 'Offered, not taken on. Say in the story that your character takes one on, or turns it down.' }),
         el('ul', { className: 'story-director-records' }, offered.map(record => {
             const item = renderQuest(record, { formatDate, status, onAbandon: null });
             item.classList.add('is-offered');
             item.querySelector('.story-director-tag.is-difficulty')?.remove();
-            const actions = offerActions(record, { choosing, onTake, onDecline, onUndo, away });
+            // (0.9.35) Whether the giver is in the scene, as a badge on the card.
+            const giver = typeof presence === 'function' ? presence(record) : null;
+            if (giver) {
+                item.querySelector('.story-director-record-head')?.append(el('span', {
+                    className: `story-director-tag is-giver ${giver.here ? 'is-here' : 'is-away'}`,
+                    text: `${giver.name} · ${giver.here ? 'here' : 'not here'}`,
+                    attrs: { title: giver.here ? `${giver.name} is in the scene.` : `${giver.name} is not in the scene: Take on asks first.` },
+                }));
+            }
+            const actions = offerActions(record, { choosing, onTake, onDecline, onUndo, presence });
             if (actions) item.append(actions);
             return item;
         })),
@@ -297,13 +285,18 @@ function renderFinished(finished) {
  * `status(record)` → 'overdue' | 'soon' | 'pay' | '' marks deadlines ('pay': only the pay is left);
  * `onAbandon(id)` when the reader gives one up (no button without it); (0.9.33) `onTake(id)`,
  * `onDecline(id)` and `onUndo(id)` for an offer, `choosing`: { take, decline } (Sets of ids)
- * chosen for the next reply; (0.9.34) `away(record)`: the giver's name while they are not in
- * the scene (Take on waits, with "I'm with them"), '' otherwise.
+ * chosen for the next reply; (0.9.35) `presence(record)`: { name, here } for the offer's giver
+ * (a badge; Take on asks first while they are away), null when nobody is looked for.
  */
-export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null, away = null } = {}) {
-    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo, away }];
+export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null } = {}) {
+    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo, presence }];
     const root = el('div', { className: 'story-director-tab story-director-quests' });
-    if (!quests.length) {
+    if (!quests.length && offered.length) {
+        // (0.9.35) Not "no open quests" above a list of offers: say where they are.
+        root.append(el('div', { className: 'story-director-empty' }, [
+            el('p', { className: 'story-director-empty-text', text: `No quests yet — ${offered.length} ${offered.length === 1 ? 'offer' : 'offers'} below.` }),
+        ]));
+    } else if (!quests.length) {
         root.append(el('div', { className: 'story-director-empty' }, [
             el('p', { className: 'story-director-empty-text', text: 'No open quests.' }),
             el('p', { className: 'story-director-empty-hint', text: 'A quest starts when your character accepts one: a bounty, a contract, a favour owed. The story writes it as "+ quest …" and it stays here until it is done.' }),
@@ -315,7 +308,7 @@ export function renderQuests(pane, { quests = [], finished = [], offered = [], f
             el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon, abandoning, onKeep }))),
         ]));
     }
-    if (offered.length) root.append(renderOffered(offered, { formatDate, status, choosing, onTake, onDecline, onUndo, away }));
+    if (offered.length) root.append(renderOffered(offered, { formatDate, status, choosing, onTake, onDecline, onUndo, presence }));
     if (finished.length) root.append(renderFinished(finished));
     pane.replaceChildren(root);
 }

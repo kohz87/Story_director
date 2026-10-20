@@ -13,6 +13,7 @@
 // they are (rebuilding the drawer would fold it shut).
 
 import { makeCalendar, parseWeek } from '../calendar.js';
+import { button, el, icon } from './dom.js';
 
 const DEFAULTS = {
     enabled: true,
@@ -64,32 +65,6 @@ const PRESET_LABELS = { custom: 'Custom (your months)', gregorian: 'Gregorian (r
 
 // ---------------------------------------------------------------------------
 // DOM helpers (the same shapes as Story Block's editor.js)
-
-function el(tag, { className, text, title, attrs } = {}, children = []) {
-    const node = globalThis.document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = String(text);
-    if (title) {
-        node.title = title;
-        node.setAttribute('aria-label', title);
-    }
-    for (const [name, value] of Object.entries(attrs ?? {})) node.setAttribute(name, value);
-    for (const child of children) if (child) node.append(child);
-    return node;
-}
-
-function icon(name) {
-    return el('i', { className: `fa-solid ${name}`, attrs: { 'aria-hidden': 'true' } });
-}
-
-function button(label, className, { iconName, title, onClick } = {}) {
-    const node = el('button', { className: `menu_button ${className}`, title });
-    node.type = 'button';
-    if (iconName) node.append(icon(iconName));
-    if (label) node.append(el('span', { text: label }));
-    if (onClick) node.addEventListener('click', onClick);
-    return node;
-}
 
 function textInput(id, value, placeholder = '') {
     const node = el('input', { className: 'text_pole', attrs: { id } });
@@ -318,15 +293,15 @@ export function renderSettings(container, { settings, blocks = [], onChange, onS
         const budget = numberInput('story_director_budget', current.budgetTokens, LIMITS.budgetTokens);
         bindNumber(budget, 'budgetTokens');
 
-        // (0.9.34) Take on in front of whoever offers the job.
-        const giver = toggle('story_director_giver_present', current.giverPresent !== false, 'Take on only with the giver there');
+        // (0.9.34) Take on in front of whoever offers the job; (0.9.35) asked, not blocked.
+        const giver = toggle('story_director_giver_present', current.giverPresent !== false, 'Ask before taking on a job away from its giver');
         giver.addEventListener('change', () => commit(next => { next.giverPresent = Boolean(giver.checked); }));
 
         return [
             row('Scene block', blocks.length ? 'The block that holds the time and place.' : 'Tag of the block that holds the time and place.', scene, { id: 'story_director_scene' }),
             row('Note depth', 'How many messages from the end the note goes in.', withUnit(depth, 'messages'), { id: 'story_director_depth' }),
             row('Note budget', 'Most tokens the note may use; the least relevant records go first.', withUnit(budget, 'tokens'), { id: 'story_director_budget' }),
-            row('Take on only with the giver there', 'The Quests tab offers Take on while whoever offered the job is in the scene (NPCs Present, or named in the latest reply); “I’m with them” lets you take it anyway.', giver, { id: 'story_director_giver_present' }),
+            row('Ask before taking on a job away from its giver', 'Each offer in the Quests tab says whether whoever offered it is in the scene (NPCs Present, or named in the latest reply); Take on asks “take it anyway?” once while they are not.', giver, { id: 'story_director_giver_present' }),
         ];
     }
 
