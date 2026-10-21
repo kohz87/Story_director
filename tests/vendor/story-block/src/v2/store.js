@@ -11,12 +11,16 @@
 //   `narrated`. Untold receipts are the `narrate: true` ones that no such carrier lists, oldest first. "At
 //   or after" rather than "after" so a cue committed on the head carrier while it is being re-generated
 //   (a swipe) counts as told by that same carrier.
+// * Replay goes block by block (`spans`: one block per stored receipt, one for a Re-read's story changes):
+//   a block that no longer applies (a middle reply deleted, a hand-edited chat) is skipped and reported
+//   alone; its receipts' revs still count. Everything stored before and after it still applies, so a
+//   command committed onto such a carrier survives the next rebuild, and so does its claim.
 // * Every state handed out is deep-frozen. The head and the checkpoints are cached; the cache is checked
 //   against the chat on each read, and `rebuild()` drops it.
 
 import { apply as applyOps } from './ops.js';
 import {
-    KEY, carrierIndexes, createSaver, isCarrier, lastCarrier, newRecordId, readRecord, writeRecord,
+    KEY, carrierIndexes, createSaver, isCarrier, lastCarrier, newRecordId, readRecord, restamp, swipeOf, writeRecord,
 } from './persist.js';
 
 export const CHECKPOINT_EVERY = 20;
@@ -54,9 +58,36 @@ export function createStore({
     if (typeof chat !== 'function') throw new TypeError('createStore needs a chat() function.');
     if (typeof apply !== 'function') throw new TypeError('createStore needs an apply(state, ops) function.');
     void now;
-    const saver = createSaver({ save, onError: onSaveError, timers });
     let frozenCheckpoints = new WeakMap();
     let cache = null;          // { key, state, problems }
+    let lastWrite = null;      // { message, swipe, rev } of the last record written, for save verification
+
+    // Every record goes through here, so a save can be checked against the last one written.
+    function write(message, record) {
+        const stored = writeRecord(message, record);
+        lastWrite = { message, swipe: stored.swipe, rev: stored.rev };
+        return stored;
+    }
+
+    // SPEC §3.3: after a save, the carrier last written must still hold the rev it was given. If
+    // something replaced it while the save ran, the save counts as failed (the story stays marked
+    // unsaved and the reader is told); the next save writes the chat as it is then.
+    const verify = {
+        before: () => lastWrite,
+        after(token) {
+            if (!token) return '';
+            const arr = list();
+            const index = arr.indexOf(token.message);
+            if (index < 0) return '';   // deleted, or another chat: nothing of this one to check
+            const message = token.message;
+            const extra = swipeOf(message) === token.swipe ? message.extra : message.swipe_info?.[token.swipe]?.extra;
+            const rev = extra?.[KEY]?.rev;
+            if (rev === token.rev) return '';
+            if (lastWrite === token) lastWrite = null;
+            return `The story was saved, but message ${index} no longer holds its latest changes (change ${rev ?? 'none'} instead of ${token.rev ?? 'none'}); the story stays marked unsaved.`;
+        },
+    };
+    const saver = createSaver({ save, onError: onSaveError, timers, verify });
 
     const list = () => {
         const arr = chat();
@@ -74,8 +105,9 @@ export function createStore({
         return ops.length ? deepFreeze(apply(state, structuredClone(ops))) : state;
     }
 
-    // State after the last carrier at or before `upTo`, or null when no checkpoint precedes it. Ops that
-    // no longer apply (a hand-edited chat) are skipped and reported, so a bad carrier cannot block the rest.
+    // State after the last carrier at or before `upTo`, or null when no checkpoint precedes it. A block
+    // of ops that no longer applies (a hand-edited chat, a middle reply deleted) is skipped and reported
+    // on its own, so a bad change cannot take the rest of its carrier, or anything later, with it.
     function replay(arr, upTo) {
         let from = -1;
         for (let i = Math.min(upTo, arr.length - 1); i >= 0; i--) {
@@ -87,13 +119,38 @@ export function createStore({
         for (let i = from; i <= upTo && i < arr.length; i++) {
             const record = readRecord(arr[i]);
             if (!record) continue;
-            try {
-                state = step(state, record.ops);
-            } catch (error) {
-                problems.push({ index: i, message: `The changes stored on message ${i} no longer apply and were skipped: ${error?.message ?? error}` });
-            }
+            state = replayRecord(state, record, i, problems);
         }
         return { state, problems };
+    }
+
+    // One carrier's ops, block by block. `skip` (a Set of "index:block") names blocks to pass over
+    // without trying them (Re-read keeps blocks that were already skipped skipped).
+    function replayRecord(state, record, index, problems, skip = null) {
+        blocksOf(record).forEach((ops, block) => {
+            if (skip?.has(`${index}:${block}`)) {
+                state = skipped(state, ops);
+                return;
+            }
+            try {
+                state = step(state, ops);
+            } catch (error) {
+                const why = String(error?.message ?? error);
+                problems.push({
+                    index, block, receipts: receiptsOf(record, ops), why,
+                    message: `Some changes stored on message ${index} no longer apply and were skipped: ${why}`,
+                });
+                state = skipped(state, ops);
+            }
+        });
+        return state;
+    }
+
+    // A skipped block still counts its receipts' revs, so every later receipt keeps a rev of its own.
+    function skipped(state, ops) {
+        const revs = ops.filter(op => op?.path === '/meta/rev' && Number.isInteger(op.value));
+        if (!revs.length || revs.at(-1).value <= revOf(state)) return state;
+        try { return step(state, [{ op: 'replace', path: '/meta/rev', value: revs.at(-1).value }]); } catch { return state; }
     }
 
     function headKey(arr) {
@@ -172,6 +229,28 @@ export function createStore({
         return null;
     }
 
+    // The record's ops in the blocks they were stored in: one per append (one receipt), one for a
+    // Re-read's story changes. A record whose spans are missing or do not add up is one block.
+    function blocksOf(record) {
+        const spans = Array.isArray(record.spans) ? record.spans : null;
+        const fits = spans && spans.every(span => Number.isInteger(span?.n) && span.n >= 0)
+            && spans.reduce((sum, span) => sum + span.n, 0) === record.ops.length;
+        if (!fits) return record.ops.length ? [record.ops] : [];
+        const out = [];
+        let at = 0;
+        for (const span of spans) {
+            if (span.n) out.push(record.ops.slice(at, at + span.n));
+            at += span.n;
+        }
+        return out;
+    }
+
+    // The IDs of the receipts whose changes are `ops` (each receipt's ops end with its /meta/rev op).
+    function receiptsOf(record, ops) {
+        const revs = new Set(ops.filter(op => op?.path === '/meta/rev').map(op => op.value));
+        return record.receipts.filter(receipt => revs.has(receipt?.rev)).map(receipt => receipt.id);
+    }
+
     function asOps(ops) {
         if (ops === undefined || ops === null) return [];
         if (!Array.isArray(ops)) throw new TypeError('Ops must be an array.');
@@ -213,9 +292,10 @@ export function createStore({
             return [...new Set((record?.ops ?? []).map(op => op?.path).filter(path => typeof path === 'string'))];
         },
 
-        // Problems met by the last head rebuild: carriers whose stored ops no longer apply.
+        // Problems met by the last head rebuild: [{ index, block, receipts, why, message }], one per block
+        // of stored ops that no longer applies (`receipts`: the IDs whose changes were skipped).
         problems() {
-            return current().problems.map(problem => ({ ...problem }));
+            return current().problems.map(problem => ({ ...problem, receipts: [...(problem.receipts ?? [])] }));
         },
 
         ensureInitial(initialState) {
@@ -225,7 +305,7 @@ export function createStore({
             const first = carrierIndexes(arr)[0];
             if (first === undefined) return;
             const checkpoint = structuredClone(initialState);
-            writeRecord(arr[first], { v: 2, sid: recordId(), checkpoint, ops: [], receipts: [], narrated: [],
+            write(arr[first], { v: 2, sid: recordId(), checkpoint, ops: [], receipts: [], narrated: [],
                 spans: [], rev: revOf(checkpoint) });
             saver.touch();
             cache = null;
@@ -245,7 +325,7 @@ export function createStore({
             if (typeof receipt?.id === 'string' && record.receipts.some(known => known?.id === receipt.id)) {
                 throw new Error(`Receipt ${receipt.id} is already stored on this reply.`);
             }
-            writeRecord(message, {
+            write(message, {
                 ...record,
                 ops: [...record.ops, ...added],
                 receipts: receipt ? [...record.receipts, structuredClone(receipt)] : record.receipts,
@@ -297,20 +377,22 @@ export function createStore({
                 spans: [{ n: fresh.length, story: true }, ...keptSpans],
                 rev: revOf(state),
             }]];
+            // Later blocks that were already skipped stay skipped; one that applied before must still apply.
+            const broken = new Set(replay(arr, lastCarrier(arr)).problems.map(problem => `${problem.index}:${problem.block}`));
             for (let i = index + 1; i < arr.length; i++) {
                 const later = readRecord(arr[i]);
                 if (!later) continue;
                 const checkpoint = later.checkpoint ? structuredClone(state) : undefined;
-                try {
-                    state = step(state, later.ops);
-                } catch (error) {
-                    throw new Error(`A later change (message ${i}) depends on this reply's old story changes: ${error?.message ?? error}`);
+                const failed = [];
+                state = replayRecord(state, later, i, failed, broken);
+                if (failed.length) {
+                    throw new Error(`A later change (message ${i}) depends on this reply's old story changes: ${failed[0].why}`);
                 }
                 if (checkpoint) writes.push([arr[i], { ...later, checkpoint, rev: revOf(state) }]);
             }
-            for (const [target, next] of writes) writeRecord(target, next);
+            for (const [target, next] of writes) write(target, next);
             saver.touch();
-            retain(arr, state, []);
+            cache = null;   // rebuilt on the next read, with the blocks that stay skipped reported
         },
 
         setNarrated(index, ids) {
@@ -322,7 +404,7 @@ export function createStore({
             const atHead = index === head.key.index;
             const { message, record, fresh } = take(arr, index, atHead ? head.state : undefined);
             const rev = fresh ? revOf(atHead ? head.state : stateBefore(arr, index)) : record.rev;
-            writeRecord(message, { ...record, narrated: [...new Set(ids)], ...(rev === undefined ? {} : { rev }) });
+            write(message, { ...record, narrated: [...new Set(ids)], ...(rev === undefined ? {} : { rev }) });
             saver.touch();
             if (atHead) retain(arr, head.state, head.problems);
         },
@@ -372,7 +454,7 @@ export function createStore({
             const ops = kept.flatMap(chunk => chunk.ops);
             const state = step(base, ops);
             const byRev = new Map(receipts.map(receipt => [receipt.rev, receipt]));
-            writeRecord(message, {
+            write(message, {
                 ...record,
                 ops,
                 receipts,
@@ -381,7 +463,8 @@ export function createStore({
                 rev: revOf(state),
             });
             saver.touch();
-            retain(arr, state, []);
+            // Only this carrier was rewritten (and its kept changes all applied): earlier problems stay.
+            retain(arr, state, (cache?.problems ?? []).filter(problem => problem.index < index));
             return { dropped, rev: revOf(state) };
         },
 
@@ -407,6 +490,12 @@ export function createStore({
         rebuild() {
             frozenCheckpoints = new WeakMap();
             cache = null;
+            // A swipe deleted before another shifts that one's index: stamp it again (persist.js), so
+            // the copy SillyTavern makes for the next new swipe is not taken for the new swipe's own.
+            const arr = list();
+            let stamped = false;
+            for (const i of carrierIndexes(arr)) stamped = restamp(arr[i]) || stamped;
+            if (stamped) saver.touch();
             current();
         },
 

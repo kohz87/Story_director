@@ -8,6 +8,13 @@
 // `capture.<kind>` runs the owner's capture.apply on a change line (turn.js), and
 // `module.init.<id>` adds a late module's initial slices (sdk.js). Modules cannot use these
 // prefixes for their own commands.
+//
+// Internal commands (`isInternal(type)`): those two families, and any module command marked
+// `internal: true` (the events part's `events.fire`). They are steps the host takes itself (a change
+// line, a module's set-up, a due event): the command bus refuses them with cause 'ui', from the top or
+// through ctx.call, and the public sdk refuses to send them at all, so no button, screen, widget or
+// layout can name one. A command is marked either as `{ handler, internal: true }` in `commands`, or
+// as a handler function that carries `internal === true` itself.
 export const CAPTURE_PREFIX = 'capture.';
 export const INIT_PREFIX = 'module.init.';
 // The host's module id and the namespace of its standard widgets (MODULES §F9).
@@ -117,7 +124,11 @@ export function definitionProblems(def) {
         for (const [type, handler] of Object.entries(def.commands)) {
             if (!COMMAND.test(type)) problems.push(`the command name "${type}" must be words joined by dots (like "item.use")`);
             else if (type.startsWith(CAPTURE_PREFIX) || type.startsWith('module.')) problems.push(`the command name "${type}" uses a prefix Story Block keeps for itself ("capture." or "module.")`);
-            fn(handler, `command "${type}"`);
+            if (isObject(handler)) {
+                fn(handler.handler, `command "${type}" handler`);
+                if (handler.internal !== undefined && typeof handler.internal !== 'boolean') problems.push(`command "${type}" internal is not true or false`);
+                for (const key of Object.keys(handler)) if (!['handler', 'internal'].includes(key)) problems.push(`"${key}" is not a command field (known: handler, internal)`);
+            } else fn(handler, `command "${type}"`);
         }
     }
     if (map(def.queries, 'queries')) {
@@ -282,8 +293,21 @@ export function createRegistry() {
             const def = defs.get(name.slice(INIT_PREFIX.length));
             return def && Object.keys(def.domains ?? {}).length ? initHandler(def) : null;
         }
+        const entry = commandEntry(name);
+        return entry ? (isObject(entry) ? entry.handler : entry) : null;
+    }
+
+    function commandEntry(name) {
         const owner = owners.command.get(name);
         return owner ? defs.get(owner).commands[name] : null;
+    }
+
+    // Steps the host takes itself (see the top): never a reader's action.
+    function isInternal(type) {
+        const name = String(type ?? '');
+        if (name.startsWith(CAPTURE_PREFIX) || name.startsWith(INIT_PREFIX)) return true;
+        const entry = commandEntry(name);
+        return Boolean(entry) && entry.internal === true;
     }
 
     function commandOwner(type) {
@@ -317,6 +341,8 @@ export function createRegistry() {
         queryOwner: name => owners.query.get(name) ?? null,
         /** The handler for a command type (module commands and the registry's own), or null. */
         command,
+        /** True for a command only the host runs (capture.*, module.init.*, commands marked internal). */
+        isInternal,
         /** { moduleId, kind, grammar, apply } for a capture kind or alias, or null. */
         capture: captureEntry,
         /** The canonical kind a written kind word stands for, or null. */

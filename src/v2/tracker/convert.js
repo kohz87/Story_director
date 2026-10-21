@@ -31,12 +31,20 @@ export function orderedThreads(director) {
         (a.track?.order ?? 0) - (b.track?.order ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
+/** The names that reach each thread (`director.keys` turned round): `Map(id → [name])`, as stored. */
+function namesById(director) {
+    const names = new Map();
+    for (const [name, id] of Object.entries(director?.keys ?? {})) {
+        if (!names.has(id)) names.set(id, []);
+        names.get(id).push(name);
+    }
+    return names;
+}
+
 /** The names other than its own key that reach a thread (v1 aliases), oldest first as stored. */
-function aliasesOf(director, thread) {
+function aliasesOf(names, thread) {
     const own = lineKey(thread.key);
-    return Object.entries(director?.keys ?? {})
-        .filter(([name, id]) => id === thread.id && name !== own)
-        .map(([name]) => name);
+    return (names.get(thread.id) ?? []).filter(name => name !== own);
 }
 
 /**
@@ -90,7 +98,9 @@ export function toRecord(thread, aliases = [], { contracts = false } = {}) {
 
 /** The v1 tracker the domain reads as: `{ version, records, message, time }`. */
 export function toTracker(director, options = {}) {
-    const records = orderedThreads(director).map(thread => toRecord(thread, aliasesOf(director, thread), options));
+    // The key index is turned round once: looked up per thread it made this quadratic (B-b1-capture-13).
+    const names = namesById(director);
+    const records = orderedThreads(director).map(thread => toRecord(thread, aliasesOf(names, thread), options));
     return { version: 1, records, message: director?.turn?.n ?? -1, time: director?.time?.minutes ?? null };
 }
 

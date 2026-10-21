@@ -159,6 +159,7 @@ export async function ensureModules({ store, bus, registry, events = null }) {
 export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null }) {
     let markReady;
     const ready = new Promise(resolve => { markReady = () => resolve(sdk); });
+    const refused = message => ({ ok: false, code: 'REFUSED', message });
     const committed = result => {
         if (result?.ok) events.emit('committed', { receipt: result.receipt });
         return result;
@@ -175,8 +176,20 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             await ensureModules({ store, bus, registry, events });
             return sdk;
         },
-        command: async (type, payload, options = {}) => committed(await bus.command(type, payload, { cause: 'ui', ...options })),
-        preview: async (type, payload) => bus.preview(type, payload),
+        /**
+         * Runs a command as the reader's own action (cause 'ui', SPEC §3.1). Screens, widgets, layouts
+         * and modules all come through here, so nothing here can raise the cause (the host's own story
+         * and system steps go to the command bus directly) or name an internal command (registry.js).
+         */
+        command: async (type, payload, options = {}) => {
+            const cause = isObject(options) && options.cause !== undefined ? options.cause : 'ui';
+            if (cause !== 'ui') return refused(`A command sent from a screen, widget or module runs as the reader's action ("ui"); "${cause}" is kept for Story Block itself.`);
+            if (registry.isInternal?.(type)) return refused(`"${type}" is a step Story Block takes itself; it cannot be sent as an action.`);
+            return committed(await bus.command(type, payload, { cause: 'ui' }));
+        },
+        preview: async (type, payload) => (registry.isInternal?.(type)
+            ? refused(`"${type}" is a step Story Block takes itself; it cannot be sent as an action.`)
+            : bus.preview(type, payload)),
         commit: async token => committed(await bus.commit(token)),
         query: (name, args) => runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [] }),
         /** The stored receipts on the current line of history, in chat order: [{ index, receipt }]. */

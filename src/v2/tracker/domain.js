@@ -4,7 +4,7 @@
 //   time:    { minutes: null | int },             // story clock on the reader's calendar
 //   threads: { [id]: thread },                    // MODULES §C1
 //   keys:    { [lineKey(key) or alias]: id },
-//   problems:[{ rev, kind, text, … }],            // last 50, newest last
+//   problems:[{ rev, kind, text, … }],            // newest last; up to 100 kept, the newest 50 shown
 //   (a quest thread may also carry `ready: { rev }`, F83, and an offer `shown: { turn }`, F88)
 //   turn:    { n, reply, index, from, quests, lone }, // the reply whose Director lines are being read
 // }
@@ -17,6 +17,8 @@ import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 
 export const PROBLEM_LIMIT = 50;
+/** How long the list grows before it is cut back to the newest PROBLEM_LIMIT (see capture.js addProblem). */
+export const PROBLEM_ROOM = 2 * PROBLEM_LIMIT;
 const THREAD_ID = /^th_[0-9a-z]{8}$/;
 const TARGET_KINDS = ['foes', 'items'];
 
@@ -83,7 +85,7 @@ export function validateDirector(slice) {
             if (thread?.key && slice.keys[lineKey(thread.key)] !== thread.id) errors.push(`"${thread.key}" is missing from director.keys.`);
         }
     }
-    if (!Array.isArray(slice.problems) || slice.problems.length > PROBLEM_LIMIT) errors.push(`director.problems must be a list of at most ${PROBLEM_LIMIT}.`);
+    if (!Array.isArray(slice.problems) || slice.problems.length > PROBLEM_ROOM) errors.push(`director.problems must be a list of at most ${PROBLEM_ROOM}.`);
     else if (slice.problems.some(problem => !isRecord(problem) || typeof problem.kind !== 'string' || typeof problem.text !== 'string' || !isInt(problem.rev))) {
         errors.push('director.problems entries need rev, kind and text.');
     }

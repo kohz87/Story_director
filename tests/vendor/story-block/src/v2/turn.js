@@ -12,6 +12,8 @@
 // <Changes> block, run each line as its owner's capture command (cause 'story'), append what
 // was accepted, record what the reply was told, save once. A line no module takes, or one its
 // owner rejects, goes to the Problems list; nothing is thrown at the reader.
+// A failed save (before or after the reply) is told and logged but never drops the turn: the state
+// stays in memory, marked unsaved, and the save is tried again after the reply.
 //
 // turn.js receives the SillyTavern context and the host parts; it never imports the store or
 // the command bus (their interfaces are docs/v2/SPEC.md §12).
@@ -158,6 +160,21 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         return item;
     }
 
+    // A save that fails never costs the turn (SPEC §3.3): the reader is told, the state stays in
+    // memory marked unsaved, and the save is tried again after the reply (or with the next change).
+    async function trySave(when) {
+        try {
+            await store.flush();
+            return true;
+        } catch (error) {
+            const why = String(error?.message ?? error).trim().replace(/[.\s]*$/, '.');
+            const reason = `The story could not be saved ${when}: ${why} It is kept and will be saved again.`;
+            problem({ code: 'SAVE_FAILED', message: reason });
+            try { notify?.(reason, null); } catch { /* a missing toastr is not an error */ }
+            return false;
+        }
+    }
+
     const view = () => makeView({ store, registry, settings, chat: ctx?.chat });
     const hasCarrier = () => (ctx?.chat ?? []).some(isCarrier);
     const lastCarrier = () => (ctx?.chat ?? []).findLastIndex(isCarrier);
@@ -189,7 +206,7 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
                 } else problem({ module: moduleId, code: result?.code ?? 'FAILED', message: `The cue "${command?.type}" was not committed: ${result?.message ?? 'unknown error'}` });
             }
         }
-        if (committed) await store.flush();
+        if (committed) await trySave('after the cues before the reply');
         return cues;
     }
 
@@ -246,7 +263,7 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         }
         if (!ctx?.chat) return;
         try {
-            await store.flush();
+            await trySave('before the reply');
             // A Regenerate removes the old reply before this runs, without an event for it.
             if (store.headIndex() !== lastCarrier()) store.rebuild();
             if (hasCarrier()) store.ensureInitial(initial());
@@ -361,6 +378,17 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         return { receipts, problems: found };
     }
 
+    // Only the reply's text changed (its block hidden): SillyTavern's own save, told like any other.
+    async function saveText() {
+        try { await ctx.saveChat?.(); } catch (error) {
+            problem({ code: 'SAVE_FAILED', message: `The reply could not be saved: ${error?.message ?? error}` });
+        }
+    }
+
+    function redraw(index, message) {
+        try { ctx.updateMessageBlock?.(index, message); } catch { /* not drawn yet: SillyTavern draws it from the saved text */ }
+    }
+
     /** MESSAGE_RECEIVED: (messageId, type). */
     async function onMessageReceived(messageId) {
         const id = Number(messageId);
@@ -396,9 +424,11 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
                     edited = true;
                 }
             }
-            if (store.dirty()) await store.flush();
-            else if (edited) await ctx.saveChat?.();
-            if (edited) ctx.updateMessageBlock?.(id, message);
+            if (store.dirty()) await trySave('after the reply');
+            else if (edited) await saveText();
+            // At MESSAGE_RECEIVED SillyTavern has not drawn the reply yet (it draws the text as saved), so
+            // redrawing can fail; that is not a reason to lose the turn.
+            if (edited) redraw(id, message);
             const turn = { index: id, type: current.type, receipts: result.receipts, problems, told: current.untold };
             events?.emit('turn', turn);
             if (!parsed.lines.length) afterReply(id, current.type, message);
@@ -439,9 +469,9 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
             message.mes = mes;
             if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = mes;
         }
-        if (store.dirty()) await store.flush();
-        else if (parsed.lines.length) await ctx.saveChat?.();
-        if (parsed.lines.length) ctx.updateMessageBlock?.(index, message);
+        if (store.dirty()) await trySave('after the late change lines');
+        else if (parsed.lines.length) await saveText();
+        if (parsed.lines.length) redraw(index, message);
         const turn = { index, type: 'late', receipts: result.receipts, problems, told: [] };
         events?.emit('turn', turn);
         return turn;
@@ -463,6 +493,8 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
     /** GENERATION_ENDED / GENERATION_STOPPED: a spent note never reaches a later prompt. */
     function onGenerationEnded() {
         if (session?.prompted) clearPrompts();
+        // A save that failed and was not made good after the reply (or the reply never came): again soon.
+        if (store.dirty()) store.scheduleSave();
     }
 
     function install({ globalName = INTERCEPTOR_NAME } = {}) {

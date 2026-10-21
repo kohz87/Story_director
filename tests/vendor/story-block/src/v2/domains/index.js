@@ -35,16 +35,18 @@ export const CORE_STATIC = 'Code keeps the inventory, the wallet, the place and 
 export const CORE_KINDS = Object.freeze({
     item: Object.freeze({ grammar: '+ item Name | qty: 1 | note: short detail (- item Name | qty: 1 when used up or lost; ~ item Name | note: … when it changes)' }),
     coin: Object.freeze({ grammar: '+ coin 30 | from: who (- coin 5 | to: who when paid; one number, in the wallet\'s currency)' }),
-    place: Object.freeze({ grammar: '~ place Name | kind: settlement|wild|dungeon|… | region: wider area' }),
+    place: Object.freeze({ grammar: '~ place Name | kind: settlement|wild|dungeon|… | region: wider area | with: who came along (the rest stay behind)' }),
     present: Object.freeze({ grammar: '+ present Name when someone arrives, - present Name when they leave' }),
 });
 
-// The chat's one currency (MODULES.md F1): its name, renamable by the reader, never a second one.
+// The chat's one currency (MODULES.md F1): its name (singular) and plural, renamable by the reader,
+// never a second one.
 export const CORE_SETTINGS = Object.freeze({
     section: 'Story Block',
-    defaults: Object.freeze({ currency: DEFAULT_CURRENCY.name, currencyShort: '' }),
+    defaults: Object.freeze({ currency: DEFAULT_CURRENCY.name, currencyPlural: '', currencyShort: '' }),
     schema: Object.freeze({
-        currency: Object.freeze({ type: 'text', label: 'Currency', max: 24 }),
+        currency: Object.freeze({ type: 'text', label: 'Currency (one coin: mark, crown, gold)', max: 24 }),
+        currencyPlural: Object.freeze({ type: 'text', label: 'Currency, plural (blank: the name with an s)', max: 24 }),
         currencyShort: Object.freeze({ type: 'text', label: 'Currency, short form (blank: its first letter)', max: 6 }),
     }),
 });

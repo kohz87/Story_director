@@ -21,7 +21,7 @@ export const STATIC_MARKER = '[Story Suite: how this story is kept]';
 const HEADER = [
     STATIC_MARKER,
     'Code keeps this story\'s facts and numbers; you narrate.',
-    `When the last note starts with ${HAPPENED}, those things have just happened: tell them as they happen in the scene and keep their numbers. Do not write them again as changes.`,
+    `When a note starts with ${HAPPENED}, those things have just happened: tell them as they happen in the scene and keep their numbers. Do not write them again as changes.`,
 ].join('\n');
 
 const CHANGES_HEADER = [
@@ -32,6 +32,7 @@ const CHANGES_HEADER = [
     'op: + new or gained, - gone or lost, ~ changed, ! happened, ? asks code to decide (a check, a roll).',
     'Use only the kinds below. Leave out what did not change, and the whole block when nothing did.',
     'This is the only block you write: no state, inventory or party blocks; code keeps those and shows them to you.',
+    'Write it outside any thinking, once. It does not count toward any reply length limit.',
     'Kinds:',
 ].join('\n');
 

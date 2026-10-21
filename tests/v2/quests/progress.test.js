@@ -23,7 +23,8 @@ test('progress for foes counts only fights after taken.rev, whole words', () => 
     const seen = [];
     const query = (name, args) => { seen.push([name, args]); return fakeQueries[name](state, args); };
     assert.deepEqual(progress(state, { id: 'th_wolves01' }, { query }), want);
-    assert.deepEqual(seen, [['combat.foesBeaten', { sinceRev: 10 }]]);
+    // The scene has no kind, so the place rule asks the atlas for it (atlas.here).
+    assert.deepEqual(seen, [['combat.foesBeaten', { sinceRev: 10 }], ['atlas.here', {}]]);
     state.domains.combat.beaten.push(fight(12, [{ name: 'Wolves', count: 6 }]));
     assert.deepEqual(progress(state, { key: 'EastBluffWolves' }), { ...want, have: 8, met: true, label: 'Wolves 8/3', reason: '', finish: { ok: false, reason: 'Turn it in at a settlement or where Orsa is.' } });
 });

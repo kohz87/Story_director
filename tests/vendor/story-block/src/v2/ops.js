@@ -73,11 +73,14 @@ function setKey(target, key, value) {
     else target[key] = value;
 }
 
-/** A deep copy of plain JSON (other values are kept as they are, for checkOps to report). */
+/**
+ * A deep copy of plain JSON (other values are kept as they are, for checkOps to report). An object
+ * without a prototype (a change line's labels) stays one, so a key it lacks is never an inherited one.
+ */
 export function clone(value) {
     if (Array.isArray(value)) return value.map(clone);
     if (isPlainObject(value)) {
-        const out = {};
+        const out = Object.getPrototypeOf(value) === null ? Object.create(null) : {};
         for (const key of Object.keys(value)) setKey(out, key, clone(value[key]));
         return out;
     }
@@ -213,11 +216,15 @@ export function valueAt(state, path) {
 
 // Keys whose values must be IDs: `id`, and names ending in `Id` or `_id` (`stackId`, `owner_id`).
 const ID_KEY = /^(?:id|.+Id|.+_id)$/;
+// Keys no value in the state may hold: copied with Object.assign or a for-in loop they would change
+// an object's prototype, and code reading them would get the language's own (QA #70).
+export const FORBIDDEN_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
 
 /**
  * checkOps(ops, before?) → string[]: the generic rules of SPEC §2.5, as plain sentences (empty when
  * fine). Every op: a known op, a well-formed path below the root, a plain-JSON value (no NaN, no
- * Infinity, no undefined). Anywhere in a value or at the end of a path:
+ * Infinity, no undefined, no key named __proto__, constructor or prototype inside a value). Anywhere
+ * in a value or at the end of a path:
  * * `qty` is a whole number, 0 or more;
  * * `/meta/rev` is a whole number, 0 or more;
  * * a key named `id` holds a well-formed ID (`it_k3f9a2qz` or `story/moonveil-trout`); a key ending
@@ -271,7 +278,13 @@ function checkValue(value, key, path, errors) {
     }
     if (Array.isArray(value)) value.forEach((item, i) => checkValue(item, String(i), `${path}/${i}`, errors));
     else if (value !== null && typeof value === 'object') {
-        for (const child of Object.keys(value)) checkValue(value[child], child, `${path}/${escapeKey(child)}`, errors);
+        for (const child of Object.keys(value)) {
+            if (FORBIDDEN_KEYS.includes(child)) {
+                errors.push(`${path} holds a key named "${child}", which the state may not use.`);
+                continue;
+            }
+            checkValue(value[child], child, `${path}/${escapeKey(child)}`, errors);
+        }
     }
 }
 

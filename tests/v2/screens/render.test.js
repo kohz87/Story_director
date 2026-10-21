@@ -110,7 +110,7 @@ test('quests: each row opens its details (F84): goal, progress, terms, rank, giv
     const facts = Object.fromEntries(more.querySelectorAll('.sd-facts > div').map(row => [squash(row.querySelector('dt').textContent), squash(row.querySelector('dd').textContent)]));
     assert.equal(facts.Goal, 'Clear at least 3 wolves');
     assert.equal(facts.Progress, 'Hunt along the ridge');
-    assert.equal(facts.Terms, 'beat 3 wolves; 900 gold (reward held to E-rank range: 50–230 gold (the story said 900 gold)); E-rank');
+    assert.equal(facts.Terms, 'beat 3 wolves; 900 gold (reward clamped to E-rank range: 50–230 gold (clamped from 900 gold)); E-rank');
     assert.equal(facts.Rank, 'E-rank');
     assert.equal(facts.Giver, 'Orsa');
     assert.equal(facts.Due, 'June 20, 2025');

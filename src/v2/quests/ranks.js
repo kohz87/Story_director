@@ -2,8 +2,9 @@
 // Pure. The suite keeps one ladder: the enabled packs' `ranks` content when they have one (complete,
 // rewards included), else RPG Battle's level tiers (`party.ranks`, rewards added here by place on the
 // ladder), else the built-in F to S ladder. A quest's `rank:` (or `difficulty:` when it names a rank)
-// is matched against whichever ladder is in use; easy/normal/hard are not ranks and leave a quest
-// unranked, so its reward is paid as written.
+// is matched against whichever ladder is in use. A quest from a pack takes the pack's rank. A quest with
+// no rank gets one from its difficulty (defaultRank, B-b4-10 / B-b3-18), so every reward is held inside
+// some rank's range.
 
 import { tryQuery } from './progress.js';
 
@@ -115,6 +116,44 @@ export function rankOf(thread, ladder) {
     return null;
 }
 
+/**
+ * How far from the party's own rank a quest's difficulty puts it when it names no rank: easy one rank
+ * below, normal the party's, hard one above, nightmare two above (held to the ends of the ladder).
+ */
+export const DIFFICULTY_STEPS = Object.freeze({ easy: -1, normal: 0, hard: 1, nightmare: 2 });
+
+/**
+ * The rank a quest that names none is paid as: the party's rank on `ladder` (the rank whose levels hold
+ * `level`, the player character's level; above every band, the highest band below it; the lowest rank
+ * when the level is not known) moved by DIFFICULTY_STEPS for `difficulty` (easy, normal, hard,
+ * nightmare; anything else is normal). Null only for an empty ladder.
+ */
+export function defaultRank(ladder, difficulty, level = null) {
+    if (!Array.isArray(ladder) || !ladder.length) return null;
+    let base = 0;
+    if (Number.isSafeInteger(level) && level > 0) {
+        const at = ladder.findIndex(rank => rank.levels && level >= rank.levels[0] && level <= rank.levels[1]);
+        if (at >= 0) base = at;
+        else ladder.forEach((rank, index) => { if (rank.levels && rank.levels[1] < level) base = index; });
+    }
+    const step = Object.hasOwn(DIFFICULTY_STEPS, difficulty) ? DIFFICULTY_STEPS[difficulty] : 0;
+    return ladder[Math.min(ladder.length - 1, Math.max(0, base + step))];
+}
+
+/**
+ * The rank a quest is paid as: `{ rank, by }`, `by` one of 'pack' (its pack quest's `rank` or
+ * `letter`), 'written' (its own `rank:`, or a `difficulty:` that names a rank) or 'difficulty'
+ * (defaultRank). `pack` is the quest's pack record or null; `level` the player character's level.
+ */
+export function questRank(thread, ladder, { pack = null, level = null, difficulty = 'normal' } = {}) {
+    const fromPack = pack ? rankNamed(pack.rank ?? pack.letter ?? '', ladder) : null;
+    if (fromPack) return { rank: fromPack, by: 'pack' };
+    const written = rankOf(thread, ladder);
+    if (written) return { rank: written, by: 'written' };
+    const rank = defaultRank(ladder, difficulty, level);
+    return { rank, by: rank ? 'difficulty' : null };
+}
+
 /** "220–1000 gold". */
 export function rangeText(rank, currency) {
     return `${rank.reward[0]}–${rank.reward[1]} ${currency}`;
@@ -123,15 +162,17 @@ export function rangeText(rank, currency) {
 /**
  * A total reward held inside its rank's range: `{ total, held }`, `held` true when it was moved. A reward
  * of nothing in money (0, or no amount) is left as it is: "reward: none" is not raised to the range.
+ * `capOnly`: only the top of the range holds (a rank the quest's difficulty gave, not one it names: a
+ * small reward the story wrote is not raised).
  */
-export function holdReward(total, rank) {
+export function holdReward(total, rank, { capOnly = false } = {}) {
     if (!rank || !Number.isSafeInteger(total) || total <= 0) return { total, held: false };
     const [lo, hi] = rank.reward;
-    const kept = Math.min(hi, Math.max(lo, total));
+    const kept = Math.min(hi, capOnly ? total : Math.max(lo, total));
     return { total: kept, held: kept !== total };
 }
 
-/** "reward held to D-rank range: 220–1000 gold (the story said 5000)". */
+/** "reward clamped to D-rank range: 220–1000 gold (clamped from 5000 gold)". */
 export function heldText(rank, said, currency) {
-    return `reward held to ${rank.title} range: ${rangeText(rank, currency)} (the story said ${said})`;
+    return `reward clamped to ${rank.title} range: ${rangeText(rank, currency)} (clamped from ${said})`;
 }

@@ -23,11 +23,23 @@ const GREGORIAN_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 // (0.9.21) A custom calendar's week: up to this many day names. None: the world has no weekdays.
 export const MAX_WEEK_DAYS = 14;
 
+// The longest era, month name and day name a calendar keeps (the reader's settings are free text).
+export const ERA_CHARS = 24;
+export const NAME_CHARS = 40;
+
+// One line, at most `max` characters: line breaks, tabs and control characters become one space, so a
+// name from the settings cannot start a line of its own in the prompt ("[Happened]", "</Changes>").
+export function oneLine(value, max) {
+    const flat = String(value ?? '').replace(/[\s\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim();
+    const chars = Array.from(flat);
+    return chars.length > max ? chars.slice(0, max).join('').trimEnd() : flat;
+}
+
 // Day names from a list or from text ("Moonday, Tideday" or one per line), trimmed, once each.
 export function parseWeek(value) {
     const list = Array.isArray(value) ? value : String(value ?? '').split(/[,\n]/);
     const seen = new Set();
-    return list.map(name => String(name ?? '').trim()).filter(name => {
+    return list.map(name => oneLine(name, NAME_CHARS)).filter(name => {
         const key = name.toLowerCase();
         if (!name || seen.has(key)) return false;
         seen.add(key);
@@ -66,11 +78,12 @@ function positiveInt(value, fallback) {
 // A month may be a bare name, 'Name | days' (the settings textarea line) or { name, days }.
 function toMonth(month, daysPerMonth) {
     if (typeof month === 'string') {
-        const [name, days] = month.split('|');
-        return name.trim() ? { name: name.trim(), days: positiveInt(days, daysPerMonth) } : null;
+        const [written, days] = month.split('|');
+        const name = oneLine(written, NAME_CHARS);
+        return name ? { name, days: positiveInt(days, daysPerMonth) } : null;
     }
     if (month && typeof month === 'object') {
-        const name = String(month.name ?? '').trim();
+        const name = oneLine(month.name, NAME_CHARS);
         return name ? { name, days: positiveInt(month.days, daysPerMonth) } : null;
     }
     return null;
@@ -101,7 +114,7 @@ export function normalizeCalendar(config) {
     if (Array.isArray(config)) config = { months: config };
     if (!config || typeof config !== 'object') config = PRESETS.custom30;
 
-    const era = typeof config.era === 'string' ? config.era.trim() : '';
+    const era = typeof config.era === 'string' ? oneLine(config.era, ERA_CHARS) : '';
     const daysPerMonth = positiveInt(config.daysPerMonth ?? config.days_per_month, 30);
     const partsOfDay = normalizeParts(config.partsOfDay ?? config.parts_of_day);
 

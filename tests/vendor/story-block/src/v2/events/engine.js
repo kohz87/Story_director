@@ -178,9 +178,11 @@ export function inspect(view, list, problems = []) {
 
 /**
  * The `events.fire` handler (SPEC §3.2): claim, run `then`, tell the cue.
- * Payload `{ id, cue, once, then }`, as `beforeGenerate` builds it from a checked event.
+ * Payload `{ id, cue, once, then }`, as `beforeGenerate` builds it from a checked event. Runs only as
+ * the host's `system` cue (REFUSED otherwise), and is marked internal for the registry.
  */
 export function fireEvent(ctx, payload) {
+    if (ctx.cause !== 'system') ctx.fail('REFUSED', 'An event happens only when Story Block checks the events before a reply, never from a button or a change line.');
     const fire = normalizeFire(payload);
     if (fire.why) ctx.fail('INVALID', fire.why);
     const { id, cue, once, then } = fire.value;
@@ -188,6 +190,9 @@ export function fireEvent(ctx, payload) {
     for (const step of then) ctx.call(step.command, step.payload);
     return { summary: cue, narrate: true, data: { event: id, then: then.map(step => step.command) } };
 }
+
+// An internal command (registry.js): the bus refuses it with cause 'ui' and the public sdk never sends it.
+Object.defineProperty(fireEvent, 'internal', { value: true, enumerable: true });
 
 const isThenable = value => value !== null && (typeof value === 'object' || typeof value === 'function') && typeof value.then === 'function';
 

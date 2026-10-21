@@ -4,7 +4,7 @@
 // touched domains' validators run, and a throw or a problem keeps the state as it was.
 
 import { part } from '../../../../src/v2/atlas/index.js';
-import { apply, checkOps, diff } from '../vendor/story-block/src/v2/ops.js';
+import { apply, checkOps, diff } from '../../../vendor/story-block/src/v2/ops.js';
 
 export function deepFreeze(value) {
     if (value && typeof value === 'object' && !Object.isFrozen(value)) {

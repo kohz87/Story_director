@@ -105,25 +105,30 @@ function rankedHost(fields, more = {}, queries = fakeQueries) {
 test('F87: a ranked quest\'s reward above its range is held at turn-in, and the receipt says so', () => {
     const host = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', rank: 'D' });
     const take2 = makeHost(makeState({ threads: [quest('th_x0000001', 'X', { goal: 'Kill 3 wolves', reward: '5000 gold', rank: 'D' }, { offer: true })] })).run(take, { id: 'th_x0000001' });
-    assert.equal(take2.receipt.summary, 'Astra takes on X: beat 3 wolves; 5000 gold (reward held to D-rank range: 230–1000 gold (the story said 5000 gold)); D-rank.', 'the terms line shows it');
+    assert.equal(take2.receipt.summary, 'Astra takes on X: beat 3 wolves; 5000 gold (reward clamped to D-rank range: 230–1000 gold (clamped from 5000 gold)); D-rank.', 'the terms line shows it');
     const done = host.run(finish, { id: 'th_wolves01' });
     assert.equal(done.ok, true, done.message);
-    assert.equal(done.receipt.summary, 'Astra turns in Wolves: 3 wolves beaten (target 3), 1000 gold paid (reward held to D-rank range: 230–1000 gold (the story said 5000 gold)).');
+    assert.equal(done.receipt.summary, 'Astra turns in Wolves: 3 wolves beaten (target 3), 1000 gold paid (reward clamped to D-rank range: 230–1000 gold (clamped from 5000 gold)).');
     assert.deepEqual(done.receipt.data.paid, { amount: 1000, said: 5000, rank: 'D', range: [230, 1000] });
     assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 1000 });
 });
 
-test('F87: a per-unit reward is held on its total; inside the range or unranked it is paid as written', () => {
+test('F87: a per-unit reward is held on its total; inside the range it is paid as written, unranked it is capped by its difficulty', () => {
     // 3 wolves × 100 = 300 is over F's 10–50; 3 × 10 = 30 is inside it.
     const each = rankedHost({ goal: 'Kill 3 wolves', reward: '100 gold each wolf', difficulty: 'F' });
     const paid = each.run(finish, { id: 'th_wolves01' });
     assert.equal(paid.receipt.data.paid.amount, 50);
-    assert.match(paid.receipt.summary, /50 gold paid \(reward held to F-rank range: 10–50 gold \(the story said 300 gold\)\)/);
+    assert.match(paid.receipt.summary, /50 gold paid \(reward clamped to F-rank range: 10–50 gold \(clamped from 300 gold\)\)/);
     const inside = rankedHost({ goal: 'Kill 3 wolves', reward: '10 gold each wolf', rank: 'F' }).run(finish, { id: 'th_wolves01' });
     assert.deepEqual(inside.receipt.data.paid, { amount: 30 });
     assert.match(inside.receipt.summary, /30 gold paid\.$/);
+    // B-b4-10: a quest with no rank takes one from its difficulty (hard: one above the party's F), and
+    // only the top of that range holds: a small reward is paid as written, never raised.
     const unranked = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', difficulty: 'hard' }).run(finish, { id: 'th_wolves01' });
-    assert.deepEqual(unranked.receipt.data.paid, { amount: 5000 }, 'easy/normal/hard leave a quest unclamped');
+    assert.deepEqual(unranked.receipt.data.paid, { amount: 230, said: 5000, rank: 'E', range: [50, 230] });
+    assert.match(unranked.receipt.summary, /230 gold paid \(reward clamped to E-rank range: 50–230 gold \(clamped from 5000 gold\)\)\.$/);
+    const small = rankedHost({ goal: 'Kill 3 wolves', reward: '5 gold', difficulty: 'hard' }).run(finish, { id: 'th_wolves01' });
+    assert.deepEqual(small.receipt.data.paid, { amount: 5 }, 'a rank from the difficulty is not a floor');
     const none = rankedHost({ goal: 'Kill 3 wolves', reward: 'none', rank: 'S' }).run(finish, { id: 'th_wolves01' });
     assert.equal(none.receipt.data.paid, null, 'reward: none stays none');
 });
@@ -132,9 +137,9 @@ test('F87: the clamp follows the ladder in use: a pack\'s, or RPG Battle\'s tier
     const packQueries = { ...fakeQueries, 'packs.content': () => ERSVEIL };
     const pack = rankedHost({ goal: 'Kill 3 wolves', reward: '20 gold', rank: 'Journeyman' }, {}, packQueries).run(finish, { id: 'th_wolves01' });
     assert.equal(pack.receipt.data.paid.amount, 800);
-    assert.match(pack.receipt.summary, /reward held to Journeyman range: 800–3000 gold/);
+    assert.match(pack.receipt.summary, /reward clamped to Journeyman range: 800–3000 gold/);
     const rbQueries = { ...fakeQueries, 'party.ranks': () => SOUL };
     const rb = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', difficulty: 'II' }, {}, rbQueries).run(finish, { id: 'th_wolves01' });
     assert.equal(rb.receipt.data.paid.amount, 230);
-    assert.match(rb.receipt.summary, /reward held to Soul Class II range: 50–230 gold/);
+    assert.match(rb.receipt.summary, /reward clamped to Soul Class II range: 50–230 gold/);
 });

@@ -8,7 +8,8 @@
 //   in (SPEC §2.6; `start` hooks, packs' applyStart);
 // * the chat's one currency (MODULES §F1) is the reader's name for it, else the first enabled
 //   pack's suggestion, else the default (gold);
-// * the events part commits and asks through this runtime's sdk.
+// * the events part commits through this runtime's command bus (its cues are system steps) and asks
+//   through its sdk.
 
 import { createCommandBus as realBus } from './commands.js';
 import { CORE_MODULE_ID, createCoreModule } from './domains/index.js';
@@ -24,8 +25,8 @@ import { createTurn, substituteNames } from './turn.js';
 export const VERSION = '2.0.0-alpha.1';
 
 /**
- * Settings where Story Block's `currency` (and `currencyShort`) fall back to `suggest()` →
- * { name, short } | null when the reader has not set them. Same interface as createSettings().
+ * Settings where Story Block's `currency` (and `currencyShort`, `currencyPlural`) fall back to
+ * `suggest()` → { name, short, plural? } | null when the reader has not set them. Same interface as createSettings().
  */
 export function withPackCurrency(base, suggest) {
     const settings = id => {
@@ -38,6 +39,7 @@ export function withPackCurrency(base, suggest) {
         if (offer && typeof offer.name === 'string' && offer.name.trim()) {
             values.currency = offer.name.trim();
             if (!Object.hasOwn(stored, 'currencyShort') || !String(stored.currencyShort ?? '').trim()) values.currencyShort = String(offer.short ?? '');
+            if (!Object.hasOwn(stored, 'currencyPlural') || !String(stored.currencyPlural ?? '').trim()) values.currencyPlural = String(offer.plural ?? '');
         }
         return values;
     };
@@ -93,13 +95,25 @@ export function createRuntime({
     const base = createSettings({ root: () => ctx.extensionSettings, registry, save: () => ctx.saveSettingsDebounced?.() });
     const settings = withPackCurrency(base, () => packPart.startState().currency);
     let sdk = null;
+    let bus = null;
+    let events = null;
     if (core) {
         registry.register(createCoreModule({
             hooks: name => registry.hooks(name),
             settings: () => settings(CORE_MODULE_ID),
             version: VERSION,
             packs: packPart,
-            command: (type, payload, options) => (sdk ? sdk.command(type, payload, options) : { ok: false, code: 'FAILED', message: 'Story Block is not ready.' }),
+            // Due events are the host's own system cues: straight to the bus (the public sdk only runs
+            // the reader's 'ui' actions), with the same 'committed' event the sdk sends.
+            command: (type, payload, options) => {
+                if (!bus) return { ok: false, code: 'FAILED', message: 'Story Block is not ready.' };
+                const result = bus.command(type, payload, options);
+                const tell = value => {
+                    if (value?.ok) events.emit('committed', { receipt: value.receipt });
+                    return value;
+                };
+                return typeof result?.then === 'function' ? result.then(tell) : tell(result);
+            },
             query: (name, args) => {
                 if (!sdk) throw new Error('Story Block is not ready.');
                 return sdk.query(name, args);
@@ -118,8 +132,8 @@ export function createRuntime({
     for (const def of modules) registry.register(def);
 
     const store = createStore({ chat: () => ctx.chat, save: () => ctx.saveChat(), onSaveError });
-    const bus = createCommandBus({ store, registry, settings });
-    const events = createEvents();
+    bus = createCommandBus({ store, registry, settings });
+    events = createEvents();
     const rewind = createRewind({ ctx, store, events, ...(branch ? { branch } : {}) });
     let dialogOpener = null;
     const made = createSdk({ store, bus, registry, settings, events, chat: () => ctx.chat, onRegister: def => onRegister?.(def), rewind,

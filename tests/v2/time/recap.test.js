@@ -126,7 +126,10 @@ test('without the chat\'s length, a later receipt is what makes the recap old', 
 
 test('a jump that brings too much is cut to about 200 tokens, the rest counted', () => {
     const many = Array.from({ length: 30 }, (_, i) => `+ event Market stall ${i + 1} of the long harbour row — trade | then: the stall keeper packs up and leaves for the winter quarters | on: Goldwane 13`);
-    const chat = begun(many);
+    // Over two replies: one reply adds at most 16 new threads (B-b1-capture-13).
+    const chat = begun(many.slice(0, 15));
+    chat.answer(many.slice(15).join('\n'));
+    chat.send();
     chat.answer('~ time Goldwane 15, 07:00 am');
     const [line] = chat.send().tail.lines;
     assert.ok(estimateTokens(line) <= RECAP_BUDGET, String(estimateTokens(line)));
