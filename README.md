@@ -4,10 +4,14 @@
 > (`"dependencies": ["third-party/Story_block"]`); without it, it shows one line in the extensions drawer
 > and does nothing else. Story Block keeps the state in the replies, reads each reply's `<Changes>` block
 > and builds the prompt; Story Director adds the `director` domain (story time, threads, quests), its
-> change-line kinds (`agenda`, `event`, `hook`, `quest`, `clock`, `beat`, `secret`, `time`), the Director
-> note, the commands `quest.take`, `quest.decline`, `quest.abandon`, `quest.finish`, and the Director and
-> Quests tabs. Quest rewards are whole amounts of the chat's one currency, paid once by code; one fight
-> pays one kill quest. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
+> change-line kinds (`agenda`, `event`, `hook`, `quest`, `clock`, `beat`, `secret`, `time`, `route`,
+> `landmark`), the Director note, the commands `quest.take`, `quest.decline`, `quest.abandon`,
+> `quest.finish`, deadlines that slip or lapse as story time passes with a *While away* recap after a
+> jump, the atlas (places, routes, travel times) and its screens: Quests, Director, Map, the time-and-place
+> strip and a status card under every reply (on by default, collapsed; turn it off per screen). The story
+> clock runs on the reader's calendar, or by default on the enabled pack's (Ersveil: CY, twelve months
+> of 30 days), and starts at the pack's start date when the story has not set it. Quest rewards are whole
+> amounts of the chat's one currency, paid once by code; one fight pays one kill quest. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
 > branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
 > is not loaded. Progress for the whole suite:
 > [Story Block docs/v2/STATUS.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md).

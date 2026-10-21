@@ -3,17 +3,26 @@
 // `director.time.minutes` is v1's story time: minutes since the calendar's epoch (calendar.js).
 // The story moves it with a `time` line: `~ time Goldwane 12, 12:45 pm` sets it to a date
 // (read as v1 reads the scene's time, the nearest year to the time before), `! time +2h` moves
-// it on. The calendar is the reader's (settings section 'Calendar', v1 defaults: Gregorian).
+// it on. The calendar is the reader's (settings section 'Calendar'): by default (preset `pack`) the
+// first enabled pack's (Story Block's query `packs.calendar`), else Gregorian; a reader who picks
+// `gregorian` or `custom` keeps their own whatever the packs say. A pack that gives a start date
+// sets the clock before the first reply when the story has not (`director.seed`).
 
 import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { DEFAULTS } from '../../relevance.js';
 
 const DAY_MINUTES = 1440;
 
+/** The calendar preset that defers to the enabled packs' calendar (Gregorian without one). */
+export const PACK_PRESET = 'pack';
+export const PRESET_CHOICES = Object.freeze([PACK_PRESET, 'gregorian', 'custom']);
+/** The claim that keeps the clock from being seeded from a pack twice. */
+export const SEED_CLAIM = 'clock:seed';
+
 /** The part's settings defaults: v1's calendar and relevance defaults, plain copies. */
 export function settingsDefaults() {
     return {
-        calendar: structuredClone(PRESETS.gregorian),
+        calendar: { ...structuredClone(PRESETS.gregorian), preset: PACK_PRESET },
         dormantReplies: DEFAULTS.dormantReplies,
         dormantDays: DEFAULTS.dormantDays,
         dueSoonDays: DEFAULTS.dueSoonDays,
@@ -26,9 +35,59 @@ export function settingsFrom(source) {
     return { ...settingsDefaults(), ...(value && typeof value === 'object' ? value : {}) };
 }
 
-/** The reader's calendar from the module's settings. */
-export function calendarOf(settings) {
-    return makeCalendar(normalizeCalendar(settings?.calendar ?? PRESETS.gregorian));
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * The enabled packs' calendar through a query function (ctx.query, view.query, tools.query):
+ * `{ pack, era, months: [{ name, days }], start }` or null (no pack has one, or no packs part).
+ */
+export function packCalendarOf(query) {
+    if (typeof query !== 'function') return null;
+    try {
+        const value = query('packs.calendar', {});
+        return isRecord(value) && Array.isArray(value.months) && value.months.length ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The calendar config the chat runs on (normalizeCalendar's shape): the reader's own when they chose
+ * `gregorian` or `custom`; with the default preset `pack`, the pack's calendar (`packCalendar`, see
+ * packCalendarOf) when there is one, else Gregorian.
+ */
+export function calendarConfig(settings, packCalendar = null) {
+    const own = settings?.calendar ?? null;
+    const preset = typeof own === 'string' ? own : isRecord(own) ? own.preset : PACK_PRESET;
+    if (preset === PACK_PRESET || own === null) {
+        if (isRecord(packCalendar) && Array.isArray(packCalendar.months) && packCalendar.months.length) {
+            return normalizeCalendar({ preset: 'custom', era: String(packCalendar.era ?? ''), months: packCalendar.months, leapYears: false });
+        }
+        return normalizeCalendar(PRESETS.gregorian);
+    }
+    return normalizeCalendar(own);
+}
+
+/** The chat's calendar (makeCalendar) from the module's settings and the packs' calendar. */
+export function calendarOf(settings, packCalendar = null) {
+    return makeCalendar(calendarConfig(settings, packCalendar));
+}
+
+/**
+ * The story time a pack's `start` (`{ year, month: name, day, hour, minute }`) is on `calendar`, in
+ * minutes, or null when it is not a date there (a month the calendar has not got, a day past the
+ * month's end).
+ */
+export function startMinutes(calendar, start) {
+    if (!isRecord(start)) return null;
+    const { year, day, hour = 0, minute = 0 } = start;
+    if (![year, day, hour, minute].every(Number.isSafeInteger)) return null;
+    if (day < 1 || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    const name = String(start.month ?? '').trim().toLowerCase();
+    const month = calendar.config.months.findIndex(entry => entry.name.toLowerCase() === name);
+    if (month < 0 || day > calendar.daysInMonth(year, month)) return null;
+    const minutes = calendar.toAbs({ year, month, day, minutes: hour * 60 + minute });
+    return Number.isSafeInteger(minutes) ? minutes : null;
 }
 
 const UNITS = [

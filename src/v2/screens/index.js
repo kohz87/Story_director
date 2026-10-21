@@ -5,9 +5,11 @@
 // them by id (§13.7).
 //
 // The screens bind to the tracker's and quests' queries (`director.time`, `director.threads`,
-// `quest.progress`) and to three view queries this part adds (queries.js: `director.goal`,
-// `director.next`, `quest.board`), which work out what a template cannot (sorting, dates, the
-// Finish rule) from those same queries. No commands, domains or change-line kinds of its own.
+// `quest.progress`) and to four view queries this part adds (queries.js: `director.goal`,
+// `director.next`, `quest.board`, `director.problems`), which work out what a template cannot
+// (sorting, dates, the Finish state from `quest.progress`'s `finish`, `{{user}}` in problem texts)
+// from those same queries. No commands, domains or change-line kinds of its own. The status card is
+// on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
 import { directorScreen } from './director.js';
 import { hudScreen } from './hud.js';
@@ -19,7 +21,7 @@ export { DIRECTOR_ID, KIND_GROUPS } from './director.js';
 export { HUD_ID } from './hud.js';
 export { QUESTS_ID } from './quests.js';
 export { STATUS_CARD_ID } from './status-card.js';
-export { calendarSetting, currentGoal, finishState, nextDue, questBoard, screenQueries } from './queries.js';
+export { calendarSetting, currentGoal, finishState, nextDue, problemsList, questBoard, readerWords, screenQueries } from './queries.js';
 
 export const MODULE_ID = 'story-director';
 

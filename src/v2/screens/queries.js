@@ -11,9 +11,9 @@
 // Without `tools` (a host that cannot call queries from a query) the threads are read from the
 // documented `director` layout (MODULES §C1) and progress is left out.
 //
-// The calendar (for "what comes due next") is the reader's: the tracker part's calendar setting, read
-// through an injected settings function (by default Story Block's `sdk.settings('story-director')`),
-// else the Gregorian one.
+// The calendar (for "what comes due next") is the chat's: the tracker's `director.calendar` query (the
+// reader's, else the enabled pack's, else Gregorian); without it the tracker part's calendar setting,
+// read through an injected settings function (by default Story Block's `sdk.settings('story-director')`).
 
 import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 
@@ -92,7 +92,13 @@ export function calendarSetting(values) {
     return flat.length ? Object.fromEntries(flat.map(([key, value]) => [key.slice(CALENDAR_PREFIX.length), value])) : null;
 }
 
-function calendarFrom(settings) {
+// The chat's calendar: the tracker's `director.calendar` (the reader's, else the pack's, else Gregorian)
+// when a query can ask it, else the setting itself.
+function calendarFrom(settings, query = null) {
+    const config = ask(query, 'director.calendar', {}, null);
+    if (isRecord(config)) {
+        try { return makeCalendar(config); } catch { /* the setting below */ }
+    }
     try {
         const value = typeof settings === 'function' ? settings() : settings;
         return makeCalendar(normalizeCalendar(calendarSetting(value) ?? PRESETS.gregorian));
@@ -114,9 +120,10 @@ function reached(parsed, now, calendar) {
  * `reached` is true once that date has come (it is due now or overdue). Secrets are never due.
  */
 export function nextDue(state, args, tools, { settings = null } = {}) {
-    const threads = threadsOf(state, queryFrom(tools), { status: 'active' }).filter(thread => isOpen(thread) && thread.kind !== 'secret');
+    const query = queryFrom(tools);
+    const threads = threadsOf(state, query, { status: 'active' }).filter(thread => isOpen(thread) && thread.kind !== 'secret');
     if (!threads.length) return null;
-    const calendar = calendarFrom(settings);
+    const calendar = calendarFrom(settings, query);
     const minutes = state?.domains?.director?.time?.minutes;
     const now = Number.isInteger(minutes) ? minutes : null;
     let best = null;
@@ -152,40 +159,19 @@ export function nextDue(state, args, tools, { settings = null } = {}) {
 // ---------------------------------------------------------------------------------------------------
 // The quest board
 
-// Whole-word names: "Fenna" is "Fenna the miller". The same reading as the quests part's place
-// rule (src/v2/quests/progress.js placeRule), which `quest.finish` enforces; this is only the hint.
-const nameWords = name => text(name).toLowerCase().split(/[^\p{L}\p{N}'-]+/u).filter(Boolean);
-function samePersonName(a, b) {
-    const x = nameWords(a);
-    const y = nameWords(b);
-    if (!x.length || !y.length) return false;
-    const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-    for (let start = 0; start + short.length <= long.length; start += 1) {
-        if (short.every((word, i) => long[start + i] === word)) return true;
-    }
-    return false;
-}
-
-function placeReason(thread, scene) {
-    if (text(scene?.place?.kind).toLowerCase() === 'settlement') return '';
-    const giver = text(thread?.fields?.giver);
-    const present = Array.isArray(scene?.present) ? scene.present : [];
-    if (giver && present.some(name => samePersonName(giver, name))) return '';
-    return giver ? `Turn it in at a settlement or where ${giver} is.` : 'Turn it in at a settlement.';
-}
-
 /**
  * Whether Finish can be pressed now: `{ show, blocked, reason }`. Shown only when code can count the
- * quest's target; blocked, with the reason in plain words, until it is taken on, its target is met and
- * the story is where it can be turned in (the quests part's rules, which `quest.finish` checks again).
+ * quest's target; blocked, with the reason in plain words, until it is taken on and its target is met,
+ * then by `quest.progress`'s own `finish: { ok, reason }` (the quests part's rule, place included,
+ * which `quest.finish` checks again). Without `finish` (an older quests part) the place is left to
+ * `quest.finish`, whose refusal says why.
  */
-export function finishState(thread, progress, scene) {
+export function finishState(thread, progress) {
     if (!progress || !(progress.need > 0)) return { show: false, blocked: true, reason: '' };
     let reason = '';
     if (!thread.taken) reason = 'Take it on first: fights count from then.';
     else if (!progress.met) reason = text(progress.reason) || 'Not done yet.';
-    else if (isRecord(progress.finish)) reason = progress.finish.ok === false ? text(progress.finish.reason) || 'It cannot be turned in here.' : '';
-    else reason = placeReason(thread, scene);
+    else if (isRecord(progress.finish) && progress.finish.ok === false) reason = text(progress.finish.reason) || 'It cannot be turned in here.';
     return { show: true, blocked: Boolean(reason), reason };
 }
 
@@ -224,7 +210,6 @@ function progressOf(query, thread) {
 export function questBoard(state, args, tools) {
     const query = queryFrom(tools);
     const quests = threadsOf(state, query, { kind: 'quest' });
-    const scene = state?.domains?.scene ?? null;
     const byKey = (a, b) => text(a.key).localeCompare(text(b.key)) || (a.id < b.id ? -1 : 1);
     const offers = quests.filter(isOffer).sort(byKey).map(thread => ({
         id: thread.id,
@@ -236,7 +221,7 @@ export function questBoard(state, args, tools) {
     }));
     const active = quests.filter(thread => isOpen(thread) && !isOffer(thread)).sort(byKey).map(thread => {
         const progress = progressOf(query, thread);
-        const finish = finishState(thread, progress, scene);
+        const finish = finishState(thread, progress);
         return {
             id: thread.id,
             key: text(thread.key),
@@ -269,11 +254,49 @@ export function questBoard(state, args, tools) {
     };
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Problems, in the reader's words
+
+// v1's problem texts name the reader as the `{{user}}` macro. Without the host's substitution they read
+// "you", with the few phrases where that changes the verb or pronoun put right.
+const YOU = [
+    [/\{\{user\}\}'s choice, and their message/gi, 'your choice, and your message'],
+    [/\{\{user\}\} accepts/gi, 'you accept'],
+    [/\{\{user\}\}'s/gi, 'your'],
+    [/\{\{user\}\}/gi, 'you'],
+];
+export function readerWords(value, substitute = null) {
+    let out = String(value ?? '');
+    if (typeof substitute === 'function' && out.includes('{{')) {
+        try {
+            const named = substitute(out);
+            if (typeof named === 'string') out = named;
+        } catch { /* "you" below */ }
+    }
+    for (const [pattern, words] of YOU) out = out.replace(pattern, words);
+    return out;
+}
+
+/**
+ * `director.problems` → the last replies' Director problems, oldest first as kept: `[{ rev, kind, text }]`,
+ * the text with `{{user}}` written out (the host's `tools.substitute` when there is one, else "you").
+ */
+export function problemsList(state, args, tools) {
+    const problems = state?.domains?.director?.problems;
+    const substitute = typeof tools?.substitute === 'function' ? tools.substitute : null;
+    return (Array.isArray(problems) ? problems : []).filter(isRecord).map(problem => ({
+        rev: problem.rev ?? null,
+        kind: text(problem.kind),
+        text: readerWords(problem.text, substitute),
+    }));
+}
+
 /** The part's queries; `settings` is the module's settings (a function or an object). */
 export function screenQueries({ settings = null } = {}) {
     return {
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'director.next': (state, args, tools) => nextDue(state, args, tools, { settings }),
         'quest.board': (state, args, tools) => questBoard(state, args, tools),
+        'director.problems': (state, args, tools) => problemsList(state, args, tools),
     };
 }

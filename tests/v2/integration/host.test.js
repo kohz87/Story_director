@@ -53,7 +53,7 @@ test('a reply\'s + quest is an offer; Take on, fights, Finish pays integers once
     assert.equal((await host.sdk.command('quest.finish', { key: 'Granary Rats' })).code, 'NOT_ENOUGH');
     const first = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 2 }] }));
     const second = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat Swarm', count: 1 }, { name: 'Bandit', count: 1 }] }));
-    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }), { have: 3, need: 3, met: true, source: 'fights', noun: 'cellar rats', label: 'Cellar rats 3/3', reason: '' });
+    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }), { have: 3, need: 3, met: true, source: 'fights', noun: 'cellar rats', label: 'Cellar rats 3/3', reason: '', finish: { ok: true, reason: '' } });
 
     const finish = await ok(host.sdk.command('quest.finish', { key: 'Granary Rats' }));
     assert.equal(finish.receipt.summary, 'Astra turns in Granary Rats: 3 cellar rats beaten (target 3), 6 gold paid.');
@@ -137,7 +137,7 @@ test('~ time sets the story clock and ! time moves it on, on the reader\'s calen
 
     // The calendar is the reader's (namespaced settings of part tracker).
     const values = host.settings(MODULE_ID);
-    assert.equal(values['tracker.calendar.preset'], 'gregorian');
+    assert.equal(values['tracker.calendar.preset'], 'pack', 'the pack\'s calendar when a pack has one, else Gregorian');
     assert.equal(values['tracker.dormantReplies'], 15);
     const custom = await newHost({ settings: { modules: { [MODULE_ID]: {
         'tracker.calendar.preset': 'custom',
@@ -246,20 +246,27 @@ test('refusals through the host save nothing and use REFUSED for rule refusals',
     host.close();
 });
 
-test('the module registers whole: tabs, settings fields, capture kinds, queries', async () => {
+test('the module registers whole: screens instead of tabs, settings fields, capture kinds, queries', async () => {
     const host = await newHost();
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
     assert.equal(mine.version, '2.0.0-alpha.1');
-    assert.deepEqual(mine.tabs, ['director', 'quests']);
-    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'hook', 'quest', 'secret', 'time']);
-    assert.deepEqual([...mine.commands].sort(), ['quest.abandon', 'quest.decline', 'quest.finish', 'quest.take']);
-    assert.deepEqual(host.sdk.query('director.time'), { minutes: null });
+    assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
+    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'hook', 'landmark', 'quest', 'route', 'secret', 'time']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'director.seed', 'quest.abandon', 'quest.decline', 'quest.finish', 'quest.take', 'time.settle']);
+    assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
+    assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
+        'story-director/map', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
+    ]);
     const defs = host.registry.settingsDefs().find(entry => entry.moduleId === MODULE_ID);
     assert.deepEqual(Object.keys(defs.schema).sort(), [
+        'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
+        'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays',
     ]);
     assert.equal(defs.schema['tracker.calendar.preset'].label, 'Calendar: Calendar');
-    assert.deepEqual(defs.schema['tracker.calendar.preset'].options, ['gregorian', 'custom']);
+    assert.deepEqual(defs.schema['tracker.calendar.preset'].options, ['pack', 'gregorian', 'custom']);
+    assert.equal(defs.schema['atlas.map.north'].label, 'Map: North is');
+    assert.deepEqual(defs.schema['atlas.map.north'].options, ['up', 'down']);
     host.close();
 });

@@ -53,7 +53,7 @@ export class Rejected extends Error {
  * Runs `handler(ctx, payload)` as a command on `state`: `{ ok, state, result, ctx }`, or
  * `{ ok: false, code, message, state }` with the state untouched.
  */
-export function runCommand(state, handler, payload, { said = null, settings = {}, seed = 7, carrier = undefined, owned = ['director'], call = null } = {}) {
+export function runCommand(state, handler, payload, { said = null, settings = {}, seed = 7, carrier = undefined, owned = ['director'], call = null, queries = {} } = {}) {
     const rev = state.meta.rev + 1;
     const drafts = {};
     const claims = { ...state.meta.claims };
@@ -76,7 +76,8 @@ export function runCommand(state, handler, payload, { said = null, settings = {}
         settings: () => structuredClone(settings),
         time: () => (drafts.director ?? state.domains.director).time.minutes,
         fail: (code, message) => { throw new Rejected(code, message); },
-        query: (name, args) => part.queries[name]({ ...state, domains: { ...state.domains, ...drafts } }, args),
+        // Other modules' queries (`queries`, e.g. Story Block's packs.calendar) before the part's own.
+        query: (name, args) => (queries[name] ?? part.queries[name])({ ...state, domains: { ...state.domains, ...drafts } }, args),
     };
     let result;
     try {

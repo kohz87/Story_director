@@ -9,7 +9,7 @@ import { installFakeDom } from '../../ui-fake-dom.js';
 import { command, lines, makeState, placeNamed, query } from './helpers/fake-ctx.js';
 
 // Story Block's template renderer (SPEC §13.2), used from a Story Block checkout when there is one.
-const SB = '/home/user/_main/story_block/src/v2/';
+const SB = new URL('../../vendor/story-block/src/v2/', import.meta.url).pathname;
 const HAVE_TEMPLATES = ['view/template/index.js', 'view/bind.js', 'events/index.js'].every(file => existsSync(`${SB}${file}`));
 const NO_TEMPLATES = HAVE_TEMPLATES ? false : `Story Block's template renderer is not at ${SB}view/template/ (it is not vendored here)`;
 

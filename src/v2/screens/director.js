@@ -2,7 +2,7 @@
 // game-view screen: every tracked thread grouped by kind (open ones first, closed ones folded under
 // them), then the problems the last replies' Director lines had, newest first. Secrets show by name
 // only. Read-only: the threads come from `director.threads` (bindings per kind: all, open, closed), the
-// problems from `state.director.problems`.
+// problems from `director.problems` (their `{{user}}` written out).
 
 import { BASE_CSS } from './style.js';
 
@@ -59,10 +59,10 @@ const TEMPLATE = `
 <div class="sd-director">
   <p class="sd-empty" data-if="!len(q.all)">Nothing tracked yet.</p>
 ${KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
-  <section class="sd-kind sd-problems-box" data-kind="problems" data-if="len(state.director.problems)">
-    <h4 class="sd-h">Problems <small>{{ len(state.director.problems) }}</small></h4>
+  <section class="sd-kind sd-problems-box" data-kind="problems" data-if="len(q.problems)">
+    <h4 class="sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
     <ol class="sd-list sd-problems">
-      <li class="sd-problem" data-each="state.director.problems as p" data-kind="{{ p.kind }}">
+      <li class="sd-problem" data-each="q.problems as p" data-kind="{{ p.kind }}">
         <span class="sd-tag">{{ p.kind }}</span> {{ p.text }}
       </li>
     </ol>
@@ -89,7 +89,7 @@ const CSS = `${BASE_CSS}
 }
 `;
 
-const data = { all: { query: 'director.threads' } };
+const data = { all: { query: 'director.threads' }, problems: { query: 'director.problems' } };
 for (const [kind] of KIND_GROUPS) {
     data[kind] = { query: 'director.threads', args: { kind } };
     data[`${kind}_open`] = { query: 'director.threads', args: { kind, status: 'active' } };

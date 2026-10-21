@@ -10,8 +10,7 @@
 
 import { questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
-import { beatenClaim, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
-import { renderQuestsTab } from './tab.js';
+import { beatenClaim, finishRule, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 
 export { questLists };
 
@@ -225,7 +224,12 @@ function finish(ctx, payload) {
     };
 }
 
-/** `quest.progress({ id | key })` → `{ have, need, met, source, noun, label, reason }` (null for no such quest). */
+/**
+ * `quest.progress({ id | key })` → `{ have, need, met, source, noun, label, reason, finish: { ok, reason } }`
+ * (null for no such quest). `finish` is whether `quest.finish` would turn it in now, by its own rules in
+ * its order (over, taken on, a target code can count, the target met, the place rule), with the first
+ * reason it would refuse in plain words; screens show it instead of working the rule out again.
+ */
 function progressQuery(state, args = {}, tools = null) {
     const thread = findQuest(state?.domains?.director, args);
     if (!thread) return null;
@@ -233,8 +237,9 @@ function progressQuery(state, args = {}, tools = null) {
     const query = typeof tools?.query === 'function' ? tools.query : typeof tools === 'function' ? tools : stateQuery(state);
     const target = thread.target ?? withKind(state?.domains?.inventory, parseTarget(thread.fields, thread.summary));
     const view = { ...thread, target };
-    const { have, need, met, source, noun, reason } = progressOf(view, query, { free: unclaimedIn(state) });
-    return { have, need, met, source, noun, label: progressLabel(view, { have, need }), reason };
+    const progress = progressOf(view, query, { free: unclaimedIn(state) });
+    const { have, need, met, source, noun, reason } = progress;
+    return { have, need, met, source, noun, label: progressLabel(view, { have, need }), reason, finish: finishRule(view, progress, state?.domains?.scene) };
 }
 
 const TAIL_NAMES = 6;
@@ -295,5 +300,6 @@ export const part = {
     kinds: {},
     context: { static: () => QUEST_STATIC, tail: questTail, budget: 150 },
     hooks: {},
-    tabs: [{ id: 'quests', title: 'Quests', icon: 'fa-scroll', render: renderQuestsTab }],
+    // The Quests board is the screens part's `story-director/quests` screen.
+    tabs: [],
 };

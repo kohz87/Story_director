@@ -13,6 +13,7 @@
 
 import { lineKey } from '../../changes.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
+import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 
 export const PROBLEM_LIMIT = 50;
 const THREAD_ID = /^th_[0-9a-z]{8}$/;
@@ -96,9 +97,35 @@ const plain = thread => {
     return copy(rest);
 };
 
+// The chat's calendar for a query: the tracker's settings as module.js hands them to its queries
+// (`tools.settings()`, defaults without it) and the packs' calendar through `tools.query`.
+function queryCalendar(tools) {
+    const settings = settingsFrom(typeof tools?.settings === 'function' ? tools.settings() : null);
+    return { settings, pack: packCalendarOf(typeof tools?.query === 'function' ? tools.query : null) };
+}
+
 export const queries = {
-    /** `{ minutes }`: the story time (null until the story sets it). */
-    'director.time': state => ({ minutes: state?.domains?.director?.time?.minutes ?? null }),
+    /**
+     * `{ minutes, text }`: the story time (null until the story sets it) and that time written on the
+     * chat's calendar ("Goldwane 12, 611, 06:40 am"; '' while unset).
+     */
+    'director.time': (state, _args, tools) => {
+        const minutes = state?.domains?.director?.time?.minutes ?? null;
+        if (!Number.isInteger(minutes)) return { minutes: null, text: '' };
+        const { settings, pack } = queryCalendar(tools);
+        let text = '';
+        try { text = calendarOf(settings, pack).format(minutes); } catch { text = ''; }
+        return { minutes, text };
+    },
+    /**
+     * The calendar the chat runs on, as plain data (calendar.js normalizeCalendar's shape: `preset`,
+     * `era`, `months: [{ name, days }]`, `leapYears`, `week`, …): the reader's own, else the first
+     * enabled pack's, else Gregorian. Other parts make it a calendar with calendar.js makeCalendar.
+     */
+    'director.calendar': (_state, _args, tools) => {
+        const { settings, pack } = queryCalendar(tools);
+        return calendarConfig(settings, pack);
+    },
     /** Threads in tracker order, filtered by `kind`, `status` and `offer` when given. */
     'director.threads': (state, { kind = null, status = null, offer = null } = {}) => orderedThreads(state?.domains?.director)
         .filter(thread => (!kind || thread.kind === kind) && (!status || thread.status === status) && (offer === null || thread.offer === offer))

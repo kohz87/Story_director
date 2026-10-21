@@ -1,22 +1,22 @@
 // Where the screens part's tests find Story Block's view runtime.
 //
-// * `validateScreen` / `resolveData` (src/v2/view/screens.js) are pure and merged on Story Block's v2:
-//   a copy lives in ../vendor/ (see VERSION), so the definitions are always checked, CI included.
-// * The template renderer, scoped CSS, the condition language, the standard widgets and the card
-//   mount need a Story Block checkout: set STORY_BLOCK_DIR to one (its root, with src/v2/view/template/).
-//   Without it the render tests are skipped with the reason below.
+// * Story Block's view runtime (validateScreen, resolveData, the template renderer, scoped CSS, the
+//   condition language, the standard widgets and the card mount) is vendored with the testkit in
+//   tests/vendor/story-block/ (npm run sync-testkit in Story Block; see its VERSION), so the
+//   definitions are checked and the screens rendered in CI too.
+// * STORY_BLOCK_DIR (a Story Block checkout's root) renders against that checkout instead.
 
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const vendored = await import('../vendor/screens.js');
+const VENDORED = new URL('../../../vendor/story-block/', import.meta.url);
+const vendored = await import(new URL('src/v2/view/screens.js', VENDORED).href);
 
-const dir = process.env.STORY_BLOCK_DIR ? resolve(process.env.STORY_BLOCK_DIR) : null;
+const dir = resolve(process.env.STORY_BLOCK_DIR ?? fileURLToPath(VENDORED));
 const file = rel => pathToFileURL(join(dir, rel)).href;
 
 async function loadRenderer() {
-    if (!dir) return { runtime: null, reason: 'Story Block\'s template renderer is not in this repository; set STORY_BLOCK_DIR to a Story Block checkout to run the render tests.' };
     if (!existsSync(join(dir, 'src/v2/view/template/index.js'))) return { runtime: null, reason: `STORY_BLOCK_DIR (${dir}) has no src/v2/view/template/index.js.` };
     try {
         const [template, bind, css, events, widgets, card, screens] = await Promise.all([

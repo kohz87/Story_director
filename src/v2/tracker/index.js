@@ -1,5 +1,6 @@
 // Story Director v2, part **tracker** (MODULES §C1): the `director` domain, its change-line
-// kinds, the story clock, its queries, what the model is told, and the Director tab.
+// kinds, the story clock (set from a pack's start date when the story has not set it), its queries
+// and what the model is told. Its screen is the screens part's `story-director/director`.
 // The coordinator's src/v2/module.js merges this part with the others into module
 // `story-director`. Quest taking, finishing, targets and progress are part `quests` (§C2):
 // this part keeps `taken`, `target` and `reward` as they are, and sets `ended` when a line
@@ -9,8 +10,8 @@ import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
 import { initialDirector, queries, validateDirector } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, directorTail } from './note.js';
-import { renderDirectorTab } from './tab.js';
-import { settingsDefaults } from './time.js';
+import { SEED, seedCommand, seedHook } from './seed.js';
+import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
 const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, { grammar: GRAMMAR[kind], apply: applyThreadLine }]));
 kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
@@ -19,7 +20,7 @@ export const part = {
     domains: {
         director: { initial: initialDirector, validate: validateDirector },
     },
-    commands: {},
+    commands: { [SEED]: seedCommand },
     queries,
     kinds,
     context: {
@@ -27,7 +28,7 @@ export const part = {
         tail: view => directorTail(view),
         budget: TAIL_BUDGET,
     },
-    hooks: {},
+    hooks: { beforeGenerate: seedHook },
     settings: {
         section: 'Calendar',
         defaults: settingsDefaults(),
@@ -36,7 +37,8 @@ export const part = {
                 type: 'group',
                 label: 'Calendar',
                 fields: {
-                    preset: { type: 'choice', label: 'Calendar', options: ['gregorian', 'custom'] },
+                    // `pack`: the enabled pack's calendar when one has it, else Gregorian.
+                    preset: { type: 'choice', label: 'Calendar', options: [...PRESET_CHOICES] },
                     era: { type: 'text', label: 'Era (written before the year)' },
                     months: { type: 'list', label: 'Months', of: { name: { type: 'text', label: 'Name' }, days: { type: 'int', label: 'Days', min: 1, max: 400 } } },
                     leapYears: { type: 'bool', label: 'Leap years' },
@@ -48,7 +50,5 @@ export const part = {
             dueSoonDays: { type: 'int', label: 'Due soon within days', min: 0, max: 365 },
         },
     },
-    tabs: [
-        { id: 'director', title: 'Director', icon: 'fa-compass', render: (el, view, api) => renderDirectorTab(el, view, api) },
-    ],
+    tabs: [],
 };

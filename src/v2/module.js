@@ -1,5 +1,6 @@
-// Story Director v2: the module definition (MODULES §A, §C). The parts (tracker, quests) are
-// merged here into the one `sdk.registerModule` definition of module `story-director`:
+// Story Director v2: the module definition (MODULES §A, §C). The parts (tracker, quests, time,
+// atlas, screens) are merged here into the one `sdk.registerModule` definition of module
+// `story-director`:
 //
 // - domains, commands, queries: the parts' own, each name owned by one part (a clash throws);
 // - capture: every part's kinds with their one-line grammar; `apply` dispatches by `line.kind`
@@ -10,19 +11,53 @@
 // - settings: each part's keys are namespaced under its part id (`tracker.dormantReplies`), a
 //   `group` field is flattened into dotted keys (`tracker.calendar.months`) because the Story
 //   Suite overlay shows flat fields. A part reads its own settings back as it wrote them: the
-//   ctx, view and api handed to it have `settings()` → that part's values, un-namespaced;
-// - tabs: the parts' tabs in part order.
+//   ctx, view and api handed to it have `settings()` → that part's values, un-namespaced. A part's
+//   `settings.reads: { key: '<part>.<key>' }` hands it another part's setting under its own name
+//   when it has none (the time part reads `tracker.calendar` as `calendar`); the tracker's calendar
+//   is handed over as the chat uses it (the reader's, else the enabled pack's, else Gregorian);
+// - queries: called (state, args, tools) with the host's tools plus `tools.settings()` (the part's
+//   own settings: the host's tools.settings when it passes one, else Story Block's
+//   `sdk.settings('story-director')`, else the defaults) and `tools.substitute(text)` ({{user}} and
+//   {{char}} through Story Block's `sdk.substitute` when it is there). The atlas's trip queries get
+//   the reader's map settings as `map` when the caller gives none;
+// - tabs: the parts' tabs in part order (none now: the screens show quests, threads and the map);
+// - screens: every part's `screens`, in part order; widgets: every part's `widgets`. A screen id
+//   or widget name in two parts throws.
 // Parts never import each other; they talk through commands and queries (ctx.call, ctx.query).
 
 import { part as tracker } from './tracker/index.js';
 import { part as quests } from './quests/index.js';
+import { part as time } from './time/index.js';
+import { part as atlas } from './atlas/index.js';
+import { part as screens } from './screens/index.js';
+import { calendarConfig, packCalendarOf } from './tracker/time.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
 export const VERSION = '2.0.0-alpha.1';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['screens', screens]]);
+
+// Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
+function liveSdk() {
+    try {
+        return globalThis.StoryBlock?.sdk ?? null;
+    } catch {
+        return null;
+    }
+}
+const tryLive = (fn, fallback) => {
+    try {
+        return fn() ?? fallback;
+    } catch {
+        return fallback;
+    }
+};
+const LIVE_HOST = Object.freeze({
+    settings: id => tryLive(() => liveSdk()?.settings?.(id), null),
+    substitute: text => tryLive(() => liveSdk()?.substitute?.(text), undefined),
+});
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -77,27 +112,89 @@ export function partSettings(ns, values) {
     return out;
 }
 
-// `settings(id?)` for a part: no id (or this module's) → the part's values; another id → as given.
-function settingsFor(ns, base) {
+// A setting handed to another part through `reads`, as the chat uses it: the tracker's calendar
+// setting becomes the chat's calendar (its `pack` preset resolved against the packs' calendar).
+const READ_AS_USED = {
+    'tracker.calendar': (value, query) => calendarConfig({ calendar: value ?? null }, packCalendarOf(query)),
+};
+
+/** A part's `reads` as [key, part id, path inside that part's settings, what the path names]. */
+function readsOf(settings) {
+    const reads = isObject(settings?.reads) ? settings.reads : {};
+    return Object.entries(reads).filter(([, path]) => typeof path === 'string' && path.includes('.'))
+        .map(([key, path]) => {
+            const [from, ...rest] = path.split('.');
+            return [key, from, rest, path];
+        });
+}
+
+// `settings(id?)` for a part: no id (or this module's) → the part's values (its defaults under the
+// module's values, then what it reads from other parts); another id → as given. `query` resolves
+// settings read as the chat uses them.
+function settingsFor(ns, base, { defaults = {}, reads = [], query = null } = {}) {
     return (id) => {
-        if (id !== undefined && id !== null && id !== MODULE_ID) return typeof base === 'function' ? base(id) : {};
-        const values = typeof base === 'function' ? base(MODULE_ID) : base;
-        return partSettings(ns, values);
+        if (id !== undefined && id !== null && id !== MODULE_ID) return (typeof base === 'function' ? base(id) : null) ?? {};
+        const given = typeof base === 'function' ? base(MODULE_ID) : base;
+        const values = { ...defaults, ...(isObject(given) ? given : {}) };
+        const own = partSettings(ns, values);
+        for (const [key, from, path, name] of reads) {
+            if (own[key] !== undefined) continue;
+            let value = partSettings(from, values);
+            for (const step of path) value = isObject(value) ? value[step] : undefined;
+            if (READ_AS_USED[name]) value = READ_AS_USED[name](value, query);
+            if (value !== undefined) own[key] = value;
+        }
+        return own;
     };
 }
 
 // The handler ctx a part sees: the host's, with settings() reading the part's own.
-function partCtx(ns, ctx) {
-    return Object.freeze({ ...ctx, settings: settingsFor(ns, id => ctx.settings(id)) });
+function partCtx(ns, ctx, shared) {
+    return Object.freeze({ ...ctx, settings: settingsFor(ns, id => ctx.settings(id), { ...shared(ns), query: ctx.query }) });
 }
 
 // The view a part's tail, tab or hook sees: the host's, with settings() reading the part's own.
-function partView(ns, view) {
+function partView(ns, view, shared) {
     if (!isObject(view)) return view;
     const base = typeof view.settings === 'function'
         ? id => view.settings(id)
         : id => (id === undefined || id === null || id === MODULE_ID ? view.settings : {});
-    return Object.freeze({ ...view, settings: settingsFor(ns, base) });
+    return Object.freeze({ ...view, settings: settingsFor(ns, base, { ...shared(ns), query: view.query }) });
+}
+
+// The tools a part's query sees: the host's (`query`, `receipts`, …) plus settings() and substitute().
+function partTools(ns, tools, shared, host) {
+    const base = typeof tools === 'function' ? { query: tools } : isObject(tools) ? tools : {};
+    const settings = typeof base.settings === 'function' ? id => base.settings(id) : id => host.settings(id);
+    const substitute = typeof base.substitute === 'function' ? base.substitute : host.substitute;
+    return Object.freeze({
+        ...base,
+        settings: settingsFor(ns, settings, { ...shared(ns), query: base.query ?? null }),
+        substitute: text => {
+            let out;
+            try { out = substitute?.(text); } catch { out = undefined; }
+            return typeof out === 'string' ? out : String(text ?? '');
+        },
+    });
+}
+
+// Queries whose args take a part setting when the caller leaves it out: { query: { arg: setting } }.
+const SETTING_ARGS = {
+    'atlas.routes': { map: 'map' },
+    'atlas.travel': { map: 'map' },
+};
+
+function withSettingArgs(name, args, tools) {
+    const fill = SETTING_ARGS[name];
+    if (!fill) return args;
+    const out = isObject(args) ? { ...args } : {};
+    let settings = null;
+    for (const [arg, key] of Object.entries(fill)) {
+        if (out[arg] !== undefined && out[arg] !== null) continue;
+        settings ??= tools.settings();
+        if (settings[key] !== undefined) out[arg] = settings[key];
+    }
+    return out;
 }
 
 // ---- merging ---------------------------------------------------------------------------------
@@ -112,17 +209,18 @@ const linesOf = value => (Array.isArray(value) ? value.filter(line => typeof lin
 // Several parts' functions under one hook name, called in part order. beforeGenerate answers
 // (string[] | { lines, commands }) are joined; canGenerate gives the first refusal; any other
 // hook gives the last answer that is not undefined.
-function mergeHook(name, entries) {
+function mergeHook(name, entries, shared) {
+    const partView_ = (ns, view) => partView(ns, view, shared);
     if (entries.length === 1) {
         const [[ns, fn]] = entries;
-        return (view, ...rest) => fn(partView(ns, view), ...rest);
+        return (view, ...rest) => fn(partView_(ns, view), ...rest);
     }
     return async (view, ...rest) => {
         if (name === 'beforeGenerate') {
             const lines = [];
             const commands = [];
             for (const [ns, fn] of entries) {
-                const out = await fn(partView(ns, view), ...rest);
+                const out = await fn(partView_(ns, view), ...rest);
                 lines.push(...linesOf(Array.isArray(out) ? out : out?.lines));
                 if (Array.isArray(out?.commands)) commands.push(...out.commands);
             }
@@ -130,7 +228,7 @@ function mergeHook(name, entries) {
         }
         let answer;
         for (const [ns, fn] of entries) {
-            const out = await fn(partView(ns, view), ...rest);
+            const out = await fn(partView_(ns, view), ...rest);
             if (name === 'canGenerate' && (out === false || (isObject(out) && out.ok === false))) return out;
             if (out !== undefined) answer = out;
         }
@@ -140,10 +238,15 @@ function mergeHook(name, entries) {
 
 /**
  * The module definition for `sdk.registerModule` (SPEC §6) from `parts` ([id, part], in order;
- * default: tracker, quests).
+ * default: tracker, quests, time, atlas, screens). `host` (tests): `{ settings(id), substitute(text) }`
+ * for queries whose host tools lack them; by default Story Block's live sdk.
  */
-export function createModule({ parts = PARTS } = {}) {
-    const owners = { domain: {}, command: {}, query: {}, kind: {}, tab: {} };
+export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
+    const owners = { domain: {}, command: {}, query: {}, kind: {}, tab: {}, screen: {}, widget: {} };
+    const screenList = [];
+    const widgets = {};
+    const readsByPart = {};
+    const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [] });
     const domains = {};
     const commands = {};
     const queries = {};
@@ -164,16 +267,19 @@ export function createModule({ parts = PARTS } = {}) {
         }
         for (const [type, handler] of Object.entries(part.commands ?? {})) {
             own(owners.command, type, ns, 'the command');
-            commands[type] = (ctx, payload) => handler(partCtx(ns, ctx), payload);
+            commands[type] = (ctx, payload) => handler(partCtx(ns, ctx, shared), payload);
         }
         for (const [name, query] of Object.entries(part.queries ?? {})) {
             own(owners.query, name, ns, 'the query');
-            queries[name] = query;
+            queries[name] = (state, args, tools) => {
+                const own = partTools(ns, tools, shared, host);
+                return query(state, withSettingArgs(name, args, own), own);
+            };
         }
         for (const [kind, spec] of Object.entries(part.kinds ?? {})) {
             own(owners.kind, kind, ns, 'the change-line kind');
             kinds[kind] = { grammar: spec.grammar, ...(spec.aliases ? { aliases: spec.aliases } : {}) };
-            appliers[kind] = (ctx, line) => spec.apply(partCtx(ns, ctx), line);
+            appliers[kind] = (ctx, line) => spec.apply(partCtx(ns, ctx, shared), line);
             for (const alias of spec.aliases ?? []) appliers[alias] = appliers[kind];
         }
         if (typeof part.context?.static === 'function') statics.push(part.context.static);
@@ -187,10 +293,19 @@ export function createModule({ parts = PARTS } = {}) {
             const named = namespaced(ns, part.settings);
             Object.assign(defaults, named.defaults);
             Object.assign(schema, named.schema);
+            readsByPart[ns] = readsOf(part.settings);
         }
         for (const tab of part.tabs ?? []) {
             own(owners.tab, tab.id, ns, 'the tab');
-            tabs.push({ ...tab, render: (el, view, api) => tab.render(el, partView(ns, view), api) });
+            tabs.push({ ...tab, render: (el, view, api) => tab.render(el, partView(ns, view, shared), api) });
+        }
+        for (const screen of part.screens ?? []) {
+            own(owners.screen, screen?.id, ns, 'the screen');
+            screenList.push(screen);
+        }
+        for (const [name, widget] of Object.entries(part.widgets ?? {})) {
+            own(owners.widget, name, ns, 'the widget');
+            widgets[name] = widget;
         }
     }
 
@@ -208,7 +323,7 @@ export function createModule({ parts = PARTS } = {}) {
                 const lines = [];
                 const optional = [];
                 for (const [ns, tail] of tails) {
-                    const out = tail(partView(ns, view)) ?? {};
+                    const out = tail(partView(ns, view, shared)) ?? {};
                     lines.push(...linesOf(out.lines));
                     optional.push(...linesOf(out.optional));
                 }
@@ -216,10 +331,12 @@ export function createModule({ parts = PARTS } = {}) {
             },
             budget: budget || 1,
         },
-        hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => [name, mergeHook(name, entries)])),
+        hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => [name, mergeHook(name, entries, shared)])),
         settings: { defaults, schema },
         tabs,
+        screens: screenList,
     };
+    if (Object.keys(widgets).length) def.widgets = widgets;
     if (Object.keys(kinds).length) {
         def.capture = {
             kinds,
