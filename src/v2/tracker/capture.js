@@ -11,9 +11,13 @@
 
 import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps, isOffer } from '../../tracker.js';
-import { fromRecord, keysOf, orderedThreads, toRecord, toTracker } from './convert.js';
+import { fromRecord, keysOf, orderedThreads, outcomeOf, toRecord, toTracker } from './convert.js';
 import { PROBLEM_LIMIT } from './domain.js';
+import { applyMet, capNote, markOffer, noGoalProblem, onlyOwnLabels, questHasGoal, splitQuestLine, storyTurnIn } from './quest-lines.js';
 import { calendarOf, packCalendarOf, settingsFrom, timeAfter } from './time.js';
+
+/** The offer cooldown (F88, the quests part's `offerCooldown`, read by this part) when nothing sets it. */
+export const OFFER_COOLDOWN = 6;
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 // A stand-in for "another new quest in this reply" (see applyThreadLine): a name nobody writes.
@@ -157,11 +161,25 @@ function writeBack(director, records, ctx, offeredIds) {
     return idOf;
 }
 
+// The quests part's offer cooldown as this part reads it (`settings.reads`), else the default.
+function offerCooldown(ctx) {
+    let value;
+    try {
+        value = (typeof ctx?.settings === 'function' ? ctx.settings() : ctx?.settings)?.offerCooldown;
+    } catch {
+        value = undefined;
+    }
+    return Number.isSafeInteger(value) && value >= 0 ? value : OFFER_COOLDOWN;
+}
+
 /** `apply(ctx, line)` for agenda, event, hook, quest, clock, beat and secret lines. */
-export function applyThreadLine(ctx, line) {
+export function applyThreadLine(ctx, given) {
     const director = ctx.draft('director');
-    beginTurn(director, ctx, line);
-    const raw = lineText(line);
+    beginTurn(director, ctx, given);
+    const raw = lineText(given);
+    // A quest line's own labels (F83 `met:`, F85 `progress:`) are taken out before v1 reads it.
+    const { line, met, metText } = splitQuestLine(given);
+    if (met !== null && onlyOwnLabels(line)) return metOnly(ctx, director, line, met, metText, raw);
     const read = toV1Op(line);
     if (read.error) {
         addProblem(director, ctx, { kind: 'unread', severity: 'warn', key: String(line?.name ?? ''), op: line?.op, text: read.error });
@@ -182,6 +200,16 @@ export function applyThreadLine(ctx, line) {
     const newQuest = op.op === '+' && op.kind === 'quest';
     const crowd = newQuest && director.turn.quests.some(id => id !== named?.id);
     if (crowd) ops.unshift(OTHER_QUEST);
+    // F94: a taken quest the story closes as done is turned in by code, or kept open with the reason.
+    if (named && named.kind === 'quest' && named.status === 'active' && named.taken && op.op !== '+') {
+        const trial = applyOps(toTracker(director), ops, { message: director.turn.n, time: director.time.minutes, said });
+        const record = trial.tracker.records.find(entry => entry.id === lineKey(named.key));
+        if (record && record.status !== 'active' && outcomeOf(record) === 'done') {
+            if (met !== null) applyMet(ctx, director.threads[named.id], met, metText, revOf(ctx));
+            const out = storyTurnIn(ctx, director, named, { addProblem, raw });
+            if (out) return out;
+        }
+    }
     const result = applyOps(tracker, ops, { message: director.turn.n, time: director.time.minutes, said });
     const findings = (again ? result.problems.slice(1) : result.problems).filter(finding => finding.key !== OTHER_QUEST.key);
     const records = result.tracker.records.filter(record => record.id !== OTHER_QUEST.id);
@@ -208,6 +236,16 @@ export function applyThreadLine(ctx, line) {
             text: finding.message, candidates: finding.candidates,
         });
     }
+    const current = thread ? director.threads[thread] : null;
+    if (current?.kind === 'quest') {
+        capNote(current);
+        // F82: a quest the story starts with no goal is kept and flagged once.
+        if (op.op === '+' && current.status === 'active' && !(named?.kind === 'quest') && !questHasGoal(ctx, current)) addProblem(director, ctx, noGoalProblem(current));
+        if (met !== null) {
+            const { problem } = applyMet(ctx, current, met, metText, revOf(ctx));
+            if (problem) addProblem(director, ctx, problem);
+        }
+    }
     let took = false;
     if (newQuest && thread) {
         // The reply's first new quest, taken while it was the only one: read again once another comes.
@@ -220,6 +258,11 @@ export function applyThreadLine(ctx, line) {
             director.turn.lone = { id: thread, op: structuredClone(loneOp), was: before, took };
         }
         if (!director.turn.quests.includes(thread)) director.turn.quests = [...director.turn.quests, thread];
+    }
+    // F88: an offer is shown now, or held until the offer cooldown has passed: only one this line made
+    // an offer (an older offer, kept from before offers were marked, is never held afterwards).
+    if (current && !(named?.offer && named.status === 'active')) {
+        markOffer(director, director.threads[thread], offerCooldown(ctx));
     }
     return { summary: `Director: ${raw}`, narrate: false, data: { thread, problems: findings.map(finding => finding.kind), ...(took ? { taken: true } : {}) } };
 }
@@ -269,6 +312,21 @@ function recheckLone(director, ctx, said, current) {
     if (!isOffer({ ...record, status: 'active' })) thread.track.typed = true;
     director.problems = director.problems.filter(problem => !(problem.turn === director.turn.n && problem.kind === 'became-quest' && lineKey(problem.key ?? '') === lineKey(thread.key)));
     addProblem(director, ctx, { kind: 'offered', severity: 'info', key: thread.key, op: '+', text: OFFERED_TEXT(thread.key) });
+    markOffer(director, thread, offerCooldown(ctx));
+}
+
+// `~ quest Name | met: yes` and nothing else (F83): read without v1's rules, which would count a bare
+// `~` as the story touching the thread or add a name it does not know.
+function metOnly(ctx, director, line, met, metText, raw) {
+    const id = director.keys[lineKey(bareName(line.name))];
+    const thread = id ? director.threads[id] : null;
+    if (!thread) {
+        addProblem(director, ctx, { kind: 'met', severity: 'warn', key: String(line.name ?? ''), op: '~', text: `"${String(line.name ?? '').trim()}" is not a tracked quest; met: changed nothing.` });
+        return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['met'] } };
+    }
+    const { problem } = applyMet(ctx, thread, met, metText, revOf(ctx));
+    if (problem) addProblem(director, ctx, problem);
+    return { summary: `Director: ${raw}`, narrate: false, data: { thread: thread.id, problems: problem ? [problem.kind] : [] } };
 }
 
 /** `apply(ctx, line)` for `time` lines: `~ time <date, clock time>`, `! time +2h`. */

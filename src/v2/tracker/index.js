@@ -4,7 +4,8 @@
 // The coordinator's src/v2/module.js merges this part with the others into module
 // `story-director`. Quest taking, finishing, targets and progress are part `quests` (§C2):
 // this part keeps `taken`, `target` and `reward` as they are, and sets `ended` when a line
-// closes a thread.
+// closes a thread. Its quest lines also carry `met:` (a thread's `ready`), `progress:` (the step
+// note), the no-goal Problem, held offers (`shown`) and the story's own turn-in (quest-lines.js).
 
 import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
@@ -31,6 +32,8 @@ export const part = {
     hooks: { beforeGenerate: seedHook },
     settings: {
         section: 'Calendar',
+        // The quests part's offer cooldown (F88), which this part applies to the offers it reads.
+        reads: { offerCooldown: 'quests.offerCooldown' },
         defaults: settingsDefaults(),
         schema: {
             calendar: {

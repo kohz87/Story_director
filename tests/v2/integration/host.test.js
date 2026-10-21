@@ -53,7 +53,7 @@ test('a reply\'s + quest is an offer; Take on, fights, Finish pays integers once
     assert.equal((await host.sdk.command('quest.finish', { key: 'Granary Rats' })).code, 'NOT_ENOUGH');
     const first = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 2 }] }));
     const second = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat Swarm', count: 1 }, { name: 'Bandit', count: 1 }] }));
-    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }), { have: 3, need: 3, met: true, source: 'fights', noun: 'cellar rats', label: 'Cellar rats 3/3', reason: '', finish: { ok: true, reason: '' } });
+    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }), { have: 3, need: 3, met: true, ready: false, source: 'fights', noun: 'cellar rats', label: 'Cellar rats 3/3', reason: '', finish: { ok: true, reason: '' } });
 
     const finish = await ok(host.sdk.command('quest.finish', { key: 'Granary Rats' }));
     assert.equal(finish.receipt.summary, 'Astra turns in Granary Rats: 3 cellar rats beaten (target 3), 6 gold paid.');
@@ -216,7 +216,9 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
     assert.match(text, /\+ quest Name — a job You accepted/, '{{user}} is the reader\'s name');
     assert.match(text, /~ time <date, clock time>/);
     assert.match(text, /Director lines:/);
-    assert.match(text, /Quest rewards: when the reader turns a quest in/);
+    assert.match(text, /Quest rewards: when a quest is turned in/);
+    assert.match(text, /~ quest Name \| met: yes/);
+    assert.match(text, /A passer-by is only a passer-by/);
     // Another chat with other state sends the same bytes.
     const other = await newHost();
     await other.send('Hi.', 'Hello.');
@@ -260,7 +262,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     const defs = host.registry.settingsDefs().find(entry => entry.moduleId === MODULE_ID);
     assert.deepEqual(Object.keys(defs.schema).sort(), [
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
-        'time.lapses', 'time.recapHours',
+        'quests.offerCooldown', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays',
     ]);

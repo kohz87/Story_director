@@ -16,7 +16,7 @@ test('progress for foes counts only fights after taken.rev, whole words', () => 
         fight(9, [{ name: 'Wolf', count: 5 }]), fight(10, [{ name: 'Wolf', count: 5 }]),
         fight(11, [{ name: 'Dire Wolf', count: 2 }, { name: 'Wolfhound Handler', count: 3 }]),
     ] });
-    const want = { have: 2, need: 3, met: false, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.', finish: { ok: false, reason: 'Need 1 more wolf.' } };
+    const want = { have: 2, need: 3, met: false, ready: false, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.', finish: { ok: false, reason: 'Need 1 more wolf.' } };
     // Through the documented state layouts (no query handed to the query) …
     assert.deepEqual(progress(state, { id: 'th_wolves01' }), want);
     // … and through the host's queries when it passes them.
@@ -43,8 +43,10 @@ test('progress for items reads the inventory; no target and unknown quests', () 
         defs: [{ id: 'story/moonleaf', name: 'Moonleaf' }, { id: 'story/moon', name: 'Moon Charm' }],
         stacks: [{ id: 'it_aaaaaaa1', def: 'story/moonleaf', qty: 2 }, { id: 'it_bbbbbbb2', def: 'story/moonleaf', qty: 1 }, { id: 'it_ccccccc3', def: 'story/moon', qty: 9 }],
     });
-    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'Take it on first.' } });
-    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, source: null, noun: '', label: '', reason: 'No target code can count; the story decides when it is done.', finish: { ok: false, reason: 'No target code can count; the story decides when it is done.' } });
+    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, ready: false, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'Take it on first.' } });
+    // A goal code cannot count (F83): not met until the story says so.
+    const waiting = 'The story has not said its goal is met yet.';
+    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, ready: false, source: null, noun: '', label: '', reason: waiting, finish: { ok: false, reason: waiting } });
     assert.equal(progress(state, { id: 'th_nope0001' }), null);
 });
 
@@ -69,18 +71,20 @@ test('tail: open offers and quests ready to turn in; done-but-elsewhere is optio
     });
     const tail = part.context.tail(viewOf(state));
     assert.deepEqual(tail.lines, [
-        'Quest offers not yet taken (the reader takes them on or turns them down): Granary Rats (from Fenna).',
-        'Quests ready to turn in (code pays when the reader turns one in): EastBluffWolves (Wolves 8/3).',
+        'Quest offers not yet taken ({{user}} takes them on or turns them down in their own words): Granary Rats (from Fenna).',
+        'Quests ready to turn in here (code checks and pays when the story turns one in): EastBluffWolves (Wolves 8/3).',
     ]);
     assert.deepEqual(tail.optional, ['Quests done but turned in only at a settlement or with their giver: Bear Trouble (Bears 1/1).']);
-    assert.equal(part.context.budget, 150);
+    assert.equal(part.context.budget, 250);
 });
 
 test('tail stays within its budget and is empty without quests', () => {
     const threads = Array.from({ length: 40 }, (_, i) => quest(`th_offer${String(i).padStart(3, '0')}`, `A rather long offered job number ${i}`, { giver: 'Someone with a long name' }, { offer: true }));
     const tail = part.context.tail(viewOf(makeState({ threads })));
-    assert.equal(tail.lines.length, 1);
-    assert.ok(tail.lines.join('\n').length <= 600);
+    // The offers, then the same quests asked for a goal (F82).
+    assert.equal(tail.lines.length, 2);
+    assert.match(tail.lines[1], /^Quests with no goal yet .*and 34 more\.$/);
+    assert.ok(tail.lines.join('\n').length <= 1000);
     assert.match(tail.lines[0], /and 34 more/);
     assert.deepEqual(part.context.tail(viewOf(makeState())), { lines: [], optional: [] });
     assert.deepEqual(part.context.tail({ state: { domains: {} } }), { lines: [], optional: [] });
@@ -93,10 +97,11 @@ test('static text is byte-identical whatever the state', () => {
 });
 
 test('the part has the MODULES §A shape and no domain of its own', () => {
-    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'tabs']);
+    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
     assert.deepEqual(part.domains, {});
     assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.decline', 'quest.abandon', 'quest.finish']);
-    assert.deepEqual(Object.keys(part.queries), ['quest.progress']);
+    assert.deepEqual(Object.keys(part.queries), ['quest.progress', 'quest.details', 'quest.ranks']);
+    assert.deepEqual(part.settings.defaults, { offerCooldown: 6 });
     // The Quests board is the screens part's screen now.
     assert.deepEqual(part.tabs, []);
 });

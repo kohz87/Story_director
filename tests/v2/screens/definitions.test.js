@@ -65,8 +65,9 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     const director = byId[DIRECTOR_ID].data;
     assert.deepEqual(director.quest_open, { query: 'director.threads', args: { kind: 'quest', status: 'active' } });
     assert.deepEqual(director.secret_closed, { query: 'director.threads', args: { kind: 'secret', status: 'resolved' } });
-    const { problems, ...threads } = director;
+    const { problems, time, ...threads } = director;
     assert.deepEqual(problems, { query: 'director.problems' });
+    assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
     assert.ok(Object.values(threads).every(binding => binding.query === 'director.threads'));
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
     assert.equal(byId[HUD_ID].defaultOn, undefined);
@@ -108,15 +109,11 @@ test('templates stay inside the §13.2 subset: no scripts, handlers or script UR
     }
 });
 
-test('buttons run the quests part\'s commands with { id }', () => {
+test('no screen draws a command button by default: quests follow the reader\'s words and the story (F95)', () => {
+    for (const screen of screens) assert.doesNotMatch(screen.template, /data-command|data-submit|<button/, `${screen.id} draws no buttons`);
+    // Each quest row says where it stands and opens its details (F84) in a screen-local panel.
     const template = byId[QUESTS_ID].template;
-    const commands = [...template.matchAll(/data-command="([^"]+)" data-payload='([^']+)'/g)].map(match => [match[1], match[2]]);
-    assert.deepEqual(commands, [
-        ['quest.take', '{"id":"{{ o.id }}"}'],
-        ['quest.decline', '{"id":"{{ o.id }}"}'],
-        ['quest.take', '{"id":"{{ a.id }}"}'],
-        ['quest.finish', '{"id":"{{ a.id }}"}'],
-        ['quest.abandon', '{"id":"{{ a.id }}"}'],
-    ]);
-    for (const screen of screens.filter(screen => screen.id !== QUESTS_ID)) assert.doesNotMatch(screen.template, /data-command|data-submit/, `${screen.id} is read-only`);
+    assert.equal([...template.matchAll(/class="sd-status"/g)].length, 2, 'offers and active quests');
+    assert.equal([...template.matchAll(/<details class="sd-more">/g)].length, 3, 'offers, active and finished rows');
+    assert.doesNotMatch(template, /<dialog/i, 'templates have no dialog element');
 });

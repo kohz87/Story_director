@@ -5,6 +5,7 @@
 //   threads: { [id]: thread },                    // MODULES §C1
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:[{ rev, kind, text, … }],            // last 50, newest last
+//   (a quest thread may also carry `ready: { rev }`, F83, and an offer `shown: { turn }`, F88)
 //   turn:    { n, reply, index, from, quests, lone }, // the reply whose Director lines are being read
 // }
 // `turn` is this part's own: v1's rules count replies (a record changed in the last three
@@ -58,6 +59,9 @@ function threadErrors(id, thread) {
         errors.push(`${at}.reward must be null or { amount, each, unit, text }.`);
     }
     if (!isInt(thread.rev) || thread.rev < 0) errors.push(`${at}.rev must be a whole number.`);
+    // F83: the story said the goal is met; F88: the reply an offer is shown from.
+    if (thread.ready !== undefined && thread.ready !== null && !(isRecord(thread.ready) && isInt(thread.ready.rev))) errors.push(`${at}.ready must be null or { rev }.`);
+    if (thread.shown !== undefined && !(isRecord(thread.shown) && isInt(thread.shown.turn) && thread.shown.turn >= 0)) errors.push(`${at}.shown must be { turn }.`);
     if (thread.track !== undefined && !isRecord(thread.track)) errors.push(`${at}.track must be an object.`);
     return errors;
 }

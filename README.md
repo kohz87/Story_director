@@ -13,7 +13,13 @@
 > strip and a status card under every reply (on by default, collapsed; turn it off per screen). The story
 > clock runs on the reader's calendar, or by default on the enabled pack's (Ersveil: CY, twelve months
 > of 30 days), and starts at the pack's start date when the story has not set it. Quest rewards are whole
-> amounts of the chat's one currency, paid once by code; one fight pays one kill quest. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
+> amounts of the chat's one currency, paid once by code; one fight pays one kill quest. Quests follow the
+> story: you take one on, turn it down or give it up in your own words, and when the story turns a quest in
+> code checks the target (or, for a goal code cannot count, the story's `met: yes`) and the place, then
+> pays, held inside the quest's rank range (F to S, or the pack's or RPG Battle's ladder); a turn-in that
+> fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
+> where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
+> it") and opens its details (goal, progress note, terms, dates, history). The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
 > branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
 > is not loaded. Progress for the whole suite:
 > [Story Block docs/v2/STATUS.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md).

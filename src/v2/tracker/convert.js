@@ -138,7 +138,7 @@ export function fromRecord(record, before, { id, rev, order, offered = false }) 
     const closedBefore = before && before.status !== 'active';
     const ended = active ? null : closedBefore && before.ended
         ? before.ended
-        : { rev, reason: text(record.resolved?.reason), outcome: outcomeOf(record) };
+        : { rev, ...(Number.isSafeInteger(record.resolved?.time) ? { at: record.resolved.time } : {}), reason: text(record.resolved?.reason), outcome: outcomeOf(record) };
     const closed = active ? null : closedBefore && track.closed ? track.closed : stamp(record.resolved);
     const thread = {
         id,
@@ -168,6 +168,9 @@ export function fromRecord(record, before, { id, rev, order, offered = false }) 
             typed,
         }),
     };
+    // Keys the v1 record has no part in (the quests' `ready`, an offer's `shown`) are kept as they
+    // were, in their order, so an unchanged thread compares equal.
+    for (const [name, value] of Object.entries(before ?? {})) if (!Object.hasOwn(thread, name)) thread[name] = value;
     if (before && JSON.stringify({ ...thread, rev: before.rev }) !== JSON.stringify(before)) thread.rev = rev;
     return thread;
 }
