@@ -95,8 +95,15 @@ test('F87: holdReward keeps a total inside the range; nothing in money is never 
     assert.deepEqual(holdReward(5000, null), { total: 5000, held: false });
 });
 
-function rankedHost(fields, more = {}, queries = fakeQueries) {
-    const host = makeHost(makeState({ threads: [quest('th_wolves01', 'Wolves', { giver: 'Orsa', ...fields }, { offer: true })], scene: settlement, rev: 10, ...more }), { queries });
+// The player character's level: a written rank is held to one above the party's own (D at 13–20 is the
+// party's own, so a written D is paid as D).
+const atLevel = (state, level) => {
+    if (Number.isSafeInteger(level)) state.domains.party.actors.ac_astra001.level = level;
+    return state;
+};
+
+function rankedHost(fields, { level = 13, ...more } = {}, queries = fakeQueries) {
+    const host = makeHost(atLevel(makeState({ threads: [quest('th_wolves01', 'Wolves', { giver: 'Orsa', ...fields }, { offer: true })], scene: settlement, rev: 10, ...more }), level), { queries });
     assert.equal(host.run(take, { id: 'th_wolves01' }).ok, true);
     host.state.domains.combat.beaten = [{ rev: 12, foes: [{ name: 'Wolf', count: 3 }], won: true }];
     return host;
@@ -104,7 +111,7 @@ function rankedHost(fields, more = {}, queries = fakeQueries) {
 
 test('F87: a ranked quest\'s reward above its range is held at turn-in, and the receipt says so', () => {
     const host = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', rank: 'D' });
-    const take2 = makeHost(makeState({ threads: [quest('th_x0000001', 'X', { goal: 'Kill 3 wolves', reward: '5000 gold', rank: 'D' }, { offer: true })] })).run(take, { id: 'th_x0000001' });
+    const take2 = makeHost(atLevel(makeState({ threads: [quest('th_x0000001', 'X', { goal: 'Kill 3 wolves', reward: '5000 gold', rank: 'D' }, { offer: true })] }), 13)).run(take, { id: 'th_x0000001' });
     assert.equal(take2.receipt.summary, 'Astra takes on X: beat 3 wolves; 5000 gold (reward clamped to D-rank range: 230–1000 gold (clamped from 5000 gold)); D-rank.', 'the terms line shows it');
     const done = host.run(finish, { id: 'th_wolves01' });
     assert.equal(done.ok, true, done.message);
@@ -124,10 +131,10 @@ test('F87: a per-unit reward is held on its total; inside the range it is paid a
     assert.match(inside.receipt.summary, /30 gold paid\.$/);
     // B-b4-10: a quest with no rank takes one from its difficulty (hard: one above the party's F), and
     // only the top of that range holds: a small reward is paid as written, never raised.
-    const unranked = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', difficulty: 'hard' }).run(finish, { id: 'th_wolves01' });
+    const unranked = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', difficulty: 'hard' }, { level: 1 }).run(finish, { id: 'th_wolves01' });
     assert.deepEqual(unranked.receipt.data.paid, { amount: 230, said: 5000, rank: 'E', range: [50, 230] });
     assert.match(unranked.receipt.summary, /230 gold paid \(reward clamped to E-rank range: 50–230 gold \(clamped from 5000 gold\)\)\.$/);
-    const small = rankedHost({ goal: 'Kill 3 wolves', reward: '5 gold', difficulty: 'hard' }).run(finish, { id: 'th_wolves01' });
+    const small = rankedHost({ goal: 'Kill 3 wolves', reward: '5 gold', difficulty: 'hard' }, { level: 1 }).run(finish, { id: 'th_wolves01' });
     assert.deepEqual(small.receipt.data.paid, { amount: 5 }, 'a rank from the difficulty is not a floor');
     const none = rankedHost({ goal: 'Kill 3 wolves', reward: 'none', rank: 'S' }).run(finish, { id: 'th_wolves01' });
     assert.equal(none.receipt.data.paid, null, 'reward: none stays none');

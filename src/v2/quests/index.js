@@ -16,7 +16,9 @@
 import { lineKey, questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
 import { NOT_MET_YET, beatenClaim, finishRule, isHeld, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
-import { heldText, holdReward, questRank, ranksOf } from './ranks.js';
+import { heldText, holdReward, questRank, rankHeldText, ranksOf } from './ranks.js';
+// The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
+import { PROBLEM_LIMIT, PROBLEM_ROOM } from '../tracker/domain.js';
 
 export { questLists };
 
@@ -136,8 +138,23 @@ function termsFor(query, inventory, thread, currency) {
     const pack = packQuestOf(query, thread);
     const fromPack = packReward(pack, target, currency);
     const differs = fromPack && JSON.stringify(fromPack) !== JSON.stringify(own);
-    const rank = questRank(thread, ranksOf(query), { pack, level: pcLevel(query), difficulty: questDifficulty(thread.fields?.difficulty) });
-    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, rank: rank.rank, rankBy: rank.by };
+    const level = pcLevel(query);
+    const rank = questRank(thread, ranksOf(query), { pack, level, difficulty: questDifficulty(thread.fields?.difficulty) });
+    const rankNote = rank.said ? rankHeldText(rank.said, rank.rank, level) : '';
+    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, rank: rank.rank, rankBy: rank.by, rankNote };
+}
+
+/*
+ * A written rank held to the party's (questRank): a Problem on the Director tab, once per quest (a
+ * Problem already on the list for it is not repeated). Appended as the tracker part appends its own,
+ * cut back to the newest PROBLEM_LIMIT once the list reaches PROBLEM_ROOM.
+ */
+function rankProblem(ctx, director, thread, note) {
+    if (!note || !Array.isArray(director.problems)) return;
+    if (director.problems.some(problem => problem?.kind === 'rank-held' && problem.key === thread.key)) return;
+    const entry = { rev: ctx.rev, turn: Number.isSafeInteger(director.turn?.n) ? director.turn.n : 0, kind: 'rank-held', severity: 'info', key: thread.key, text: `${thread.key}: ${note}.` };
+    if (director.problems.length >= PROBLEM_ROOM) director.problems = [...director.problems.slice(-(PROBLEM_LIMIT - 1)), entry];
+    else director.problems.push(entry);
 }
 
 function termsOf(ctx, thread, currency = currencyOf(ctx.query)) {
@@ -193,7 +210,7 @@ function take(ctx, payload) {
     const rev = receiptRev(ctx);
     const wasOffer = Boolean(thread.offer);
     const currency = currencyOf(ctx.query);
-    const { target, reward, rank, rankBy } = termsOf(ctx, thread, currency);
+    const { target, reward, rank, rankBy, rankNote } = termsOf(ctx, thread, currency);
     thread.offer = false;
     thread.taken = stampOf(director, rev);
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
@@ -202,7 +219,8 @@ function take(ctx, payload) {
     // A held offer (F88) taken on is shown from now.
     if (thread.shown && thread.shown.turn > (director.turn?.n ?? 0)) thread.shown = { turn: director.turn?.n ?? 0 };
     const who = whoName(ctx.query);
-    const terms = termsText(thread.target, reward, currency, rank, { capOnly: rankBy === 'difficulty' });
+    const terms = [termsText(thread.target, reward, currency, rank, { capOnly: rankBy === 'difficulty' }), rankNote].filter(Boolean).join('; ');
+    rankProblem(ctx, director, thread, rankNote);
     // A quest the story already accepted is only adopted for counting: nothing new to tell.
     return {
         summary: wasOffer ? `${who} takes on ${thread.key}${terms ? `: ${terms}` : ''}.` : `${who} keeps count for ${thread.key}${terms ? `: ${terms}` : ''}.`,
@@ -250,7 +268,7 @@ function finish(ctx, payload) {
     if (!thread.taken) fail(ctx, CODES.invalid, `${thread.key} has not been taken on.`);
     const byStory = payload?.by === 'story' && ctx.cause !== 'ui';
     const currency = currencyOf(ctx.query);
-    const { target, reward, said: written, rank, rankBy } = termsOf(ctx, thread, currency);
+    const { target, reward, said: written, rank, rankBy, rankNote } = termsOf(ctx, thread, currency);
     if (!target && !thread.ready && !byStory) fail(ctx, CODES.invalid, `${thread.key} is not done yet: ${NOT_MET_YET.toLowerCase()}`);
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
     thread.reward = reward;
@@ -311,7 +329,9 @@ function finish(ctx, payload) {
             : `${progress.have} ${nounFor(target, progress.have)} beaten (target ${target.count})`;
     const currencyWord = currencyName(currency);
     const fromPack = written && Number.isSafeInteger(written.amount) ? ` (the pack's reward for ${thread.key}; the story said ${rewardText(written, target, currency)})` : '';
-    const payText = paid ? `${money(paid.amount, currency)} paid${hold.held ? ` (${heldText(rank, money(said, currency), currencyWord)})` : ''}${fromPack}`
+    const rankText = rankNote && hold.held ? ` (${rankNote})` : '';
+    if (rankNote) rankProblem(ctx, director, thread, rankNote);
+    const payText = paid ? `${money(paid.amount, currency)} paid${hold.held ? ` (${heldText(rank, money(said, currency), currencyWord)})` : ''}${rankText}${fromPack}`
         : reward?.amount === 0 ? 'no reward in money'
             : reward?.text ? `reward as the story tells it: ${reward.text}`
                 : 'no reward was named';

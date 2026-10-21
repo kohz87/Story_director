@@ -134,7 +134,7 @@ test('defaultRank: the party\'s rank by level, moved by difficulty, held to the 
     // A pack quest's rank, then the quest's own, then the difficulty's.
     const thread = { fields: { rank: 'D', difficulty: 'easy' } };
     assert.deepEqual(questRank(thread, DEFAULT_RANKS, { pack: { letter: 'F' } }).by, 'pack');
-    assert.deepEqual(questRank(thread, DEFAULT_RANKS).rank.id, 'D');
+    assert.deepEqual(questRank(thread, DEFAULT_RANKS, { level: 13 }).rank.id, 'D');
     assert.deepEqual(questRank({ fields: {} }, DEFAULT_RANKS, { difficulty: 'hard', level: 1 }), { rank: DEFAULT_RANKS[1], by: 'difficulty' });
 });
 
