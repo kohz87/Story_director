@@ -1,0 +1,175 @@
+// Story Director v2, part **time** (MODULES §F21): deadlines that slip or lapse when story time
+// passes, and the While away recap after a jump. No domain of its own: it reads the story clock
+// (`director.time.minutes`, the tracker part's) and writes `checked` and `recap` on the
+// `director` domain, and closes threads time ran past (status, ended, offer, rev).
+//
+// Before each reply (`beforeGenerate`), the clock is compared with the last time settled. When
+// it moved (or a deadline is due to lapse, or the recap was for an earlier reply) the hook
+// commits `time.settle` as a `system` receipt on the reply where the time passed, so swiping or
+// deleting that reply takes it all back. Its summary tells the next reply what slipped, in v1's
+// words; the recap goes in this part's tail, for that reply only.
+
+import { estimateTokens } from '../../relevance.js';
+import { RECAP_BUDGET } from './recap.js';
+import { DEFAULTS, calendarOf, timeSettings } from './records.js';
+import { needsSettle, recapStale, settle, settleSummary } from './settle.js';
+
+export const SETTLE = 'time.settle';
+
+const isInt = value => Number.isSafeInteger(value);
+const copy = value => structuredClone(value);
+
+function fail(ctx, code, message) {
+    ctx.fail(code, message);
+    // ctx.fail throws; this is only for a ctx that does not.
+    const error = new Error(message);
+    error.code = code;
+    throw error;
+}
+
+// A query that may not exist (the quests part's `quest.progress`): its answer, or the fallback.
+function tryQuery(query, name, args, fallback) {
+    if (typeof query !== 'function') return fallback;
+    try {
+        return query(name, args) ?? fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+// A quest whose target is met waits only for its turn-in: like v1's pay waiting, the hour fails nothing.
+const targetMet = query => id => tryQuery(query, 'quest.progress', { id }, null)?.met === true;
+
+/*
+ * The meta.rev this receipt will carry (SPEC §2.4, MODULES §F2 `ctx.rev`). Without `ctx.rev`,
+ * the hook's `rev` (the head's meta.rev + 1: the cue is committed at once on that head), else
+ * meta.rev + 1 through `ctx.read('meta')`, else 0.
+ */
+function receiptRev(ctx, given) {
+    if (isInt(ctx?.rev)) return ctx.rev;
+    if (isInt(given)) return given;
+    try {
+        const meta = ctx.read('meta');
+        if (isInt(meta?.rev)) return meta.rev + 1;
+    } catch {
+        // No meta through ctx.read.
+    }
+    return 0;
+}
+
+/**
+ * `time.settle` (cause `system`, from the hook). Payload `{ at?, rev? }`: the chat's length when
+ * the hook ran (which reply the recap is for) and the revision the hook expects this receipt to
+ * have (used only when the host gives no `ctx.rev`). Refused (`REFUSED`) while the story time is
+ * not set.
+ */
+function settleCommand(ctx, payload = {}) {
+    const at = payload?.at ?? null;
+    const given = payload?.rev ?? null;
+    if (!(at === null || (isInt(at) && at >= 0))) fail(ctx, 'INVALID', 'time.settle: "at" must be the chat\'s length (a whole number).');
+    if (!(given === null || (isInt(given) && given >= 0))) fail(ctx, 'INVALID', 'time.settle: "rev" must be a whole number.');
+    const director = ctx.draft('director');
+    if (!isInt(director?.time?.minutes)) fail(ctx, 'REFUSED', 'The story time is not set yet, so there is nothing to settle.');
+    const settings = timeSettings(ctx.settings);
+    const calendar = calendarOf(settings);
+    const rev = receiptRev(ctx, given);
+    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), met: targetMet(ctx.query) });
+    const told = settleSummary(done.closed, { calendar, now: done.now });
+    return {
+        summary: told || `Story time settled at ${calendar.format(done.now, { era: false })}.`,
+        narrate: Boolean(told),
+        data: {
+            minutes: done.now,
+            from: done.from,
+            lapsed: done.closed.map(({ id, key, kind, reason }) => ({ id, key, kind, reason })),
+            overdue: [...done.standing.overdue],
+            pay: [...done.standing.pay],
+            due: [...done.standing.due],
+            recap: Boolean(done.recap && done.recap.rev === rev),
+        },
+    };
+}
+
+/** `beforeGenerate(view)`: `{ lines: [], commands: [time.settle] }` when there is something to settle. */
+export function beforeGenerate(view) {
+    const state = view?.state;
+    if (!state?.domains?.director) return { lines: [], commands: [] };
+    const settings = timeSettings(view.settings);
+    const at = isInt(view?.chat?.length) ? view.chat.length : null;
+    const calendar = calendarOf(settings);
+    if (!needsSettle(state, { calendar, settings, at, met: targetMet(view.query) })) return { lines: [], commands: [] };
+    const rev = isInt(state.meta?.rev) ? state.meta.rev + 1 : null;
+    return { lines: [], commands: [{ type: SETTLE, payload: { at, rev } }] };
+}
+
+/** The recap the reply about to be written gets, or null. */
+function recapFor(view) {
+    const recap = view?.state?.domains?.director?.recap ?? null;
+    if (!recap || !Array.isArray(recap.lines)) return null;
+    const at = isInt(view?.chat?.length) ? view.chat.length : null;
+    return recapStale(recap, { at, rev: view?.state?.meta?.rev ?? null }) ? null : recap;
+}
+
+/** `context.tail(view)`: the `[While away] …` line for the reply after the jump. */
+export function timeTail(view) {
+    const recap = recapFor(view);
+    const lines = recap ? recap.lines.filter(line => typeof line === 'string' && line && estimateTokens(line) <= RECAP_BUDGET) : [];
+    return { lines, optional: [] };
+}
+
+const stillActive = (director, ids) => (Array.isArray(ids) ? ids : [])
+    .map(id => director?.threads?.[id])
+    .filter(thread => thread && thread.status === 'active')
+    .map(thread => ({ id: thread.id, key: thread.key, kind: thread.kind, due: String(thread.fields?.due ?? thread.fields?.on ?? '') }));
+
+export const queries = {
+    /**
+     * Where threads stood when the story time was last settled: `{ minutes, lapsed, overdue,
+     * pay, due }`, each a list of `{ id, key, kind, due }` (lapsed: closed in that jump, with
+     * `reason`; the others still open), or null before the first settle.
+     */
+    'time.overdue': state => {
+        const director = state?.domains?.director;
+        const checked = director?.checked;
+        if (!checked) return null;
+        const lapsed = (checked.lapsed ?? []).map(id => director.threads?.[id]).filter(Boolean)
+            .map(thread => ({ id: thread.id, key: thread.key, kind: thread.kind, due: String(thread.fields?.due ?? thread.fields?.on ?? ''), reason: thread.ended?.reason ?? '' }));
+        return {
+            minutes: checked.minutes,
+            lapsed,
+            overdue: stillActive(director, checked.overdue),
+            pay: stillActive(director, checked.pay),
+            due: stillActive(director, checked.due),
+        };
+    },
+    /** The While away recap kept for the reply after a jump: `{ fromMinutes, toMinutes, lines, threads, rev, at }` or null. */
+    'time.recap': state => {
+        const recap = state?.domains?.director?.recap;
+        return recap ? copy(recap) : null;
+    },
+};
+
+export const part = {
+    domains: {},
+    commands: { [SETTLE]: settleCommand },
+    queries,
+    kinds: {},
+    context: {
+        // Nothing fixed: the recap carries its own cue, so the static prompt is unchanged.
+        static: () => '',
+        tail: view => timeTail(view),
+        budget: RECAP_BUDGET,
+    },
+    hooks: { beforeGenerate },
+    settings: {
+        section: 'Time',
+        defaults: { ...DEFAULTS },
+        // The reader's calendar is the tracker part's setting (module.js hands it over as `calendar`).
+        reads: { calendar: 'tracker.calendar' },
+        schema: {
+            recapHours: { type: 'int', label: 'While away recap after a jump of (story hours)', min: 1, max: 720 },
+            lapses: { type: 'bool', label: 'Deadlines slip or lapse as story time passes' },
+        },
+    },
+    tabs: [],
+};
