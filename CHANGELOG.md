@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.0.0-alpha.1 (v2 branch)
+## 2.0.0-alpha.1 (in progress, `v2` branch)
+
+Story Suite v2. Story Director v2 module: tracker and quests parts merged; integration, atlas (map) and screens in progress. Status: https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md
 
 - **A Story Block v2 module.** `index.js` waits for `globalThis.StoryBlock.ready` and registers module `story-director` (`src/v2/module.js`, the tracker and quests parts merged); without Story Block v2 it shows one line in the drawer. The v1 glue moved to `index.v1.js` and is not loaded. The manifest declares `"dependencies": ["third-party/Story_block"]` and no generate interceptor.
 - **Quest rewards in the one currency.** `quest.finish` pays `wallet.receive { owner, amount }` with a whole number; coin words in the story are only read as "this is money", and summaries name the chat's currency from `inventory.currency`.

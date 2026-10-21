@@ -9,8 +9,8 @@
 > Quests tabs. Quest rewards are whole amounts of the chat's one currency, paid once by code; one fight
 > pays one kill quest. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
 > branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
-> is not loaded.
-
+> is not loaded. Progress for the whole suite:
+> [Story Block docs/v2/STATUS.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md).
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
