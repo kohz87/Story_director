@@ -140,16 +140,24 @@ export function defaultRank(ladder, difficulty, level = null) {
     return ladder[Math.min(ladder.length - 1, Math.max(0, base + step))];
 }
 
+/** How many ranks above the party's own (defaultRank's base) a rank the story writes may be. */
+export const WRITTEN_RANKS_ABOVE = 1;
+
 /**
- * The rank a quest is paid as: `{ rank, by }`, `by` one of 'pack' (its pack quest's `rank` or
+ * The rank a quest is paid as: `{ rank, by, said? }`, `by` one of 'pack' (its pack quest's `rank` or
  * `letter`), 'written' (its own `rank:`, or a `difficulty:` that names a rank) or 'difficulty'
  * (defaultRank). `pack` is the quest's pack record or null; `level` the player character's level.
+ * Code sets the numbers: a written rank more than WRITTEN_RANKS_ABOVE above the party's own is held
+ * there, and `said` is the rank the story wrote. A pack's rank is not held.
  */
 export function questRank(thread, ladder, { pack = null, level = null, difficulty = 'normal' } = {}) {
     const fromPack = pack ? rankNamed(pack.rank ?? pack.letter ?? '', ladder) : null;
     if (fromPack) return { rank: fromPack, by: 'pack' };
     const written = rankOf(thread, ladder);
-    if (written) return { rank: written, by: 'written' };
+    if (written) {
+        const most = Math.min(ladder.length - 1, ladder.indexOf(defaultRank(ladder, 'normal', level)) + WRITTEN_RANKS_ABOVE);
+        return ladder.indexOf(written) > most ? { rank: ladder[most], by: 'written', said: written } : { rank: written, by: 'written' };
+    }
     const rank = defaultRank(ladder, difficulty, level);
     return { rank, by: rank ? 'difficulty' : null };
 }
@@ -170,6 +178,12 @@ export function holdReward(total, rank, { capOnly = false } = {}) {
     const [lo, hi] = rank.reward;
     const kept = Math.min(hi, capOnly ? total : Math.max(lo, total));
     return { total: kept, held: kept !== total };
+}
+
+/** "the story said S-rank; held to D-rank for a level-12 party". */
+export function rankHeldText(said, rank, level) {
+    const party = Number.isSafeInteger(level) ? `a level-${level} party` : 'a party whose level is not known';
+    return `the story said ${said.title}; held to ${rank.title} for ${party}`;
 }
 
 /** "reward clamped to D-rank range: 220–1000 gold (clamped from 5000 gold)". */

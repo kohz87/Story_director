@@ -20,6 +20,8 @@ import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } f
 export const OFFER_COOLDOWN = 6;
 /** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
 export const KEY_CHARS = 120;
+/** The longest thread summary kept, in characters: a longer one is cut (at a space when there is one). */
+export const SUMMARY_CHARS = 600;
 /** New threads one reply's lines may add; a line that would add more is not used (a Problem says so). */
 export const NEW_THREADS_PER_REPLY = 16;
 // The longest a line is quoted in a summary or a Problem.
@@ -106,6 +108,15 @@ export function capKey(key) {
     const head = text.slice(0, KEY_CHARS);
     const space = head.lastIndexOf(' ');
     return (space >= KEY_CHARS / 2 ? head.slice(0, space) : head).trim();
+}
+
+/** A summary at most SUMMARY_CHARS long, ending "…" when cut: at the last space past half of it when there is one. */
+export function capSummary(summary) {
+    const text = String(summary ?? '');
+    if (text.length <= SUMMARY_CHARS) return text;
+    const head = text.slice(0, SUMMARY_CHARS - 1);
+    const space = head.lastIndexOf(' ');
+    return `${(space >= SUMMARY_CHARS / 2 ? head.slice(0, space) : head).trimEnd()}…`;
 }
 
 /**
@@ -294,6 +305,13 @@ export function applyThreadLine(ctx, given) {
         }
     }
     const reached = record => record.id === op.id || (record.aliases ?? []).includes(op.id);
+    // A summary (v1's `desc`) longer than SUMMARY_CHARS is cut, with a Problem.
+    for (const record of records) {
+        const desc = String(record.fields?.desc ?? '');
+        if (desc.length <= SUMMARY_CHARS) continue;
+        record.fields.desc = capSummary(desc);
+        addProblem(director, ctx, { kind: 'long-summary', severity: 'info', key: record.key, op: op.op, text: `The summary of "${record.key}" was ${desc.length} characters long; it was cut to ${SUMMARY_CHARS}.` });
+    }
     const offered = findings.some(finding => finding.kind === 'offered');
     const offeredIds = new Set(offered ? records.filter(reached).map(record => record.id) : []);
     const before = named ? toRecord(named, []).kind : null;
