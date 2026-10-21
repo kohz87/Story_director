@@ -10,7 +10,7 @@ import {
     OWNER_RE, isPlainObject, clone, labelOf, parseCount, newId, ownerName, ownerNameIn, capitalize,
 } from './common.js';
 import { aliasKey, cleanName, resolveDef, slugify, trimText } from './names.js';
-import { WALLET_KEY, currencyOf, formatAmount, formatWallet, parseAmount } from './money.js';
+import { WALLET_KEY, currencyOf, formatAmount, formatWallet, isCurrencyName, parseAmount } from './money.js';
 import { DEF_ID, isId } from '../check.js';
 
 export const KINDS = Object.freeze(['goods', 'material', 'consumable', 'equipment', 'quest', 'money']);
@@ -311,15 +311,19 @@ function pay(ctx, env, { owner, amount, note }) {
 
 // ---------- commands ----------
 
+// Commands that make something out of nothing (items, money) run for the story, the host, or another
+// module's command (ctx.caller); a 'ui' command at the top is refused with `why`.
+function byModule(ctx, why) {
+    if (!(ctx.caller || ctx.cause === 'story' || ctx.cause === 'system')) ctx.fail('REFUSED', why);
+}
+
 /** The inventory commands; `env` = { hooks: name => fn[], settings: () => this module's settings }. */
 export function createInventoryCommands(env) {
     return {
         // { def | defId | name, qty, owner, note? }: `def` is a def ID or a full def. Internal (§7):
         // the story, the host, or another module's command through ctx.call.
         'inventory.grant'(ctx, payload = {}) {
-            if (!(ctx.caller || ctx.cause === 'story' || ctx.cause === 'system')) {
-                ctx.fail('REFUSED', 'Items cannot be handed out from a button; they come from the story or from another module.');
-            }
+            byModule(ctx, 'Items cannot be handed out from a button; they come from the story or from another module.');
             const inv = ctx.draft('inventory');
             const qty = count(ctx, payload.qty, 1);
             const owner = ownerArg(ctx, payload.owner);
@@ -484,8 +488,11 @@ export function createInventoryCommands(env) {
             };
         },
 
-        // { owner, amount, note? }, amount in the smallest unit.
+        // { owner, amount, note? }, amount in whole units of the one currency. Like inventory.grant, not
+        // from a button on its own: the story, the host, or another module's command through ctx.call
+        // (a shop's trade.buy pays; a reward's quest.finish receives).
         'wallet.pay'(ctx, payload = {}) {
+            byModule(ctx, 'Money cannot be paid from a button on its own; it is paid by the story or by another module\'s action.');
             return pay(ctx, env, {
                 owner: ownerArg(ctx, payload.owner),
                 amount: count(ctx, payload.amount, undefined, 'amount'),
@@ -494,6 +501,7 @@ export function createInventoryCommands(env) {
         },
 
         'wallet.receive'(ctx, payload = {}) {
+            byModule(ctx, 'Money cannot be handed out from a button; it comes from the story or from another module\'s action.');
             return receive(ctx, env, {
                 owner: ownerArg(ctx, payload.owner),
                 amount: count(ctx, payload.amount, undefined, 'amount'),
@@ -519,6 +527,9 @@ export function captureItem(ctx, line, env) {
     const name = cleanName(line?.name);
     if (!name) ctx.fail('INVALID', 'An item line needs the item\'s name.');
     const text = String(line.text ?? '').trim();
+    // An "item" named exactly the currency (singular or plural) is money: it goes to the wallet.
+    const currency = currencyOf(ctx.settings());
+    if (isCurrencyName(name, currency)) return itemAsCoin(ctx, line, env, currency);
     if (line.op === '+') {
         const qty = lineQty(ctx, line, 1);
         if (qty < 1) ctx.fail('INVALID', 'A gained item needs a quantity of at least 1.');
@@ -587,6 +598,20 @@ export function captureItem(ctx, line, env) {
     return ctx.fail('INVALID', `"${line.op} item" is not a change the inventory understands; use +, - or ~.`);
 }
 
+// `+ item Marks | qty: 44`, `- item mark`: the party's wallet, as `+ coin 44` / `- coin 1` would.
+function itemAsCoin(ctx, line, env, currency) {
+    if (line.op !== '+' && line.op !== '-') {
+        ctx.fail('INVALID', `${currency.plural} are money, not an item; write + coin or - coin with the amount.`);
+    }
+    const amount = lineQty(ctx, line, 1);
+    if (amount < 1) ctx.fail('INVALID', 'An amount of money must be more than nothing.');
+    const who = labelOf(line, line.op === '+' ? 'from' : 'to');
+    const note = who ? `${line.op === '+' ? 'from' : 'to'} ${trimText(who, 80)}` : '';
+    return line.op === '+'
+        ? receive(ctx, env, { owner: 'party', amount, note })
+        : pay(ctx, env, { owner: 'party', amount, note });
+}
+
 /** `+ coin 30 | from: who`, `- coin 5 | to: who`: the party's wallet; only the number counts. */
 export function captureCoin(ctx, line, env) {
     const written = labelOf(line, 'amount') ?? String(line?.name ?? '');
@@ -626,7 +651,7 @@ export function listItems(inventory, owner = null) {
 
 /** The inventory queries; `env.settings()` gives the currency for `inventory.currency`. */
 export const createInventoryQueries = env => ({
-    // { name, short }: the chat's one currency (MODULES.md F1).
+    // { name, plural, short }: the chat's one currency (MODULES.md F1); name singular ("mark").
     'inventory.currency': () => currencyOf(env.settings()),
     'inventory.items': (state, args = {}) => listItems(state?.domains?.inventory, args?.owner ?? null),
     'inventory.wallet': (state, args = {}) => ({ ...(state?.domains?.inventory?.wallets?.[args?.owner ?? 'party'] ?? {}) }),

@@ -22,6 +22,8 @@ const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 // Fields that hold a date the story can reach (v1 relevance.js DATE_FIELDS).
 const DATE_FIELDS = ['due', 'on', 'arrive'];
+// The problems the Director screen shows (the tracker's PROBLEM_LIMIT).
+const PROBLEM_SHOWN = 50;
 export const FINISHED_SHOWN = 20;
 
 /** A `query(name, args)` from the tools a host passes (MODULES §F3), or null. */
@@ -373,7 +375,8 @@ export function problemsList(state, args, tools) {
     const problems = director?.problems;
     const substitute = typeof tools?.substitute === 'function' ? tools.substitute : null;
     const query = queryFrom(tools);
-    return (Array.isArray(problems) ? problems : []).filter(isRecord).filter(problem => stillSo(problem, director, query)).map(problem => ({
+    // The newest PROBLEM_SHOWN: the tracker lets the list grow past that before it cuts it back.
+    return (Array.isArray(problems) ? problems.slice(-PROBLEM_SHOWN) : []).filter(isRecord).filter(problem => stillSo(problem, director, query)).map(problem => ({
         rev: problem.rev ?? null,
         kind: text(problem.kind),
         text: readerWords(problem.text, substitute),

@@ -145,13 +145,18 @@ function samePersonName(a, b) {
     return false;
 }
 
+// The place kinds a quest is turned in at: the scene's class `settlement`, or a kind the atlas or a pack
+// gives a settlement ("village", "lock town", "fortress city"), as `atlas.here` reports it.
+const SETTLEMENT_KIND = /(?:^|[^\p{L}])(?:settlement|village|town|city|hamlet|capital)(?![\p{L}])/u;
+
 /**
- * The place rule for a turn-in: in a settlement (`scene.place.kind`), or with the giver in
- * `scene.present` (whole-word names: "Fenna" is "Fenna the miller"). `{ ok, reason }`.
+ * The place rule for a turn-in: in a settlement (`scene.place.kind`, or the atlas's kind when the scene
+ * has none: quests/index.js hereScene), or with the giver in `scene.present` (whole-word names: "Fenna"
+ * is "Fenna the miller"). `{ ok, reason }`.
  */
 export function placeRule(thread, scene) {
     const kind = text(scene?.place?.kind).toLowerCase();
-    if (kind === 'settlement') return { ok: true, reason: '' };
+    if (SETTLEMENT_KIND.test(kind)) return { ok: true, reason: '' };
     const giver = text(thread?.fields?.giver);
     if (giver && (scene?.present ?? []).some(name => samePersonName(giver, name))) return { ok: true, reason: '' };
     return { ok: false, reason: giver ? `Turn it in at a settlement or where ${giver} is.` : 'Turn it in at a settlement.' };

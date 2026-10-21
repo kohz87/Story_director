@@ -431,11 +431,16 @@ test('lines the Director cannot use are Problems, not errors, and change nothing
     assert.equal(asked.ok, true);
     assert.deepEqual(asked.state.domains.director.threads, start.domains.director.threads);
     assert.deepEqual(kinds(asked.state), ['unread']);
-    // The 50 newest problems are kept.
+    // The list grows to 100 and is then cut back to the newest 50 (B-b1-capture-14: most problems are
+    // one small append, not the whole list rewritten).
     let state = start;
     for (let n = 0; n < 30; n += 1) state = reply(state, `! event Riot ${n} — x\n! event Fire ${n} — y`).state;
-    assert.equal(state.domains.director.problems.length, 50);
+    assert.equal(state.domains.director.problems.length, 60);
     assert.match(state.domains.director.problems.at(-1).text, /Fire 29/);
+    for (let n = 30; n < 51; n += 1) state = reply(state, `! event Riot ${n} — x\n! event Fire ${n} — y`).state;
+    assert.equal(state.domains.director.problems.length, 51, '100 reached, cut to the newest 50, then one more');
+    assert.match(state.domains.director.problems.at(-1).text, /Fire 50/);
+    assert.match(state.domains.director.problems.at(0).text, /Fire 25/);
     valid(state);
 });
 

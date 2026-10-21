@@ -1,15 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { map as mapWidget, visibleOnLayer, mapNodes, mapEdges } from './vendor/story-block/src/v2/view/widgets/map.js';
-import { propProblems } from './vendor/story-block/src/v2/view/widgets/props.js';
+import { map as mapWidget, visibleOnLayer, mapNodes, mapEdges } from '../../vendor/story-block/src/v2/view/widgets/map.js';
+import { propProblems } from '../../vendor/story-block/src/v2/view/widgets/props.js';
 import { DEFAULT_ICON, iconFor } from '../../../src/v2/atlas/map.js';
 import { at, command, lines, makeState, placeNamed, query } from './helpers/fake-ctx.js';
 
-const MAIN = '/home/user/_main/story_block/src/v2/';
-const VENDOR = fileURLToPath(new URL('./vendor/story-block/src/v2/', import.meta.url));
+// The Story Block copy the tests run against: tests/vendor/story-block, written by Story Block's
+// scripts/sync-testkit.mjs, with the commit it was copied from in its VERSION file.
+const VENDOR = fileURLToPath(new URL('../../vendor/story-block/', import.meta.url));
 
 const PACK = {
     places: [
@@ -147,7 +150,26 @@ test('icons by kind', () => {
     assert.equal(iconFor('strange'), DEFAULT_ICON);
 });
 
-test('the vendored Story Block files are the same as Story Block\'s own', { skip: existsSync(MAIN) ? false : 'no Story Block checkout at /home/user/_main/story_block' }, () => {
-    const files = ['ops.js', 'check.js', 'view/screens.js', 'view/css.js', ...readdirSync(`${VENDOR}view/widgets`).map(name => `view/widgets/${name}`)];
-    for (const file of files) assert.equal(readFileSync(`${VENDOR}${file}`, 'utf8'), readFileSync(`${MAIN}${file}`, 'utf8'), file);
+// The copy is checked against the commit its VERSION names, not against wherever a Story Block
+// checkout happens to be now, so moving that checkout on does not fail this test. It runs only when
+// STORY_BLOCK_DIR names a Story Block checkout that has that commit.
+const PINNED = /^commit ([0-9a-f]{40})$/m.exec(readFileSync(join(VENDOR, 'VERSION'), 'utf8'))?.[1] ?? null;
+const SB_DIR = process.env.STORY_BLOCK_DIR ?? '';
+const git = (...args) => execFileSync('git', ['-C', SB_DIR, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 26 });
+function pinnedSkip() {
+    if (!PINNED) return 'tests/vendor/story-block/VERSION names no plain commit (copied from local changes?); re-sync with Story Block\'s scripts/sync-testkit.mjs';
+    if (!SB_DIR) return 'set STORY_BLOCK_DIR to a Story Block checkout to check the vendored copy against its pinned commit';
+    try {
+        git('cat-file', '-e', `${PINNED}^{commit}`);
+        return false;
+    } catch {
+        return `the Story Block checkout at ${SB_DIR} does not have the pinned commit ${PINNED.slice(0, 7)} (fetch it there)`;
+    }
+}
+const walk = dir => readdirSync(dir).flatMap(name => (statSync(join(dir, name)).isDirectory() ? walk(join(dir, name)) : [join(dir, name)]));
+
+test('the vendored Story Block files are the same as Story Block\'s own at the commit VERSION names', { skip: pinnedSkip() }, () => {
+    const files = [...walk(join(VENDOR, 'src')), ...walk(join(VENDOR, 'testkit'))].map(path => relative(VENDOR, path));
+    assert.ok(files.length > 0);
+    for (const file of files) assert.equal(readFileSync(join(VENDOR, file), 'utf8'), git('show', `${PINNED}:${file}`), file);
 });

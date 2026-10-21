@@ -49,13 +49,28 @@ function findBlocks(mes, tag) {
     return blocks;
 }
 
+// Reasoning a model writes in the reply itself (<think>, <thinking>, <reasoning>), closed
+// blocks only: a draft of the change block inside it is not the change block, so a reply that
+// drafts it there and writes it again at the end is read once. An unclosed tag is left alone,
+// so a reply cut off mid-thought never loses a block written before it.
+const REASONING_RE = /<(think|thinking|reasoning)(?:[ \t][^>\n]*)?>[\s\S]*?<\/\1\s*>/gi;
+
+/** `mes` without its closed reasoning blocks. */
+export function withoutReasoning(mes) {
+    return String(mes ?? '').replace(REASONING_RE, '');
+}
+
+// `text` with its closed reasoning blocks blanked to spaces of the same length, so the
+// positions of what is outside them stay where they are.
+const maskReasoning = text => text.replace(REASONING_RE, match => ' '.repeat(match.length));
+
 /**
  * The text inside the reply's <Changes> block (or `tag`), or null when there is none. Found
  * whether the block is bare or already hidden in Story Suite's comment; several blocks are
- * read as one, in order, so no line is lost.
+ * read as one, in order, so no line is lost. Blocks inside closed reasoning are not read.
  */
 export function extractBlock(mes, tag = 'Changes') {
-    const blocks = findBlocks(mes, tag);
+    const blocks = findBlocks(withoutReasoning(mes), tag);
     if (!blocks.length) return null;
     return blocks.map(block => block.body.replace(/^\s*\n/, '').replace(/\n\s*$/, '')).join('\n');
 }
@@ -77,7 +92,7 @@ export function stripBlock(mes, tag = 'Changes') {
  */
 export function hideBlock(mes, tag = 'Changes') {
     const text = String(mes ?? '');
-    const bare = findBlocks(text.replace(HIDDEN_RE, match => ' '.repeat(match.length)), tag);
+    const bare = findBlocks(maskReasoning(text.replace(HIDDEN_RE, match => ' '.repeat(match.length))), tag);
     if (!bare.length) return text;
     let story = text;
     for (const block of [...bare].reverse()) story = story.slice(0, block.start) + story.slice(block.end);
@@ -96,7 +111,10 @@ function stripDecoration(line) {
 }
 
 function addLabel(labels, label, value) {
-    labels[label] = Object.hasOwn(labels, label) && labels[label] && value ? `${labels[label]}; ${value}` : (labels[label] || value);
+    const had = Object.hasOwn(labels, label) ? labels[label] : '';
+    const next = had && value ? `${had}; ${value}` : (had || value);
+    // "__proto__" would set the prototype even of a prototype-less object: define it as a key.
+    Object.defineProperty(labels, label, { value: next, enumerable: true, writable: true, configurable: true });
 }
 
 // One line → { op, kind, name, text, labels } or { error }.
@@ -113,7 +131,8 @@ function parseLine(source) {
     const name = (dash ? first.slice(0, dash.index) : first).trim();
     const texts = [dash ? first.slice(dash.index + dash[0].length).trim() : ''];
     if (!name) return { error: `the ${kind} has no name` };
-    const labels = {};
+    // No prototype: a label named "constructor" or "toString" is the line's own, never inherited.
+    const labels = Object.create(null);
     for (const part of rest) {
         const trimmed = part.trim();
         if (!trimmed) continue;

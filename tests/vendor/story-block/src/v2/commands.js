@@ -20,6 +20,8 @@
 //   have, `ctx.id(prefix)` a new `<prefix>_<8 base36>` drawn from the receipt's seed (so the same seed
 //   gives the same IDs, and ctx.rng() is not disturbed), and, for capture runs, `ctx.carrier`
 //   ({ index, swipe, key }) and `ctx.chat` ({ lastUser, reply }); both are null for other commands.
+// * Internal commands (registry.isInternal: capture.*, module.init.*, events.fire) are refused with
+//   REFUSED when the cause is 'ui', whether named at the top or through ctx.call.
 
 import { apply, checkOps, clone, deepFreeze, diff, escapeKey, isJson } from './ops.js';
 import { isSeed, rng as makeRng, roll as rollDice, seed as freshSeed } from './rng.js';
@@ -84,6 +86,10 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
         if (typeof handler !== 'function' || !moduleId) fail('UNKNOWN_COMMAND', `There is no command called "${type}".`);
         return { moduleId, handler };
     }
+
+    // Internal commands (registry.js) are the host's own steps: never with cause 'ui'.
+    const internal = type => typeof registry.isInternal === 'function' && registry.isInternal(type);
+    const internalMessage = type => `"${type}" is a step Story Block takes itself (a change line, a module's set-up or an event); a button, screen or module action cannot run it.`;
 
     function findQuery(name) {
         if (typeof registry.query === 'function') {
@@ -189,6 +195,10 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
                     throw tx.failure;
                 }
                 const target = resolve(type);   // UNKNOWN_COMMAND here has changed nothing
+                if (tx.cause === 'ui' && internal(type)) {
+                    tx.failure ??= new CommandError('REFUSED', internalMessage(type));
+                    throw tx.failure;
+                }
                 try {
                     return invoke(tx, type, target, payload, depth + 1, moduleId);
                 } catch (error) {
@@ -281,6 +291,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
             const target = capture
                 ? { moduleId: capture.moduleId, handler: capture.apply }
                 : resolve(type);
+            if (cause === 'ui' && internal(type)) fail('REFUSED', internalMessage(type));
             if (typeof target.handler !== 'function' || !target.moduleId) fail('UNKNOWN_COMMAND', `There is no capture handler for "${type}".`);
             const headRev = Number.isInteger(head.meta?.rev) ? head.meta.rev : 0;
             tx = {

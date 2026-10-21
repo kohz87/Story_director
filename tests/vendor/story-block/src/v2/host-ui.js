@@ -11,6 +11,7 @@
 
 import { normalizeField } from './registry.js';
 import { HOST_SETTINGS_SCHEMA } from './sdk.js';
+import { scrollCue } from './view/scroll-cue.js';
 
 export const OPEN_CLASS = 'story-suite-open';
 export const HOST_FOLD = 'story-suite';
@@ -263,6 +264,8 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
     const pane = el(doc, 'div', 'story-suite-pane');
     pane.setAttribute('role', 'tabpanel');
     root.replaceChildren(bar, pane);
+    // Tabs that do not fit scroll sideways; the edge with more of them fades (scroll-cue.js).
+    const cue = scrollCue(bar, { win: doc.defaultView ?? globalThis });
 
     function draw() {
         const tabs = registry.tabs();
@@ -282,6 +285,7 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
             node.addEventListener('click', () => select(tab.id));
             bar.appendChild(node);
         }
+        cue.update();
         pane.replaceChildren();
         const tab = tabs.find(item => item.id === current);
         pane.dataset.tabId = tab?.id ?? '';

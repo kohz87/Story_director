@@ -1,1 +1,0 @@
-Copied from kohz87/Story_block v2: src/v2/ops.js, src/v2/check.js, src/v2/view/widgets/{map,dom,styles,map-math,props}.js at 0e0bf12; src/v2/view/{screens,css}.js at 74f8630 (unchanged). Used by the atlas tests only.

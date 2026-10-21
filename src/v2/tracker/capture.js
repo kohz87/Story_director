@@ -12,12 +12,24 @@
 import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps, isOffer } from '../../tracker.js';
 import { fromRecord, keysOf, orderedThreads, outcomeOf, toRecord, toTracker } from './convert.js';
-import { PROBLEM_LIMIT } from './domain.js';
+import { PROBLEM_LIMIT, PROBLEM_ROOM } from './domain.js';
 import { applyMet, capNote, markOffer, noGoalProblem, onlyOwnLabels, questHasGoal, splitQuestLine, storyTurnIn } from './quest-lines.js';
-import { calendarOf, packCalendarOf, settingsFrom, timeAfter } from './time.js';
+import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } from './time.js';
 
 /** The offer cooldown (F88, the quests part's `offerCooldown`, read by this part) when nothing sets it. */
 export const OFFER_COOLDOWN = 6;
+/** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
+export const KEY_CHARS = 120;
+/** New threads one reply's lines may add; a line that would add more is not used (a Problem says so). */
+export const NEW_THREADS_PER_REPLY = 16;
+// The longest a line is quoted in a summary or a Problem.
+const QUOTE_CHARS = 300;
+// Labels Story Block's generic state rules reserve (ops.js checkOps: `qty` is a count, `id` and
+// `…_id` are IDs, three keys no state may hold): kept under such a name in `fields`, they would get
+// the whole line refused. They mean nothing to the Director, so they are left out with a Problem.
+const RESERVED_LABEL = /^(?:qty|id|.+_id|.+Id|__proto__|constructor|prototype)$/;
+// `xp:` on a quest: quest XP is RPG Battle's, scaled by difficulty (MODULES §F5); never a written amount.
+const IGNORED_LABELS = new Set(['xp', 'exp', 'experience']);
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 // A stand-in for "another new quest in this reply" (see applyThreadLine): a name nobody writes.
@@ -79,10 +91,48 @@ function bareName(name) {
     return prefixed && ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'].includes(prefixed[1].toLowerCase()) ? prefixed[2].trim() : text;
 }
 
-/** The line as v2 wrote it, for history and problems. */
+const clip = value => (value.length > QUOTE_CHARS ? `${value.slice(0, QUOTE_CHARS - 1)}…` : value);
+
+/** The line as v2 wrote it, for history and problems (at most QUOTE_CHARS long). */
 export function lineText(line) {
     const labels = Object.entries(line?.labels ?? {}).map(([label, value]) => ` | ${label}: ${value}`).join('');
-    return `${line?.op ?? ''} ${line?.kind ?? ''} ${line?.name ?? ''}${line?.text ? ` — ${line.text}` : ''}${labels}`.trim();
+    return clip(`${line?.op ?? ''} ${line?.kind ?? ''} ${line?.name ?? ''}${line?.text ? ` — ${line.text}` : ''}${labels}`.trim());
+}
+
+/** A thread name at most KEY_CHARS long: cut at the last space before the limit when there is one. */
+export function capKey(key) {
+    const text = String(key ?? '');
+    if (text.length <= KEY_CHARS) return text;
+    const head = text.slice(0, KEY_CHARS);
+    const space = head.lastIndexOf(' ');
+    return (space >= KEY_CHARS / 2 ? head.slice(0, space) : head).trim();
+}
+
+/**
+ * The line without the labels the Director does not keep (RESERVED_LABEL, IGNORED_LABELS):
+ * `{ line, dropped: [label] }`.
+ */
+export function withoutDroppedLabels(line) {
+    const labels = line?.labels;
+    if (!labels || typeof labels !== 'object') return { line, dropped: [] };
+    const kept = {};
+    const dropped = [];
+    for (const [label, value] of Object.entries(labels)) {
+        const name = String(label).trim();
+        if (RESERVED_LABEL.test(name) || RESERVED_LABEL.test(name.toLowerCase()) || IGNORED_LABELS.has(name.toLowerCase())) dropped.push(name);
+        else kept[label] = value;
+    }
+    return dropped.length ? { line: { ...line, labels: kept }, dropped } : { line, dropped };
+}
+
+function droppedProblem(line, dropped) {
+    const xp = dropped.filter(label => IGNORED_LABELS.has(label.toLowerCase()));
+    const other = dropped.filter(label => !IGNORED_LABELS.has(label.toLowerCase()));
+    const said = [
+        xp.length ? `${xp.map(label => `"${label}:"`).join(', ')} is ignored: quest XP comes from the quest's difficulty, never a written amount` : '',
+        other.length ? `${other.map(label => `"${label}:"`).join(', ')} ${other.length === 1 ? 'is a name' : 'are names'} the Director does not keep` : '',
+    ].filter(Boolean).join('; ');
+    return { kind: 'label', severity: 'info', key: capKey(bareName(line?.name)), op: line?.op, text: `${said}; the rest of the line is used.` };
 }
 
 /**
@@ -93,7 +143,8 @@ export function lineText(line) {
 export function toV1Op(line) {
     const op = line?.op;
     if (!['+', '-', '~', '!'].includes(op)) return { error: `"${lineText(line)}" asks code to decide something; Director lines use + ~ - or !.` };
-    const key = bareName(line?.name);
+    const written = bareName(line?.name);
+    const key = capKey(written);
     const id = lineKey(key);
     if (!id) return { error: `"${lineText(line)}" names nothing.` };
     const labels = Object.entries(line?.labels ?? {})
@@ -109,8 +160,9 @@ export function toV1Op(line) {
             kind: op === '+' ? line.kind : null,
             key,
             id,
-            raw: String(line?.raw ?? '').trim() || lineText(line),
+            raw: clip(String(line?.raw ?? '').trim()) || lineText(line),
         },
+        ...(key !== written ? { cut: written.length } : {}),
     };
 }
 
@@ -131,11 +183,16 @@ function newId(ctx, taken) {
     throw new Error('No free thread id.');
 }
 
-/** Adds a problem to the Director's list (the newest 50 are kept). */
+/**
+ * Adds a problem to the Director's list. The list is only added to until it holds PROBLEM_ROOM, then
+ * cut back to the newest PROBLEM_LIMIT: an append is one small change in the receipt, where cutting it
+ * to 50 every time made each new problem rewrite the whole list. Readers show the newest 50.
+ */
 export function addProblem(director, ctx, problem) {
     const entry = { rev: revOf(ctx), turn: director.turn.n, ...problem };
     for (const name of Object.keys(entry)) if (entry[name] === undefined) delete entry[name];
-    director.problems = [...director.problems, entry].slice(-PROBLEM_LIMIT);
+    if (director.problems.length >= PROBLEM_ROOM) director.problems = [...director.problems.slice(-(PROBLEM_LIMIT - 1)), entry];
+    else director.problems.push(entry);
 }
 
 const withArticle = word => `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
@@ -177,8 +234,11 @@ export function applyThreadLine(ctx, given) {
     const director = ctx.draft('director');
     beginTurn(director, ctx, given);
     const raw = lineText(given);
+    // Labels the Director does not keep are left out first (a Problem says which).
+    const { line: kept, dropped } = withoutDroppedLabels(given);
+    if (dropped.length) addProblem(director, ctx, droppedProblem(given, dropped));
     // A quest line's own labels (F83 `met:`, F85 `progress:`) are taken out before v1 reads it.
-    const { line, met, metText } = splitQuestLine(given);
+    const { line, met, metText } = splitQuestLine(kept);
     if (met !== null && onlyOwnLabels(line)) return metOnly(ctx, director, line, met, metText, raw);
     const read = toV1Op(line);
     if (read.error) {
@@ -186,6 +246,7 @@ export function applyThreadLine(ctx, given) {
         return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['unread'] } };
     }
     const op = read.op;
+    if (read.cut) addProblem(director, ctx, { kind: 'long-name', severity: 'info', key: op.key, op: op.op, text: `A name ${read.cut} characters long was cut to "${op.key}" (names are at most ${KEY_CHARS}).` });
     const said = readerSaid(ctx);
     const tracker = toTracker(director, { contracts: true });
     const ops = [op];
@@ -213,6 +274,15 @@ export function applyThreadLine(ctx, given) {
     const result = applyOps(tracker, ops, { message: director.turn.n, time: director.time.minutes, said });
     const findings = (again ? result.problems.slice(1) : result.problems).filter(finding => finding.key !== OTHER_QUEST.key);
     const records = result.tracker.records.filter(record => record.id !== OTHER_QUEST.id);
+    // One reply adds at most NEW_THREADS_PER_REPLY threads: past that a line that would add one is not used.
+    const known = new Set(orderedThreads(director).map(thread => lineKey(thread.key)));
+    const adding = records.filter(record => !known.has(record.id)).length;
+    const addedSoFar = Number.isSafeInteger(director.turn.added) ? director.turn.added : 0;
+    if (adding > 0 && addedSoFar + adding > NEW_THREADS_PER_REPLY) {
+        addProblem(director, ctx, { kind: 'too-many', severity: 'warn', key: op.key, op: op.op, text: `"${op.key}" was not added: one reply adds at most ${NEW_THREADS_PER_REPLY} new threads.` });
+        return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['too-many'] } };
+    }
+    if (adding > 0) director.turn.added = addedSoFar + adding;
 
     // A `~` on a name not tracked becomes v1's hook; the line's own kind says what it is.
     const added = findings.find(finding => finding.kind === 'untracked-added');
@@ -335,9 +405,10 @@ export function applyTimeLine(ctx, line) {
     beginTurn(director, ctx, line);
     const settings = settingsFrom(typeof ctx.settings === 'function' ? ctx.settings() : ctx.settings);
     const calendar = calendarOf(settings, packCalendarOf(ctx.query));
-    const next = timeAfter(line, director.time.minutes, calendar);
+    const next = timeAfter(line, director.time.minutes, calendar, { maxJump: maxJumpMinutes(settings) });
+    if (next.problem) addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? '').slice(0, KEY_CHARS), op: line?.op, text: next.problem });
     if (next.error) {
-        addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? ''), op: line?.op, text: next.error });
+        addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? '').slice(0, KEY_CHARS), op: line?.op, text: next.error });
         return { summary: `Director: ${lineText(line)} (not used)`, narrate: false, data: { minutes: director.time.minutes } };
     }
     const before = director.time.minutes;
@@ -345,6 +416,6 @@ export function applyTimeLine(ctx, line) {
     return {
         summary: `Story time: ${calendar.format(next.minutes)}.`,
         narrate: false,
-        data: { minutes: next.minutes, from: before },
+        data: { minutes: next.minutes, from: before, ...(next.held ? { held: next.held } : {}) },
     };
 }

@@ -51,6 +51,8 @@ export const part = {
             dormantReplies: { type: 'int', label: 'Quiet after replies', min: 1, max: 500 },
             dormantDays: { type: 'int', label: 'Quiet after story days', min: 1, max: 3650 },
             dueSoonDays: { type: 'int', label: 'Due soon within days', min: 0, max: 365 },
+            // One time line moves the clock forward at most this far; a longer jump is held to it, with a Problem.
+            maxJump: { type: 'int', label: 'Longest time jump (story days)', min: 1, max: 3650 },
         },
     },
     tabs: [],

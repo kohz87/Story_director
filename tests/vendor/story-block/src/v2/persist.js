@@ -6,6 +6,7 @@
 // * `sid` and `swipe` say which swipe wrote the record. SillyTavern copies `extra` into a new swipe, so a
 //   record whose `swipe` is not the shown swipe is only trusted when no other swipe holds the same `sid`
 //   (a swipe deleted before it shifted its index); otherwise it is a copy and the swipe has no record.
+//   The store stamps such a shifted record again on rebuild (`restamp`), so it never matches a later copy.
 // * `spans` = [{ n, story }]: how many of `ops` each append added and whether it came from a story capture,
 //   so a Re-read can replace the story ops and keep the rest.
 // * `rev` = meta.rev of the state after this carrier, for the host's check after a save.
@@ -52,6 +53,16 @@ export function readRecord(message) {
     return copied ? null : record;
 }
 
+// A trusted record stamped with another swipe (it moved down when an earlier swipe was deleted) is
+// stamped again with the swipe it now is, so a copy SillyTavern makes of it for a new swipe at its old
+// index is seen as a copy. True when it wrote.
+export function restamp(message) {
+    const record = readRecord(message);
+    if (!record || record.swipe === undefined || record.swipe === swipeOf(message)) return false;
+    writeRecord(message, record);
+    return true;
+}
+
 // Writes the record for the shown swipe and keeps swipe_info in step. Touches nothing else in the message.
 export function writeRecord(message, record) {
     const swipe = swipeOf(message);
@@ -69,7 +80,9 @@ export function writeRecord(message, record) {
 // One save per burst. `touch()` marks a change; `schedule(ms)` saves `ms` after the last call; `flush()`
 // saves now (waiting for a save already running) and rethrows a failure. A failed save leaves `dirty()`
 // true so the next flush tries again.
-export function createSaver({ save, onError = null, timers = globalThis } = {}) {
+// `verify` (SPEC §3.3): `{ before() → token, after(token) → '' | problem }`, asked around each save that
+// nothing was changed during; a problem counts as a failed save (stays dirty, thrown or told to onError).
+export function createSaver({ save, onError = null, timers = globalThis, verify = null } = {}) {
     if (typeof save !== 'function') throw new TypeError('createSaver needs a save function.');
     let version = 0;
     let saved = 0;
@@ -87,9 +100,13 @@ export function createSaver({ save, onError = null, timers = globalThis } = {}) 
         while (running) await running.catch(() => {});
         if (!dirty()) return;
         const target = version;
+        const token = verify?.before?.();
         running = Promise.resolve().then(() => save());
         try {
             await running;
+            // A change made while the save ran goes with the next save, which checks it then.
+            const problem = version === target ? verify?.after?.(token) : '';
+            if (problem) throw new Error(problem);
             saved = target;
         } finally {
             running = null;

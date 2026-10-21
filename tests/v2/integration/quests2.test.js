@@ -122,7 +122,7 @@ test('F86/F87: with RPG Battle\'s tiers, quest.ranks is its ladder and a ranked 
     await host.send('Done.', reply('The reeve pays.', ['- quest Bandit Camp — turned in']));
     assert.deepEqual(wallet(host), { coin: 230 });
     const turnIn = receipts(host).find(receipt => /turns in Bandit Camp/.test(receipt.summary));
-    assert.match(turnIn.summary, /230 gold paid \(reward held to Soul Class II range: 50–230 gold \(the story said 5000 gold\)\)/);
+    assert.match(turnIn.summary, /230 gold paid \(reward clamped to Soul Class II range: 50–230 gold \(clamped from 5000 gold\)\)/);
     host.close();
 });
 

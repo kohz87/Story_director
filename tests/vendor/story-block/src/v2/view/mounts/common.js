@@ -19,6 +19,7 @@
 // The scope given to the renderer: { state, q, draft, settings, changes, mount, index, screenId, api, query },
 // and for cards also { before, replyOps } (the state before the reply, the reply's own ops).
 
+import { themeVars } from '../css.js';
 import { resolveData } from '../screens.js';
 
 const disposers = new WeakMap();
@@ -109,8 +110,9 @@ export function drawScreen(el, screenId, mount, { deps, state, changes = [], dra
     el.setAttribute('data-ss-mount', mount);
     // The same element may show another screen later (the game view's body): drop the last one's theme.
     for (const key of themed.get(el) ?? []) el.style.removeProperty?.(key);
-    const theme = Object.entries(screen.theme ?? {});
-    for (const [key, value] of theme) el.style.setProperty(key, String(value));
+    // Only values that pass css.js's checks are set (screens.js already refused a screen with others).
+    const theme = themeVars(screen.theme ?? {}).vars;
+    for (const [key, value] of theme) el.style.setProperty(key, value);
     themed.set(el, theme.map(([key]) => key));
 
     const scope = {

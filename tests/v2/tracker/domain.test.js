@@ -61,7 +61,7 @@ test('the validator accepts what capture writes and rejects every malformed part
         [d => { d.threads[wolf].track = []; }, /track/],
         [d => { d.keys.ghost = 'th_nothing0'; }, /points at no thread/],
         [d => { delete d.keys['wolf hunt']; }, /missing from director\.keys/],
-        [d => { d.problems = Array.from({ length: 51 }, () => ({ rev: 1, kind: 'x', text: 'y' })); }, /at most 50/],
+        [d => { d.problems = Array.from({ length: 101 }, () => ({ rev: 1, kind: 'x', text: 'y' })); }, /at most 100/],
         [d => { d.problems = [{ kind: 'x', text: 'y' }]; }, /rev, kind and text/],
         [d => { d.turn = { n: -1 }; }, /turn is malformed/],
     ];

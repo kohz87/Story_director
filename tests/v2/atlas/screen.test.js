@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { part } from '../../../src/v2/atlas/index.js';
 import { MAP_SCREEN_ID, mapScreen } from '../../../src/v2/atlas/screen.js';
 import { MAP_WIDGET, atlasMapWidget, forgetViews } from '../../../src/v2/atlas/widget.js';
-import { validateScreen } from './vendor/story-block/src/v2/view/screens.js';
+import { validateScreen } from '../../vendor/story-block/src/v2/view/screens.js';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { command, makeState, query } from './helpers/fake-ctx.js';
 

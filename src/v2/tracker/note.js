@@ -15,6 +15,12 @@ import { orderedThreads, toTracker } from './convert.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
 
 export const TAIL_BUDGET = 500;
+/**
+ * The most relevant threads the tail lists, at most (B-b1-capture-13). v1's note drops threads from the
+ * end until it fits its budget, building the note again each time, so with hundreds of threads every
+ * reply paid for all of them; 40 short ones already fill the budget.
+ */
+export const TAIL_THREADS = 40;
 
 const V1_LINES = CHANGE_INSTRUCTION.split('\n');
 const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:'));
@@ -85,6 +91,8 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
         recentText: said,
         settings: { dormantReplies: settings.dormantReplies, dormantDays: settings.dormantDays, dueSoonDays: settings.dueSoonDays },
     });
+    // Highest priority first: the rest would only be cut again by the budget.
+    if (selection.relevant.length > TAIL_THREADS) selection.relevant = selection.relevant.slice(0, TAIL_THREADS);
     // What the While away recap (the time part's `time.recap`) tells is not repeated under Due now or
     // Arriving (v1 note.js: the recapped items leave those lines).
     const recapped = recappedIds(view);

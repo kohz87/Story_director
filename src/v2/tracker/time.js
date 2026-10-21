@@ -19,6 +19,11 @@ export const PRESET_CHOICES = Object.freeze([PACK_PRESET, 'gregorian', 'custom']
 /** The claim that keeps the clock from being seeded from a pack twice. */
 export const SEED_CLAIM = 'clock:seed';
 
+/** The longest a single time line may move the clock forward, in story days (`maxJump`), by default. */
+export const MAX_JUMP_DAYS = 30;
+/** The furthest year a time line may name, either way of year 0. */
+export const MAX_YEAR = 999999;
+
 /** The part's settings defaults: v1's calendar and relevance defaults, plain copies. */
 export function settingsDefaults() {
     return {
@@ -26,7 +31,14 @@ export function settingsDefaults() {
         dormantReplies: DEFAULTS.dormantReplies,
         dormantDays: DEFAULTS.dormantDays,
         dueSoonDays: DEFAULTS.dueSoonDays,
+        maxJump: MAX_JUMP_DAYS,
     };
+}
+
+/** The `maxJump` setting in minutes: a whole number of days, 1 or more, else the default. */
+export function maxJumpMinutes(settings) {
+    const days = settings?.maxJump;
+    return (Number.isSafeInteger(days) && days >= 1 ? days : MAX_JUMP_DAYS) * DAY_MINUTES;
 }
 
 /** The module's settings as handed to a handler or a view: a function, an object, or nothing. */
@@ -123,21 +135,51 @@ export function durationMinutes(input) {
  * `{ error }` in plain words. A date alone runs from its day's start, as v1 reads the scene's
  * time; a bare clock time or part of the day that is earlier than now is the next day's.
  */
-export function timeAfter(line, minutes, calendar) {
+export function timeAfter(line, minutes, calendar, { maxJump = MAX_JUMP_DAYS * DAY_MINUTES } = {}) {
     const words = [line?.name, line?.text].map(part => String(part ?? '').trim()).filter(Boolean).join(' ');
     if (line?.op === '-' || line?.op === '?') return { error: 'Story time only moves forward or is set: write "! time +2h" or "~ time <date, clock time>".' };
     if (!words) return { error: 'A time line needs a date or a stretch of time.' };
+    const shown = words.length > 80 ? `${words.slice(0, 79)}…` : words;
     const known = Number.isInteger(minutes);
     const stretch = durationMinutes(words);
     if (stretch !== null) {
-        if (!known) return { error: `The story time is not set yet, so "${words}" cannot move it on; write "~ time <date, clock time>" first.` };
-        return { minutes: minutes + stretch };
+        if (!known) return { error: `The story time is not set yet, so "${shown}" cannot move it on; write "~ time <date, clock time>" first.` };
+        return held(minutes, minutes + stretch, maxJump, shown);
     }
+    const bad = badClock(words);
+    if (bad) return { error: `"${shown}" has ${bad}, which is not a clock time; the story time is left as it was.` };
     const parsed = calendar.parse(words, { reference: known ? minutes : null });
-    if (!parsed || !Number.isFinite(parsed.abs)) return { error: `"${words}" is not a date or a stretch of time on this calendar.` };
+    if (!parsed || !Number.isFinite(parsed.abs)) return { error: `"${shown}" is not a date or a stretch of time on this calendar.` };
+    if (!Number.isSafeInteger(parsed.year) || Math.abs(parsed.year) > MAX_YEAR) return { error: `"${shown}" names a year past ${MAX_YEAR}; the story time is left as it was.` };
     let abs = Math.round(parsed.abs);
     // No date written (only "evening", "08:00 am"): the reference's day, or the next one.
     const bare = calendar.parse(words, { reference: null }) === null;
     if (known && bare && abs < minutes) abs += DAY_MINUTES;
-    return { minutes: abs };
+    return known ? held(minutes, abs, maxJump, shown) : { minutes: abs };
+}
+
+// A move forward of more than `maxJump` minutes is held to it: `{ minutes, held: { asked } }`.
+function held(minutes, next, maxJump, shown) {
+    if (!(next - minutes > maxJump)) return { minutes: next };
+    const days = Math.round(maxJump / DAY_MINUTES);
+    return {
+        minutes: minutes + maxJump,
+        held: { asked: Number.isSafeInteger(next) ? next - minutes : null },
+        problem: `"${shown}" moves the story time more than ${days} day${days === 1 ? '' : 's'} at once; it moved ${days} day${days === 1 ? '' : 's'} (the longest jump is the Calendar setting "Longest time jump").`,
+    };
+}
+
+// A written clock time no clock shows ("25:99 pm", "13 pm", "0 am"), in words, or ''. The calendar's
+// reader skips such a time and reads the date alone, at its day's start.
+const CLOCKISH = /(?<![\p{L}\d:.])(\d{1,3})(?::(\d{1,3}))?(?:\s*([ap])\.?\s?m\.?)?(?![\p{L}\d])/giu;
+function badClock(words) {
+    for (const match of words.matchAll(CLOCKISH)) {
+        const [, hourText, minuteText, half] = match;
+        if (minuteText === undefined && !half) continue;
+        const hour = Number(hourText);
+        const minute = minuteText === undefined ? 0 : Number(minuteText);
+        const ok = minuteText === undefined || minuteText.length === 2;
+        if (!ok || minute > 59 || (half ? hour < 1 || hour > 12 : hour > 23)) return `"${match[0].trim()}"`;
+    }
+    return '';
 }

@@ -99,7 +99,7 @@ test('abandon gives up a taken quest; not an offer, not twice', () => {
     assert.deepEqual(host.state, before);
 });
 
-test('finish, foes: counts whole-word matches since taken, pays 8 × 1 gold once, claims the fights, tells it with code numbers', () => {
+test('finish, foes: counts whole-word matches since taken, pays 1 gold for each of the target\'s 3 once, claims the fights, tells it with code numbers', () => {
     const host = takenWolves([
         fight(5, [{ name: 'Wolf', count: 4 }]),                         // before it was taken on
         fight(12, [{ name: 'Grey Wolf', count: 5 }, { name: 'Wolfhound Handler', count: 1 }]),
@@ -108,9 +108,10 @@ test('finish, foes: counts whole-word matches since taken, pays 8 × 1 gold once
     ]);
     const result = host.run(finish, { id: 'th_wolves01' });
     assert.equal(result.ok, true, result.message);
-    assert.equal(result.receipt.summary, 'Astra turns in EastBluffWolves: 8 wolves beaten (target 3), 8 gold paid.');
+    // B-b4-10: a per-unit reward pays for the target, not for every foe beaten past it.
+    assert.equal(result.receipt.summary, 'Astra turns in EastBluffWolves: 8 wolves beaten (target 3), 3 gold paid.');
     assert.equal(result.receipt.narrate, true);
-    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 8 });
+    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 3 });
     assert.equal(host.state.meta.claims['quest:th_wolves01:paid'], true);
     // MODULES §F7: the two fights it counted are claimed; the one before it and the lost one are not.
     assert.deepEqual(Object.keys(host.state.meta.claims).filter(key => key.startsWith('beaten:')).sort(), ['beaten:12', 'beaten:14']);
@@ -118,10 +119,11 @@ test('finish, foes: counts whole-word matches since taken, pays 8 × 1 gold once
     const thread = host.state.domains.director.threads.th_wolves01;
     assert.equal(thread.status, 'resolved');
     assert.deepEqual(thread.ended, { rev: 12, reason: 'turned in', outcome: 'done' });
-    assert.deepEqual(result.receipt.data.paid, { amount: 8 });
+    assert.deepEqual(result.receipt.data.paid, { amount: 3 });
+    assert.equal(result.receipt.data.units, 3);
     assert.equal(result.receipt.data.xp, null);           // no party.grantXp: none, and no failure
     assert.ok(host.calls.some(call => call.type === 'party.grantXp'));
-    assert.deepEqual(host.calls.find(call => call.type === 'wallet.receive').payload, { owner: 'party', amount: 8, note: 'EastBluffWolves reward' });
+    assert.deepEqual(host.calls.find(call => call.type === 'wallet.receive').payload, { owner: 'party', amount: 3, note: 'EastBluffWolves reward' });
 });
 
 test('finish grants XP through party.grantXp when RPG Battle has it', () => {

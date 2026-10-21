@@ -119,7 +119,7 @@ test('F84: quest.details gives goal, note, terms, rank, giver, due, dates, statu
     assert.deepEqual(got, {
         id: 'th_ring0001', key: 'Lost Ring', goal: 'Find the ring', hasGoal: true, countable: false, note: 'searching the well',
         giver: 'Mara', due: 'Goldwane 3', rank: { id: 'E', title: 'E-rank', reward: [50, 230] },
-        terms: { target: '', reward: '900 gold', held: 'reward held to E-rank range: 50–230 gold (the story said 900 gold)', text: '900 gold (reward held to E-rank range: 50–230 gold (the story said 900 gold)); E-rank' },
+        terms: { target: '', reward: '900 gold', held: 'reward clamped to E-rank range: 50–230 gold (clamped from 900 gold)', text: '900 gold (reward clamped to E-rank range: 50–230 gold (clamped from 900 gold)); E-rank' },
         ready: true, taken: { rev: 4, at: 600 }, ended: null,
         status: { state: 'here', text: 'Ready to turn in — goal met' },
         history: [{ rev: 4, text: 'Astra takes on Lost Ring: 900 gold.' }, { rev: 9, text: '~ quest Lost Ring | met: yes' }],

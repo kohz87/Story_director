@@ -40,7 +40,9 @@ test('the screens register in Story Block\'s screen registry and list by mount',
     const registry = vendoredScreens();
     registry.addModule('story-director', part.screens);
     assert.deepEqual(registry.problems(), []);
-    assert.deepEqual(registry.list('tab').map(entry => entry.id), [DIRECTOR_ID, QUESTS_ID]);
+    // Story Block sorts the navigation by screen `order` (SB #75): an id ending in /quests takes the
+    // usual quests place (20); the Director screen gives no order, so it comes after the usual ones.
+    assert.deepEqual(registry.list('tab').map(entry => entry.id), [QUESTS_ID, DIRECTOR_ID]);
     assert.deepEqual(registry.list('card').map(entry => entry.id), [STATUS_CARD_ID]);
     assert.deepEqual(registry.list('hud').map(entry => entry.id), [HUD_ID]);
     assert.deepEqual(registry.list('dialog'), []);

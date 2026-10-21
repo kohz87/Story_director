@@ -177,7 +177,7 @@ test('F94: a step or status saying turned in counts the same as the - line', () 
     let state = wolfCull(options);
     state = withFights(state, [{ rev: thread(state, 'Wolf Cull').taken.rev + 1, foes: [{ name: 'Wolf', count: 4 }], won: true }]);
     const after = reply(state, '~ quest Wolf Cull | step: turned in', { said: 'Done.', ...options }).state;
-    assert.deepEqual(paid, [8], 'per wolf beaten');
+    assert.deepEqual(paid, [6], 'per wolf beaten, up to the target\'s 3 (B-b4-10)');
     assert.equal(thread(after, 'Wolf Cull').status, 'resolved');
 });
 
