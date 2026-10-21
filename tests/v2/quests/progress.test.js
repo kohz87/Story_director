@@ -1,0 +1,102 @@
+// Quests part: the quest.progress query, the context tail and static text.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { part, QUEST_STATIC } from '../../../src/v2/quests/index.js';
+import { fakeQueries, makeState, quest } from './helpers/fake-ctx.js';
+
+const progress = part.queries['quest.progress'];
+const fight = (rev, foes, won = true) => ({ rev, foes, won });
+const viewOf = state => ({ state, query: (name, args) => fakeQueries[name](state, args), settings: {}, chat: { length: 3, lastUser: '' } });
+
+const wolves = (more = {}) => quest('th_wolves01', 'EastBluffWolves', { goal: 'Clear at least 3 wolves', reward: '1 silver each wolf', giver: 'Orsa' },
+    { taken: { rev: 10 }, target: { noun: 'wolves', count: 3, kind: 'foes' }, reward: { amount: 1, each: true, unit: 'silver', text: '1 silver each wolf' }, ...more });
+
+test('progress for foes counts only fights after taken.rev, whole words', () => {
+    const state = makeState({ threads: [wolves()], beaten: [
+        fight(9, [{ name: 'Wolf', count: 5 }]), fight(10, [{ name: 'Wolf', count: 5 }]),
+        fight(11, [{ name: 'Dire Wolf', count: 2 }, { name: 'Wolfhound Handler', count: 3 }]),
+    ] });
+    const want = { have: 2, need: 3, met: false, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.' };
+    // Through the documented state layouts (no query handed to the query) …
+    assert.deepEqual(progress(state, { id: 'th_wolves01' }), want);
+    // … and through the host's queries when it passes them.
+    const seen = [];
+    const query = (name, args) => { seen.push([name, args]); return fakeQueries[name](state, args); };
+    assert.deepEqual(progress(state, { id: 'th_wolves01' }, { query }), want);
+    assert.deepEqual(seen, [['combat.foesBeaten', { sinceRev: 10 }]]);
+    state.domains.combat.beaten.push(fight(12, [{ name: 'Wolves', count: 6 }]));
+    assert.deepEqual(progress(state, { key: 'EastBluffWolves' }), { ...want, have: 8, met: true, label: 'Wolves 8/3', reason: '' });
+});
+
+test('progress accepts foes already flattened by the combat query', () => {
+    const state = makeState({ threads: [wolves()] });
+    const query = () => [{ name: 'Wolf', count: 2 }, { name: 'Grey Wolf' }];
+    assert.equal(progress(state, { id: 'th_wolves01' }, { query }).have, 3);
+});
+
+test('progress for items reads the inventory; no target and unknown quests', () => {
+    const state = makeState({
+        threads: [
+            quest('th_herbs001', 'Herb Run', { goal: 'Bring 5 moonleaf' }),
+            quest('th_story001', 'Who Poisoned', { goal: 'Find out who poisoned the well' }, { taken: { rev: 2 } }),
+        ],
+        defs: [{ id: 'story/moonleaf', name: 'Moonleaf' }, { id: 'story/moon', name: 'Moon Charm' }],
+        stacks: [{ id: 'it_aaaaaaa1', def: 'story/moonleaf', qty: 2 }, { id: 'it_bbbbbbb2', def: 'story/moonleaf', qty: 1 }, { id: 'it_ccccccc3', def: 'story/moon', qty: 9 }],
+    });
+    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.' });
+    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, source: null, noun: '', label: '', reason: 'No target code can count; the story decides when it is done.' });
+    assert.equal(progress(state, { id: 'th_nope0001' }), null);
+});
+
+test('a foes quest not taken on here counts nothing yet', () => {
+    const state = makeState({ threads: [quest('th_wolves01', 'Wolves', { goal: 'kill 3 wolves' })], beaten: [fight(4, [{ name: 'Wolf', count: 9 }])] });
+    const got = progress(state, { id: 'th_wolves01' });
+    assert.equal(got.have, 0);
+    assert.equal(got.source, 'fights');
+    assert.match(got.reason, /from when it is taken on/);
+});
+
+test('tail: open offers and quests ready to turn in; done-but-elsewhere is optional', () => {
+    const state = makeState({
+        threads: [
+            quest('th_offer001', 'Granary Rats', { goal: 'kill 6 rats', giver: 'Fenna' }, { offer: true }),
+            wolves(),
+            quest('th_bears001', 'Bear Trouble', { goal: 'kill 1 bear', giver: 'Hobb' }, { taken: { rev: 10 }, target: { noun: 'bear', count: 1, kind: 'foes' } }),
+            quest('th_closed01', 'Old Job', {}, { status: 'resolved', offer: true, ended: { rev: 3, reason: 'x', outcome: 'declined' } }),
+        ],
+        beaten: [fight(11, [{ name: 'Wolf', count: 8 }, { name: 'Black Bear', count: 1 }])],
+        scene: { place: { kind: 'wild' }, present: ['Orsa'] },
+    });
+    const tail = part.context.tail(viewOf(state));
+    assert.deepEqual(tail.lines, [
+        'Quest offers not yet taken (the reader takes them on or turns them down): Granary Rats (from Fenna).',
+        'Quests ready to turn in (code pays when the reader turns one in): EastBluffWolves (Wolves 8/3).',
+    ]);
+    assert.deepEqual(tail.optional, ['Quests done but turned in only at a settlement or with their giver: Bear Trouble (Bears 1/1).']);
+    assert.equal(part.context.budget, 150);
+});
+
+test('tail stays within its budget and is empty without quests', () => {
+    const threads = Array.from({ length: 40 }, (_, i) => quest(`th_offer${String(i).padStart(3, '0')}`, `A rather long offered job number ${i}`, { giver: 'Someone with a long name' }, { offer: true }));
+    const tail = part.context.tail(viewOf(makeState({ threads })));
+    assert.equal(tail.lines.length, 1);
+    assert.ok(tail.lines.join('\n').length <= 600);
+    assert.match(tail.lines[0], /and 34 more/);
+    assert.deepEqual(part.context.tail(viewOf(makeState())), { lines: [], optional: [] });
+    assert.deepEqual(part.context.tail({ state: { domains: {} } }), { lines: [], optional: [] });
+});
+
+test('static text is byte-identical whatever the state', () => {
+    assert.equal(part.context.static(), QUEST_STATIC);
+    assert.equal(part.context.static(), part.context.static());
+    assert.doesNotMatch(QUEST_STATIC, /\d/);
+});
+
+test('the part has the MODULES §A shape and no domain of its own', () => {
+    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'tabs']);
+    assert.deepEqual(part.domains, {});
+    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.decline', 'quest.abandon', 'quest.finish']);
+    assert.deepEqual(Object.keys(part.queries), ['quest.progress']);
+    assert.equal(part.tabs[0].id, 'quests');
+    assert.equal(part.tabs[0].title, 'Quests');
+});
