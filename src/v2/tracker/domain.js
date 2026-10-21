@@ -10,7 +10,8 @@
 // }
 // `turn` is this part's own: v1's rules count replies (a record changed in the last three
 // replies is relevant; a `- hook` beside the `+ quest` of the same reply is not an ending), and
-// capture hands lines over one at a time.
+// capture hands lines over one at a time. The quests part marks in it the one quest this reply
+// turned in on the story's word alone (`turn.vouched`, a thread id; B-b3-r2-5).
 
 import { lineKey } from '../../changes.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';

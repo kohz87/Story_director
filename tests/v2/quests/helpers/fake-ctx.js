@@ -31,15 +31,22 @@ function sfc32(seed) {
 
 /** Fake commands other modules own, as `(state, payload) => result`, mutating the transaction state. */
 export const fakeCommands = {
-    // MODULES §F1/§F5: { owner, amount, note? }, one integer per owner under `coin`.
+    // MODULES §F1/§F5: { owner, amount, note?, story? }, one integer per owner under `coin`. `story: true`
+    // (B-b3-r2-5) is the story's money: with `state.storyBudget` set it is held to what is left of it
+    // (Story Block's per-reply coin budget), and `data.amount` says what was paid.
     'wallet.receive'(state, payload) {
-        const { owner, amount } = payload;
-        if (Object.keys(payload).some(key => !['owner', 'amount', 'note'].includes(key))) throw codeError('INVALID', 'Unknown field.');
+        const { owner, story } = payload;
+        let { amount } = payload;
+        if (Object.keys(payload).some(key => !['owner', 'amount', 'note', 'story'].includes(key))) throw codeError('INVALID', 'Unknown field.');
         if (!Number.isSafeInteger(amount) || amount < 0) throw codeError('INVALID', 'Bad amount.');
+        if (story === true && Number.isSafeInteger(state.storyBudget)) {
+            amount = Math.min(amount, state.storyBudget);
+            state.storyBudget -= amount;
+        }
         const wallets = state.domains.inventory.wallets;
         wallets[owner] ??= {};
         wallets[owner].coin = (wallets[owner].coin ?? 0) + amount;
-        return { summary: `${amount} gold received.` };
+        return { summary: `${amount} gold received.`, data: { owner, amount } };
     },
     'inventory.consume'(state, { stack, qty }) {
         const record = state.domains.inventory.stacks[stack];
