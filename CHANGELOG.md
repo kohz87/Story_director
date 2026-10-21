@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.47
+
+- **Steps aside next to Story Block 2.** Story Director 0.9.47 is for Story Block 1. On a page where Story Block 2 is installed it no longer throws on load or on every reply; it says once that Story Director 2 is needed and runs as if Story Block were absent.
+
 ## 0.9.46
 
 - **Quest turn-ins work over plain HTTP.** Checkpoint and completion IDs no longer require `crypto.randomUUID`, which browsers can omit on HTTP LAN hosts. Use with Story Block **0.9.28** to restore journal reads and the Quests tab on those hosts. Existing quests and IDs remain intact; no chat reset or HTTPS change is required.
