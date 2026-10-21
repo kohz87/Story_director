@@ -88,7 +88,7 @@ const quests = {
     },
 };
 storySuite().announce({ id: 'rpg-battle', name: 'RPG Battle', owns: ['stats'], enabled: true, api: { quests } });
-await import('../index.js');
+await import('../index.v1.js');
 
 function reply(text, owner = randomId(), swipe = 0) {
     return { mes: text, is_user: false, swipe_id: swipe, extra: { storyBlockIdentity: { id: owner, swipe } } };

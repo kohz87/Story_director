@@ -28,8 +28,8 @@ test('take on an offer: taken at this receipt rev, target and reward settled by 
     assert.deepEqual(thread.taken, { rev: 11 });
     assert.equal(thread.rev, 11);
     assert.deepEqual(thread.target, { noun: 'wolves', count: 3, kind: 'foes' });
-    assert.deepEqual(thread.reward, { amount: 1, each: true, unit: 'silver', text: '1 silver each wolf' });
-    assert.equal(result.receipt.summary, 'Astra takes on EastBluffWolves: beat 3 wolves; 1 silver per wolf.');
+    assert.deepEqual(thread.reward, { amount: 1, each: true, unit: '', text: '1 silver each wolf' });
+    assert.equal(result.receipt.summary, 'Astra takes on EastBluffWolves: beat 3 wolves; 1 gold per wolf.');
     assert.equal(result.receipt.narrate, true);
 });
 
@@ -54,9 +54,9 @@ test('take refusals save nothing', () => {
     const before = structuredClone(host.state);
     assert.equal(host.run(take, { id: 'th_nope0001' }).code, 'NOT_FOUND');
     assert.equal(host.run(take, { id: 'th_hook0001' }).code, 'NOT_FOUND');
-    assert.equal(host.run(take, { id: 'th_done0001' }).code, 'INVALID');
+    assert.equal(host.run(take, { id: 'th_done0001' }).code, 'REFUSED');
     const again = host.run(take, { id: 'th_taken001' });
-    assert.equal(again.code, 'INVALID');
+    assert.equal(again.code, 'REFUSED');
     assert.match(again.message, /already taken on/);
     assert.deepEqual(host.state, before);
 });
@@ -79,27 +79,27 @@ test('decline closes an offer as declined; only open offers', () => {
     assert.equal(thread.offer, false);
     assert.deepEqual(thread.ended, { rev: 11, reason: 'turned down', outcome: 'declined' });
     const before = structuredClone(host.state);
-    assert.equal(host.run(decline, { id: 'th_wolves01' }).code, 'INVALID');
-    assert.equal(host.run(decline, { id: 'th_active01' }).code, 'INVALID');
+    assert.equal(host.run(decline, { id: 'th_wolves01' }).code, 'REFUSED');
+    assert.equal(host.run(decline, { id: 'th_active01' }).code, 'REFUSED');
     assert.equal(host.run(decline, { id: 'th_missing1' }).code, 'NOT_FOUND');
     assert.deepEqual(host.state, before);
 });
 
 test('abandon gives up a taken quest; not an offer, not twice', () => {
     const host = makeHost(makeState({ threads: [wolvesOffer()] }));
-    assert.equal(host.run(abandon, { id: 'th_wolves01' }).code, 'INVALID');
+    assert.equal(host.run(abandon, { id: 'th_wolves01' }).code, 'REFUSED');
     host.run(take, { id: 'th_wolves01' });
     const result = host.run(abandon, { id: 'th_wolves01', reason: 'too far' });
     assert.equal(result.ok, true);
     assert.equal(result.receipt.summary, 'Astra gives up EastBluffWolves.');
     assert.deepEqual(host.state.domains.director.threads.th_wolves01.ended, { rev: 12, reason: 'too far', outcome: 'abandoned' });
     const before = structuredClone(host.state);
-    assert.equal(host.run(abandon, { id: 'th_wolves01' }).code, 'INVALID');
-    assert.equal(host.run(finish, { id: 'th_wolves01' }).code, 'INVALID');
+    assert.equal(host.run(abandon, { id: 'th_wolves01' }).code, 'REFUSED');
+    assert.equal(host.run(finish, { id: 'th_wolves01' }).code, 'REFUSED');
     assert.deepEqual(host.state, before);
 });
 
-test('finish, foes: counts whole-word matches since taken, pays 8 × 1 silver once, tells it with code numbers', () => {
+test('finish, foes: counts whole-word matches since taken, pays 8 × 1 gold once, claims the fights, tells it with code numbers', () => {
     const host = takenWolves([
         fight(5, [{ name: 'Wolf', count: 4 }]),                         // before it was taken on
         fight(12, [{ name: 'Grey Wolf', count: 5 }, { name: 'Wolfhound Handler', count: 1 }]),
@@ -108,17 +108,20 @@ test('finish, foes: counts whole-word matches since taken, pays 8 × 1 silver on
     ]);
     const result = host.run(finish, { id: 'th_wolves01' });
     assert.equal(result.ok, true, result.message);
-    assert.equal(result.receipt.summary, 'Astra turns in EastBluffWolves: 8 wolves beaten (target 3), 8 silver paid.');
+    assert.equal(result.receipt.summary, 'Astra turns in EastBluffWolves: 8 wolves beaten (target 3), 8 gold paid.');
     assert.equal(result.receipt.narrate, true);
-    assert.deepEqual(host.state.domains.inventory.wallets.party, { silver: 8 });
+    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 8 });
     assert.equal(host.state.meta.claims['quest:th_wolves01:paid'], true);
+    // MODULES §F7: the two fights it counted are claimed; the one before it and the lost one are not.
+    assert.deepEqual(Object.keys(host.state.meta.claims).filter(key => key.startsWith('beaten:')).sort(), ['beaten:12', 'beaten:14']);
+    assert.deepEqual(result.receipt.data.fights, [12, 14]);
     const thread = host.state.domains.director.threads.th_wolves01;
     assert.equal(thread.status, 'resolved');
     assert.deepEqual(thread.ended, { rev: 12, reason: 'turned in', outcome: 'done' });
-    assert.deepEqual(result.receipt.data.paid, { amount: 8, currency: 'silver' });
+    assert.deepEqual(result.receipt.data.paid, { amount: 8 });
     assert.equal(result.receipt.data.xp, null);           // no party.grantXp: none, and no failure
     assert.ok(host.calls.some(call => call.type === 'party.grantXp'));
-    assert.deepEqual(host.calls.find(call => call.type === 'wallet.receive').payload, { owner: 'party', currency: 'silver', amount: 8, note: 'EastBluffWolves reward' });
+    assert.deepEqual(host.calls.find(call => call.type === 'wallet.receive').payload, { owner: 'party', amount: 8, note: 'EastBluffWolves reward' });
 });
 
 test('finish grants XP through party.grantXp when RPG Battle has it', () => {
@@ -128,7 +131,7 @@ test('finish grants XP through party.grantXp when RPG Battle has it', () => {
     const withXp = makeHost(host.state, { commands, queries: fakeQueries });
     const result = withXp.run(finish, { id: 'th_wolves01' });
     assert.equal(result.ok, true, result.message);
-    assert.deepEqual(withXp.state.domains.party.xpLog, [{ quest: 'th_wolves01', name: 'EastBluffWolves', difficulty: 'hard' }]);
+    assert.deepEqual(withXp.state.domains.party.xpLog, [{ quest: 'th_wolves01', difficulty: 'hard' }]);
     assert.deepEqual(result.receipt.data.xp, { xp: 40 });
 });
 
@@ -137,8 +140,8 @@ test('finish, fixed reward: paid once whatever the count', () => {
     host.state.domains.combat.beaten = [fight(3, [{ name: 'Cellar Rat Swarm', count: 9 }])];
     const result = host.run(finish, { id: 'th_rats0001' });
     assert.equal(result.ok, true, result.message);
-    assert.equal(result.receipt.summary, 'Astra turns in Granary Rats: 9 cellar rats beaten (target 6), 5 silver paid.');
-    assert.deepEqual(host.state.domains.inventory.wallets.party, { silver: 5 });
+    assert.equal(result.receipt.summary, 'Astra turns in Granary Rats: 9 cellar rats beaten (target 6), 5 gold paid.');
+    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 5 });
 });
 
 test('finish, items: hands over exactly the target count across stacks, pays per unit', () => {
@@ -154,13 +157,13 @@ test('finish, items: hands over exactly the target count across stacks, pays per
     }));
     const result = host.run(finish, { id: 'th_tails001' });
     assert.equal(result.ok, true, result.message);
-    assert.equal(result.receipt.summary, 'Astra turns in Tail Bounty: 5 wolf tails handed over (target 5), 10 copper paid.');
+    assert.equal(result.receipt.summary, 'Astra turns in Tail Bounty: 5 wolf tails handed over (target 5), 10 gold paid.');
     const stacks = host.state.domains.inventory.stacks;
     assert.equal(stacks.it_aaaaaaa1, undefined);
     assert.equal(stacks.it_bbbbbbb2.qty, 2);
     assert.equal(stacks.it_ccccccc3.qty, 2);
     assert.deepEqual(result.receipt.data.consumed, [{ stack: 'it_aaaaaaa1', qty: 3 }, { stack: 'it_bbbbbbb2', qty: 2 }]);
-    assert.deepEqual(host.state.domains.inventory.wallets.party, { copper: 10 });
+    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 10 });
 });
 
 test('finish with a reward that is not money pays nothing and says so', () => {
@@ -185,7 +188,7 @@ test('finish refusals: not met, wrong place, already paid, no target, not taken;
     host = takenWolves([fight(12, [{ name: 'Wolf', count: 3 }])], { place: { kind: 'wild' }, present: ['Fenna'] });
     before = structuredClone(host.state);
     result = host.run(finish, { id: 'th_wolves01' });
-    assert.equal(result.code, 'INVALID');
+    assert.equal(result.code, 'REFUSED');
     assert.equal(result.message, 'EastBluffWolves cannot be turned in here. Turn it in at a settlement or where Captain Orsa is.');
     assert.deepEqual(host.state, before);
     assert.equal(host.calls.filter(call => !call.rejected && call.type === 'wallet.receive').length, 0);
@@ -203,7 +206,7 @@ test('finish refusals: not met, wrong place, already paid, no target, not taken;
 
     // No target code can count; an offer not taken on.
     host = makeHost(makeState({ threads: [quest('th_story001', 'Who Poisoned', { goal: 'Find out who poisoned the well' }, { taken: { rev: 2 } }), wolvesOffer()], scene: settlement }));
-    assert.equal(host.run(finish, { id: 'th_story001' }).code, 'INVALID');
+    assert.equal(host.run(finish, { id: 'th_story001' }).code, 'REFUSED');
     assert.match(host.run(finish, { id: 'th_wolves01' }).message, /has not been taken on/);
     assert.equal(host.run(finish, { id: 'th_missing1' }).code, 'NOT_FOUND');
 });
@@ -245,4 +248,52 @@ test('without RPG Battle a foes quest cannot be finished, and says why', () => {
 test('the transaction refuses drafts of domains the module does not own', () => {
     const host = makeHost(makeState({ threads: [wolvesOffer()] }), { owns: [] });
     assert.equal(host.run(take, { id: 'th_wolves01' }).code, 'NOT_OWNER');
+});
+
+test('one fight pays one kill quest: a fight a turn-in counted is not counted again (MODULES §F7)', () => {
+    const rats = (id, key) => quest(id, key, { goal: 'Kill 3 rats', reward: '2 gold' }, { taken: { rev: 2 } });
+    const host = makeHost(makeState({ threads: [rats('th_ratsaaa1', 'Granary Rats'), rats('th_ratsbbb2', 'Cellar Rats')], scene: settlement }));
+    host.state.domains.combat.beaten = [fight(3, [{ name: 'Rat', count: 3 }]), fight(4, [{ name: 'Rat', count: 1 }, { name: 'Bandit', count: 1 }])];
+    const first = host.run(finish, { id: 'th_ratsaaa1' });
+    assert.equal(first.ok, true, first.message);
+    assert.deepEqual(first.receipt.data.fights, [3, 4]);
+    // The second quest sees no fight left: both were claimed by the first turn-in.
+    assert.deepEqual(part.queries['quest.progress'](host.state, { id: 'th_ratsbbb2' }, { query: (name, args) => fakeQueries[name](host.state, args) }).have, 0);
+    const before = structuredClone(host.state);
+    const second = host.run(finish, { id: 'th_ratsbbb2' });
+    assert.equal(second.code, 'NOT_ENOUGH');
+    assert.deepEqual(host.state, before);
+    // A new fight after that counts for it.
+    host.state.domains.combat.beaten.push(fight(20, [{ name: 'Giant Rat', count: 3 }]));
+    const third = host.run(finish, { id: 'th_ratsbbb2' });
+    assert.equal(third.ok, true, third.message);
+    assert.deepEqual(third.receipt.data.fights, [20]);
+    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 4 });
+});
+
+test('a refused turn-in claims no fights; item quests do not claim fights', () => {
+    const host = takenWolves([fight(12, [{ name: 'Wolf', count: 2 }])], { place: { kind: 'wild' }, present: [] });
+    assert.equal(host.run(finish, { id: 'th_wolves01' }).code, 'NOT_ENOUGH');
+    assert.equal(Object.keys(host.state.meta.claims).some(key => key.startsWith('beaten:')), false);
+    host.state.domains.combat.beaten.push(fight(13, [{ name: 'Wolf', count: 1 }]));
+    assert.equal(host.run(finish, { id: 'th_wolves01' }).code, 'REFUSED');   // the wild, nobody present
+    assert.equal(Object.keys(host.state.meta.claims).some(key => key.startsWith('beaten:')), false);
+
+    const pelts = makeHost(makeState({
+        threads: [quest('th_pelts001', 'Pelts', { goal: 'Bring 2 wolf pelts', reward: '3 gold' }, { taken: { rev: 2 } })],
+        scene: settlement, defs: [{ id: 'story/wolf-pelt', name: 'Wolf Pelt' }], stacks: [{ id: 'it_aaaaaaa1', def: 'story/wolf-pelt', qty: 2 }],
+        beaten: [fight(3, [{ name: 'Wolf', count: 2 }])], claims: { 'beaten:3': true },
+    }));
+    const result = pelts.run(finish, { id: 'th_pelts001' });
+    assert.equal(result.ok, true, result.message);
+    assert.deepEqual(Object.keys(pelts.state.meta.claims).sort(), ['beaten:3', 'quest:th_pelts001:paid']);
+});
+
+test('the reward is named in the chat\'s one currency', () => {
+    const state = makeState({ threads: [quest('th_rats0001', 'Granary Rats', { goal: 'Kill 2 rats', reward: '30 Gil' }, { taken: { rev: 2 } })], scene: settlement, beaten: [fight(3, [{ name: 'Rat', count: 2 }])] });
+    state.currency = { name: 'Gil', short: 'G' };
+    const host = makeHost(state);
+    const result = host.run(finish, { id: 'th_rats0001' });
+    assert.equal(result.ok, true, result.message);
+    assert.equal(result.receipt.summary, 'Astra turns in Granary Rats: 2 rats beaten (target 2), 30 Gil paid.');
 });

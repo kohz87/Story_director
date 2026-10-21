@@ -9,17 +9,17 @@
 // over, and the receipt tells the next reply what happened with those numbers.
 
 import { questDifficulty } from '../../changes.js';
-import { nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
-import { placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery } from './progress.js';
+import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
+import { beatenClaim, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { renderQuestsTab } from './tab.js';
 
 export { questLists };
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 
-// Error codes (SPEC §12). Being in the wrong place or a quest in the wrong state has no
-// code of its own in the spec, so both use INVALID; kept here so they change in one place.
-export const CODES = Object.freeze({ notFound: 'NOT_FOUND', invalid: 'INVALID', wrongPlace: 'INVALID', notMet: 'NOT_ENOUGH', claimed: 'CLAIMED', failed: 'FAILED' });
+// Error codes (SPEC §12, MODULES §F4): a rule refusal (a quest in the wrong state, the wrong
+// place, nothing code can count) is REFUSED; a target not met yet is NOT_ENOUGH.
+export const CODES = Object.freeze({ notFound: 'NOT_FOUND', invalid: 'REFUSED', wrongPlace: 'REFUSED', notMet: 'NOT_ENOUGH', claimed: 'CLAIMED', failed: 'FAILED' });
 
 function fail(ctx, code, message) {
     ctx.fail(code, message);
@@ -38,20 +38,18 @@ export function findQuest(director, payload = {}) {
 }
 
 /*
- * The meta.rev this receipt will carry, for `taken.rev` / `ended.rev` / `rev`. SPEC §2.4 says a
- * receipt's rev is meta.rev after it, but §3.2 gives a handler no way to read it: this takes
- * `ctx.rev` when the host provides it, else meta.rev + 1 through `ctx.read('meta')`, and refuses
- * the action otherwise (fights could not be counted "since" anything safely).
+ * The meta.rev this receipt will carry (`ctx.rev`, MODULES §F2), for `taken.rev` / `ended.rev` /
+ * `rev`. Without it the action is refused: fights could not be counted "since" anything safely.
  */
 function receiptRev(ctx) {
     if (Number.isSafeInteger(ctx.rev)) return ctx.rev;
-    try {
-        const meta = ctx.read('meta');
-        if (Number.isSafeInteger(meta?.rev)) return meta.rev + 1;
-    } catch {
-        // No meta through ctx.read.
-    }
     return fail(ctx, CODES.failed, 'Story Block did not say which revision this action is.');
+}
+
+/** The chat's one currency (`inventory.currency`, MODULES §F1), `{ name, short }`; gold without it. */
+function currencyOf(query) {
+    const currency = tryQuery(query, 'inventory.currency', {}, null);
+    return { name: currencyName(currency), short: text(currency?.short) };
 }
 
 /** The player character's name for summaries ("Astra"), else "The party". */
@@ -84,14 +82,14 @@ function readOr(ctx, domain) {
     }
 }
 
-function termsOf(ctx, thread) {
+function termsOf(ctx, thread, currency = currencyOf(ctx.query)) {
     const target = thread.target ?? withKind(readOr(ctx, 'inventory'), parseTarget(thread.fields, thread.summary));
-    const reward = thread.reward ?? settleReward(parseReward(thread.fields, thread.summary), target);
+    const reward = thread.reward ?? settleReward(parseReward(thread.fields, thread.summary, { currency }), target);
     return { target, reward };
 }
 
-function termsText(target, reward) {
-    return [targetText(target), rewardText(reward, target)].filter(Boolean).join('; ');
+function termsText(target, reward, currency) {
+    return [targetText(target), rewardText(reward, target, currency)].filter(Boolean).join('; ');
 }
 
 // A sub-command: a host that reports a refusal as `{ ok: false }` instead of throwing still rejects.
@@ -111,14 +109,15 @@ function take(ctx, payload) {
     if (thread.taken) fail(ctx, CODES.invalid, `${thread.key} is already taken on.`);
     const rev = receiptRev(ctx);
     const wasOffer = Boolean(thread.offer);
-    const { target, reward } = termsOf(ctx, thread);
+    const currency = currencyOf(ctx.query);
+    const { target, reward } = termsOf(ctx, thread, currency);
     thread.offer = false;
     thread.taken = { rev };
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
     thread.reward = reward;
     thread.rev = rev;
     const who = whoName(ctx.query);
-    const terms = termsText(thread.target, reward);
+    const terms = termsText(thread.target, reward, currency);
     // A quest the story already accepted is only adopted for counting: nothing new to tell.
     return {
         summary: wasOffer ? `${who} takes on ${thread.key}${terms ? `: ${terms}` : ''}.` : `${who} keeps count for ${thread.key}${terms ? `: ${terms}` : ''}.`,
@@ -159,16 +158,20 @@ function finish(ctx, payload) {
     if (!thread) fail(ctx, CODES.notFound, 'There is no such quest.');
     if (isOver(thread)) fail(ctx, CODES.invalid, `${thread.key} is already over.`);
     if (!thread.taken) fail(ctx, CODES.invalid, `${thread.key} has not been taken on.`);
-    const { target, reward } = termsOf(ctx, thread);
+    const currency = currencyOf(ctx.query);
+    const { target, reward } = termsOf(ctx, thread, currency);
     if (!target) fail(ctx, CODES.invalid, `${thread.key} has no target code can count; the story decides when it is done.`);
     thread.target = { noun: target.noun, count: target.count, kind: target.kind };
     thread.reward = reward;
-    const progress = progressOf(thread, ctx.query);
-    if (!progress.met) fail(ctx, CODES.notMet, `${thread.key} is not done yet (${progressLabel(thread, progress)}). ${progress.reason}`.trim());
     const place = placeRule(thread, ctx.read('scene'));
-    if (!place.ok) fail(ctx, CODES.wrongPlace, `${thread.key} cannot be turned in here. ${place.reason}`);
     const rev = receiptRev(ctx);
     if (!ctx.claim(`quest:${thread.id}:paid`)) fail(ctx, CODES.claimed, `${thread.key} has already been paid.`);
+    // One fight pays one kill quest (MODULES §F7): each fight counted is claimed as `beaten:<rev>`
+    // while it is counted, and a fight another kill quest claimed is skipped. A refusal below
+    // takes the claims back with everything else.
+    const progress = progressOf(thread, ctx.query, { free: fightRev => ctx.claim(beatenClaim(fightRev)) });
+    if (!progress.met) fail(ctx, CODES.notMet, `${thread.key} is not done yet (${progressLabel(thread, progress)}). ${progress.reason}`.trim());
+    if (!place.ok) fail(ctx, CODES.wrongPlace, `${thread.key} cannot be turned in here. ${place.reason}`);
 
     // Fetched items are handed over: exactly the target's count, stack by stack.
     const consumed = [];
@@ -187,15 +190,16 @@ function finish(ctx, payload) {
     const pay = payFor(reward, units);
     let paid = null;
     if (pay > 0) {
-        call(ctx, 'wallet.receive', { owner: 'party', currency: reward.unit, amount: pay, note: `${thread.key} reward` });
-        paid = { amount: pay, currency: reward.unit };
+        // A whole amount of the chat's one currency (MODULES §F1, §F5).
+        call(ctx, 'wallet.receive', { owner: 'party', amount: pay, note: `${thread.key} reward` });
+        paid = { amount: pay };
     }
     // XP is RPG Battle's (it scales quest XP by difficulty); without it there is none.
     let xp = null;
     try {
         const amount = Number(text(thread.fields?.xp));
         const result = call(ctx, 'party.grantXp', {
-            quest: thread.id, name: thread.key, difficulty: questDifficulty(thread.fields?.difficulty),
+            quest: thread.id, difficulty: questDifficulty(thread.fields?.difficulty),
             ...(Number.isSafeInteger(amount) && amount > 0 ? { amount } : {}),
         });
         xp = result?.data ?? result?.receipt?.data ?? true;
@@ -210,14 +214,14 @@ function finish(ctx, payload) {
     const counted = target.kind === 'items'
         ? `${target.count} ${nounFor(target, target.count)} handed over`
         : `${progress.have} ${nounFor(target, progress.have)} beaten`;
-    const payText = paid ? `${money(paid.amount, paid.currency)} paid`
-        : reward?.amount === 0 ? 'no coin reward'
+    const payText = paid ? `${money(paid.amount, currency)} paid`
+        : reward?.amount === 0 ? 'no reward in money'
             : reward?.text ? `reward as the story tells it: ${reward.text}`
                 : 'no reward was named';
     return {
         summary: `${whoName(ctx.query)} turns in ${thread.key}: ${counted} (target ${target.count}), ${payText}.`,
         narrate: true,
-        data: { quest: thread.id, key: thread.key, have: progress.have, need: progress.need, source: progress.source, units, paid, consumed, xp },
+        data: { quest: thread.id, key: thread.key, have: progress.have, need: progress.need, source: progress.source, units, paid, consumed, xp, fights: progress.fights ?? [] },
     };
 }
 
@@ -229,7 +233,7 @@ function progressQuery(state, args = {}, tools = null) {
     const query = typeof tools?.query === 'function' ? tools.query : typeof tools === 'function' ? tools : stateQuery(state);
     const target = thread.target ?? withKind(state?.domains?.inventory, parseTarget(thread.fields, thread.summary));
     const view = { ...thread, target };
-    const { have, need, met, source, noun, reason } = progressOf(view, query);
+    const { have, need, met, source, noun, reason } = progressOf(view, query, { free: unclaimedIn(state) });
     return { have, need, met, source, noun, label: progressLabel(view, { have, need }), reason };
 }
 
@@ -261,7 +265,7 @@ export function questTail(view) {
     const elsewhere = [];
     for (const thread of active) {
         if (!thread.taken || !thread.target) continue;
-        const progress = progressOf(thread, query);
+        const progress = progressOf(thread, query, { free: unclaimedIn(state) });
         if (!progress.met) continue;
         const entry = `${thread.key} (${progressLabel(thread, progress)})`;
         if (placeRule(thread, state.domains.scene).ok) ready.push(entry);

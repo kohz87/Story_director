@@ -36,7 +36,7 @@ export const part = {
                 type: 'group',
                 label: 'Calendar',
                 fields: {
-                    preset: { type: 'choice', label: 'Calendar', choices: ['gregorian', 'custom'] },
+                    preset: { type: 'choice', label: 'Calendar', options: ['gregorian', 'custom'] },
                     era: { type: 'text', label: 'Era (written before the year)' },
                     months: { type: 'list', label: 'Months', of: { name: { type: 'text', label: 'Name' }, days: { type: 'int', label: 'Days', min: 1, max: 400 } } },
                     leapYears: { type: 'bool', label: 'Leap years' },
