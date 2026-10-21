@@ -595,6 +595,7 @@ test('a step that opens with the ending and confirms it closes the quest; one th
         '~ EastBluffWolves — step: Done — bounty paid by Fenna',
         '~ EastBluffWolves — step: Finished and the reward collected',
         '~ EastBluffWolves — step: Completed and reported | reward: Claimed 2 gold',
+        '~ EastBluffWolves — step: cleared and turned in for 60 copper',
     ]) {
         const { tracker, problems } = after(line);
         const quest = findRecord(tracker, 'EastBluffWolves');
@@ -608,6 +609,7 @@ test('a step that opens with the ending and confirms it closes the quest; one th
         '~ EastBluffWolves — step: Completed and heading back to Fenna',
         '~ EastBluffWolves — step: Completed and heading back | reward: 2 gold, paid on return',
         '~ EastBluffWolves — step: Finished the hunt, pelts to skin',
+        '~ EastBluffWolves — step: cleared and heading back to Fenna | reward: 60 copper, paid on return',
     ]) {
         assert.equal(findRecord(after(line).tracker, 'EastBluffWolves').status, 'active', line);
     }

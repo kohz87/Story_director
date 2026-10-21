@@ -97,7 +97,7 @@ test('hook acceptance freezes terms and actual acceptance boundary, not offer cr
 
 test('managed narrative success requires a receipt; legacy closure and failures remain', () => {
     const seed = { ...emptyTracker(), records: [job()] };
-    for (const line of ['- Wolf bounty — done', '~ Wolf bounty — step: completed', '! Wolf bounty — reward paid']) {
+    for (const line of ['- Wolf bounty — done', '~ Wolf bounty — step: completed', '~ Wolf bounty — step: cleared and turned in for 60 copper', '! Wolf bounty — reward paid']) {
         const result = add(line, seed);
         assert.equal(result.tracker.records[0].status, 'active');
         assert.ok(result.problems.some(problem => problem.kind === 'unverified-completion'));

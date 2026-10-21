@@ -49,6 +49,8 @@ explicit terms block completion, while unmeasurable quests keep narrative closur
   and before saving; quiet calls, changed stock/claims/currency and wrong branches cannot pay.
 - Inject the exact payout/removal and completion instruction into that reply. Require a
   code-owned receipt for managed success, even if the model declares it complete itself.
+  A declared success without that receipt blocks later settlement until the conflicting
+  reply is corrected; never pay again over an unverified narrative payout.
 - Reconcile omitted or echoed resource effects once; preserve unrelated changes and block
   ambiguous deltas. Save Inventory, completion and receipt in one serialized message update.
   Confirm actual saved state before success; a lost response may still be durable. Restore

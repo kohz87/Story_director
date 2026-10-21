@@ -17,7 +17,7 @@ const OVER_VALUE = /^(?:done|complete|completed|finished|fulfilled|accomplished|
 // (0.9.42) A quest's step that opens with the ending and goes on to confirm it: "Completed and
 // turned in to Fenna" (the rest says turned in), or with a `reward:` that reads as paid in the
 // same line ("reward: Claimed 2 gold"). "done tracking, now the den" is still a step.
-const OVER_START = /^(?:done|completed|finished|fulfilled|accomplished|turned in|handed in|delivered|failed|abandoned)\b\s*(?:and|&|,|—|–|-|;)\s*(.+)$/i;
+const OVER_START = /^(?:done|completed|finished|fulfilled|accomplished|cleared|turned in|handed in|delivered|failed|abandoned)\b\s*(?:and|&|,|—|–|-|;)\s*(.+)$/i;
 const REWARD_TAKEN = /^(?:claimed|collected|received|paid|taken|pocketed|got)\b/i;
 const overStep = (value, op) => {
     const rest = value.match(OVER_START)?.[1] ?? '';

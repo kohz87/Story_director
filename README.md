@@ -1,4 +1,4 @@
-# Story Director v0.9.43
+# Story Director v0.9.44
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
