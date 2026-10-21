@@ -65,10 +65,10 @@ function stampOf(director, rev) {
     return Number.isSafeInteger(minutes) ? { rev, at: minutes } : { rev };
 }
 
-/** The chat's one currency (`inventory.currency`, MODULES §F1), `{ name, short }`; gold without it. */
+/** The chat's one currency (`inventory.currency`, MODULES §F1), `{ name, plural, short }`; gold without it. */
 function currencyOf(query) {
     const currency = tryQuery(query, 'inventory.currency', {}, null);
-    return { name: currencyName(currency), short: text(currency?.short) };
+    return { name: currencyName(currency), plural: text(currency?.plural), short: text(currency?.short) };
 }
 
 /** The player character's name for summaries ("Astra"), else "The party". */
