@@ -57,7 +57,7 @@ import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, n
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.43';
+const VERSION = '0.9.44';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.

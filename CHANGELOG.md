@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.44
+
+- **A cleared and turned-in quest leaves Pending.** A story-tracked quest whose step says `cleared and turned in for 60 copper` now closes, as `completed and turned in` already did. Merely clearing the site and heading back stays pending. This records the ending without paying coins again; quests with verified targets still require their code-owned turn-in receipt.
+
 ## 0.9.43
 
 - **Complete verified quests from the Quests tab.** Targets such as `defeat 3 wolves`, `possess 1 Travel Permit` and `deliver 5 Rat Tail` show progress under **Pending**. **Complete** becomes available when the target is met and the giver is present or you are in the issuing settlement. **Undo complete** cancels before generation. The next story reply receives the exact completion, payment and delivery instruction; code saves effects the model leaves out once.
