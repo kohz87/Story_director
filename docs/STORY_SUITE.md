@@ -71,13 +71,20 @@ kept as before, and its instruction points the model at NPC State Delta's cards.
 
 `StoryDirector.questProgress()` returns active quest evaluation copies: identity,
 managed/eligible/availability, required/observed/claimable counts, claims, payment,
-consumption, revisions and blocked reason. `questsDoneAt()` remains the XP integration.
+consumption, revisions and blocked reason. `questsDoneAt()` includes hidden story replies;
+RPG recognizes coordinated XP receipts before offering an automatic award.
 `target: defeat|possess|deliver N entity` and fixed/per-unit coin rewards drive Complete;
 Undo complete cancels before generation. The next story reply receives exact instructions.
 
 `extra.storyDirectorQuest` stores acceptance `context` and settlement `receipts`;
 `chatMetadata.storyDirector.finish` holds queued intent. Requires Block transaction v1
-and RPG `quests.version === 1`; Delta presence is optional. See the
+and RPG `quests.version === 1` / `rewardVersion === 1`; Delta presence is optional.
+`extra.storyDirectorState` holds compact replay state in Block's shared
+`chatMetadata.storyBlockJournal`. Proven archived ancestors seed replay with shifted display
+coordinates. Turn-in commits Party XP, Inventory, receipt and checkpoint together; acceptance
+context and its initial checkpoint also share one transaction. Preserve chat metadata and
+a recognized retained reply when archiving; ambiguous edited interiors require recovery.
+See the
 [contracts](quest-completion/CONTRACTS.md) and [status](quest-completion/IMPLEMENTATION_STATUS.md).
 
 ```js

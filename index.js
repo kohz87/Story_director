@@ -57,7 +57,7 @@ import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, n
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.44';
+const VERSION = '0.9.45';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -305,12 +305,17 @@ function readEntry(chat, index, previous, sb, cal, own) {
         tracker: result.tracker,
         questConflict: previous?.questConflict
             || (read.entry.settlements.length !== receipts.length ? 'Quest evidence or accepted terms changed.' : '')
-            || (result.problems.some(problem => problem.kind === 'unverified-completion') ? 'The story reported a turn-in without a receipt. Correct or regenerate that reply.' : ''),
+            || completionConflict(result.problems),
         problems: result.problems,
         hadBlock: read.hadBlock,
         parseErrors: read.parseErrors,
         location: read.location ? { message: index, time: read.entry.time ?? seed.time ?? null, text: read.location } : null,
     };
+}
+
+function completionConflict(problems) {
+    return problems.some(problem => problem.kind === 'unverified-completion')
+        ? 'The story reported a turn-in without a receipt. Correct or regenerate that reply.' : '';
 }
 
 // (0.9.30) Checkpoints: the tracker kept at the back of the chat (src/checkpoints.js), in its
@@ -384,14 +389,18 @@ function trackerAt(upTo) {
     const chat = ctx?.chat ?? [];
     const chatId = chatIdOf(ctx);
     if (!sb || !chatId) return { tracker: emptyTracker(), problems: [], info: null };
-    if (cache.chatId !== chatId) cache = { chatId, entries: [], base: -1 };
+    const history = sb.journalVersion === 1 ? sb.journal() : null;
+    const archived = history?.availability === 'available'
+        ? [...history.prefix].reverse().find(node => node.extra.storyDirectorState?.version === 1)?.extra.storyDirectorState : null;
+    if (cache.chatId !== chatId || cache.archiveKey !== history?.key) cache = { chatId, entries: [], base: -1, archiveKey: history?.key };
+    cache.seed = archived ? { tracker: shiftTracker(archived.tracker, archived.position - archived.at - history.offset), questConflict: archived.questConflict } : null;
     const own = settings(ctx);
     const cal = calendar();
     const last = Math.min(Number(upTo), chat.length - 1);
 
     // The checkpoint's reply changed or went (a swipe, an edit, a rollback past it): start over.
-    if (cache.base >= 0 && cache.entries[cache.base]?.sig !== signature(chat[cache.base])) cache = { chatId, entries: [], base: -1 };
-    if (!cache.entries.length) {
+    if (cache.base >= 0 && cache.entries[cache.base]?.sig !== signature(chat[cache.base])) cache = { ...cache, entries: [], base: -1 };
+    if (!cache.entries.length && !archived) {
         const found = usableCheckpoint(checkpoints(ctx), chat, { signature, upTo: chat.length - 1, key: checkpointKey(own) });
         if (found) {
             cache.base = found.index;
@@ -400,7 +409,7 @@ function trackerAt(upTo) {
     }
     if (last < cache.base) {
         // Before the checkpoint: read from the start, with whatever messages are still there.
-        let entry = null;
+        let entry = cache.seed;
         for (let index = 0; index <= last; index++) entry = readEntry(chat, index, entry, sb, cal, own);
         return { tracker: entry?.tracker ?? emptyTracker(), problems: entry?.problems ?? [], info: entry };
     }
@@ -410,10 +419,10 @@ function trackerAt(upTo) {
     while (start <= last && cache.entries[start]?.sig === signature(chat[start])) start++;
     if (start < cache.entries.length) cache.entries.length = start;
     for (let index = start; index <= last; index++) {
-        cache.entries[index] = readEntry(chat, index, cache.entries[index - 1], sb, cal, own);
+        cache.entries[index] = readEntry(chat, index, cache.entries[index - 1] ?? cache.seed, sb, cal, own);
     }
     if (start <= last && last === chat.length - 1) keepCheckpoint(ctx, chat, sb, own);
-    const at = last >= 0 ? cache.entries[last] : null;
+    const at = last >= 0 ? cache.entries[last] : cache.seed;
     return { tracker: at?.tracker ?? emptyTracker(), problems: at?.problems ?? [], info: at ?? null };
 }
 
@@ -460,7 +469,7 @@ function sceneTextAt(upTo) {
         const scene = sb?.blockInText?.(chat[index].mes, tag);
         if (scene?.text) return scene.text;
     }
-    return '';
+    return sb?.getBlock?.(tag, { beforeIndex: upTo + 1 })?.text ?? '';
 }
 
 // What the tracker says around the scene `sceneText` after message `upTo`: the same reading
@@ -739,7 +748,7 @@ const API = Object.freeze({
             const chat = context()?.chat ?? [];
             const at = Number(index);
             if (!storyBlock() || !settings().enabled) return [];
-            if (!Number.isInteger(at) || at < 0 || at >= chat.length || !isAssistant(chat[at])) return [];
+            if (!Number.isInteger(at) || at < 0 || at >= chat.length || !isStoryReply(chat[at])) return [];
             return questsDoneIn(trackerAt(at).tracker, at);
         } catch {
             return [];
@@ -892,6 +901,7 @@ async function onReply({ messageIndex }) {
         if (settings(ctx).mirrorOffscreen && isSource('timeline', settings(ctx))) await mirror(index, after);
         // After the mirror: it rewrites the reply's scene block, which changes its signature.
         lastFindingsKey = findingsKey(index);
+        await saveQuestCheckpoint(index);
         // The tab shows this reply's findings only once they are marked current (just now).
         if (lastFindings.some(finding => finding.kind !== 'distance')) redraw = true;
         if (settings(ctx).arc.trigger === 'auto') void maybePlanAutomatically(after);
@@ -1613,12 +1623,39 @@ function questEvaluation(record, { upTo = (context()?.chat?.length ?? 0) - 1, pr
         busy: api?.busy() || questWriting || (!preparing && (questGenerating || Boolean(pending && pending.attachedTo === null))),
         parseCoins: api?.parseCoins, formatCoins: api?.formatCoins,
     });
+    const history = storyBlock()?.journalVersion === 1 ? storyBlock().journal() : null;
     const recovery = uncertainQuestWrite ? 'A quest save is unverified. Reload the chat before retrying.'
-        : info?.questConflict ? `${info.questConflict} Recovery is required before another turn-in.` : '';
-    if (result.managed && (storyBlock()?.transactionVersion !== 1 || recovery || pendingAbandons().has(record.id))) {
-        return { ...result, eligible: false, reason: recovery || (pendingAbandons().has(record.id) ? 'Abandonment is queued.' : 'Coordinated saving is unavailable.') };
+        : history && history.availability !== 'available' ? `${history.reason} Recovery is required before another turn-in.`
+            : info?.questConflict ? `${info.questConflict} Recovery is required before another turn-in.` : '';
+    if (result.managed && (storyBlock()?.transactionVersion !== 1 || api?.rewardVersion !== 1 || recovery || pendingAbandons().has(record.id))) {
+        return { ...result, eligible: false, reason: recovery || (pendingAbandons().has(record.id) ? 'Abandonment is queued.'
+            : api?.rewardVersion !== 1 ? 'Update RPG Battle for coordinated XP and quest rewards.' : 'Coordinated saving is unavailable.') };
     }
     return result;
+}
+
+function questCheckpoint(index, tracker, questConflict = '') {
+    return { version: 1, at: index, position: index + (storyBlock()?.journal?.().offset ?? 0), tracker: compactTracker(tracker), questConflict };
+}
+
+async function saveQuestCheckpoint(index) {
+    const sb = storyBlock();
+    if (sb?.journalVersion !== 1) return;
+    const ctx = context(), message = ctx.chat[index];
+    const { tracker, info } = trackerAt(index);
+    if (!tracker.records.length && !info?.questConflict) return;
+    const history = sb.journal();
+    if (history.availability !== 'available') return;
+    const prior = [...history.entries].reverse().find(node => node.extra.storyDirectorState)?.extra.storyDirectorState;
+    const value = questCheckpoint(index, tracker, info?.questConflict);
+    if (prior && JSON.stringify([prior.tracker.records, prior.tracker.time, prior.questConflict])
+        === JSON.stringify([value.tracker.records, value.tracker.time, value.questConflict])) return;
+    const result = await sb.commitBlocks({ id: `director-state:${crypto.randomUUID()}`, chatId: chatIdOf(ctx), messageIndex: index,
+        expectedText: message.mes, expectedExtra: JSON.stringify(message.extra ?? {}), namespace: 'storyDirectorState', value });
+    if (result.status !== 'durable') {
+        if (result.status === 'uncertain') uncertainQuestWrite = result.id ?? 'checkpoint';
+        throw new Error(`Quest checkpoint needs recovery: ${result.reason}`);
+    }
 }
 
 async function captureQuestContext(index) {
@@ -1627,7 +1664,8 @@ async function captureQuestContext(index) {
     const message = ctx.chat[index];
     if (sb?.transactionVersion !== 1 || questContextAt(index) || message.extra?.storyDirectorQuest?.receipts?.length) return;
     const ops = parseChanges(sb.blockInText(message.mes, BLOCK.tag)?.text ?? '').ops;
-    const before = trackerAt(index - 1).tracker;
+    const previous = trackerAt(index - 1);
+    const before = previous.tracker;
     const managed = record => record && (record.contract || requirementOf(record.fields, record.extra).managed);
     const choice = abandonState(ctx);
     if (!ops.some(op => managed(op) || managed(findRecord(before, op.key)))
@@ -1639,12 +1677,21 @@ async function captureQuestContext(index) {
         context: { owner, cursor: api?.cursor(index) ?? null, currency: api?.inventory().currency ?? null, place: scenePlace(sceneTextAt(index)) },
         receipts: [],
     };
+    const read = entryFor(message, index, sb, calendar(), settings(), before.time, saidBefore(ctx.chat, index)).entry;
+    read.contractContext = value.context;
+    if (choice?.sentFor === index) read.taken = choice.take;
+    const accepted = replay([read], { seed: before });
     const result = await sb.commitBlocks({
         id: `quest-context:${owner}`, chatId: chatIdOf(ctx), messageIndex: index,
         expectedText: message.mes, expectedExtra: JSON.stringify(message.extra ?? {}),
         namespace: 'storyDirectorQuest', value,
+        ...(sb.journalVersion === 1 ? { extras: { storyDirectorState: questCheckpoint(index, accepted.tracker,
+            previous.info?.questConflict || completionConflict(accepted.problems)) } } : {}),
     });
-    if (result.status !== 'durable') throw new Error(`Quest acceptance was not saved: ${result.reason}`);
+    if (result.status !== 'durable') {
+        if (result.status === 'uncertain') uncertainQuestWrite = `quest-context:${owner}`;
+        throw new Error(`Quest acceptance was not saved: ${result.reason}`);
+    }
 }
 
 function finishQuest(id) {
@@ -1711,16 +1758,26 @@ async function settleQuestTurnIn(index) {
         const current = sb.blockInText(message.mes, state.base.tag)?.text ?? state.base.text;
         const inventory = questApi().reconcile(state.base, current, plan);
         const director = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
-        const receipt = { ...structuredClone(plan), owner: sb.messageIdentity(index) };
+        const award = questApi().prepareAward(record);
+        const receipt = { ...structuredClone(plan), owner: sb.messageIdentity(index), xp: award.xp };
         const extra = message.extra?.storyDirectorQuest ?? {};
+        const completion = `${director}${director ? '\n' : ''}- ${record.key} — completed; verified turn-in (${plan.paymentText})`;
+        const projected = entryFor(message, index, sb, calendar(), settings(), tracker.time,
+            saidBefore(ctx.chat, index)).entry;
+        projected.ops = parseChanges(completion).ops;
+        projected.settlements = [receipt];
+        const after = replay([projected], { seed: tracker });
         const result = await sb.commitBlocks({
             id: plan.id, chatId, messageIndex: index,
             expectedText: message.mes, expectedExtra: JSON.stringify(message.extra ?? {}),
             changes: [
                 { tag: state.base.tag, text: inventory },
-                { tag: BLOCK.tag, text: `${director}${director ? '\n' : ''}- ${record.key} — completed; verified turn-in (${plan.paymentText})` },
+                { tag: BLOCK.tag, text: completion },
+                ...award.changes,
             ],
             namespace: 'storyDirectorQuest', value: { ...extra, receipts: [...(extra.receipts ?? []), receipt] },
+            extras: { storyDirectorState: questCheckpoint(index, after.tracker,
+                trackerAt(index - 1).info?.questConflict || completionConflict(after.problems)) },
         });
         if (result.status === 'durable') {
             setFinishState({ ...state, attachedTo: index }, ctx);

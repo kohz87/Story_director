@@ -60,12 +60,15 @@ const sb = globalThis.StoryBlock = {
         if (commitStatus !== 'durable' && request.changes?.length) return { status: commitStatus, reason: 'Injected save failure' };
         for (const change of request.changes ?? []) message.mes = replace(message.mes, change.tag, change.text);
         message.extra[request.namespace] = structuredClone(request.value);
+        Object.assign(message.extra, structuredClone(request.extras ?? {}));
         commits++;
         return { status: 'durable', owner: sb.messageIdentity(request.messageIndex) };
     },
 };
 const quests = {
     version: 1,
+    rewardVersion: 1,
+    prepareAward: record => ({ changes: [], xp: { version: 1, quest: record.id, gains: [] } }),
     cursor: index => ({ version: 1, anchor: sb.messageIdentity(index), excluded: battles.map(event => event.id) }),
     evidence: cursor => ({ availability: 'available', events: battles.filter(event => !cursor.excluded.includes(event.id)), revision: JSON.stringify(battles) }),
     busy: () => busy,
@@ -154,10 +157,45 @@ test('runtime queues and undoes without mutation; persists missing completion/pa
     assert.equal(sb.getBlock('Inventory').text, 'Coins | 10 silver |', notices.join('\n'));
     const index = ctx.chat.length - 1;
     assert.equal(globalThis.StoryDirector.questsDoneAt(index).length, 1);
+    ctx.chat[index].is_system = true;
+    assert.equal(globalThis.StoryDirector.questsDoneAt(index).length, 1, 'hidden completion remains recorded');
+    ctx.chat[index].is_system = false;
     const beforeRetry = commits;
     await hooks.reply({ messageIndex: index });
     assert.equal(commits, beforeRetry);
     assert.equal(sb.getBlock('Inventory').text, 'Coins | 10 silver |');
+});
+
+test('archived replay seeds accepted terms and paid closure across hundreds of removed replies', async t => {
+    let prefix = [], offset = 0;
+    sb.journalVersion = 1;
+    sb.journal = () => ({ availability: 'available', prefix, offset, key: prefix.at(-1)?.id ?? '',
+        entries: [...prefix, ...ctx.chat.map(message => ({ extra: message.extra ?? {} }))] });
+    t.after(() => { delete sb.journal; delete sb.journalVersion; });
+    await start();
+    const acceptance = structuredClone(ctx.chat[1].extra.storyDirectorState);
+    assert.equal(acceptance.tracker.records[0].contract.requirement.qty, 3);
+    const originalGet = sb.getBlock;
+    const inventory = originalGet('Inventory');
+    t.mock.method(sb, 'getBlock', (tag, options) => originalGet(tag, options) ?? (tag === 'Inventory' ? inventory : null));
+    prefix = [{ id: 'archive-300', extra: { storyDirectorState: acceptance } }];
+    offset = 300;
+    ctx.chat = [reply(scene('Bluewatch'))];
+    assert.equal(globalThis.StoryDirector.questProgress()[0].eligible, true);
+    queue();
+    ctx.chat.push({ is_user: true, mes: 'Turn it in.' });
+    await globalThis.storyDirectorInterceptor([], 0, null, 'normal');
+    await receive(scene('Bluewatch'));
+    const at = ctx.chat.length - 1;
+    assert.equal(globalThis.StoryDirector.questsDoneAt(at).length, 1);
+    const closure = structuredClone(ctx.chat[at].extra.storyDirectorState);
+    assert.equal(closure.position, 302);
+    prefix = [{ id: 'archived-payment', extra: { storyDirectorState: closure } }];
+    offset = 500;
+    ctx.chat = [reply(scene('Bluewatch'))];
+    assert.equal(globalThis.StoryDirector.questProgress().length, 0, 'closure remains authoritative after its prose is archived');
+    prefix = []; offset = 0;
+    assert.equal(globalThis.StoryDirector.questProgress().length, 0, 'a rewind before acceptance cannot inherit future contracts');
 });
 
 test('an unrequested narrative payout blocks another payment until the conflicting reply is corrected', async () => {
@@ -204,6 +242,21 @@ test('save rejection leaves the quest open and retry does not fabricate success'
     await receive(`${scene('Bluewatch')}\n<Director>\n- Wolf bounty — completed\n</Director>`);
     assert.equal(globalThis.StoryDirector.questsDoneAt(ctx.chat.length - 1).length, 0);
     assert.equal(sb.getBlock('Inventory').text, 'Coins | 2 silver |');
+});
+
+test('uncertain acceptance readback blocks turn-in until the chat is reloaded', async t => {
+    await start();
+    const saved = structuredClone(ctx.chat[1].extra);
+    delete ctx.chat[1].extra.storyDirectorQuest;
+    t.mock.method(console, 'error', () => {});
+    const commit = t.mock.method(sb, 'commitBlocks', async () => ({ status: 'uncertain', reason: 'Readback unavailable' }));
+    await hooks.reply({ messageIndex: 1 });
+    assert.match(globalThis.StoryDirector.questProgress()[0].reason, /save is unverified/);
+    assert.equal(draw().querySelector('.story-director-quest-finish').disabled, true);
+    commit.mock.restore();
+    ctx.chat[1].extra = saved;
+    for (const fn of handlers.chat ?? []) fn();
+    assert.equal(globalThis.StoryDirector.questProgress()[0].eligible, true);
 });
 
 test('narration swipe settles from its base once; removing its reply restores prior balance', async () => {

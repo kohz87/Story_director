@@ -91,7 +91,7 @@ export function evaluateQuest({ record, inventory, evidence, claims = [], presen
     if (!Number.isSafeInteger(result.payment) || result.payment < 0) return stop('Reward is too large.');
     result.label = `${requirement.entity} ${result.claimable}/${requirement.qty}`;
     result.paymentText = formatCoins?.(result.payment, contract.currency) ?? `${result.payment}`;
-    result.revisions = { inventory: inventory.revision, evidence: evidence?.revision ?? '', contract: JSON.stringify(contract) };
+    result.revisions = { inventory: inventory.revision, evidence: evidence?.revision ?? '', award: inventory.rewardRevision ?? '', contract: JSON.stringify(contract) };
     if (record.status !== 'active' || record.settlement) return stop('This quest has already ended.');
     if (result.claimable < requirement.qty) return stop(`Need ${requirement.qty - result.claimable} more ${requirement.entity}.`);
     if (!presence?.here) return stop(presence?.reason || 'Turn-in availability unknown.');
