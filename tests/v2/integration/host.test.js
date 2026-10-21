@@ -251,11 +251,11 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
     assert.equal(mine.version, '2.0.0-alpha.1');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
-    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'hook', 'landmark', 'quest', 'route', 'secret', 'time']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'director.seed', 'quest.abandon', 'quest.decline', 'quest.finish', 'quest.take', 'time.settle']);
+    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'faction', 'hook', 'landmark', 'quest', 'route', 'secret', 'time', 'world']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.edit', 'chronicle.remove', 'chronicle.surface', 'director.seed', 'quest.abandon', 'quest.decline', 'quest.finish', 'quest.take', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
-        'story-director/map', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
+        'story-director/map', 'story-director/chronicle', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
     ]);
     const defs = host.registry.settingsDefs().find(entry => entry.moduleId === MODULE_ID);
     assert.deepEqual(Object.keys(defs.schema).sort(), [
