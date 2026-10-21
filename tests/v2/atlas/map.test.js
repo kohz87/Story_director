@@ -148,6 +148,6 @@ test('icons by kind', () => {
 });
 
 test('the vendored Story Block files are the same as Story Block\'s own', { skip: existsSync(MAIN) ? false : 'no Story Block checkout at /home/user/_main/story_block' }, () => {
-    const files = ['ops.js', 'check.js', 'view/screens.js', ...readdirSync(`${VENDOR}view/widgets`).map(name => `view/widgets/${name}`)];
+    const files = ['ops.js', 'check.js', 'view/screens.js', 'view/css.js', ...readdirSync(`${VENDOR}view/widgets`).map(name => `view/widgets/${name}`)];
     for (const file of files) assert.equal(readFileSync(`${VENDOR}${file}`, 'utf8'), readFileSync(`${MAIN}${file}`, 'utf8'), file);
 });

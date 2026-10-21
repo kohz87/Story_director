@@ -89,7 +89,7 @@ test('two parts claiming one name is refused', () => {
 test('screens and widgets: every part\'s, in part order; one id in two parts is refused', () => {
     assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, ...SCREENS].map(screen => screen.id));
     assert.deepEqual(storyDirectorModule.tabs, []);
-    assert.equal(storyDirectorModule.widgets, undefined, 'no part has a widget of its own');
+    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map'], 'the atlas\'s Map widget is the one widget of its own');
     const status = storyDirectorModule.screens.find(screen => screen.id === 'story-director/status-card');
     assert.equal(status.defaultOn, true, 'the status card is on under every reply by default (§F24)');
     const widget = { render: () => {} };

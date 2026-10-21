@@ -1,7 +1,7 @@
 // Story Director v2, part **atlas**: the `atlas` domain (places, routes, the names they go by),
 // the `route` and `landmark` change lines, the places the story visits, the reader's
 // corrections, travel times by v1's maths, the map as Story Block's `ss.map` widget draws it,
-// and the Map screen. The coordinator's src/v2/module.js merges this part with the others into
+// the atlas's own Map widget `story-director.map` (pan, zoom, search, details) and the Map screen. The coordinator's src/v2/module.js merges this part with the others into
 // module `story-director`. The enabled packs' places and routes (Story Block's optional query
 // `packs.content`) are read live and joined in; without them the atlas is the story's alone.
 
@@ -10,6 +10,7 @@ import { initialAtlas, validateAtlas } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, atlasTail } from './note.js';
 import { beforeGenerate, queries } from './queries.js';
 import { mapScreen } from './screen.js';
+import { MAP_WIDGET, atlasMapWidget } from './widget.js';
 import { DEFAULT_MAP } from '../../places.js';
 
 export const part = {
@@ -52,4 +53,5 @@ export const part = {
     },
     tabs: [],
     screens: [mapScreen],
+    widgets: { [MAP_WIDGET]: atlasMapWidget },
 };

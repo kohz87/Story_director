@@ -10,11 +10,24 @@
 import { PACK_NODE, cleanName, cleanWord, isRecord, keyOf, orderedPlaces, orderedRoutes } from './domain.js';
 
 const finite = value => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+// Names once each by key, without `own` (the place's own name key).
+const byKeyOnce = (names, own) => {
+    const seen = new Set([own]);
+    return names.filter(name => {
+        const key = keyOf(name);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+};
 const positive = value => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
 
 /**
  * The enabled packs' places and routes through `query` (ctx.query, tools.query or view.query):
- * `{ places: [{ key, name, region, kind, layer, x, y, aliases }], routes: [{ from, to, kind, km, hours }] }`.
+ * `{ places: [{ key, name, region, kind, layer, x, y, aliases, aliasNames, hidden }], routes: [{ from, to, kind, km, hours }] }`.
+ * `aliases` are name keys, `aliasNames` the same names as written (for search). `hidden`: the pack
+ * marks the place `hidden: true` or `secret: true`, so the map keeps it off until the story goes
+ * there (Story Block's pack format has no such field yet; a pack that gives one is respected).
  * A missing query, or one that throws, gives an empty pack world.
  */
 export function packWorld(query) {
@@ -30,13 +43,14 @@ export function packWorld(query) {
     const places = [];
     const seen = new Set();
     for (const entry of read('places')) {
-        if (!isRecord(entry)) continue;
+        if (!isRecord(entry) || typeof entry.name !== 'string') continue;
         const name = cleanName(entry.name);
         const key = keyOf(name);
         if (!key || seen.has(key)) continue;
         seen.add(key);
         const x = finite(entry.x);
         const y = finite(entry.y);
+        const aliasNames = (Array.isArray(entry.aliases) ? entry.aliases : []).map(cleanName).filter(alias => keyOf(alias) && keyOf(alias) !== key);
         places.push({
             key,
             name,
@@ -45,7 +59,9 @@ export function packWorld(query) {
             layer: cleanWord(entry.layer ?? entry.plane),
             x: x !== null && y !== null ? x : null,
             y: x !== null && y !== null ? y : null,
-            aliases: (Array.isArray(entry.aliases) ? entry.aliases : []).map(keyOf).filter(alias => alias && alias !== key),
+            aliases: aliasNames.map(keyOf),
+            aliasNames,
+            hidden: entry.hidden === true || entry.secret === true,
         });
     }
     const routes = [];
@@ -61,10 +77,12 @@ export function packWorld(query) {
 
 /**
  * The joined world: `{ places, routes, find(ref) }`. A place:
- * `{ id, key, name, region, kind, layer, x, y, discovered, source: 'atlas' | 'pack', atlasId }`
+ * `{ id, key, name, region, kind, layer, x, y, discovered, source: 'atlas' | 'pack', atlasId, aliases, hidden }`
  * (`id` is the atlas id, or `pack:<key>` for a pack place the atlas lacks). A route:
  * `{ id, from, to, kind, hours, km, source }` between place ids (`hours` from the story or the
  * pack, `km` from the pack; null when not given). `find` takes an id, a node id, a name or an alias.
+ * `aliases`: the other names the place goes by (the pack's as written, the atlas's as keys).
+ * `hidden`: a pack's hidden or secret place the story has not reached; maps and search leave it out.
  */
 export function worldOf(atlas, pack = { places: [], routes: [] }) {
     const packByKey = new Map();
@@ -93,14 +111,18 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
             discovered: own.discovered,
             source: 'atlas',
             atlasId: own.id,
+            aliases: byKeyOnce([...(from?.aliasNames ?? []), from?.name ?? '', ...Object.entries(atlas.keys ?? {}).filter(([, id]) => id === own.id).map(([alias]) => alias)], key),
+            hidden: Boolean(from?.hidden) && !own.discovered,
         };
         places.push(place);
         byId.set(place.id, place);
     }
     for (const [alias, id] of Object.entries(atlas?.keys ?? {})) if (byId.has(id)) byKey.set(alias, byId.get(id));
+    // The pack's other names find the atlas's place too ("the quay" for Inspection Quay).
+    for (const place of places) for (const alias of place.aliases) if (!byKey.has(keyOf(alias))) byKey.set(keyOf(alias), place);
     for (const from of pack.places ?? []) {
         if (usedPack.has(from.key) || byKey.has(from.key)) continue;
-        const place = { id: `${PACK_NODE}${from.key}`, key: from.key, name: from.name, region: from.region, kind: from.kind, layer: from.layer, x: from.x, y: from.y, discovered: false, source: 'pack', atlasId: null };
+        const place = { id: `${PACK_NODE}${from.key}`, key: from.key, name: from.name, region: from.region, kind: from.kind, layer: from.layer, x: from.x, y: from.y, discovered: false, source: 'pack', atlasId: null, aliases: [...(from.aliasNames ?? [])], hidden: Boolean(from.hidden) };
         places.push(place);
         byId.set(place.id, place);
         byKey.set(from.key, place);
