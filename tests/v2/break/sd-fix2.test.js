@@ -9,6 +9,7 @@ import { DEFAULT_RANKS, WRITTEN_RANKS_ABOVE, questRank } from '../../../src/v2/q
 import { SUMMARY_CHARS, capSummary } from '../../../src/v2/tracker/capture.js';
 import { fakeQueries, makeHost, makeState as questState, quest } from '../quests/helpers/fake-ctx.js';
 import { lastProblems, makeState, reply, thread } from '../tracker/helpers/fake-ctx.js';
+import { problemList } from '../../../src/v2/tracker/domain.js';
 
 const take = quests.commands['quest.take'];
 const finish = quests.commands['quest.finish'];
@@ -24,7 +25,7 @@ function wolves(fields, { level = 1, queries = fakeQueries } = {}) {
     return { host, taken };
 }
 
-const rankProblems = host => host.state.domains.director.problems.filter(problem => problem.kind === 'rank-held');
+const rankProblems = host => problemList(host.state.domains.director).filter(problem => problem.kind === 'rank-held');
 
 test('questRank: a written rank is held to one above the party\'s own; a pack\'s rank is not', () => {
     assert.equal(WRITTEN_RANKS_ABOVE, 1);

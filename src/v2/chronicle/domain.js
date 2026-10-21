@@ -4,9 +4,9 @@
 // chronicle = {
 //   events:   { [ev_id]: { id, name, summary, state, since, updated, place, factions, aka, rev } },
 //   factions: { [fa_id]: { id, name, summary, area, stance, aka, rev } },
-//   seen:     { [ev_id]: round },               // the round an open event was last in the tail
+//   seen:     [{ [ev_id]: round }],             // the round an open event was last in the tail
 //   round:    int,                              // tail picks made so far (chronicle.surface)
-//   surfaced: null | { at, round, ids },        // the pick for the reply being written
+//   surfaced: null | [{ at, round, ids }],      // the pick for the reply being written
 // }
 // An event is a lasting situation of the wider world (a war, a plague, a calamity) the story
 // keeps moving: `state` is looming, ongoing or resolved. `since` and `updated` are story minutes
@@ -15,7 +15,11 @@
 // are the names a line gave (a faction need not be in the chronicle to be named). `aka` keeps a
 // name the entry had before the reader renamed it, so the story's old name still finds it.
 // `seen` and `surfaced` are kept apart from the events, so an event changes only when the story
-// or the reader changes it.
+// or the reader changes it. Both are slots (../slot.js), written whole, so a later reply's pick or
+// line never depends on what a deleted reply's pick wrote (B-b1r2-12); an id in them whose event is
+// gone (its reply deleted) is passed over.
+
+import { slotValue, toSlot } from '../slot.js';
 
 export const EVENT_ID = /^ev_[0-9a-z]{8}$/;
 export const FACTION_ID = /^fa_[0-9a-z]{8}$/;
@@ -36,18 +40,39 @@ export const MAX_AKA = 6;
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 export function initialChronicle() {
-    return { events: {}, factions: {}, seen: {}, round: 0, surfaced: null };
+    return { events: {}, factions: {}, seen: toSlot({}), round: 0, surfaced: null };
+}
+
+/** The round each event was last in the tail (`seen`; an older state kept the map bare). */
+export const seenOf = chronicle => slotValue(chronicle?.seen) ?? {};
+
+/** The pick for the reply being written (`surfaced`), or null. */
+export const surfacedOf = chronicle => slotValue(chronicle?.surfaced);
+
+/** Drops `id` from `seen` (a draft), writing the slot whole; nothing when it is not there. */
+export function forgetSeen(chronicle, id) {
+    const seen = seenOf(chronicle);
+    if (!Object.hasOwn(seen, id)) return;
+    const next = { ...seen };
+    delete next[id];
+    chronicle.seen = toSlot(next);
 }
 
 export const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isInt = value => Number.isSafeInteger(value);
 
-/** The key a name is found by: apostrophes dropped, spaces folded, lowercase. */
-export const keyOf = name => String(name ?? '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// Invisible format marks (zero-width spaces and joiners, bidi overrides): "Ro\u200Bpe" and "\u202ERope"
+// are "Rope", as Story Block reads its own names (names.js).
+const INVISIBLE = /\p{Cf}+/gu;
 
-/** A name or short word as it is kept: markdown marks dropped, spaces folded, at most 80 characters. */
+/** The key a name is found by: invisible marks and apostrophes dropped, spaces folded, lowercase. */
+export const keyOf = name => String(name ?? '').replace(INVISIBLE, '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// The key as it was made before invisible marks were dropped: two entries saved then stay apart.
+const keptKeyOf = name => String(name ?? '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** A name or short word as it is kept: invisible and markdown marks dropped, NFC, spaces folded, at most 80 characters. */
 export function cleanName(name) {
-    return String(name ?? '').replace(/\*\*|__|[*`]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME).trim();
+    return String(name ?? '').replace(INVISIBLE, '').normalize('NFC').replace(/\*\*|__|[*`]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME).trim();
 }
 
 /** A summary as it is kept: one line, at most 300 characters (cut at a word when it is longer). */
@@ -114,7 +139,7 @@ export function prune(chronicle) {
     for (const event of resolved) {
         if (kept <= MAX_RESOLVED && total <= MAX_EVENTS) break;
         delete chronicle.events[event.id];
-        delete chronicle.seen[event.id];
+        forgetSeen(chronicle, event.id);
         gone.push(event.name);
         kept -= 1;
         total -= 1;
@@ -170,7 +195,7 @@ function clashes(table, what) {
     const errors = [];
     for (const entry of Object.values(table)) {
         if (!isRecord(entry)) continue;
-        const key = keyOf(entry.name);
+        const key = keptKeyOf(entry.name);
         if (key && owner.has(key) && owner.get(key) !== entry.id) errors.push(`Two ${what} are called "${entry.name}".`);
         owner.set(key, entry.id);
     }
@@ -197,16 +222,17 @@ export function validateChronicle(slice) {
         errors.push(...clashes(slice.factions, 'factions'));
     }
     if (!isInt(slice.round) || slice.round < 0) errors.push('chronicle.round must be a whole number.');
-    if (!isRecord(slice.seen)) errors.push('chronicle.seen is not an object.');
-    else if (events) {
-        for (const [id, round] of Object.entries(slice.seen)) {
-            if (!Object.hasOwn(events, id)) errors.push(`chronicle.seen["${id}"] is for no event.`);
+    const seen = slotValue(slice.seen);
+    if (!seen || (Array.isArray(slice.seen) && slice.seen.length !== 1)) errors.push('chronicle.seen is not an object.');
+    else {
+        for (const [id, round] of Object.entries(seen)) {
+            if (!EVENT_ID.test(id)) errors.push(`chronicle.seen["${id}"] is for no event.`);
             else if (!isInt(round) || round < 0 || (isInt(slice.round) && round > slice.round)) errors.push(`chronicle.seen["${id}"] must be a round so far.`);
         }
     }
-    const surfaced = slice.surfaced;
-    if (surfaced !== null) {
-        if (!isRecord(surfaced) || !(surfaced.at === null || (isInt(surfaced.at) && surfaced.at >= 0)) || !isInt(surfaced.round)
+    const surfaced = slotValue(slice.surfaced);
+    if (slice.surfaced !== null) {
+        if (!isRecord(surfaced) || (Array.isArray(slice.surfaced) && slice.surfaced.length !== 1) || !(surfaced.at === null || (isInt(surfaced.at) && surfaced.at >= 0)) || !isInt(surfaced.round)
             || !Array.isArray(surfaced.ids) || surfaced.ids.some(id => typeof id !== 'string' || !EVENT_ID.test(id))) {
             errors.push('chronicle.surfaced must be null or { at, round, ids }.');
         }

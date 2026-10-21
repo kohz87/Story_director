@@ -4,22 +4,35 @@
 //   time:    { minutes: null | int },             // story clock on the reader's calendar
 //   threads: { [id]: thread },                    // MODULES §C1
 //   keys:    { [lineKey(key) or alias]: id },
-//   problems:[{ rev, kind, text, … }],            // newest last; up to 100 kept, the newest 50 shown
+//   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
 //   (a quest thread may also carry `ready: { rev }`, F83, and an offer `shown: { turn }`, F88)
-//   turn:    { n, reply, index, from, quests, lone }, // the reply whose Director lines are being read
+//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched }] },
+//   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
+//   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
 // }
-// `turn` is this part's own: v1's rules count replies (a record changed in the last three
+// `turn` is this part's own: v1's rules count replies (`n`; a record changed in the last three
 // replies is relevant; a `- hook` beside the `+ quest` of the same reply is not an ending), and
-// capture hands lines over one at a time. The quests part marks in it the one quest this reply
-// turned in on the story's word alone (`turn.vouched`, a thread id; B-b3-r2-5).
+// capture hands lines over one at a time, so what the reply being read has done so far is kept in
+// `now`: the reply, the line last read, the clock when it began, its new quests, its one lone quest,
+// how many threads it added, and the one quest it turned in on the story's word alone (`vouched`, a
+// thread id, which the quests part marks; B-b3-r2-5).
+// Later replies never write inside what an earlier reply wrote (B-b1r2-12): `turn.now` is a slot
+// (../slot.js), written whole at a path that is always there; a problem is added under its own key (the
+// receipt's rev and its number in that receipt) and never changed, and the oldest past PROBLEM_ROOM are
+// removed (Story Block 2.0.0-alpha.2 passes over the removal of a key a deleted reply had made). Readers
+// order problems by rev and number.
 
 import { lineKey } from '../../changes.js';
+import { slotIn, slotValue, toSlot } from '../slot.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 
 export const PROBLEM_LIMIT = 50;
-/** How long the list grows before it is cut back to the newest PROBLEM_LIMIT (see capture.js addProblem). */
+/** How many problems are kept; the newest PROBLEM_LIMIT are shown. */
 export const PROBLEM_ROOM = 2 * PROBLEM_LIMIT;
+// The most the validator lets the list hold (a replay after a delete never adds more than were kept).
+const PROBLEM_CEILING = 2 * PROBLEM_ROOM;
+const PROBLEM_KEY = /^(\d+)\.(\d+)$/;
 const THREAD_ID = /^th_[0-9a-z]{8}$/;
 const TARGET_KINDS = ['foes', 'items'];
 
@@ -28,9 +41,100 @@ export function initialDirector() {
         time: { minutes: null },
         threads: {},
         keys: {},
-        problems: [],
-        turn: { n: 0, reply: null, index: -1, from: null, quests: [], lone: null },
+        problems: {},
+        turn: { n: 0, now: null },
+        // The time part's last settle and its While away recap (slots, time/settle.js).
+        checked: null,
+        recap: null,
     };
+}
+
+/** What the reply being read has done so far (a blank before its first line). */
+export function replyTurn(director) {
+    const turn = director?.turn;
+    // An older state kept these on `turn` itself.
+    const now = isRecord(turn) && Object.hasOwn(turn, 'now') ? slotValue(turn.now) : isRecord(turn) && Object.hasOwn(turn, 'quests') ? turn : null;
+    return {
+        reply: now?.reply ?? null,
+        index: isInt(now?.index) ? now.index : -1,
+        from: isInt(now?.from) ? now.from : null,
+        quests: Array.isArray(now?.quests) ? now.quests : [],
+        lone: isRecord(now?.lone) ? now.lone : null,
+        added: isInt(now?.added) ? now.added : 0,
+        vouched: typeof now?.vouched === 'string' ? now.vouched : null,
+    };
+}
+
+/** The reply count (`turn.n`, v1's message number), 0 before any. */
+export const turnNumber = director => (isInt(director?.turn?.n) && director.turn.n >= 0 ? director.turn.n : 0);
+
+/** Starts the next reply's bookkeeping on a draft: `turn.n` one up, `now` fresh. Returns `now`. */
+export function startReply(director, { reply, index }) {
+    const now = { reply, index, from: director.time?.minutes ?? null, quests: [], lone: null, added: 0, vouched: null };
+    director.turn = { n: turnNumber(director) + 1, now: toSlot(now) };
+    return director.turn.now[0];
+}
+
+/**
+ * The reply being read's bookkeeping on a draft, to change in place (written whole: a slot), or null
+ * before its first line. An older state's bare `turn` is moved into the slot first.
+ */
+export function replyDraft(director) {
+    const turn = director?.turn;
+    if (!isRecord(turn)) return null;
+    if (!Object.hasOwn(turn, 'now')) {
+        if (!Object.hasOwn(turn, 'quests')) return null;
+        director.turn = { n: turnNumber(director), now: toSlot({ ...replyTurn(director) }) };
+        return director.turn.now[0];
+    }
+    return slotIn(director.turn, 'now');
+}
+
+// [rev, number] of a problem key, for ordering.
+const keyOrder = key => {
+    const match = PROBLEM_KEY.exec(key);
+    return match ? [Number(match[1]), Number(match[2])] : [-1, -1];
+};
+const byKey = (a, b) => {
+    const [x, y] = [keyOrder(a), keyOrder(b)];
+    return x[0] - y[0] || x[1] - y[1] || (a < b ? -1 : a > b ? 1 : 0);
+};
+
+/** The problems kept, oldest first (an older state's list as it is). */
+export function problemList(director) {
+    const problems = director?.problems;
+    if (Array.isArray(problems)) return problems.filter(isRecord);
+    if (!isRecord(problems)) return [];
+    return Object.keys(problems).sort(byKey).map(key => problems[key]).filter(isRecord);
+}
+
+/**
+ * Adds a problem to the Director's list (a draft): under a key of its own, so it is one `add` that
+ * never depends on another reply's; past PROBLEM_ROOM the oldest go.
+ */
+export function addProblem(director, ctx, problem) {
+    const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
+    const entry = { rev, turn: turnNumber(director), ...problem };
+    for (const name of Object.keys(entry)) if (entry[name] === undefined) delete entry[name];
+    // An older state's list is keyed once (the whole list is written then).
+    if (!isRecord(director.problems)) {
+        const old = problemList(director).slice(-PROBLEM_ROOM);
+        director.problems = Object.fromEntries(old.map((item, n) => [`${isInt(item.rev) ? item.rev : 0}.${n}`, item]));
+    }
+    let n = 0;
+    while (Object.hasOwn(director.problems, `${rev}.${n}`)) n += 1;
+    director.problems[`${rev}.${n}`] = entry;
+    const keys = Object.keys(director.problems);
+    if (keys.length > PROBLEM_ROOM) for (const key of keys.sort(byKey).slice(0, keys.length - PROBLEM_ROOM)) delete director.problems[key];
+}
+
+/** Removes the problems `drop(problem)` says have gone (a draft). */
+export function dropProblems(director, drop) {
+    if (Array.isArray(director.problems)) {
+        director.problems = director.problems.filter(problem => !drop(problem));
+        return;
+    }
+    for (const [key, problem] of Object.entries(director.problems ?? {})) if (isRecord(problem) && drop(problem)) delete director.problems[key];
 }
 
 const isInt = value => Number.isSafeInteger(value);
@@ -86,12 +190,23 @@ export function validateDirector(slice) {
             if (thread?.key && slice.keys[lineKey(thread.key)] !== thread.id) errors.push(`"${thread.key}" is missing from director.keys.`);
         }
     }
-    if (!Array.isArray(slice.problems) || slice.problems.length > PROBLEM_ROOM) errors.push(`director.problems must be a list of at most ${PROBLEM_ROOM}.`);
-    else if (slice.problems.some(problem => !isRecord(problem) || typeof problem.kind !== 'string' || typeof problem.text !== 'string' || !isInt(problem.rev))) {
+    const problems = slice.problems;
+    const badProblem = problem => !isRecord(problem) || typeof problem.kind !== 'string' || typeof problem.text !== 'string' || !isInt(problem.rev);
+    if (Array.isArray(problems)) {
+        // An older state's list.
+        if (problems.length > PROBLEM_ROOM) errors.push(`director.problems must be a list of at most ${PROBLEM_ROOM}.`);
+        else if (problems.some(badProblem)) errors.push('director.problems entries need rev, kind and text.');
+    } else if (!isRecord(problems) || Object.keys(problems).length > PROBLEM_CEILING || Object.keys(problems).some(key => !PROBLEM_KEY.test(key))) {
+        errors.push(`director.problems must hold at most ${PROBLEM_CEILING} problems under "<rev>.<n>" keys.`);
+    } else if (Object.values(problems).some(badProblem)) {
         errors.push('director.problems entries need rev, kind and text.');
     }
     const turn = slice.turn;
-    if (!isRecord(turn) || !isInt(turn.n) || turn.n < 0 || !Array.isArray(turn.quests) || !(turn.from === null || isInt(turn.from)) || !(turn.lone === null || isRecord(turn.lone))) {
+    const legacy = isRecord(turn) && !Object.hasOwn(turn, 'now');
+    const now = legacy ? turn : slotValue(turn?.now);
+    if (!isRecord(turn) || !isInt(turn.n) || turn.n < 0
+        || (legacy ? !Array.isArray(turn.quests) : !(turn.now === null || (Array.isArray(turn.now) && turn.now.length === 1 && isRecord(now))))
+        || (now && (!Array.isArray(now.quests) || !(now.from === null || isInt(now.from)) || !(now.lone === null || isRecord(now.lone))))) {
         errors.push('director.turn is malformed.');
     }
     return errors;

@@ -19,7 +19,7 @@
 
 import {
     EVENT_ID, FACTION_ID, MAX_AKA, MAX_EVENTS, MAX_FACTIONS, MAX_NAME, MAX_NAMED, STATES,
-    cleanName, cleanSummary, findIn, isOpen, isRecord, keyOf, newId, prune, revOf,
+    cleanName, cleanSummary, findIn, forgetSeen, isOpen, isRecord, keyOf, newId, prune, revOf,
 } from './domain.js';
 
 // The separator between a word and more text inside a label: an em or en dash, or a spaced hyphen.
@@ -111,7 +111,7 @@ function changeEvent(chronicle, event, fields, { now, rev }) {
     if (fields.state !== undefined && fields.state !== event.state) {
         event.state = fields.state;
         changes.push(fields.state);
-        if (!isOpen(event)) delete chronicle.seen[event.id];
+        if (!isOpen(event)) forgetSeen(chronicle, event.id);
     }
     if (fields.place !== undefined && fields.place !== event.place) {
         event.place = fields.place;
@@ -335,7 +335,7 @@ export function remove(ctx, payload = {}) {
     if (EVENT_ID.test(payload.id) && Object.hasOwn(chronicle.events, payload.id)) {
         const { name } = chronicle.events[payload.id];
         delete chronicle.events[payload.id];
-        delete chronicle.seen[payload.id];
+        forgetSeen(chronicle, payload.id);
         return { summary: `${name} is out of the chronicle.`, narrate: false, data: { id: payload.id, removed: 'event' } };
     }
     if (FACTION_ID.test(payload.id) && Object.hasOwn(chronicle.factions, payload.id)) {

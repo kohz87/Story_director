@@ -89,16 +89,18 @@ export const queries = {
      */
     'atlas.place': (state, { id = null, name = null } = {}, tools) => placeDetail(worldFrom(state, tools), id ?? name, mapOf(tools), hereOf(state, tools)),
     /**
-     * The scene's place as the atlas knows it: `{ id, name, kind, region }`: the scene's kind, else
-     * the atlas's or the pack's (a `~ place` line that moves the scene leaves the scene's kind
-     * empty); the place's own region over the scene's wider one. Null when the scene is nowhere
-     * the atlas or a pack knows.
+     * The scene's place as the atlas knows it: `{ id, name, kind, placeKind, region }`: the scene's
+     * kind, else the atlas's or the pack's (a `~ place` line that moves the scene may leave the
+     * scene's kind empty, or keep the last place's); `placeKind` the atlas's or the pack's alone; the
+     * place's own region over the scene's wider one. Null when the scene is nowhere the atlas or a
+     * pack knows.
      */
     'atlas.here': (state, _args, tools) => {
         const scene = scenePlace({ state, query: toolsQuery(tools) });
         const place = scene.name ? worldFrom(state, tools).find(parseLocation(scene.name).name.trim()) : null;
         if (!place) return null;
-        return { id: place.id, name: place.name, kind: scene.kind || place.kind, region: place.region || scene.region };
+        // `placeKind`: the map's own kind for the place, whatever the scene says now.
+        return { id: place.id, name: place.name, kind: scene.kind || place.kind, placeKind: place.kind, region: place.region || scene.region };
     },
     /** The place picked on the map (`atlas.focus`) with its routes, or null. */
     'atlas.selected': (state, _args, tools) => {

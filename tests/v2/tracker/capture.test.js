@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { part } from '../../../src/v2/tracker/index.js';
 import { toV1Op } from '../../../src/v2/tracker/capture.js';
 import { lastProblems, makeState, readLine, reply, runCommand, story, thread } from './helpers/fake-ctx.js';
+import { problemList, replyTurn } from '../../../src/v2/tracker/domain.js';
 
 const kinds = state => lastProblems(state).map(problem => problem.kind);
 const threads = (state, args = {}) => part.queries['director.threads'](state, args);
@@ -36,7 +37,7 @@ test('+ makes threads: kind, key, summary, fields as written, ids, keys and revs
     assert.equal(thread(state, 'hollins reach graves').fields.shown, 'none', 'keys ignore case and punctuation');
     assert.deepEqual(threads(state).map(entry => entry.rev), [1, 2, 3, 4, 5, 6], 'each line its own receipt');
     assert.deepEqual(Object.keys(state.domains.director.keys), ['senior listener geva', 'hollins reach graves', 'canal street granary fires', 'river stranger', 'footing at bluewatch', 'the fall of the weir']);
-    assert.deepEqual(state.domains.director.problems, []);
+    assert.deepEqual(problemList(state.domains.director), []);
 });
 
 test('- closes with its reason; replaced and merged supersede', () => {
@@ -328,7 +329,12 @@ test('the carrier the host gives ({ index, swipe, key }) tells replies apart, a 
     assert.equal(run('+ hook B — b', { index: 3, swipe: 0, key: '3:0' }, 1).n, 1);
     assert.equal(run('+ hook C — c', { index: 3, swipe: 1, key: '3:1' }, 2).n, 2, 'a swipe is another reply');
     assert.equal(run('+ hook D — d', { index: 5, swipe: 0 }, 3).n, 3, 'index and swipe without a key');
-    assert.equal(state.domains.director.turn.reply, '5:0');
+    assert.equal(replyTurn(state.domains.director).reply, '5:0');
+    // The reply's record ID (`sid`, which stays with it when an earlier message is deleted) wins over its index.
+    assert.equal(run('+ hook E — e', { index: 4, swipe: 0, key: '4:0', sid: 'm_reply5' }, 0).n, 4);
+    assert.equal(run('+ hook F — f', { index: 4, swipe: 0, key: '4:0', sid: 'm_reply5' }, 1).n, 4);
+    assert.equal(replyTurn(state.domains.director).reply, 'm_reply5');
+    assert.equal(run('+ hook G — g', { index: 4, swipe: 0, key: '4:0', sid: 'm_reply6' }, 2).n, 5, 'another record at the same index');
 });
 
 test('the reply a line belongs to: the host\'s carrier when given, else the line\'s place in its block', () => {
@@ -431,16 +437,16 @@ test('lines the Director cannot use are Problems, not errors, and change nothing
     assert.equal(asked.ok, true);
     assert.deepEqual(asked.state.domains.director.threads, start.domains.director.threads);
     assert.deepEqual(kinds(asked.state), ['unread']);
-    // The list grows to 100 and is then cut back to the newest 50 (B-b1-capture-14: most problems are
-    // one small append, not the whole list rewritten).
+    // The newest 100 are kept, each under its own key (B-b1-capture-14, B-b1r2-12: never a list
+    // position): one `add` a problem, and past 100 the oldest is removed.
     let state = start;
     for (let n = 0; n < 30; n += 1) state = reply(state, `! event Riot ${n} — x\n! event Fire ${n} — y`).state;
-    assert.equal(state.domains.director.problems.length, 60);
-    assert.match(state.domains.director.problems.at(-1).text, /Fire 29/);
+    assert.equal(problemList(state.domains.director).length, 60);
+    assert.match(problemList(state.domains.director).at(-1).text, /Fire 29/);
     for (let n = 30; n < 51; n += 1) state = reply(state, `! event Riot ${n} — x\n! event Fire ${n} — y`).state;
-    assert.equal(state.domains.director.problems.length, 51, '100 reached, cut to the newest 50, then one more');
-    assert.match(state.domains.director.problems.at(-1).text, /Fire 50/);
-    assert.match(state.domains.director.problems.at(0).text, /Fire 25/);
+    assert.equal(problemList(state.domains.director).length, 100, 'the newest 100');
+    assert.match(problemList(state.domains.director).at(-1).text, /Fire 50/);
+    assert.match(problemList(state.domains.director).at(0).text, /Fire 1$|Riot 1$|Fire 1\b|Riot 1\b/);
     valid(state);
 });
 
@@ -451,7 +457,7 @@ test('a swipe reads from the state before the reply: nothing of the swiped reply
     assert.equal(thread(first, 'Wolf Hunt').kind, 'quest');
     assert.equal(thread(swipe, 'Wolf Hunt'), null);
     assert.equal(thread(swipe, 'River stranger').status, 'active');
-    assert.deepEqual(swipe.domains.director.turn.quests, []);
+    assert.deepEqual(replyTurn(swipe.domains.director).quests, []);
     assert.equal(swipe.domains.director.turn.n, first.domains.director.turn.n);
     assert.deepEqual(swipe, reply(before, '~ hook River stranger | now: at the inn', { said: 'I take the wolf hunt.', carrier: 4 }).state);
 });

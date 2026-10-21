@@ -63,7 +63,7 @@ const TEMPLATE = `
 
   <section class="panel purse">
     <h4><i class="fa-solid fa-sack-dollar" aria-hidden="true"></i> ${html(S.purse)}</h4>
-    <p class="wallet"><b data-if="q.wallet.coin">{{ q.wallet.coin }}</b><b data-if="!q.wallet.coin">0</b> {{ q.currency.name }}
+    <p class="wallet"><b data-if="q.wallet.coin">{{ q.wallet.coin }}</b><b data-if="!q.wallet.coin">0</b> <span data-if="q.wallet.coin == 1">{{ q.currency.name }}</span><span data-if="q.wallet.coin != 1">{{ q.currency.plural }}</span>
       <span class="muted"> · {{ len(q.items) }} <span data-if="len(q.items) == 1">${html(S.thing)}</span><span data-if="len(q.items) != 1">${html(S.things)}</span> ${html(S.carried)}</span></p>
     <ul class="worn">
       <li data-each="q.items as it" data-if="it.equipped != null"><span class="chip"><i class="fa-solid fa-check" aria-hidden="true"></i> {{ it.name }}</span></li>

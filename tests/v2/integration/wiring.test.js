@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { MODULE_ID, createModule } from '../../../src/v2/module.js';
 import { fakeRpgBattle } from './helpers/fake-rpg.js';
+import { problemList } from '../../../src/v2/tracker/domain.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
@@ -193,7 +194,7 @@ test('a custom calendar and a time jump: the deadline lapses and the recap tells
 test('the Director screen\'s problems name the reader, not {{user}}', async () => {
     const host = await newHost({ st: { user: 'Astra' } });
     await host.send('Any work?', reply('Fenna has a job.', ['+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 rats']));
-    const raw = host.head().domains.director.problems.map(problem => problem.text);
+    const raw = problemList(host.head().domains.director).map(problem => problem.text);
     assert.ok(raw.some(text => text.includes('{{user}}')), 'the stored text keeps v1\'s macro');
     const shown = host.sdk.query('director.problems').map(problem => problem.text);
     assert.ok(shown.some(text => /until Astra accepts it/.test(text)), shown.join(' | '));

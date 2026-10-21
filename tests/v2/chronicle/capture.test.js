@@ -11,6 +11,7 @@ import {
     clockAt, command, eventNamed, factionNamed, line, lines, makeState, replay, runCommand,
 } from './helpers/fake-ctx.js';
 import { part } from '../../../src/v2/chronicle/index.js';
+import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
 
 const DAY = 1440;
 
@@ -227,7 +228,7 @@ test('chronicle.remove takes an event (and its seen mark) or a faction out; an u
     state = { ...state, domains: { ...state.domains, chronicle: { ...state.domains.chronicle, seen: { [war.id]: 1 }, round: 1 } } };
     let run = command(state, 'chronicle.remove', { id: war.id });
     assert.equal(run.result.summary, 'Border War is out of the chronicle.');
-    assert.deepEqual([run.state.domains.chronicle.events, run.state.domains.chronicle.seen], [{}, {}]);
+    assert.deepEqual([run.state.domains.chronicle.events, seenOf(run.state.domains.chronicle)], [{}, {}]);
     run = command(run.state, 'chronicle.remove', { id: factionNamed(state, 'Ashen Court').id });
     assert.deepEqual(run.state.domains.chronicle.factions, {});
     const missing = command(run.state, 'chronicle.remove', { id: war.id });

@@ -9,7 +9,7 @@
 // Every node is built with textContent; module names, labels and values are never markup.
 // `doc` is the document to build in (tests pass a fake one).
 
-import { normalizeField } from './registry.js';
+import { FIELD_TYPES, normalizeField } from './registry.js';
 import { HOST_SETTINGS_SCHEMA } from './sdk.js';
 import { scrollCue } from './view/scroll-cue.js';
 
@@ -97,8 +97,14 @@ function control(doc, field, value, onChange, id) {
     if (f.type === 'list') return listControl(doc, f, Array.isArray(value) ? value : [], onChange, id);
     const input = el(doc, f.multiline ? 'textarea' : 'input', 'text_pole');
     if (!f.multiline) input.type = 'text';
+    // A text field's `max` holds for typing and pasting alike (settings.set cuts it there too).
+    const max = Number.isInteger(f.max) && f.max >= 0 ? f.max : null;
+    if (max !== null) input.maxLength = max;
     input.value = String(value ?? '');
-    input.addEventListener('change', () => onChange(input.value));
+    input.addEventListener('change', () => {
+        if (max !== null && input.value.length > max) input.value = input.value.slice(0, max);
+        onChange(input.value);
+    });
     return input;
 }
 
@@ -142,6 +148,13 @@ function listControl(doc, field, items, onChange, id) {
 // `label.story-suite-row`: the label and its help on the left, the control on the right.
 function fieldRow(doc, key, field, value, onChange, prefix) {
     const f = normalizeField(field);
+    // A type this Story Block does not know (a newer module's): hidden, its value left alone.
+    if (!FIELD_TYPES.includes(f?.type)) {
+        const hidden = el(doc, 'div', 'story-suite-row');
+        hidden.dataset.field = key;
+        hidden.hidden = true;
+        return hidden;
+    }
     const id = `${prefix}-${key}`.replace(/[^\w-]/g, '_');
     const row = el(doc, f.type === 'list' ? 'div' : 'label', 'story-suite-row');
     row.dataset.field = key;

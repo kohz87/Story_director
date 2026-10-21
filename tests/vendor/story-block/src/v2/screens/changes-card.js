@@ -32,7 +32,7 @@ const TEMPLATE = `
     </li>
     <li class="line coin" data-if="changed('state.inventory.wallets.party')">
       <i class="fa-solid fa-coins" aria-hidden="true"></i>
-      <span>${html(C.wallet, { coin: '<b>{{ state.inventory.wallets.party.coin }}</b>', money: '{{ q.currency.name }}' })}</span>
+      <span>${html(C.wallet, { coin: '<b>{{ state.inventory.wallets.party.coin }}</b>', money: '<span data-if="state.inventory.wallets.party.coin == 1">{{ q.currency.name }}</span><span data-if="state.inventory.wallets.party.coin != 1">{{ q.currency.plural }}</span>' })}</span>
     </li>
     <li class="line place" data-if="changed('state.scene.place')">
       <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
@@ -199,14 +199,17 @@ function people(names) {
  */
 export function changesSummary({ state = null, before = null, changes = [], currency = null, digest = null, refused = 0 } = {}) {
     const d = digest ?? changesDigest({ state, before, changes });
-    const money = typeof currency?.name === 'string' && currency.name ? currency.name : T.defaultMoney;
+    // The currency word for an amount: its name for exactly 1, else its plural (MODULES §F1).
+    const name = typeof currency?.name === 'string' && currency.name ? currency.name : T.defaultMoney;
+    const plural = typeof currency?.plural === 'string' && currency.plural ? currency.plural : name;
+    const money = n => (Math.abs(n) === 1 ? name : plural);
     const parts = [];
     const items = [...itemList(d.gained, '+'), ...itemList(d.lost, '−')];
     if (items.length) parts.push(items.join(', '));
     if (d.held.length) parts.push(d.held.slice(0, MAX_ITEMS).map(entry => fill(T.held, { name: entry.name, qty: entry.qty })).join(', ')
         + (d.held.length > MAX_ITEMS ? fill(T.moreTail, { n: d.held.length - MAX_ITEMS }) : ''));
-    if (d.coin !== null) parts.push(`${d.coin > 0 ? '+' : '−'}${Math.abs(d.coin)} ${money}`);
-    else if (d.coinNow !== null) parts.push(fill(T.coinNow, { n: d.coinNow, money }));
+    if (d.coin !== null) parts.push(`${d.coin > 0 ? '+' : '−'}${Math.abs(d.coin)} ${money(d.coin)}`);
+    else if (d.coinNow !== null) parts.push(fill(T.coinNow, { n: d.coinNow, money: money(d.coinNow) }));
     if (d.place !== null) parts.push(d.place ? fill(T.to, { place: d.place }) : T.placeCleared);
     if (d.arrived.length) parts.push(fill(T.arrived, { names: people(d.arrived) }));
     if (d.left.length) parts.push(fill(T.left, { names: people(d.left) }));

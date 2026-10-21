@@ -11,6 +11,7 @@ import { SURFACE, TAIL_EVENTS, beforeGenerate, hashUnit, nearness, pickEvents, p
 import { agoText } from '../../../src/v2/chronicle/queries.js';
 import { part } from '../../../src/v2/chronicle/index.js';
 import { clockAt, command, eventNamed, lines, makeState, replay, runCommand, sceneAt, viewOf } from './helpers/fake-ctx.js';
+import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
 
 const DAY = 1440;
 const surface = (state, payload, options = {}) => runCommand(state, part.commands[SURFACE], payload, { cause: 'system', ...options });
@@ -75,7 +76,7 @@ test('chronicle.surface rotates: each pick favours the events shown least recent
         const run = surface(state, { at: round * 2 }, { seed: 100 + round });
         assert.equal(run.ok, true, run.message);
         state = run.state;
-        picks.push(state.domains.chronicle.surfaced.ids);
+        picks.push(surfacedOf(state.domains.chronicle).ids);
         assert.equal(state.domains.chronicle.round, round);
         assert.equal(run.result.narrate, false);
         // The tail shows exactly the recorded pick for that reply.
@@ -87,7 +88,7 @@ test('chronicle.surface rotates: each pick favours the events shown least recent
     assert.deepEqual(new Set(picks[2]), new Set(picks[0]));
     // Replay of the ops gives the same picks (Story Block replays ops, it never runs the command again).
     const again = surface(sixEvents(), { at: 2 }, { seed: 101 });
-    assert.deepEqual(again.state.domains.chronicle.surfaced, { at: 2, round: 1, ids: picks[0] });
+    assert.deepEqual(surfacedOf(again.state.domains.chronicle), { at: 2, round: 1, ids: picks[0] });
     assert.deepEqual(replay(sixEvents(), [again]), again.state);
 });
 
@@ -103,15 +104,15 @@ test('events near the scene are favoured: the same place, then a route away, the
     const near = nearness((name, args) => viewOf(state, { atlas }).query(name, args), 'Harrow');
     assert.deepEqual(['Harrow', 'near the Old Weir', 'Bluewatch', 'Dragonfang', ''].map(near), [3, 2, 1, 0, 0]);
     const run = surface(state, { at: 2 }, { atlas });
-    assert.deepEqual(names(run.state, run.state.domains.chronicle.surfaced.ids), ['Harrow Riots', 'Weir Flood', 'Lake Fever']);
+    assert.deepEqual(names(run.state, surfacedOf(run.state.domains.chronicle).ids), ['Harrow Riots', 'Weir Flood', 'Lake Fever']);
     // Without the atlas only the same place counts.
     const plain = surface(state, { at: 2 });
-    assert.equal(names(plain.state, plain.state.domains.chronicle.surfaced.ids)[0], 'Harrow Riots');
+    assert.equal(names(plain.state, surfacedOf(plain.state.domains.chronicle).ids)[0], 'Harrow Riots');
     // A pick or two later the far ones come round, the near one still often.
     state = run.state;
     const next = surface(state, { at: 4 }, { atlas, seed: 9 });
-    assert.ok(names(next.state, next.state.domains.chronicle.surfaced.ids).includes('Far Trouble'));
-    assert.ok(names(next.state, next.state.domains.chronicle.surfaced.ids).includes('Nowhere War'));
+    assert.ok(names(next.state, surfacedOf(next.state.domains.chronicle).ids).includes('Far Trouble'));
+    assert.ok(names(next.state, surfacedOf(next.state.domains.chronicle).ids).includes('Nowhere War'));
     // The scene moved: the tail fallback (no recorded pick for this reply) follows it.
     const moved = sceneAt(next.state, 'Dragonfang');
     assert.equal(shown(tailOf(moved, { at: 40, atlas }))[0], 'Far Trouble');
@@ -137,12 +138,12 @@ test('the beforeGenerate hook: a pick only with more than three open, once per r
 
 test('a recorded pick whose event has ended since is topped up; the hashed fallback is stable per rev', () => {
     let state = surface(sixEvents(), { at: 2 }).state;
-    const [first] = state.domains.chronicle.surfaced.ids;
+    const [first] = surfacedOf(state.domains.chronicle).ids;
     const ended = lines(state, `- world ${state.domains.chronicle.events[first].name} — over`).state;
     const ids = tailPick(ended.domains.chronicle, { at: 2, rev: ended.meta.rev });
     assert.equal(ids.length, TAIL_EVENTS);
     assert.ok(!ids.includes(first));
-    assert.deepEqual(ids.slice(0, 2), state.domains.chronicle.surfaced.ids.slice(1));
+    assert.deepEqual(ids.slice(0, 2), surfacedOf(state.domains.chronicle).ids.slice(1));
     // The hashed pick: the same for the same rev.
     state = sixEvents();
     assert.deepEqual(tailPick(state.domains.chronicle, { rev: 7 }), tailPick(state.domains.chronicle, { rev: 7 }));
@@ -159,7 +160,7 @@ test('chronicle.surface is the hook\'s, not a click\'s; a bad "at" is refused', 
     assert.deepEqual([bad.ok, bad.code], [false, 'INVALID']);
     // A pick for no open event records an empty pick without fault.
     const none = surface(makeState(), { at: 2 });
-    assert.deepEqual([none.ok, none.state.domains.chronicle.surfaced.ids], [true, []]);
+    assert.deepEqual([none.ok, surfacedOf(none.state.domains.chronicle).ids], [true, []]);
 });
 
 test('"how long ago" in plain words', () => {

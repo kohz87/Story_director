@@ -12,6 +12,7 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
 import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
@@ -90,7 +91,7 @@ test('on the host: more than three under way — one pick per reply, kept on a s
     assert.equal(surfaces()[0].cause, 'system');
     const first = worldLines(sent(host, TAIL_KEY).at(-1));
     assert.equal(first.length, 3);
-    assert.deepEqual(first, host.head().domains.chronicle.surfaced.ids.map(id => host.head().domains.chronicle.events[id].name));
+    assert.deepEqual(first, surfacedOf(host.head().domains.chronicle).ids.map(id => host.head().domains.chronicle.events[id].name));
 
     // A swipe of that reply: the same pick, no second receipt.
     await host.swipe(reply('Other rumours.'));

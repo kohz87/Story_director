@@ -18,10 +18,11 @@
 // turn.js receives the SillyTavern context and the host parts; it never imports the store or
 // the command bus (their interfaces are docs/v2/SPEC.md §12).
 
-import { extractBlock, hideBlock, parseChanges, stripBlock } from './capture.js';
+import { continuation, cutLine, extractBlock, hideBlock, parseChanges, stripBlock } from './capture.js';
+import { hash, readRecord } from './persist.js';
 import { CAPTURE_PREFIX } from './registry.js';
 import { STATIC_MARKER, assemble } from './prompt.js';
-import { ensureModules, makeView } from './sdk.js';
+import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
 
 export const STATIC_KEY = 'story_suite_static';
 export const TAIL_KEY = 'story_suite_tail_1';
@@ -38,6 +39,25 @@ const IN_PROMPT = 0;
 const IN_CHAT = 1;
 const ROLE_SYSTEM = 0;
 const MAX_PROBLEMS = 200;
+// How long a canGenerate or beforeGenerate hook may take before the reply goes on without it.
+export const HOOK_TIMEOUT_MS = 2500;
+const TIMED_OUT = Symbol('timed out');
+
+// `value`, or TIMED_OUT when it is a promise that has not settled within `ms`.
+async function within(value, ms) {
+    if (!value || typeof value.then !== 'function') return value;
+    let timer;
+    try {
+        return await Promise.race([value, new Promise(resolve => { timer = setTimeout(resolve, ms, TIMED_OUT); })]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+// A name filled in for {{user}} / {{char}} is one line of at most this many characters.
+export const MAX_NAME = 80;
+// Stripped history texts kept between prompts (each is read again for every later prompt).
+const STRIP_CACHE = 500;
+const HAS_BLOCK = /<changes/i;
 
 const defaultNotify = reason => globalThis.toastr?.warning?.(reason, 'Story Suite');
 
@@ -53,11 +73,18 @@ export function defuseMacros(text) {
         .replace(/<(USER|BOT|CHAR|CHARIFNOTGROUP|GROUP)>/gi, '<​$1>');
 }
 
+// A persona or character name as it goes into a prompt: one line (no line breaks or other control
+// characters, so it cannot start a [Happened] or <Changes> line of its own), at most MAX_NAME long.
+export function flatName(value) {
+    const flat = String(value ?? '').replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').replace(/ {2,}/g, ' ').trim();
+    return flat.length > MAX_NAME ? `${flat.slice(0, MAX_NAME - 1).trimEnd()}…` : flat;
+}
+
 /**
  * `{{user}}` and `{{char}}` in the static and tail text become the persona's and the character's
- * names (SillyTavern's substituteParams when the context has it, else name1 / name2); any other
- * macro is left for defuseMacros. Both names are fixed for a chat, so the static text stays
- * byte-identical reply after reply.
+ * names (SillyTavern's substituteParams when the context has it, else name1 / name2), flattened to
+ * one short line (flatName); any other macro is left for defuseMacros. Both names are fixed for a
+ * chat, so the static text stays byte-identical reply after reply.
  */
 export function substituteNames(text, ctx) {
     const cache = new Map();
@@ -67,7 +94,8 @@ export function substituteNames(text, ctx) {
             let value = null;
             try { value = typeof ctx?.substituteParams === 'function' ? ctx.substituteParams(`{{${key}}}`) : null; } catch { value = null; }
             if (typeof value !== 'string' || value === `{{${key}}}`) value = key === 'user' ? ctx?.name1 : ctx?.name2;
-            cache.set(key, typeof value === 'string' && value ? value : null);
+            const flat = typeof value === 'string' ? flatName(value) : '';
+            cache.set(key, flat || null);
         }
         return cache.get(key);
     };
@@ -129,7 +157,7 @@ export function restoreMissing(chat, staticText, tailText) {
  * adds the packs' start, SPEC §2.6) }.
  * `settings` is createSettings() (settings() → host settings, settings(id) → a module's).
  * Returns { interceptor, install, uninstall, onPromptReady, onTextPromptReady, onMessageReceived,
- * onChatChanged, onTimelineChanged, onGenerationEnded, preview, problems, clearProblems,
+ * onChatChanged, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems,
  * session }.
  */
 export function createTurn({ ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState() }) {
@@ -138,6 +166,7 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
     const position = place => (place === 'static' ? types().IN_PROMPT ?? IN_PROMPT : types().IN_CHAT ?? IN_CHAT);
     const hostSettings = () => (typeof settings === 'function' ? settings() : settings ?? {});
     let session = null;
+    let dryNext = false;
     let listeners = [];
     const problemLog = [];
     const blocks = [];
@@ -179,26 +208,39 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
     const hasCarrier = () => (ctx?.chat ?? []).some(isCarrier);
     const lastCarrier = () => (ctx?.chat ?? []).findLastIndex(isCarrier);
 
+    // The chat's state starts on its first carrier; a damaged record set up again goes to the Problems.
+    function ensureInitial() {
+        const notes = store.ensureInitial(initial());
+        for (const note of Array.isArray(notes) ? notes : []) problem({ code: 'DAMAGED', message: note });
+    }
+
     function rebuild() {
         store.rebuild();
-        if (hasCarrier()) store.ensureInitial(initial());
+        if (hasCarrier()) ensureInitial();
         events?.emit('head', { index: store.headIndex() });
     }
 
     // beforeGenerate (§4.1 step 3): each hook may return lines for the tail, or commands to
     // commit now as `system` receipts: string[] | { lines?: string[], commands?: [{ type, payload }] }.
-    async function runCues(type = 'normal') {
+    // A Continue (the same reply goes on) and a dry run (SillyTavern counting tokens) commit nothing
+    // (B3-9): hooks are told `{ type, dryRun, commit: false }` and their commands are not run.
+    async function runCues(type = 'normal', { dryRun = false } = {}) {
         const cues = {};
         let committed = false;
+        const commit = !dryRun && type !== 'continue';
         for (const { moduleId, fn } of registry.hookEntries('beforeGenerate')) {
             let out;
-            try { out = await fn(view(), { type }); } catch (error) {
+            try { out = await within(fn(view(), { type, dryRun, commit }), HOOK_TIMEOUT_MS); } catch (error) {
                 problem({ module: moduleId, code: 'FAILED', message: `beforeGenerate failed: ${error?.message ?? error}` });
+                continue;
+            }
+            if (out === TIMED_OUT) {
+                problem({ module: moduleId, code: 'TIMEOUT', message: `beforeGenerate did not answer within ${HOOK_TIMEOUT_MS / 1000} s; the reply went on without its notes.` });
                 continue;
             }
             const lines = Array.isArray(out) ? out : Array.isArray(out?.lines) ? out.lines : [];
             if (lines.length) cues[moduleId] = lines.filter(line => typeof line === 'string');
-            for (const command of Array.isArray(out?.commands) ? out.commands : []) {
+            for (const command of commit && Array.isArray(out?.commands) ? out.commands : []) {
                 const result = await bus.command(command?.type, command?.payload ?? {}, { cause: 'system' });
                 if (result?.ok) {
                     committed = true;
@@ -212,7 +254,7 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
 
     function build(cues = {}) {
         const untold = store.untold();
-        const result = assemble({ registry, view: view(), untold, settings: hostSettings(), cues });
+        const result = assemble({ registry, view: view(), untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx) });
         for (const message of result.problems) problem({ code: 'FAILED', message });
         return { ...result, untold };
     }
@@ -220,12 +262,17 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
     /** SillyTavern's generate interceptor: (chat, contextSize, abort, type). */
     // canGenerate (MODULES §F12): every module may hold a story generation back, e.g. until the
     // player character exists. `false` or { ok: false, reason } blocks; the first one is the answer.
-    // A hook that throws is logged and does not block (a bug must not lock the reader out).
+    // A hook that throws, or does not answer within HOOK_TIMEOUT_MS, is logged and does not block
+    // (a bug must not lock the reader out).
     async function blockedBy() {
         for (const { moduleId, fn } of registry.hookEntries('canGenerate')) {
             let answer;
-            try { answer = await fn(view()); } catch (error) {
+            try { answer = await within(fn(view()), HOOK_TIMEOUT_MS); } catch (error) {
                 problem({ module: moduleId, code: 'FAILED', message: `canGenerate failed: ${error?.message ?? error}` });
+                continue;
+            }
+            if (answer === TIMED_OUT) {
+                problem({ module: moduleId, code: 'TIMEOUT', message: `canGenerate did not answer within ${HOOK_TIMEOUT_MS / 1000} s; the story went on.` });
                 continue;
             }
             if (answer === false || (answer && typeof answer === 'object' && answer.ok === false)) {
@@ -262,6 +309,9 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
             return;
         }
         if (!ctx?.chat) return;
+        // GENERATION_STARTED said whether this one is a dry run (it comes just before).
+        const dryRun = dryNext;
+        dryNext = false;
         try {
             await trySave('before the reply');
             // A Regenerate removes the old reply before this runs, without an event for it.
@@ -273,8 +323,13 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
                 block(blocked, abort);
                 return;
             }
-            const cues = await runCues(kind);
+            const cues = await runCues(kind, { dryRun });
             const built = build(cues);
+            if (dryRun) {
+                // Counted, never sent: the prompts are there to count, and the pending reply keeps its session.
+                setPrompts(defuseMacros(built.staticText), defuseMacros(built.tailText));
+                return;
+            }
             const chat = ctx.chat;
             const last = chat.length - 1;
             const index = kind === 'swipe' || kind === 'continue' ? last : chat.length;
@@ -282,12 +337,12 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
                 type: kind,
                 index,
                 untold: built.untold.map(receipt => receipt.id),
-                staticText: defuseMacros(substituteNames(built.staticText, ctx)),
-                tailText: defuseMacros(substituteNames(built.tailText, ctx)),
+                staticText: defuseMacros(built.staticText),
+                tailText: defuseMacros(built.tailText),
                 parts: built.parts,
-                // A Continue whose reply already held a block was captured then; only a block
-                // the continuation adds is read.
-                captured: kind === 'continue' && extractBlock(chat[last]?.mes) !== null,
+                // A Continue's reply was captured before: only blocks the continuation adds to this
+                // text are read (capture.js continuation()).
+                base: kind === 'continue' ? String(chat[last]?.mes ?? '') : null,
                 prompted: false,
                 background: 0,
                 restored: '',
@@ -300,10 +355,23 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         }
     }
 
+    // Every earlier reply is in every prompt: what its text is without blocks is remembered, and a
+    // text with no "<changes" in it at all is passed by without reading it further.
+    const stripped = new Map();
+    function strippedText(text) {
+        if (!HAS_BLOCK.test(text)) return text;
+        let out = stripped.get(text);
+        if (out === undefined) {
+            out = extractBlock(text) === null ? text : stripBlock(text);
+            if (stripped.size >= STRIP_CACHE) stripped.delete(stripped.keys().next().value);
+            stripped.set(text, out);
+        }
+        return out;
+    }
     function stripHistory(chat) {
         for (const message of chat) {
             if (message?.role !== 'assistant') continue;
-            const content = mapContent(message.content, text => (extractBlock(text) === null ? text : stripBlock(text)));
+            const content = mapContent(message.content, strippedText);
             if (content !== message.content) message.content = content;
         }
     }
@@ -345,13 +413,35 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
     // Runs the reply's change lines; returns { receipts, problems }.
     // Each line runs on the state the lines before it left (bus.run's `state`), as its owner's
     // capture handler (bus.run's `capture`), and is stored on the reply before the next one runs.
-    async function captureLines(index, lines) {
+    // A reply holds at most maxChangeLines change lines; the rest are one Problem (pushed to `found`).
+    function capped(index, all, found) {
+        const cap = Number.isInteger(hostSettings()?.maxChangeLines) && hostSettings().maxChangeLines > 0 ? hostSettings().maxChangeLines : MAX_CHANGE_LINES;
+        if (all.length > cap) {
+            const more = all.length - cap;
+            found.push(problem({ index, code: 'TOO_MANY', message: `The reply has ${all.length} change lines; only the first ${cap} were read, so ${more} ${more === 1 ? 'line was' : 'lines were'} not used (from "${all[cap].raw.slice(0, 60)}").` }));
+        }
+        return all.slice(0, cap);
+    }
+
+    async function captureLines(index, all) {
         const receipts = [];
         const found = [];
-        let state = store.head();
+        const lines = capped(index, all, found);
+        // One write of the reply's record for all its lines (store.batch), not one per line.
+        await (store.batch ?? (fn => fn()))(() => captureEach(index, lines, receipts, found));
+        return { receipts, problems: found };
+    }
+
+    // Runs `lines` as story captures on carrier `index`, each on the state the one before left. Stored on
+    // the head as they go (append), or, with `base` (a Re-read), run on that state and returned as
+    // { ops } for store.replaceStory, nothing stored.
+    async function captureEach(index, lines, receipts, found, base = null, seeds = null) {
+        const collected = [];
+        let state = base ?? store.head();
         // ctx.carrier and ctx.chat for the capture handlers (MODULES §F2's capture context).
         const message = ctx?.chat?.[index];
-        const carrier = { index, swipe: Number.isInteger(message?.swipe_id) ? message.swipe_id : 0 };
+        // `sid`: the reply's record ID, which stays with the reply when earlier messages are deleted.
+        const carrier = { index, swipe: Number.isInteger(message?.swipe_id) ? message.swipe_id : 0, sid: store.carrierSid?.(index) ?? null };
         const reader = (ctx?.chat ?? []).slice(0, index).findLast(item => item?.is_user);
         const chat = { lastUser: String(reader?.mes ?? ''), reply: stripBlock(String(message?.mes ?? '')) };
         for (const line of lines) {
@@ -362,8 +452,13 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
             }
             let result;
             try {
-                result = await bus.run(`${CAPTURE_PREFIX}${entry.kind}`, { ...line, kind: entry.kind, word: line.kind }, { cause: 'story', state, capture: entry, carrier, chat });
-                if (result?.ok) store.append({ ops: result.ops, receipt: result.receipt });
+                const mark = lineMark(line.raw);
+                const seed = seeds?.(entry.kind, mark);
+                result = await bus.run(`${CAPTURE_PREFIX}${entry.kind}`, { ...line, kind: entry.kind, word: line.kind }, { cause: 'story', state, capture: entry, carrier, chat, ...(seed === undefined ? {} : { seed }) });
+                // The receipt remembers which line made it (`line`), so a Re-read can give the line its seed again.
+                if (result?.ok) result = { ...result, receipt: { ...result.receipt, line: mark } };
+                if (result?.ok && base) collected.push(...result.ops);
+                else if (result?.ok) store.append({ ops: result.ops, receipt: result.receipt });
             } catch (error) {
                 result = { ok: false, code: 'FAILED', message: error?.message ?? String(error) };
             }
@@ -371,11 +466,85 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
                 found.push(problem({ module: entry.moduleId, index, line: line.raw, code: result?.code ?? 'FAILED', message: `"${line.raw}" was not used: ${result?.message ?? 'unknown error'}` }));
                 continue;
             }
-            state = result.state ?? store.head();
+            state = result.state ?? (base ? state : store.head());
             receipts.push(result.receipt);
-            events?.emit('committed', { receipt: result.receipt });
+            // Used, but not all of it (a clamp): the owner says why, and that goes to the Problems list.
+            if (typeof result.problem === 'string' && result.problem) {
+                found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'LIMITED', message: result.problem }));
+            }
+            if (!base) events?.emit('committed', { receipt: result.receipt });
         }
-        return { receipts, problems: found };
+        return { ops: collected };
+    }
+
+    const refusal = (code, message) => ({ ok: false, code, message });
+
+    // A change line's mark: a hash of its text without spaces (hiding the block breaks up "--" with one).
+    const lineMark = raw => hash(String(raw ?? '').replace(/\s+/g, ''));
+
+    // For a Re-read (r2-3): each line run again gets the seed of the story receipt it made before, so the
+    // records it makes keep their IDs and the reader's later actions on them still fit. The reply's story
+    // receipts are taken in order, a line matching the next one of its kind made by the same line text
+    // (`line`, lineMark); a line that made none before (it failed, was changed, or is new) gets a fresh
+    // seed. → (kind, mark) => seed | undefined.
+    function storySeeds(record) {
+        const stored = (Array.isArray(record?.receipts) ? record.receipts : [])
+            .filter(receipt => receipt?.cause === 'story' && typeof receipt.line === 'string' && Number.isInteger(receipt.seed));
+        let next = 0;
+        return (kind, mark) => {
+            const at = stored.findIndex((receipt, n) => n >= next && receipt.type === `${CAPTURE_PREFIX}${kind}` && receipt.line === mark);
+            if (at < 0) return undefined;
+            next = at + 1;
+            return stored[at].seed;
+        };
+    }
+
+    /**
+     * Re-read (F40): reads reply `index`'s <Changes> block again, as its shown swipe has it now, and
+     * replaces the story changes stored on it the way a fresh capture would (store.replaceStory): its
+     * `story` receipts go, the lines run again on the state before the reply, and the reader's own
+     * actions and system steps on it stay after them (their claims too). Later replies are checked
+     * again on top; if one of them no longer fits, nothing changes. Refused for the reader's messages,
+     * system messages, messages that hold no story record, and while a reply is being written.
+     * Saves once and emits `turn` ({ index, type: 'reread', receipts, problems, told: [] }).
+     * → { ok: true, receipts, problems } | { ok: false, code, message }.
+     */
+    async function reread(index) {
+        const chat = ctx?.chat ?? [];
+        const message = Number.isInteger(index) ? chat[index] : undefined;
+        if (!message) return refusal('NOT_FOUND', `There is no message ${index} in this chat.`);
+        if (message.is_user) return refusal('REFUSED', 'This is the reader\'s own message; only replies hold story changes.');
+        if (message.is_system) return refusal('REFUSED', 'This is a system message; it holds no story changes.');
+        if (session) return refusal('REFUSED', 'A reply is being written; Re-read once it is done.');
+        if (!readRecord(message)) return refusal('REFUSED', 'This reply keeps no story record, so there is nothing to read again.');
+        const base = store.before?.(index);
+        if (!base) return refusal('FAILED', 'This chat has no story state yet.');
+        const mes = String(message.mes ?? '');
+        const block = extractBlock(mes);
+        const parsed = block === null ? { lines: [], problems: [] } : parseChanges(block);
+        const problems = parsed.problems.map(text => problem({ index, code: 'UNREADABLE', message: text }));
+        const receipts = [];
+        const lines = capped(index, parsed.lines, problems);
+        let ops;
+        try {
+            ({ ops } = await captureEach(index, lines, receipts, problems, base, storySeeds(readRecord(message))));
+            store.replaceStory(index, { ops, receipts });
+        } catch (error) {
+            return refusal('CONFLICT', `${error?.message ?? error}`);
+        }
+        if (block !== null) {
+            const hidden = hideBlock(mes);
+            if (hidden !== mes) {
+                message.mes = hidden;
+                if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
+                redraw(index, message);
+            }
+        }
+        await trySave('after the Re-read');
+        for (const receipt of receipts) events?.emit('committed', { receipt });
+        events?.emit('head', { index: store.headIndex() });
+        events?.emit('turn', { index, type: 'reread', receipts, problems, told: [] });
+        return { ok: true, receipts, problems };
     }
 
     // Only the reply's text changed (its block hidden): SillyTavern's own save, told like any other.
@@ -400,24 +569,34 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         if (!isCarrier(message)) return null;
         try {
             if (store.headIndex() !== id) store.rebuild();
-            store.ensureInitial(initial());
+            ensureInitial();
             if (store.headIndex() !== id) {
                 problem({ index: id, code: 'FAILED', message: 'The reply is not the last message that keeps the story, so its changes were not read.' });
                 return null;
             }
-            const block = current.captured ? null : extractBlock(message.mes);
+            const text = String(message.mes ?? '');
+            // A Continue: SillyTavern wrote the old text again, cleaned up, so it can be shorter than it
+            // was; where the added text starts is found, not counted, or its block is left bare.
+            const at = typeof current.base === 'string' ? continuation(current.base, text) : null;
+            // The reader stopped it (GENERATION_STOPPED): an open block's unfinished last line is left out.
+            const stopped = current.stopped === true;
+            const block = extractBlock(text, 'Changes', at, { stopped });
             const parsed = block === null ? { lines: [], problems: [] } : parseChanges(block);
-            const problems = parsed.problems.map(text => problem({ index: id, code: 'UNREADABLE', message: text }));
+            const problems = parsed.problems.map(line => problem({ index: id, code: 'UNREADABLE', message: line }));
+            const cut = block === null ? null : cutLine(text, 'Changes', at, { stopped });
+            if (cut) problems.push(problem({ index: id, line: cut, code: 'CUT_OFF', message: `The reply stopped in the middle of the change line "${cut.slice(0, 80)}", so it was not used.` }));
             const result = await captureLines(id, parsed.lines);
             problems.push(...result.problems);
 
             // What this reply was told; a Continue keeps what the reply was told before.
-            const before = current.type === 'continue' ? message.extra?.storySuite?.narrated ?? [] : [];
+            // (B-b2-timeline-9: read through readRecord, and only receipt IDs, whatever the chat holds.)
+            const told = current.type === 'continue' ? readRecord(message)?.narrated ?? [] : [];
+            const before = told.filter(id => typeof id === 'string');
             store.setNarrated(id, [...new Set([...before, ...current.untold])]);
 
             let edited = false;
             if (block !== null) {
-                const hidden = hideBlock(message.mes);
+                const hidden = hideBlock(message.mes, 'Changes', { ...(at ?? {}), stopped });
                 if (hidden !== message.mes) {
                     message.mes = hidden;
                     if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
@@ -490,6 +669,17 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         rebuild();
     }
 
+    /** GENERATION_STARTED: (type, options, dryRun). */
+    function onGenerationStarted(_type, _options, dryRun) {
+        dryNext = dryRun === true;
+    }
+
+    /** GENERATION_STOPPED: the reader stopped the reply being written (its last line may be unfinished). */
+    function onGenerationStopped() {
+        if (session) session.stopped = true;
+        onGenerationEnded();
+    }
+
     /** GENERATION_ENDED / GENERATION_STOPPED: a spent note never reaches a later prompt. */
     function onGenerationEnded() {
         if (session?.prompted) clearPrompts();
@@ -511,10 +701,13 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         on(names.CHAT_COMPLETION_PROMPT_READY, onPromptReady);
         on(names.GENERATE_AFTER_COMBINE_PROMPTS, onTextPromptReady);
         on(names.MESSAGE_RECEIVED, onMessageReceived);
+        on(names.GENERATION_STARTED, onGenerationStarted);
         on(names.GENERATION_ENDED, onGenerationEnded);
-        on(names.GENERATION_STOPPED, onGenerationEnded);
+        on(names.GENERATION_STOPPED, onGenerationStopped);
         on(names.CHAT_CHANGED, onChatChanged);
-        for (const event of [names.MESSAGE_DELETED, names.MESSAGE_SWIPED, names.MESSAGE_SWIPE_DELETED, names.CHARACTER_FIRST_MESSAGE_SELECTED]) on(event, onTimelineChanged);
+        // MESSAGE_EDITED too: a record's swipe mark follows an edit (persist.js restamp), so a Continue
+        // after it still finds the record.
+        for (const event of [names.MESSAGE_DELETED, names.MESSAGE_SWIPED, names.MESSAGE_SWIPE_DELETED, names.CHARACTER_FIRST_MESSAGE_SELECTED, names.MESSAGE_EDITED]) on(event, onTimelineChanged);
         return api;
     }
 
@@ -536,8 +729,11 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         onChatChanged,
         onTimelineChanged,
         onGenerationEnded,
+        reread,
         /** What the next ordinary reply would be sent, without changing anything (no cues run). */
         preview: () => build().parts,
+        /** Adds { module?, code?, message, index?, line? } to the Problems list (and the console). */
+        report: entry => problem(entry),
         /** The Problems list, oldest first; `moduleId` narrows it (null: the host's own). */
         problems: moduleId => problemLog.filter(item => moduleId === undefined || item.module === moduleId).map(item => ({ ...item })),
         clearProblems: () => { problemLog.length = 0; },

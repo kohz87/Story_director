@@ -13,11 +13,67 @@ import {
 } from './domain.js';
 import { packPlace, packWorld, worldOf } from './world.js';
 
+/** New places, and new routes, one reply's lines may add; a line that would add more is not used (B-b1r2-7). */
+export const NEW_PER_REPLY = 16;
+/** Places and routes the atlas keeps; past these a line that would add one is not used. */
+export const MAX_PLACES = 400;
+export const MAX_ROUTES = 800;
+
 const ARROW = /\s*(?:→|⟶|➔|->|=>)\s*/u;
 const AMOUNT = /^(\d+(?:\.\d+)?)\s*(h|hrs?|hours?|d|days?)?$/i;
 
 const asText = value => (typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value));
 const queryOf = ctx => (typeof ctx?.query === 'function' ? (name, args) => ctx.query(name, args) : null);
+
+// The reply a story line comes from: its record ID (ctx.carrier.sid, which stays with it when an earlier
+// message is deleted), else its "index:swipe" key; null outside a reply's capture.
+function replyOf(ctx) {
+    const carrier = ctx?.carrier;
+    if (ctx?.cause !== 'story' || !carrier || typeof carrier !== 'object') return null;
+    for (const value of [carrier.sid, carrier.key]) if (typeof value === 'string' && value && value.length <= MAX_NAME) return value;
+    return null;
+}
+
+// The packs' places and routes, read once per reply's capture rather than once per line (each query
+// gives a copy): kept while the lines of one reply follow one another (the same reply and text, later
+// lines, later receipts), read again otherwise.
+let packCache = null;
+function packWorldFor(ctx, line) {
+    const reply = replyOf(ctx);
+    const index = Number.isSafeInteger(line?.index) ? line.index : -1;
+    const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : -1;
+    const text = typeof ctx?.chat?.reply === 'string' ? ctx.chat.reply : null;
+    const cached = packCache;
+    if (reply && cached && cached.reply === reply && cached.text === text && index > cached.index && rev > cached.rev) {
+        packCache = { ...cached, index, rev };
+        return cached.world;
+    }
+    const world = packWorld(queryOf(ctx));
+    packCache = reply ? { reply, text, index, rev, world } : null;
+    return world;
+}
+
+/**
+ * Why `adding` more places and `routes` more routes do not fit (one reply's NEW_PER_REPLY, the atlas's
+ * MAX_PLACES and MAX_ROUTES), or ''. A reply's own are counted by `made` (domain.js).
+ */
+function noRoom(atlas, reply, { places = 0, routes = 0 }) {
+    const count = (table, extra) => {
+        if (!extra) return { all: 0, mine: 0 };
+        const list = Object.values(atlas[table]);
+        return { all: list.length + extra, mine: reply ? list.filter(entry => entry?.made === reply).length + extra : 0 };
+    };
+    const p = count('places', places);
+    const r = count('routes', routes);
+    if (p.mine > NEW_PER_REPLY) return `one reply adds at most ${NEW_PER_REPLY} new places to the map`;
+    if (r.mine > NEW_PER_REPLY) return `one reply adds at most ${NEW_PER_REPLY} new routes to the map`;
+    if (p.all > MAX_PLACES) return `the map keeps at most ${MAX_PLACES} places`;
+    if (r.all > MAX_ROUTES) return `the map keeps at most ${MAX_ROUTES} routes`;
+    return '';
+}
+
+// Whether `name` is a place the atlas has (by its name or the pack's name for it).
+const onMap = (atlas, pack, name) => Boolean(findPlace(atlas, name) ?? findPlace(atlas, packPlace(pack, name)?.name));
 
 /**
  * The atlas place for `name`, made when there is none: `{ place, created, changed }`.
@@ -143,7 +199,7 @@ export function applyRouteLine(ctx, line) {
     if (keyOf(from) === keyOf(to)) return ctx.fail('INVALID', `"${lineText(line)}" leads from a place to itself.`);
     const kind = cleanWord(line?.labels?.kind, { lower: true });
     const atlas = ctx.draft('atlas');
-    const pack = packWorld(queryOf(ctx));
+    const pack = packWorldFor(ctx, line);
 
     if (op === '-') {
         const a = findPlace(atlas, from) ?? findPlace(atlas, packPlace(pack, from)?.name);
@@ -156,14 +212,26 @@ export function applyRouteLine(ctx, line) {
 
     const time = routeTime(line?.labels);
     if (time.error) return ctx.fail('INVALID', `"${lineText(line)}": ${time.error}`);
-    const a = ensurePlace(atlas, ctx, pack, from, { discovered: false }).place;
-    const b = ensurePlace(atlas, ctx, pack, to, { discovered: false }).place;
+    const reply = replyOf(ctx);
+    const newPlaces = [from, to].filter(name => !onMap(atlas, pack, name)).length;
+    const knownA = findPlace(atlas, from) ?? findPlace(atlas, packPlace(pack, from)?.name);
+    const knownB = findPlace(atlas, to) ?? findPlace(atlas, packPlace(pack, to)?.name);
+    const already = knownA && knownB ? routesBetween(atlas, knownA.id, knownB.id) : [];
+    const newRoute = !(kind ? already.some(entry => entry.kind === kind) : already.length);
+    const full = noRoom(atlas, reply, { places: newPlaces, routes: newRoute ? 1 : 0 });
+    if (full) return ctx.fail('REFUSED', `"${lineText(line)}" was not used: ${full}.`);
+    const made = (entry, created) => {
+        if (created && reply) entry.made = reply;
+        return entry;
+    };
+    const ends = [from, to].map(name => ensurePlace(atlas, ctx, pack, name, { discovered: false }));
+    const [a, b] = ends.map(end => made(end.place, end.created));
     const between = routesBetween(atlas, a.id, b.id);
     let route = (kind ? between.find(entry => entry.kind === kind) : between[0]) ?? null;
     const created = !route;
     if (created) {
         const id = newId(ctx, 'rt', atlas.routes);
-        route = { id, from: a.id, to: b.id, kind };
+        route = made({ id, from: a.id, to: b.id, kind }, true);
         atlas.routes[id] = route;
     } else route = atlas.routes[route.id];
     if (Object.keys(time.time).length) {
@@ -196,8 +264,11 @@ export function applyLandmarkLine(ctx, line) {
     if (!keyOf(name)) return ctx.fail('INVALID', `"${lineText(line)}" names no place.`);
     const labels = line?.labels ?? {};
     const atlas = ctx.draft('atlas');
-    const pack = packWorld(queryOf(ctx));
-    const known = Boolean(findPlace(atlas, name) ?? findPlace(atlas, packPlace(pack, name)?.name));
+    const pack = packWorldFor(ctx, line);
+    const known = onMap(atlas, pack, name);
+    const reply = replyOf(ctx);
+    const full = known ? '' : noRoom(atlas, reply, { places: 1 });
+    if (full) return ctx.fail('REFUSED', `"${lineText(line)}" was not used: ${full}.`);
     const aliases = asText(labels.aka ?? labels.alias).split(/\s*[,;]\s*/).map(cleanName).filter(Boolean);
     // A label left out keeps what the place has; one written empty (`| kind: `) clears it.
     const said = (value, options) => (value === undefined || value === null ? undefined : cleanWord(value, options));
@@ -211,6 +282,7 @@ export function applyLandmarkLine(ctx, line) {
         aliases,
         overwrite: true,
     });
+    if (created && reply) place.made = reply;
     const about = [place.kind, place.region].filter(Boolean).join(', ');
     return { summary: `${place.name}${about ? ` (${about})` : ''} is on the map.`, narrate: false, data: { place: place.id, created } };
 }

@@ -16,6 +16,7 @@ import { fakeQueries, makeHost, makeState, quest } from '../quests/helpers/fake-
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { replyTurn } from '../../../src/v2/tracker/domain.js';
 
 const finish = quests.commands['quest.finish'];
 const progress = quests.queries['quest.progress'];
@@ -41,7 +42,7 @@ test('r2-5: one reply turns in one quest on the story\'s word; a second waits, r
     const host = storyHost(errands(['Errand A', 'Errand B']));
     const first = host.run(finish, { id: 'th_errand00', by: 'story' });
     assert.equal(first.ok, true, first.message);
-    assert.equal(host.state.domains.director.turn.vouched, 'th_errand00');
+    assert.equal(replyTurn(host.state.domains.director).vouched, 'th_errand00');
     const before = structuredClone(host.state);
     const second = host.run(finish, { id: 'th_errand01', by: 'story' });
     assert.equal(second.code, 'REFUSED');

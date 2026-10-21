@@ -15,7 +15,8 @@
 // pick. Without the hook (a host that runs none), the tail picks the same way with a hash of the
 // head's rev and each id instead, so the same state always gives the same events.
 
-import { isOpen, keyOf, orderedEvents } from './domain.js';
+import { isOpen, keyOf, orderedEvents, seenOf, surfacedOf } from './domain.js';
+import { toSlot } from '../slot.js';
 
 export const SURFACE = 'chronicle.surface';
 /** Events in the tail at most. */
@@ -85,7 +86,7 @@ export function nearness(query, here) {
  * made (`chronicle.round + 1`), `near(place)` from `nearness`, `jitter(id)` → [0, 1).
  */
 export function pickEvents(chronicle, { round, near = () => 0, jitter = () => 0, limit = TAIL_EVENTS } = {}) {
-    const seen = chronicle?.seen ?? {};
+    const seen = seenOf(chronicle);
     const scored = orderedEvents(chronicle).filter(isOpen).map(event => {
         const last = seen[event.id];
         const stale = isInt(last) ? Math.min(STALE_CAP, Math.max(0, round - last)) : STALE_CAP;
@@ -113,7 +114,7 @@ export function tailPick(chronicle, { at = null, rev = 0, near = () => 0 } = {})
     const round = (chronicle.round ?? 0) + 1;
     const hashed = id => hashUnit(`${rev}:${id}`);
     if (open.length <= TAIL_EVENTS) return pickEvents(chronicle, { round, near, jitter: hashed });
-    const surfaced = chronicle.surfaced;
+    const surfaced = surfacedOf(chronicle);
     if (pickFresh(surfaced, at)) {
         const kept = surfaced.ids.filter(id => isOpen(chronicle.events?.[id]));
         if (kept.length >= TAIL_EVENTS) return kept.slice(0, TAIL_EVENTS);
@@ -141,8 +142,11 @@ export function surface(ctx, payload = {}) {
     const draws = new Map(orderedEvents(chronicle).filter(isOpen).map(event => event.id).sort().map(id => [id, ctx.rng()]));
     const ids = pickEvents(chronicle, { round, near, jitter: id => draws.get(id) ?? 0 });
     chronicle.round = round;
-    for (const id of ids) chronicle.seen[id] = round;
-    chronicle.surfaced = { at, round, ids };
+    // Both written whole (slots): only open events stay in `seen`.
+    const seen = Object.fromEntries(Object.entries(seenOf(chronicle)).filter(([id]) => isOpen(chronicle.events[id])));
+    for (const id of ids) seen[id] = round;
+    chronicle.seen = toSlot(seen);
+    chronicle.surfaced = toSlot({ at, round, ids });
     const names = ids.map(id => chronicle.events[id].name);
     return { summary: names.length ? `World news for the next reply: ${names.join(', ')}.` : '', narrate: false, data: { ids, round } };
 }
@@ -154,6 +158,6 @@ export function beforeGenerate(view) {
     const open = Object.values(chronicle.events ?? {}).filter(isOpen).length;
     if (open <= TAIL_EVENTS) return undefined;
     const at = isInt(view?.chat?.length) ? view.chat.length : null;
-    if (at === null || pickFresh(chronicle.surfaced, at)) return undefined;
+    if (at === null || pickFresh(surfacedOf(chronicle), at)) return undefined;
     return { commands: [{ type: SURFACE, payload: { at } }] };
 }

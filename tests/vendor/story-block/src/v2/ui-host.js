@@ -112,7 +112,8 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '' 
             // fmt.time: the story clock on its calendar (Story Director's, else the pack's, else Gregorian).
             const calendar = storyCalendar((name, args) => (registry.query(name) ? sdk.query(name, args) : null));
             return {
-                ...(currency?.name ? { money: n => `${n} ${currency.name}` } : {}),
+                // "1 mark", "44 marks": the currency's plural for any amount but one (MODULES §F1).
+                ...(currency?.name ? { money: n => (Number.isInteger(n) ? `${n} ${Math.abs(n) === 1 ? currency.name : currency.plural || currency.name}` : '') } : {}),
                 time: minutes => formatStoryTime(minutes, calendar),
             };
         },

@@ -27,6 +27,7 @@ import { isDue } from '../../relevance.js';
 import { waitsForPay } from '../../tracker.js';
 import { buildRecap, lapseSummary } from './recap.js';
 import { trackerOf } from './records.js';
+import { slotValue, toSlot } from '../slot.js';
 
 export const DEADLINE_REASON = 'deadline passed';
 export const REASONS = Object.freeze({ slipped: SLIPPED_REASON, lapsed: LAPSED_REASON, failed: DEADLINE_REASON });
@@ -113,8 +114,9 @@ export function needsSettle(state, { calendar, settings, at = null, met = () => 
     const director = state?.domains?.director;
     const now = director?.time?.minutes;
     if (!director || !isInt(now)) return false;
-    if (!director.checked || director.checked.minutes !== now) return true;
-    if (recapStale(director.recap ?? null, { at, rev: state?.meta?.rev ?? null })) return true;
+    const checked = slotValue(director.checked);
+    if (!checked || checked.minutes !== now) return true;
+    if (recapStale(slotValue(director.recap), { at, rev: state?.meta?.rev ?? null })) return true;
     if (!settings?.lapses) return false;
     const claims = state?.meta?.claims ?? {};
     return standing(director, { calendar, now, met, claimed: key => Boolean(claims[key]) }).lapses.length > 0;
@@ -137,7 +139,7 @@ function closedEntry(thread, reason) {
  */
 export function settle(director, { calendar, settings, rev, at = null, claim, met = () => false }) {
     const now = director.time.minutes;
-    const before = director.checked ?? null;
+    const before = slotValue(director.checked);
     const from = isInt(before?.minutes) ? before.minutes : null;
     const plan = standing(director, { calendar, now, met, lapse: settings.lapses });
     const closed = [];
@@ -155,17 +157,18 @@ export function settle(director, { calendar, settings, rev, at = null, claim, me
     }
 
     // The recap: a new one when the clock moved, else the one there was until a later reply.
-    let recap = director.recap ?? null;
+    let recap = slotValue(director.recap);
     if (from !== now) recap = null;
     else if (recapStale(recap, { at, rev })) recap = null;
     if (from !== null && from !== now) {
         const built = buildRecap(director, { calendar, from, to: now, minMinutes: settings.recapHours * 60 });
         if (built) recap = { fromMinutes: from, toMinutes: now, lines: built.lines, threads: built.threads, rev, at };
     }
-    if (recap !== null || director.recap !== undefined) director.recap = recap;
+    // Both are slots (../slot.js): written whole, so a later settle never depends on an earlier one.
+    if (recap !== null || director.recap !== undefined) director.recap = toSlot(recap);
 
     const lapsed = closed.map(entry => entry.id);
-    director.checked = { minutes: now, rev, lapsed, overdue: plan.overdue, pay: plan.pay, due: plan.due };
+    director.checked = toSlot({ minutes: now, rev, lapsed, overdue: plan.overdue, pay: plan.pay, due: plan.due });
     return { closed, standing: plan, recap, from, now };
 }
 

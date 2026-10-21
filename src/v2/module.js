@@ -37,6 +37,9 @@ export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
 export const VERSION = '2.0.0-alpha.1';
 
+/** The Story Block versions this module runs on (`requires.storyBlock`). */
+export const STORY_BLOCK_RANGE = '>=2.0.0-alpha.2';
+
 /** The parts in their fixed order: [id, part]. The order is the static prompt's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['screens', screens]]);
 
@@ -314,6 +317,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         id: MODULE_ID,
         name: MODULE_NAME,
         version: VERSION,
+        // The Story Block this needs (B-b7r2-1). Story Block before 2.0.0-alpha.2 compares without the
+        // pre-release tag, so it reads this as ">=2.0.0" and still loads the module.
+        requires: { storyBlock: STORY_BLOCK_RANGE },
         domains,
         commands,
         queries,

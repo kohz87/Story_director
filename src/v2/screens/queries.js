@@ -17,6 +17,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
+import { problemList } from '../tracker/domain.js';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -372,11 +373,11 @@ function stillSo(problem, director, query) {
  */
 export function problemsList(state, args, tools) {
     const director = state?.domains?.director;
-    const problems = director?.problems;
+    const problems = problemList(director);
     const substitute = typeof tools?.substitute === 'function' ? tools.substitute : null;
     const query = queryFrom(tools);
-    // The newest PROBLEM_SHOWN: the tracker lets the list grow past that before it cuts it back.
-    return (Array.isArray(problems) ? problems.slice(-PROBLEM_SHOWN) : []).filter(isRecord).filter(problem => stillSo(problem, director, query)).map(problem => ({
+    // The newest PROBLEM_SHOWN: the tracker keeps more than that (domain.js PROBLEM_ROOM).
+    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director, query)).map(problem => ({
         rev: problem.rev ?? null,
         kind: text(problem.kind),
         text: readerWords(problem.text, substitute),

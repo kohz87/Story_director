@@ -166,8 +166,9 @@ test('a scene move without | kind: back to a known settlement still lets a quest
         assert.equal((await host.sdk.command('quest.take', { key: 'Lone Wolf' })).ok, true);
         await host.send('Out we go.', said('The ridge.', ['~ place East Ridge | kind: wild']));
         await host.send('Back.', said('Back in town.', ['~ place Bluewatch']));
-        assert.equal(host.head().domains.scene.place.kind, '', 'the move left the scene\'s kind empty');
-        assert.equal(host.sdk.query('atlas.here').kind, 'settlement');
+        // Story Block leaves the scene's kind empty (before 2.0.0-alpha.2) or keeps the ridge's.
+        assert.ok(['', 'wild'].includes(host.head().domains.scene.place.kind), 'the move did not say the kind');
+        assert.equal(host.sdk.query('atlas.here').placeKind, 'settlement');
         assert.equal((await host.sdk.command('combat.win', { foes: [{ name: 'Wolf', count: 1 }] })).ok, true);
         const done = await host.sdk.command('quest.finish', { key: 'Lone Wolf' });
         assert.equal(done.ok, true, done.message);

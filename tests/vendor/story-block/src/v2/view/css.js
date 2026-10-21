@@ -9,10 +9,35 @@
 // * `#id` selectors get the screen's template id prefix (templateIdPrefix), as the drawn ids do;
 // * a quoted URL that is not `data:`/`https:` drops its declaration wherever it stands, custom properties
 //   included, and `image-set()`/`image()`/`cross-fade()`/`src()` may not take a value from `var()`;
-// * more than 64 KB is refused whole.
+// * more than 64 KB is refused whole;
+// * `@media`/`@supports`/… nested more than MAX_AT_DEPTH deep are dropped with a warning (a deep sheet
+//   would cost time at every level; packs refuse one, packs/validate.js unsafeCss).
 // Returns `{ css, warnings }`; warnings are plain sentences for the overlay. Pure.
 
 export const MAX_CSS_BYTES = 64 * 1024;
+// How deep group at-rules (@media, @supports, …) may nest inside each other.
+export const MAX_AT_DEPTH = 8;
+
+/** The deepest `{` nesting in a stylesheet (comments and strings skipped): `a { }` is 1. Linear. */
+export function cssDepth(source) {
+    const text = String(source ?? '');
+    let depth = 0;
+    let deepest = 0;
+    let quote = null;
+    for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        if (quote) {
+            if (char === '\\') i += 1;
+            else if (char === quote) quote = null;
+        } else if (char === '"' || char === '\'') quote = char;
+        else if (char === '/' && text[i + 1] === '*') {
+            const end = text.indexOf('*/', i + 2);
+            i = end < 0 ? text.length : end + 1;
+        } else if (char === '{') deepest = Math.max(deepest, ++depth);
+        else if (char === '}') depth = Math.max(0, depth - 1);
+    }
+    return deepest;
+}
 
 const SCOPE_ALIASES = /^(?::root|html|body|:host|:scope)(?![\w-])/i;
 const GROUPS = new Set(['media', 'supports', 'container', 'layer', 'document']);
@@ -319,17 +344,21 @@ export function scopeCss(source, screenId) {
     const clean = stripComments(text);
     if (/<\/?style|<\/?script/i.test(clean)) warnings.push('Markup inside the stylesheet was ignored.');
     const keyframes = new Map();
-    collectKeyframes(readItems(clean), prefix, keyframes);
-    const css = scopeItems(readItems(clean), { scope, keyframes, warnings, idPrefix: templateIdPrefix(screenId) }).join('\n');
+    const items = readItems(clean);
+    collectKeyframes(items, prefix, keyframes);
+    const css = scopeItems(items, { scope, keyframes, warnings, idPrefix: templateIdPrefix(screenId), depth: 0 }).join('\n');
     return { css, warnings };
 }
 
-function collectKeyframes(items, prefix, keyframes) {
+// Each group's items are read once (kept on the item for scopeItems), so a sheet is read once per level.
+const groupItems = item => (item.items ??= readItems(item.body));
+
+function collectKeyframes(items, prefix, keyframes, depth = 0) {
     for (const item of items) {
         if (item.type !== 'rule' || item.prelude[0] !== '@') continue;
         const at = /^@(-webkit-|-moz-)?keyframes\s+(-?[A-Za-z_][\w-]*)/i.exec(item.prelude);
         if (at) keyframes.set(at[2], `${prefix}${at[2]}`);
-        else if (GROUPS.has(atName(item.prelude))) collectKeyframes(readItems(item.body), prefix, keyframes);
+        else if (GROUPS.has(atName(item.prelude)) && depth < MAX_AT_DEPTH) collectKeyframes(groupItems(item), prefix, keyframes, depth + 1);
     }
 }
 
@@ -376,12 +405,17 @@ function scopeItems(items, context) {
                 continue;
             }
             if (GROUPS.has(name)) {
+                if (context.depth >= MAX_AT_DEPTH) {
+                    warnings.push(`Dropped @${name}: at-rules nest at most ${MAX_AT_DEPTH} deep in a screen.`);
+                    continue;
+                }
                 const condition = item.prelude.slice(1 + vendor.length + name.length).trim();
                 if (valueProblem(condition)) {
                     warnings.push(`Dropped @${name} ${condition.slice(0, 60)}: it names a URL.`);
                     continue;
                 }
-                const inner = scopeItems(readItems(item.body), context);
+                // Each level indents what is inside it again: bounded, as the levels are (MAX_AT_DEPTH).
+                const inner = scopeItems(groupItems(item), { ...context, depth: context.depth + 1 });
                 if (inner.length) out.push(`@${vendor}${name}${condition ? ` ${condition}` : ''} {\n${inner.map(indent).join('\n')}\n}`);
                 continue;
             }

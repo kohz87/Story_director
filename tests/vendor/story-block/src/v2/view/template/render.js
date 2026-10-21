@@ -13,7 +13,11 @@
 // `ss-t-<screen>-<id>` (css.js templateIdPrefix; the screen's CSS `#id` selectors get the same prefix), and
 // the attributes that point at ids follow (`for`, `headers`, `aria-labelledby` and the other id lists,
 // `href="#id"`, `url(#id)` in SVG paint); a form's `name` is prefixed too (document.<name> would clobber
-// the page's own). Classes SillyTavern acts on (sanitize.js RESERVED_CLASSES) are never set, bound or toggled.
+// the page's own), and so is every control's (a <form> is [LegacyOverrideBuiltIns]: `form.classList`,
+// `form.setAttribute`, `form.disabled` … would be its control named so). The renderer also reads the DOM
+// members it uses past any such control (`dom()` / `call()` below), so even a name that slips through
+// cannot stop a form drawing or leave it busy. Classes SillyTavern acts on (sanitize.js RESERVED_CLASSES)
+// are never set, bound or toggled.
 
 import { escapeKey } from '../../ops.js';
 import {
@@ -21,6 +25,40 @@ import {
     withDraft, withItem,
 } from '../bind.js';
 import { cssVarValue, templateIdPrefix } from '../css.js';
+
+// A DOM member as the element's own interface has it, never a <form>'s control of that name or id: the
+// prototype chain first (the browser's members live there), then the element's own property (the test
+// DOM keeps some on the instance).
+function descriptorOf(el, name) {
+    for (let proto = Object.getPrototypeOf(el); proto && proto !== Object.prototype; proto = Object.getPrototypeOf(proto)) {
+        const found = Object.getOwnPropertyDescriptor(proto, name);
+        if (found) return found;
+    }
+    return Object.getOwnPropertyDescriptor(el, name) ?? null;
+}
+function dom(el, name) {
+    const found = descriptorOf(el, name);
+    if (!found) return undefined;
+    return found.get ? found.get.call(el) : found.value;
+}
+function setDom(el, name, value) {
+    const found = descriptorOf(el, name);
+    if (found?.set) found.set.call(el, value);
+    else el[name] = value;
+}
+const call = (el, name, ...args) => dom(el, name).apply(el, args);
+
+// A control the reader cannot use (`:disabled`, so a disabled fieldset counts); a <form> never is.
+function isDisabled(el) {
+    try {
+        const matches = dom(el, 'matches');
+        if (typeof matches === 'function') return Boolean(matches.call(el, ':disabled'));
+    } catch { /* a DOM without :disabled (the tests'): the property below */ }
+    return dom(el, 'disabled') === true;
+}
+
+// The elements a control `name` is prefixed on (the form-associated ones a <form> exposes by name).
+const CONTROLS = new Set(['input', 'select', 'textarea', 'button', 'fieldset', 'output', 'object']);
 
 /** Set a value in a draft the host holds, creating records on the way (frozen ones are copied). */
 function writeInPlace(target, keys, value) {
@@ -73,7 +111,7 @@ function pageValue(view, tag, name, value) {
             view.warn(`name="${value.trim()}" was left off <${tag}>: SillyTavern reads controls by that name.`);
             return null;
         }
-        if (tag === 'form') return `${prefix}${value}`;
+        if (tag === 'form' || CONTROLS.has(tag)) return value.trim() ? `${prefix}${value.trim()}` : null;
     }
     return value;
 }
@@ -276,7 +314,7 @@ class IfBlock {
         if (show && !this.inner) {
             this.inner = this.node.widget ? new WidgetBlock(this.node, this.view) : new ElementBlock(this.node, this.view);
             const parent = this.anchor.parentNode;
-            for (const dom of this.inner.nodes()) parent?.insertBefore(dom, this.anchor);
+            for (const node of this.inner.nodes()) if (parent) call(parent, 'insertBefore', node, this.anchor);
         } else if (!show && this.inner) {
             this.inner.destroy();
             this.inner = null;
@@ -328,7 +366,7 @@ class EachBlock {
         const parent = this.anchor.parentNode;
         const moved = order.length !== this.order.length || order.some((key, index) => key !== this.order[index]);
         if (moved && parent) {
-            for (const key of order) for (const dom of next.get(key).nodes()) parent.insertBefore(dom, this.anchor);
+            for (const key of order) for (const node of next.get(key).nodes()) call(parent, 'insertBefore', node, this.anchor);
         }
         this.items = next;
         this.order = order;
@@ -365,19 +403,20 @@ class ElementBlock {
         this.el = el;
         for (const [name, value] of node.attrs) {
             const shown = pageValue(view, node.tag, name, value);
-            if (shown !== null) el.setAttribute(attrName(name), shown);
+            if (shown !== null) call(el, 'setAttribute', attrName(name), shown);
         }
         this.children = node.children.map(child => makeBlock(child, view));
-        for (const child of this.children) for (const dom of child.nodes()) el.appendChild(dom);
-        if (node.command) el.addEventListener('click', event => this.onCommand(event));
+        for (const child of this.children) for (const node of child.nodes()) call(el, 'appendChild', node);
+        const listen = (type, fn) => call(el, 'addEventListener', type, fn);
+        if (node.command) listen('click', event => this.onCommand(event));
         const form = node.tag === 'form' && !node.svg;
-        if (node.submit) el.addEventListener(form ? 'submit' : 'click', event => this.onSubmit(event));
+        if (node.submit) listen(form ? 'submit' : 'click', event => this.onSubmit(event));
         // A form without data-submit still never submits: the browser would load the page again.
-        else if (form) el.addEventListener('submit', event => event?.preventDefault?.());
+        else if (form) listen('submit', event => event?.preventDefault?.());
         if (node.draft) {
             const handler = () => this.onInput();
-            el.addEventListener('input', handler);
-            el.addEventListener('change', handler);
+            listen('input', handler);
+            listen('change', handler);
         }
     }
     nodes() { return [this.el]; }
@@ -399,8 +438,8 @@ class ElementBlock {
         }
         if (value !== null) value = pageValue(this.view, node.tag, name, value);
         if (!this.changed(`attr:${name}`, value)) return;
-        if (value === null) el.removeAttribute(attrName(name));
-        else el.setAttribute(attrName(name), value);
+        if (value === null) call(el, 'removeAttribute', attrName(name));
+        else call(el, 'setAttribute', attrName(name), value);
     }
 
     update(scope) {
@@ -416,12 +455,12 @@ class ElementBlock {
             if (boolean) {
                 const on = Boolean(value);
                 this.setAttr(name, on ? '' : null);
-                if (name === 'checked' || name === 'selected' || name === 'disabled') el[name] = on;
+                if (name === 'checked' || name === 'selected' || name === 'disabled') setDom(el, name, on);
             } else this.setAttr(name, value === null || value === undefined || value === false ? null : toText(value));
         }
         for (const { name, expr } of node.vars) {
             const value = cssVarValue(read(expr));
-            if (this.changed(`var:${name}`, value)) el.style.setProperty(name, value);
+            if (this.changed(`var:${name}`, value)) dom(el, 'style').setProperty(name, value);
         }
         for (const { name, expr } of node.classes) {
             if (!classAllowed(name)) {
@@ -429,11 +468,11 @@ class ElementBlock {
                 continue;
             }
             const on = Boolean(read(expr));
-            if (this.changed(`class:${name}`, on)) el.classList.toggle(name, on);
+            if (this.changed(`class:${name}`, on)) dom(el, 'classList').toggle(name, on);
         }
         if (node.bindText) {
             const text = toText(read(node.bindText));
-            if (this.changed('text', text)) el.textContent = text;
+            if (this.changed('text', text)) setDom(el, 'textContent', text);
         }
         for (const child of this.children) child.update(scope);
         if (node.draft) this.showDraft(scope);
@@ -512,24 +551,28 @@ class ElementBlock {
 
     // --- commands ----------------------------------------------------------------------------------
 
+    // Marking the element busy is inside the try, so a mark that fails can never leave it busy for good.
     async busy(fn) {
         if (this.running) return;
-        this.running = true;
-        this.el.classList.add('ss-busy');
-        this.el.setAttribute('aria-busy', 'true');
+        const { el } = this;
         try {
+            this.running = true;
+            dom(el, 'classList').add('ss-busy');
+            call(el, 'setAttribute', 'aria-busy', 'true');
             await fn();
         } finally {
             this.running = false;
-            this.el.classList.remove('ss-busy');
-            this.el.removeAttribute('aria-busy');
+            try {
+                dom(el, 'classList').remove('ss-busy');
+                call(el, 'removeAttribute', 'aria-busy');
+            } catch { /* the element is gone */ }
         }
     }
 
     onCommand(event) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        if (!this.scope || this.el.disabled) return undefined;
+        if (!this.scope || isDisabled(this.el)) return undefined;
         const { node, view } = this;
         let payload = {};
         if (node.payload) {
@@ -546,7 +589,7 @@ class ElementBlock {
     onSubmit(event) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        if (!this.scope || this.el.disabled) return undefined;
+        if (!this.scope || isDisabled(this.el)) return undefined;
         const draft = structuredClone(this.view.draftValue);
         const onSubmit = this.view.options.onSubmit;
         if (typeof onSubmit === 'function') {
@@ -562,7 +605,8 @@ class ElementBlock {
 
     destroy() {
         for (const child of this.children) child.destroy();
-        this.el.remove?.();
+        const remove = dom(this.el, 'remove');
+        if (typeof remove === 'function') remove.call(this.el);
     }
 }
 

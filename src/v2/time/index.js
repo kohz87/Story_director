@@ -13,6 +13,7 @@ import { estimateTokens } from '../../relevance.js';
 import { RECAP_BUDGET } from './recap.js';
 import { DEFAULTS, calendarOf, timeSettings } from './records.js';
 import { needsSettle, recapStale, settle, settleSummary } from './settle.js';
+import { slotValue } from '../slot.js';
 
 export const SETTLE = 'time.settle';
 
@@ -104,7 +105,7 @@ export function beforeGenerate(view) {
 
 /** The recap the reply about to be written gets, or null. */
 function recapFor(view) {
-    const recap = view?.state?.domains?.director?.recap ?? null;
+    const recap = slotValue(view?.state?.domains?.director?.recap);
     if (!recap || !Array.isArray(recap.lines)) return null;
     const at = isInt(view?.chat?.length) ? view.chat.length : null;
     return recapStale(recap, { at, rev: view?.state?.meta?.rev ?? null }) ? null : recap;
@@ -130,7 +131,7 @@ export const queries = {
      */
     'time.overdue': state => {
         const director = state?.domains?.director;
-        const checked = director?.checked;
+        const checked = slotValue(director?.checked);
         if (!checked) return null;
         const lapsed = (checked.lapsed ?? []).map(id => director.threads?.[id]).filter(Boolean)
             .map(thread => ({ id: thread.id, key: thread.key, kind: thread.kind, due: String(thread.fields?.due ?? thread.fields?.on ?? ''), reason: thread.ended?.reason ?? '' }));
@@ -144,7 +145,7 @@ export const queries = {
     },
     /** The While away recap kept for the reply after a jump: `{ fromMinutes, toMinutes, lines, threads, rev, at }` or null. */
     'time.recap': state => {
-        const recap = state?.domains?.director?.recap;
+        const recap = slotValue(state?.domains?.director?.recap);
         return recap ? copy(recap) : null;
     },
 };

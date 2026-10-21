@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    MAX_EVENTS, MAX_FACTIONS, MAX_RESOLVED, findIn, initialChronicle, keyOf, orderedEvents, prune, validateChronicle,
+    MAX_EVENTS, MAX_FACTIONS, MAX_RESOLVED, findIn, initialChronicle, keyOf, orderedEvents, prune, seenOf, surfacedOf, validateChronicle,
 } from '../../../src/v2/chronicle/domain.js';
 
 const event = (n, over = {}) => ({
@@ -15,7 +15,7 @@ const faction = (n, over = {}) => ({ id: `fa_${String(n).padStart(8, '0')}`, nam
 const withEvents = list => ({ ...initialChronicle(), events: Object.fromEntries(list.map(entry => [entry.id, entry])) });
 
 test('the initial chronicle is valid and empty', () => {
-    assert.deepEqual(initialChronicle(), { events: {}, factions: {}, seen: {}, round: 0, surfaced: null });
+    assert.deepEqual(initialChronicle(), { events: {}, factions: {}, seen: [{}], round: 0, surfaced: null });
     assert.deepEqual(validateChronicle(initialChronicle()), []);
 });
 
@@ -36,7 +36,8 @@ test('a well-formed chronicle passes; each broken field is named', () => {
         [withEvents([event(1, { extra: 1 })]), /unknown field "extra"/],
         [withEvents([event(1), event(2, { name: 'event 1' })]), /Two events are called "event 1"/],
         [{ ...initialChronicle(), factions: { fa_00000001: faction(1, { stance: 5 }) } }, /stance must be text/],
-        [{ ...initialChronicle(), seen: { ev_00000009: 0 } }, /seen\["ev_00000009"\] is for no event/],
+        [{ ...initialChronicle(), seen: [{ x: 0 }] }, /seen\["x"\] is for no event/],
+        [{ ...initialChronicle(), seen: [{}, {}] }, /seen is not an object/],
         [{ ...withEvents([event(1)]), seen: { ev_00000001: 3 } }, /must be a round so far/],
         [{ ...initialChronicle(), surfaced: { at: 1, round: 0, ids: ['x'] } }, /surfaced must be null or/],
         [{ ...initialChronicle(), round: -1 }, /round must be a whole number/],

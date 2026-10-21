@@ -11,8 +11,8 @@
 
 import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps, isOffer } from '../../tracker.js';
-import { fromRecord, keysOf, orderedThreads, outcomeOf, toRecord, toTracker } from './convert.js';
-import { PROBLEM_LIMIT, PROBLEM_ROOM } from './domain.js';
+import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toRecord, toTracker } from './convert.js';
+import { addProblem, dropProblems, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
 import { applyMet, capNote, markOffer, noGoalProblem, onlyOwnLabels, questHasGoal, splitQuestLine, storyTurnIn } from './quest-lines.js';
 import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } from './time.js';
 
@@ -24,6 +24,8 @@ export const KEY_CHARS = 120;
 export const SUMMARY_CHARS = 600;
 /** New threads one reply's lines may add; a line that would add more is not used (a Problem says so). */
 export const NEW_THREADS_PER_REPLY = 16;
+/** Open threads the Director follows at once; a line that would add one more is not used (B-b1r2-8). */
+export const MAX_OPEN_THREADS = 300;
 // The longest a line is quoted in a summary or a Problem.
 const QUOTE_CHARS = 300;
 // Labels Story Block's generic state rules reserve (ops.js checkOps: `qty` is a count, `id` and
@@ -53,10 +55,12 @@ export function readerSaid(ctx) {
     return typeof said === 'string' ? said : null;
 }
 
-// The capture ctx's carrier `{ index, swipe, key }` as one plain value: its key, else
+// The capture ctx's carrier `{ index, swipe, sid, key }` as one plain value: its sid, else its key, else
 // "index:swipe" (a swipe of the same reply is another reply), else a bare index or key.
 function carrierKey(value) {
     if (value && typeof value === 'object') {
+        // The reply's record ID (`sid`) stays with it when an earlier message is deleted; `key` does not.
+        if (typeof value.sid === 'string' && value.sid) return value.sid;
         if (typeof value.key === 'string' && value.key) return value.key;
         if (Number.isSafeInteger(value.index)) return `${value.index}:${Number.isSafeInteger(value.swipe) ? value.swipe : 0}`;
         return null;
@@ -74,21 +78,27 @@ function replyOf(ctx, line) {
     return null;
 }
 
-/** Moves `director.turn` on when `line` starts another reply's Director lines. */
+/**
+ * Moves `director.turn` on when `line` starts another reply's Director lines. Returns the reply's
+ * bookkeeping (`turn.now`) to change in place: it is written whole with the line (domain.js).
+ */
 export function beginTurn(director, ctx, line) {
-    const turn = director.turn;
+    const turn = replyTurn(director);
     const reply = replyOf(ctx, line);
     const index = Number.isSafeInteger(line?.index) ? line.index : -1;
     const fresh = reply !== null ? reply !== turn.reply || (index >= 0 && index <= turn.index)
         : index <= 0 || index <= turn.index;
-    if (fresh) director.turn = { n: turn.n + 1, reply, index, from: director.time.minutes, quests: [], lone: null };
-    else director.turn.index = index;
-    return director.turn;
+    const now = fresh ? null : replyDraft(director);
+    if (!now) return startReply(director, { reply, index });
+    if (now.index !== index) now.index = index;
+    return now;
 }
 
-// `Hook: Sheepfold Wolves`, a kind and a colon written in front of the name (v1 0.9.10).
-function bareName(name) {
-    const text = String(name ?? '').replace(/\*\*|__|[*`]/g, '').trim();
+// `Hook: Sheepfold Wolves`, a kind and a colon written in front of the name (v1 0.9.10). Invisible
+// format marks go and the name is NFC, so "Ro\u200Bpe" and "\u202ERope" are the thread "Rope", as
+// Story Block reads its own names (names.js).
+export function bareName(name) {
+    const text = String(name ?? '').replace(/\p{Cf}+/gu, '').normalize('NFC').replace(/\*\*|__|[*`]/g, '').trim();
     const prefixed = text.match(/^([A-Za-z]+)\s*:\s*(\S.*)$/s);
     return prefixed && ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'arc'].includes(prefixed[1].toLowerCase()) ? prefixed[2].trim() : text;
 }
@@ -194,23 +204,17 @@ function newId(ctx, taken) {
     throw new Error('No free thread id.');
 }
 
-/**
- * Adds a problem to the Director's list. The list is only added to until it holds PROBLEM_ROOM, then
- * cut back to the newest PROBLEM_LIMIT: an append is one small change in the receipt, where cutting it
- * to 50 every time made each new problem rewrite the whole list. Readers show the newest 50.
- */
-export function addProblem(director, ctx, problem) {
-    const entry = { rev: revOf(ctx), turn: director.turn.n, ...problem };
-    for (const name of Object.keys(entry)) if (entry[name] === undefined) delete entry[name];
-    if (director.problems.length >= PROBLEM_ROOM) director.problems = [...director.problems.slice(-(PROBLEM_LIMIT - 1)), entry];
-    else director.problems.push(entry);
-}
+// Problems are the domain's (domain.js addProblem: each under its own key, never a list position).
+export { addProblem };
 
 const withArticle = word => `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
 
 // Writes the records the rules returned onto the draft: only threads that changed, and the key
-// index, so the command's ops are the change and nothing else.
-function writeBack(director, records, ctx, offeredIds) {
+// index, so the command's ops are the change and nothing else. A record the rules left as it was read
+// (`read`: each record as text before the rules ran) is not written back at all: read in and out
+// again, an older thread could come out a little different (an offer that closed losing what it was
+// offered as), and the line would write into a thread another reply made (B-b1r2-12).
+function writeBack(director, records, ctx, offeredIds, read = new Map()) {
     const rev = revOf(ctx);
     const before = new Map(orderedThreads(director).map(thread => [lineKey(thread.key), thread]));
     const ids = new Set(Object.keys(director.threads));
@@ -220,8 +224,9 @@ function writeBack(director, records, ctx, offeredIds) {
         const prev = before.get(record.id) ?? null;
         const id = prev?.id ?? newId(ctx, ids);
         idOf.set(record.id, id);
+        if (prev && read.get(record.id) === JSON.stringify(record)) continue;
         const thread = fromRecord(record, prev, { id, rev, order: prev ? undefined : (order += 1), offered: offeredIds.has(record.id) });
-        if (JSON.stringify(thread) !== JSON.stringify(prev)) director.threads[id] = thread;
+        if (!sameValue(thread, prev)) director.threads[id] = thread;
     }
     const keys = keysOf(records, record => idOf.get(record.id));
     for (const name of Object.keys(director.keys)) if (!Object.hasOwn(keys, name)) delete director.keys[name];
@@ -243,7 +248,7 @@ function offerCooldown(ctx) {
 /** `apply(ctx, line)` for agenda, event, hook, quest, clock, beat and secret lines. */
 export function applyThreadLine(ctx, given) {
     const director = ctx.draft('director');
-    beginTurn(director, ctx, given);
+    const turn = beginTurn(director, ctx, given);
     const raw = lineText(given);
     // Labels the Director does not keep are left out first (a Problem says which).
     const { line: kept, dropped } = withoutDroppedLabels(given);
@@ -260,21 +265,23 @@ export function applyThreadLine(ctx, given) {
     if (read.cut) addProblem(director, ctx, { kind: 'long-name', severity: 'info', key: op.key, op: op.op, text: `A name ${read.cut} characters long was cut to "${op.key}" (names are at most ${KEY_CHARS}).` });
     const said = readerSaid(ctx);
     const tracker = toTracker(director, { contracts: true });
+    // Each record as read (the same objects come back from the rules, changed or not: so plain JSON).
+    const asRead = new Map(tracker.records.map(record => [record.id, JSON.stringify(record)]));
     const ops = [op];
     const named = director.threads[director.keys[op.id]];
     // v1 0.9.20: "+ quest Key" then "- hook Key — <what the hook was>" in one reply leaves the job
     // open. Lines come one at a time here, so the reply's `+ quest` is put back in front of the
     // `-` (an active record named again changes nothing) and its own finding is dropped.
-    const again = op.op === '-' && named?.status === 'active' && director.turn.quests.includes(named.id);
+    const again = op.op === '-' && named?.status === 'active' && turn.quests.includes(named.id);
     if (again) ops.unshift({ op: '+', kind: 'quest', key: named.key, id: lineKey(named.key), fields: {}, extra: {}, reason: '', raw: '' });
     // v1 0.9.27: "yes" or "I'll take it" takes a job only when it is the reply's one new quest. A
     // second `+ quest` in the reply is read beside a stand-in for the first.
     const newQuest = op.op === '+' && op.kind === 'quest';
-    const crowd = newQuest && director.turn.quests.some(id => id !== named?.id);
+    const crowd = newQuest && turn.quests.some(id => id !== named?.id);
     if (crowd) ops.unshift(OTHER_QUEST);
     // F94: a taken quest the story closes as done is turned in by code, or kept open with the reason.
     if (named && named.kind === 'quest' && named.status === 'active' && named.taken && op.op !== '+') {
-        const trial = applyOps(toTracker(director), ops, { message: director.turn.n, time: director.time.minutes, said });
+        const trial = applyOps(toTracker(director), ops, { message: turnNumber(director), time: director.time.minutes, said });
         const record = trial.tracker.records.find(entry => entry.id === lineKey(named.key));
         if (record && record.status !== 'active' && outcomeOf(record) === 'done') {
             if (met !== null) applyMet(ctx, director.threads[named.id], met, metText, revOf(ctx));
@@ -282,18 +289,23 @@ export function applyThreadLine(ctx, given) {
             if (out) return out;
         }
     }
-    const result = applyOps(tracker, ops, { message: director.turn.n, time: director.time.minutes, said });
+    const result = applyOps(tracker, ops, { message: turnNumber(director), time: director.time.minutes, said });
     const findings = (again ? result.problems.slice(1) : result.problems).filter(finding => finding.key !== OTHER_QUEST.key);
     const records = result.tracker.records.filter(record => record.id !== OTHER_QUEST.id);
-    // One reply adds at most NEW_THREADS_PER_REPLY threads: past that a line that would add one is not used.
+    // One reply adds at most NEW_THREADS_PER_REPLY threads, and at most MAX_OPEN_THREADS are open at
+    // once: past either, a line that would add one is not used.
     const known = new Set(orderedThreads(director).map(thread => lineKey(thread.key)));
     const adding = records.filter(record => !known.has(record.id)).length;
-    const addedSoFar = Number.isSafeInteger(director.turn.added) ? director.turn.added : 0;
-    if (adding > 0 && addedSoFar + adding > NEW_THREADS_PER_REPLY) {
-        addProblem(director, ctx, { kind: 'too-many', severity: 'warn', key: op.key, op: op.op, text: `"${op.key}" was not added: one reply adds at most ${NEW_THREADS_PER_REPLY} new threads.` });
-        return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['too-many'] } };
+    if (adding > 0) {
+        const open = Object.values(director.threads).filter(thread => thread?.status === 'active').length;
+        const full = turn.added + adding > NEW_THREADS_PER_REPLY ? `one reply adds at most ${NEW_THREADS_PER_REPLY} new threads`
+            : open + adding > MAX_OPEN_THREADS ? `the Director follows at most ${MAX_OPEN_THREADS} open threads; close or finish some first` : '';
+        if (full) {
+            addProblem(director, ctx, { kind: 'too-many', severity: 'warn', key: op.key, op: op.op, text: `"${op.key}" was not added: ${full}.` });
+            return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['too-many'] } };
+        }
+        turn.added += adding;
     }
-    if (adding > 0) director.turn.added = addedSoFar + adding;
 
     // A `~` on a name not tracked becomes v1's hook; the line's own kind says what it is.
     const added = findings.find(finding => finding.kind === 'untracked-added');
@@ -315,7 +327,7 @@ export function applyThreadLine(ctx, given) {
     const offered = findings.some(finding => finding.kind === 'offered');
     const offeredIds = new Set(offered ? records.filter(reached).map(record => record.id) : []);
     const before = named ? toRecord(named, []).kind : null;
-    const idOf = writeBack(director, records, ctx, offeredIds);
+    const idOf = writeBack(director, records, ctx, offeredIds, asRead);
     const target = records.find(reached);
     const thread = target ? idOf.get(target.id) : null;
     for (const finding of findings) {
@@ -337,15 +349,15 @@ export function applyThreadLine(ctx, given) {
     let took = false;
     if (newQuest && thread) {
         // The reply's first new quest, taken while it was the only one: read again once another comes.
-        if (crowd) recheckLone(director, ctx, said, thread);
+        if (crowd) recheckLone(director, turn, ctx, said, thread);
         took = takenInWords(ctx, director, thread, named, said);
-        if (!crowd && !director.turn.quests.length && !offered && director.threads[thread].kind === 'quest' && !(named?.kind === 'quest' && !named.offer)) {
+        if (!crowd && !turn.quests.length && !offered && director.threads[thread].kind === 'quest' && !(named?.kind === 'quest' && !named.offer)) {
             // Kept without the v1 key `id` (a lowercase name): Story Block checks every `id` in the
             // state is a well-formed ID. applyOps reads the key from `key` again.
             const { id: _key, ...loneOp } = op;
-            director.turn.lone = { id: thread, op: structuredClone(loneOp), was: before, took };
+            turn.lone = { id: thread, op: structuredClone(loneOp), was: before, took };
         }
-        if (!director.turn.quests.includes(thread)) director.turn.quests = [...director.turn.quests, thread];
+        if (!turn.quests.includes(thread)) turn.quests = [...turn.quests, thread];
     }
     // F88: an offer is shown now, or held until the offer cooldown has passed: only one this line made
     // an offer (an older offer, kept from before offers were marked, is never held afterwards).
@@ -378,16 +390,17 @@ function takenInWords(ctx, director, id, named, said) {
 
 // The reply's first `+ quest`, taken on while it was the only new quest, is read again beside the
 // second: when the reader's words do not name it, it goes back to being an offer.
-function recheckLone(director, ctx, said, current) {
-    const lone = director.turn.lone;
-    director.turn.lone = null;
+function recheckLone(director, turn, ctx, said, current) {
+    const lone = turn.lone;
+    turn.lone = null;
     const thread = lone && lone.id !== current ? director.threads[lone.id] : null;
     // A quest taken on in this reply's words (lone.took) may still go back to being an offer.
     if (!thread || thread.status !== 'active' || thread.offer || (thread.taken && !lone.took) || thread.kind !== 'quest') return;
     const was = lone.was ?? 'hook';
     const record = { ...toRecord(thread, []), kind: was };
-    const base = { version: 1, records: lone.was ? [record] : [], message: director.turn.n, time: director.time.minutes };
-    const again = applyOps(base, [OTHER_QUEST, lone.op], { message: director.turn.n, time: director.time.minutes, said });
+    const n = turnNumber(director);
+    const base = { version: 1, records: lone.was ? [record] : [], message: n, time: director.time.minutes };
+    const again = applyOps(base, [OTHER_QUEST, lone.op], { message: n, time: director.time.minutes, said });
     if (!again.problems.some(finding => finding.kind === 'offered' && finding.key !== OTHER_QUEST.key)) return;
     thread.offer = true;
     if (lone.took) {
@@ -398,7 +411,7 @@ function recheckLone(director, ctx, said, current) {
     thread.rev = revOf(ctx);
     thread.track = { ...thread.track, was };
     if (!isOffer({ ...record, status: 'active' })) thread.track.typed = true;
-    director.problems = director.problems.filter(problem => !(problem.turn === director.turn.n && problem.kind === 'became-quest' && lineKey(problem.key ?? '') === lineKey(thread.key)));
+    dropProblems(director, problem => problem.turn === n && problem.kind === 'became-quest' && lineKey(problem.key ?? '') === lineKey(thread.key));
     addProblem(director, ctx, { kind: 'offered', severity: 'info', key: thread.key, op: '+', text: OFFERED_TEXT(thread.key) });
     markOffer(director, thread, offerCooldown(ctx));
 }
