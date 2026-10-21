@@ -1,6 +1,6 @@
 # Implementation status
 
-Release candidates: Director 0.9.45, RPG Battle 0.5.49 and Story Block 0.9.27.
+Release candidates: Director 0.9.46, RPG Battle 0.5.49 and Story Block 0.9.28.
 PRs, CI and merges are authorized; Delta is unchanged. No paid model calls or server plugin.
 
 ## Shared persistence
@@ -12,11 +12,16 @@ the same branch's archived evidence and prepares quest XP through its existing g
 Turn-in saves coins/delivery, Party XP, completion, receipts and checkpoint together with
 backend readback. Stable XP receipts prevent duplicate awards when indexes/offer flags change.
 Reply callbacks run sequentially; scheduled awards wait until those callbacks finish.
+Plain-HTTP hosts use compatible ID allocation when `crypto.randomUUID` is unavailable.
+Existing message/journal IDs are preserved; no data reset or HTTPS migration is required.
 
 ## Verification
 
-1,431 tests passed (Director 442, RPG 503, Block 486), none skipped, plus 26 real
-Chromium/SillyTavern scenario checks. No browser, console or HTTP errors.
+1,436 tests passed (Director 444, RPG 503, Block 489), none skipped, plus 43 real
+Chromium/SillyTavern scenario checks: 16 loopback and 27 on a non-secure HTTP origin
+where native `randomUUID` is absent. Existing native-ID quests, Quests/Director tabs,
+new turn-ins, reload and long-history rollback pass. No application, page or HTTP errors;
+Chromium's expected ignored-COOP-header warning on HTTP is recorded separately.
 Coverage includes 350-reply pure history; 320-reply browser history; hiding and prefix
 archival; backend reload; exact full-Party rollback across quest level-up; earlier battle
 XP retained before hand-in and removed before the fight; old/new narration variants;
@@ -24,6 +29,9 @@ duplicate payments/XP; delivery/possession; rejected/lost/uncertain saves; metad
 chat isolation; missing bodies/anchors; and recovery after an interior evidence edit.
 Run `bash /workspace/live-sillytavern/internal-ci.sh --browser`, then
 `python3 /workspace/live-sillytavern/durable-ci.py` with the host running.
+HTTP regression: run `http-quest-ci.py` and `http-durable-ci.py` from that directory,
+sequentially, against the isolated fixture. They use a local test hostname mapped to
+loopback, with the browser's normal insecure-context restrictions intact.
 Logs/reports/screenshots: `/workspace/live-sillytavern/artifacts/`.
 The browser uses production combat and persistence with synthetic story replies; external
 and model routes are blocked. Delta is loaded but disabled to avoid branch-repair scans.

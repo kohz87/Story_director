@@ -2,6 +2,8 @@
 
 Publish through pull requests and merge after CI passes; no paid model calls.
 Keep Complete / Undo complete and Pending labels. Preserve narrative-only quests.
+Plain-HTTP LAN hosts are supported. ID allocation must work without crypto.randomUUID,
+preserve existing IDs and avoid requiring a chat reset or HTTPS migration.
 
 Current work: a shared per-chat metadata journal for durable quest evidence and
 Inventory/Party checkpoints. Coordinate quest coins, delivery, XP and receipts in one

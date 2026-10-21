@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installFakeDom } from './ui-fake-dom.js';
 import { storySuite } from '../src/suite.js';
+import { randomId } from '../src/id.js';
 
 const doc = installFakeDom();
 const host = doc.createElement('div');
@@ -89,7 +90,7 @@ const quests = {
 storySuite().announce({ id: 'rpg-battle', name: 'RPG Battle', owns: ['stats'], enabled: true, api: { quests } });
 await import('../index.js');
 
-function reply(text, owner = crypto.randomUUID(), swipe = 0) {
+function reply(text, owner = randomId(), swipe = 0) {
     return { mes: text, is_user: false, swipe_id: swipe, extra: { storyBlockIdentity: { id: owner, swipe } } };
 }
 async function receive(text) {
@@ -98,7 +99,7 @@ async function receive(text) {
 }
 const scene = place => `<World_State>\n**Loc:** ${place}\nNPCs Present: ${place === 'Bluewatch' ? 'Fenna' : 'Nobody'}\n</World_State>`;
 async function start(said = 'I accept the Wolf bounty.') {
-    ctx.chatId = crypto.randomUUID();
+    ctx.chatId = randomId();
     ctx.chat = [{ is_user: true, mes: said }];
     ctx.chatMetadata = {};
     ctx.extensionSettings.storyDirector = { enabled: true, mirrorOffscreen: false, capture: { mode: 'off' }, arc: { trigger: 'manual' } };
@@ -167,6 +168,8 @@ test('runtime queues and undoes without mutation; persists missing completion/pa
 });
 
 test('archived replay seeds accepted terms and paid closure across hundreds of removed replies', async t => {
+    const nativeCrypto = globalThis.crypto;
+    t.mock.getter(globalThis, 'crypto', () => ({ getRandomValues: bytes => nativeCrypto.getRandomValues(bytes) }));
     let prefix = [], offset = 0;
     sb.journalVersion = 1;
     sb.journal = () => ({ availability: 'available', prefix, offset, key: prefix.at(-1)?.id ?? '',
