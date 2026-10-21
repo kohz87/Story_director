@@ -58,7 +58,7 @@ import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, n
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.46';
+const VERSION = '0.9.47';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -104,9 +104,20 @@ function context() {
     return globalThis.SillyTavern?.getContext?.() ?? null;
 }
 
+// Story Block 2 is a different host (an sdk, no blocks): this Story Director is for Story Block 1.
+// It says so once and runs as if Story Block were not there.
+let warnedNewHost = false;
 function storyBlock() {
     const api = globalThis.StoryBlock;
-    return api && Number(api.apiVersion) >= MIN_STORY_BLOCK_API ? api : null;
+    if (!api) return null;
+    if (Number(api.apiVersion) >= 2) {
+        if (!warnedNewHost) {
+            warnedNewHost = true;
+            globalThis.toastr?.warning?.('This Story Director is for Story Block 1. With Story Block 2, install Story Director 2.', 'Story Director');
+        }
+        return null;
+    }
+    return Number(api.apiVersion) >= MIN_STORY_BLOCK_API ? api : null;
 }
 
 function chatIdOf(ctx) {
