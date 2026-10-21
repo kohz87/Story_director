@@ -98,3 +98,11 @@ test('per-unit pay is computed by code', () => {
     assert.equal(nounFor({ noun: 'wolf', count: 1 }, 8), 'wolves');
     assert.equal(nounFor({ noun: 'moonleaf', count: 5 }, 5), 'moonleaf');
 });
+
+test('money uses the currency plural for any amount but one', () => {
+    const mark = { name: 'mark', plural: 'marks' };
+    assert.equal(money(50, mark), '50 marks');
+    assert.equal(money(1, mark), '1 mark');
+    assert.equal(money(50, { name: 'gold' }), '50 gold');
+    assert.equal(money(50, 'mark'), '50 mark');
+});

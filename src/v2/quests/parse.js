@@ -196,9 +196,11 @@ export function currencyName(currency) {
     return name || 'gold';
 }
 
-/** "8 gold": an amount of the chat's one currency. */
+/** "1 mark", "8 marks": an amount of the chat's one currency (its plural for any amount but one). */
 export function money(amount, currency) {
-    return `${amount} ${currencyName(currency)}`;
+    const name = currencyName(currency);
+    const plural = typeof currency === 'object' ? clean(currency?.plural) : '';
+    return `${amount} ${Math.abs(Number(amount)) === 1 || !plural ? name : plural}`;
 }
 
 const matchCase = (word, like) => (like[0] && like[0] === like[0].toUpperCase() ? word.replace(/^./, c => c.toUpperCase()) : word);
