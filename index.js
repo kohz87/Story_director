@@ -303,7 +303,9 @@ function readEntry(chat, index, previous, sb, cal, own) {
     return {
         sig: signature(chat[index]),
         tracker: result.tracker,
-        questConflict: previous?.questConflict || read.entry.settlements.length !== receipts.length,
+        questConflict: previous?.questConflict
+            || (read.entry.settlements.length !== receipts.length ? 'Quest evidence or accepted terms changed.' : '')
+            || (result.problems.some(problem => problem.kind === 'unverified-completion') ? 'The story reported a turn-in without a receipt. Correct or regenerate that reply.' : ''),
         problems: result.problems,
         hadBlock: read.hadBlock,
         parseErrors: read.parseErrors,
@@ -1612,7 +1614,7 @@ function questEvaluation(record, { upTo = (context()?.chat?.length ?? 0) - 1, pr
         parseCoins: api?.parseCoins, formatCoins: api?.formatCoins,
     });
     const recovery = uncertainQuestWrite ? 'A quest save is unverified. Reload the chat before retrying.'
-        : info?.questConflict ? 'Quest evidence or accepted terms changed. Recovery is required before another turn-in.' : '';
+        : info?.questConflict ? `${info.questConflict} Recovery is required before another turn-in.` : '';
     if (result.managed && (storyBlock()?.transactionVersion !== 1 || recovery || pendingAbandons().has(record.id))) {
         return { ...result, eligible: false, reason: recovery || (pendingAbandons().has(record.id) ? 'Abandonment is queued.' : 'Coordinated saving is unavailable.') };
     }

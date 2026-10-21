@@ -37,6 +37,7 @@ test('measurable progress and Complete use eligibility, and queued completion of
     pane.querySelector('.story-director-quest-finish').click();
     assert.deepEqual(calls, []);
     pane = render({ ...options, completion: () => ({ managed: true, eligible: true, label: 'Wolves 8/3', paymentText: '8 silver', claimable: 8, required: 3 }) });
+    assert.match(pane.textContent, /Ready to turn in/);
     pane.querySelector('.story-director-quest-finish').click();
     assert.deepEqual(calls, ['wolves']);
     pane = render({ ...options, finishing: { plan: { record: 'wolves' }, attachedTo: null, sentFor: null }, onUndoFinish: () => calls.push('undo') });
@@ -45,6 +46,7 @@ test('measurable progress and Complete use eligibility, and queued completion of
     assert.deepEqual(calls, ['wolves', 'undo']);
     pane = render({ ...options, completion: () => ({ managed: false }) });
     assert.equal(pane.querySelector('.story-director-quest-finish'), null);
+    assert.match(pane.textContent, /Story-tracked — no numeric target; completion follows the story/);
 });
 
 test('grouped by type in a fixed order, untyped last; plural and singular types are one group', () => {

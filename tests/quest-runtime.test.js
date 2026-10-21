@@ -160,10 +160,24 @@ test('runtime queues and undoes without mutation; persists missing completion/pa
     assert.equal(sb.getBlock('Inventory').text, 'Coins | 10 silver |');
 });
 
-test('model completion cannot bypass Complete; away and unfinished battles disable it', async () => {
+test('an unrequested narrative payout blocks another payment until the conflicting reply is corrected', async () => {
     await start();
-    await receive(`${scene('Woods')}\n<Director>\n- Wolf bounty — completed\n</Director>`);
-    assert.equal(globalThis.StoryDirector.questsDoneAt(ctx.chat.length - 1).length, 0);
+    await receive(`${scene('Bluewatch')}\n<Inventory>\nCoins | 10 silver |\n</Inventory>\n<Director>\n- Wolf bounty — completed\n</Director>`);
+    const index = ctx.chat.length - 1;
+    assert.equal(globalThis.StoryDirector.questsDoneAt(index).length, 0);
+    assert.equal(sb.getBlock('Inventory').text, 'Coins | 10 silver |');
+    assert.match(globalThis.StoryDirector.questProgress()[0].reason, /turn-in without a receipt/);
+    assert.equal(draw().querySelector('.story-director-quest-finish').disabled, true);
+    await receive(scene('Bluewatch'));
+    assert.equal(draw().querySelector('.story-director-quest-finish').disabled, true, 'a later reply cannot hide the conflict');
+    await sb.setBlockText(index, 'Director', '');
+    await sb.setBlockText(index, 'Inventory', 'Coins | 2 silver |');
+    assert.equal(globalThis.StoryDirector.questProgress()[0].eligible, true);
+});
+
+test('away and unfinished battles disable Complete', async () => {
+    await start();
+    await receive(scene('Woods'));
     assert.equal(draw().querySelector('.story-director-quest-finish').disabled, true);
     await receive(scene('Bluewatch'));
     busy = true;

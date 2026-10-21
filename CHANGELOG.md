@@ -3,6 +3,7 @@
 ## 0.9.44
 
 - **A cleared and turned-in quest leaves Pending.** A story-tracked quest whose step says `cleared and turned in for 60 copper` now closes, as `completed and turned in` already did. Merely clearing the site and heading back stays pending. This records the ending without paying coins again; quests with verified targets still require their code-owned turn-in receipt.
+- **Turn-in ownership is visible.** Eligible verified quests say **Ready to turn in**; quests without a numeric target say their completion follows the story. The story note includes each verified quest's accepted target and reward and waits for the explicit turn-in instruction. A model-declared turn-in without a receipt blocks another payout and explains which reply needs correction.
 
 ## 0.9.43
 

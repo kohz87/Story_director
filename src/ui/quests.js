@@ -147,6 +147,7 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
     if (progress?.managed) {
         const queued = finishing?.plan?.record === record.id && finishing.attachedTo === null;
         const label = queued ? 'Turn-in queued for the next reply' : [
+            progress.eligible ? 'Ready to turn in' : '',
             progress.label || 'Progress unavailable',
             progress.paymentText && progress.claimable >= progress.required ? progress.paymentText : '',
             progress.reason,
@@ -163,6 +164,8 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
         });
         action.disabled = queued ? finishing.sentFor !== null : !progress.eligible || typeof onFinish !== 'function';
         item.append(action);
+    } else if (progress) {
+        item.append(el('div', { className: 'story-director-quest-progress', text: 'Story-tracked — no numeric target; completion follows the story.' }));
     }
     const step = text(record.fields?.step);
     if (step) {

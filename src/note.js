@@ -21,7 +21,7 @@ export const CHANGE_INSTRUCTION = [
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
-export const QUEST_INSTRUCTION = 'Measurable jobs: target: defeat 3 wolf, deliver 5 Rat Tail, or possess 1 Travel Permit; reward: 1 silver per wolf, 2 silver, or none. Successful turn-in requires the reader\'s verified Complete instruction; do not close or pay these jobs on your own.';
+export const QUEST_INSTRUCTION = 'Measurable jobs: target: defeat 3 wolf, deliver 5 Rat Tail, or possess 1 Travel Permit; reward: 1 silver per wolf, 2 silver, or none. Quests with a target: narrate no completed turn-in or reward payment without this reply\'s "Verified turn-in:" instruction. Story-tracked quests close through the story.';
 
 // How a schedule meets a scene, about 70 tokens; only when something is scheduled. Without
 // it a model handed "Due now: the warrant is filed" tends to stop the scene and stage it.
@@ -518,9 +518,11 @@ function arrivalItem(record, verb = 'arrives') {
 // "Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Haywane 30".
 function questItem(record, clock = text => text) {
     const f = noteFields(record);
-    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${clock(f.due)}` : '']
+    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', record.contract ? notePart(record.contract.rewardText, 'reward') : f.reward, f.due ? `by ${clock(f.due)}` : '']
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
+    const target = record.contract?.requirement;
+    if (target) parts.unshift(`verified target: ${target.error ? 'unavailable' : notePart(`${target.action} ${target.qty} ${target.entity}`, 'target')}; await Verified turn-in`);
     // A normal difficulty goes without saying; a set one rides with the type: "(bounty, hard)".
     const difficulty = questDifficulty(f.difficulty);
     const tags = [String(f.type ?? '').trim(), difficulty === 'normal' ? '' : difficulty].filter(Boolean);
