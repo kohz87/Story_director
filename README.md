@@ -5,9 +5,11 @@
 > and does nothing else. Story Block keeps the state in the replies, reads each reply's `<Changes>` block
 > and builds the prompt; Story Director adds the `director` domain (story time, threads, quests), its
 > change-line kinds (`agenda`, `event`, `hook`, `quest`, `clock`, `beat`, `secret`, `time`, `route`,
-> `landmark`), the Director note, the commands `quest.take`, `quest.decline`, `quest.abandon`,
+> `landmark`, `world`, `faction`), the Director note, the commands `quest.take`, `quest.decline`, `quest.abandon`,
 > `quest.finish`, deadlines that slip or lapse as story time passes with a *While away* recap after a
-> jump, the atlas (places, routes, travel times) and its screens: Quests, Director, Map, the time-and-place
+> jump, the atlas (places, routes, travel times), the chronicle (world events under way and the factions
+> behind them, three of them recalled to the story each reply) and its screens: Quests, Director, Map,
+> Chronicle, the time-and-place
 > strip and a status card under every reply (on by default, collapsed; turn it off per screen). The story
 > clock runs on the reader's calendar, or by default on the enabled pack's (Ersveil: CY, twelve months
 > of 30 days), and starts at the pack's start date when the story has not set it. Quest rewards are whole

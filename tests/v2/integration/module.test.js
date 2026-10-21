@@ -10,14 +10,16 @@ import { STATIC_TEXT as ATLAS_STATIC, TAIL_BUDGET as ATLAS_BUDGET } from '../../
 import { RECAP_BUDGET } from '../../../src/v2/time/recap.js';
 import { screens as SCREENS } from '../../../src/v2/screens/index.js';
 import { mapScreen } from '../../../src/v2/atlas/screen.js';
+import { chronicleScreen } from '../../../src/v2/chronicle/screen.js';
+import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
 
 test('statics in part order, budgets summed, kinds dispatched to their part', () => {
     const def = storyDirectorModule;
     // The time, atlas and screens parts add nothing to the static part.
     assert.equal(ATLAS_STATIC, '');
-    assert.equal(def.context.static(), `${STATIC_TEXT}\n${QUEST_STATIC}`);
-    assert.equal(def.context.budget, 500 + 150 + RECAP_BUDGET + ATLAS_BUDGET);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'quests', 'time', 'atlas', 'screens']);
+    assert.equal(def.context.static(), `${STATIC_TEXT}\n${QUEST_STATIC}\n${CHRONICLE_STATIC}`);
+    assert.equal(def.context.budget, 500 + 150 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'quests', 'time', 'atlas', 'chronicle', 'screens']);
     assert.ok(def.capture.kinds.quest.grammar.startsWith('+ quest Name'));
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;
@@ -85,7 +87,7 @@ test('two parts claiming one name is refused', () => {
 });
 
 test('screens and widgets: every part\'s, in part order; one id in two parts is refused', () => {
-    assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, ...SCREENS].map(screen => screen.id));
+    assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, ...SCREENS].map(screen => screen.id));
     assert.deepEqual(storyDirectorModule.tabs, []);
     assert.equal(storyDirectorModule.widgets, undefined, 'no part has a widget of its own');
     const status = storyDirectorModule.screens.find(screen => screen.id === 'story-director/status-card');

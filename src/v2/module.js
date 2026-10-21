@@ -1,5 +1,5 @@
 // Story Director v2: the module definition (MODULES §A, §C). The parts (tracker, quests, time,
-// atlas, screens) are merged here into the one `sdk.registerModule` definition of module
+// atlas, chronicle, screens) are merged here into the one `sdk.registerModule` definition of module
 // `story-director`:
 //
 // - domains, commands, queries: the parts' own, each name owned by one part (a clash throws);
@@ -29,6 +29,7 @@ import { part as tracker } from './tracker/index.js';
 import { part as quests } from './quests/index.js';
 import { part as time } from './time/index.js';
 import { part as atlas } from './atlas/index.js';
+import { part as chronicle } from './chronicle/index.js';
 import { part as screens } from './screens/index.js';
 import { calendarConfig, packCalendarOf } from './tracker/time.js';
 
@@ -37,7 +38,7 @@ export const MODULE_NAME = 'Story Director';
 export const VERSION = '2.0.0-alpha.1';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {
@@ -238,7 +239,7 @@ function mergeHook(name, entries, shared) {
 
 /**
  * The module definition for `sdk.registerModule` (SPEC §6) from `parts` ([id, part], in order;
- * default: tracker, quests, time, atlas, screens). `host` (tests): `{ settings(id), substitute(text) }`
+ * default: tracker, quests, time, atlas, chronicle, screens). `host` (tests): `{ settings(id), substitute(text) }`
  * for queries whose host tools lack them; by default Story Block's live sdk.
  */
 export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
