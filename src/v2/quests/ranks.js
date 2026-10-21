@@ -118,15 +118,20 @@ export function rankOf(thread, ladder) {
 
 /**
  * How far from the party's own rank a quest's difficulty puts it when it names no rank: easy one rank
- * below, normal the party's, hard one above, nightmare two above (held to the ends of the ladder).
+ * below, normal the party's, hard one above, nightmare two above (held to the ends of the ladder, and
+ * never more than WRITTEN_RANKS_ABOVE above the party's rank: see defaultRank).
  */
 export const DIFFICULTY_STEPS = Object.freeze({ easy: -1, normal: 0, hard: 1, nightmare: 2 });
+
+/** How many ranks above the party's own (defaultRank's base) a rank the story writes may be. */
+export const WRITTEN_RANKS_ABOVE = 1;
 
 /**
  * The rank a quest that names none is paid as: the party's rank on `ladder` (the rank whose levels hold
  * `level`, the player character's level; above every band, the highest band below it; the lowest rank
  * when the level is not known) moved by DIFFICULTY_STEPS for `difficulty` (easy, normal, hard,
- * nightmare; anything else is normal). Null only for an empty ladder.
+ * nightmare; anything else is normal), and never more than WRITTEN_RANKS_ABOVE above the party's rank:
+ * a difficulty reaches no further than a written rank may (B-b3-r2-7). Null only for an empty ladder.
  */
 export function defaultRank(ladder, difficulty, level = null) {
     if (!Array.isArray(ladder) || !ladder.length) return null;
@@ -136,12 +141,9 @@ export function defaultRank(ladder, difficulty, level = null) {
         if (at >= 0) base = at;
         else ladder.forEach((rank, index) => { if (rank.levels && rank.levels[1] < level) base = index; });
     }
-    const step = Object.hasOwn(DIFFICULTY_STEPS, difficulty) ? DIFFICULTY_STEPS[difficulty] : 0;
+    const step = Math.min(WRITTEN_RANKS_ABOVE, Object.hasOwn(DIFFICULTY_STEPS, difficulty) ? DIFFICULTY_STEPS[difficulty] : 0);
     return ladder[Math.min(ladder.length - 1, Math.max(0, base + step))];
 }
-
-/** How many ranks above the party's own (defaultRank's base) a rank the story writes may be. */
-export const WRITTEN_RANKS_ABOVE = 1;
 
 /**
  * The rank a quest is paid as: `{ rank, by, said? }`, `by` one of 'pack' (its pack quest's `rank` or
@@ -170,14 +172,23 @@ export function rangeText(rank, currency) {
 /**
  * A total reward held inside its rank's range: `{ total, held }`, `held` true when it was moved. A reward
  * of nothing in money (0, or no amount) is left as it is: "reward: none" is not raised to the range.
- * `capOnly`: only the top of the range holds (a rank the quest's difficulty gave, not one it names: a
- * small reward the story wrote is not raised).
+ * `capOnly`: only the top of the range holds (a small reward is not raised to the floor). Quests use
+ * capOnly unless the pack wrote both the rank and the reward (rewardHold).
  */
 export function holdReward(total, rank, { capOnly = false } = {}) {
     if (!rank || !Number.isSafeInteger(total) || total <= 0) return { total, held: false };
     const [lo, hi] = rank.reward;
     const kept = Math.min(hi, capOnly ? total : Math.max(lo, total));
     return { total: kept, held: kept !== total };
+}
+
+/**
+ * The reward held for a quest whose rank came `by` 'pack', 'written' or 'difficulty' (questRank): only a
+ * pack quest's reward is raised to its rank's floor (the pack wrote both); a reward the story wrote is
+ * only ever lowered to the top (B-b3-r2-6: a written `rank:` does not raise "reward: 1 mark").
+ */
+export function rewardHold(total, rank, by) {
+    return holdReward(total, rank, { capOnly: by !== 'pack' });
 }
 
 /** "the story said S-rank; held to D-rank for a level-12 party". */

@@ -11,6 +11,8 @@
 // * A taken quest the story closes as done is turned in by code (F94/F95): `quest.finish` with
 //   `by: 'story'` when quest.progress's checks pass, else it stays open with a Problem and a
 //   narrated receipt that tells the next reply why.
+//   One reply turns in at most one quest on the story's word alone (B-b3-r2-5): the others stay
+//   open and ready, with that Problem.
 //
 // The quests part's rules are reached only through its queries and commands (`quest.details`,
 // `quest.progress`, `quest.finish`); without that part a line is read as before.
@@ -137,6 +139,13 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw }) {
         const closed = director.threads[thread.id];
         if (closed) closed.track = { ...(closed.track ?? {}), closed: { turn: director.turn.n, time: director.time.minutes ?? null } };
         return { summary: text(out.summary) || `Director: ${raw}`, narrate: true, data: { thread: thread.id, quest: thread.id, problems: [], turnIn: out.data ?? null } };
+    }
+    // One reply turns in one quest on the story's word alone (B-b3-r2-5): another the story closes in the
+    // same reply stays open, marked ready (as `met: yes` would), for a later reply to turn in.
+    if (check.finish.word && !thread.ready) {
+        const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
+        thread.ready = { rev };
+        thread.rev = rev;
     }
     const why = text(check.refusal) || text(check.finish.reason).replace(/\.$/, '').replace(/^./, c => c.toLowerCase());
     const message = `The story says ${thread.key} was turned in, but ${why}; it stays open.`;

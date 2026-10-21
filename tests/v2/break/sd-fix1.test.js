@@ -126,8 +126,8 @@ test('the tail lists only the most relevant threads, and stays cheap with 600', 
 
 test('defaultRank: the party\'s rank by level, moved by difficulty, held to the ends of the ladder', () => {
     const at = (difficulty, level) => defaultRank(DEFAULT_RANKS, difficulty, level).id;
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 1)), ['F', 'F', 'E', 'D']);
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 25)), ['D', 'C', 'B', 'A']);
+    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 1)), ['F', 'F', 'E', 'E']);
+    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 25)), ['D', 'C', 'B', 'B']);
     assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 99)), ['A', 'S', 'S', 'S']);
     assert.equal(at('normal', null), 'F', 'no level known: the lowest rank');
     assert.equal(defaultRank([], 'normal', 1), null);

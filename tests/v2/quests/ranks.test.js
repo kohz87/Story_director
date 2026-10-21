@@ -142,8 +142,8 @@ test('F87: a per-unit reward is held on its total; inside the range it is paid a
 
 test('F87: the clamp follows the ladder in use: a pack\'s, or RPG Battle\'s tiers', () => {
     const packQueries = { ...fakeQueries, 'packs.content': () => ERSVEIL };
-    const pack = rankedHost({ goal: 'Kill 3 wolves', reward: '20 gold', rank: 'Journeyman' }, {}, packQueries).run(finish, { id: 'th_wolves01' });
-    assert.equal(pack.receipt.data.paid.amount, 800);
+    const pack = rankedHost({ goal: 'Kill 3 wolves', reward: '9000 gold', rank: 'Journeyman' }, {}, packQueries).run(finish, { id: 'th_wolves01' });
+    assert.equal(pack.receipt.data.paid.amount, 3000);
     assert.match(pack.receipt.summary, /reward clamped to Journeyman range: 800–3000 gold/);
     const rbQueries = { ...fakeQueries, 'party.ranks': () => SOUL };
     const rb = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', difficulty: 'II' }, {}, rbQueries).run(finish, { id: 'th_wolves01' });
