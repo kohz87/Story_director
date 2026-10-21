@@ -1,0 +1,259 @@
+// Screens part: the four screens drawn by Story Block's template renderer (SPEC §13.2) against fixture
+// states, with the real condition language and standard widgets; the status card through Story Block's
+// card mount, which draws each reply's card from that reply's state (stateAt). Needs a Story Block
+// checkout (STORY_BLOCK_DIR, see helpers/runtime.js); skipped with the reason otherwise.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { installFakeDom } from '../../ui-fake-dom.js';
+import { resolveData, runtime, skipReason } from './helpers/runtime.js';
+import { calendar, earlierState, headState, makeRunner, makeState, wolves } from './helpers/fixtures.js';
+import { DIRECTOR_ID, HUD_ID, QUESTS_ID, STATUS_CARD_ID, part, screens } from '../../../src/v2/screens/index.js';
+
+const skip = runtime ? false : skipReason;
+const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
+const formatters = { time: minutes => (Number.isInteger(minutes) ? calendar.format(minutes) : '') };
+const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
+
+function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0] } = {}) {
+    const { run } = makeRunner();
+    const screen = byId[id];
+    const doc = installFakeDom();
+    doc.head = doc.createElement('head');
+    const el = doc.createElement('div');
+    el.setAttribute('data-ss-screen', id);
+    doc.body.appendChild(el);
+    const data = resolveData(screen.data, (name, args) => run(state, name, args));
+    assert.equal(data.ok, true);
+    const compiled = runtime.compileTemplate(screen.template);
+    const warnings = [...compiled.warnings];
+    const results = [];
+    const view = runtime.renderTemplate(el, compiled, { state, q: data.q, changes, settings: {}, mount, screenId: id, api: {} }, {
+        evaluate: runtime.evaluate,
+        widgets: runtime.widgets,
+        formatters,
+        command,
+        onWarn: message => warnings.push(message),
+        onResult: result => results.push(result),
+    });
+    return { el, view, warnings, results, doc };
+}
+
+const button = (root, label) => root.querySelectorAll('button').filter(node => squash(node.textContent) === label);
+
+test('every screen compiles and renders without a warning, and its CSS scopes cleanly', { skip }, () => {
+    for (const screen of screens) {
+        const { warnings } = draw(screen.id, headState());
+        assert.deepEqual(warnings, [], screen.id);
+        const scoped = runtime.scopeCss(screen.css, screen.id);
+        assert.deepEqual(scoped.warnings, [], `${screen.id} css`);
+        const prefix = `[data-ss-screen="${screen.id}"]`;
+        // Every selector of every rule starts at the screen root.
+        for (const match of scoped.css.matchAll(/(^|})\s*([^{}@]+)\{/g)) {
+            const selectors = match[2].split(',').map(part => part.trim()).filter(Boolean);
+            for (const selector of selectors) assert.ok(selector.startsWith(prefix), `${screen.id}: ${selector}`);
+        }
+    }
+});
+
+test('quests: offers with Take on / Turn down, which send { id }', { skip }, async () => {
+    const sent = [];
+    const command = (type, payload, options) => { sent.push([type, payload, options]); return { ok: true }; };
+    const { el } = draw(QUESTS_ID, headState(), { command });
+    const offer = el.querySelector('.sd-offer');
+    assert.equal(offer.getAttribute('data-quest'), 'th_rats0001');
+    assert.match(squash(offer.textContent), /Granary Rats kill 6 rats in the granary From Miller Fenna Reward: 5 coin/);
+    button(offer, 'Take on')[0].click();
+    button(offer, 'Turn down')[0].click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.deepEqual(sent, [
+        ['quest.take', { id: 'th_rats0001' }, { cause: 'ui' }],
+        ['quest.decline', { id: 'th_rats0001' }, { cause: 'ui' }],
+    ]);
+    assert.equal(button(offer, 'Take on')[0].getAttribute('type'), 'button');
+});
+
+test('quests: active progress is an ss.meter ("Wolves 8/3") and Finish runs when it can be turned in', { skip }, async () => {
+    const sent = [];
+    const { el } = draw(QUESTS_ID, headState(), { command: (type, payload) => { sent.push([type, payload]); return { ok: true }; } });
+    const [hunt, hides] = el.querySelectorAll('.sd-quest');
+    assert.equal(hunt.getAttribute('data-quest'), 'th_wolves01');
+    const meter = hunt.querySelector('.ss-w-meter');
+    assert.ok(meter, 'the meter widget is drawn');
+    assert.equal(squash(meter.querySelector('.ss-w-meter-label').textContent), 'Wolves 8/3');
+    assert.equal(meter.getAttribute('aria-valuenow'), '3');
+    assert.equal(meter.getAttribute('aria-valuemax'), '3');
+    assert.equal(meter.getAttribute('aria-valuetext'), '8 of 3');
+    assert.ok(hunt.classList.contains('sd-met'));
+    assert.ok(hunt.classList.contains('sd-ready'));
+    const finish = button(hunt, 'Finish')[0];
+    assert.equal(finish.disabled, false);
+    assert.equal(finish.hasAttribute('disabled'), false);
+    assert.equal(finish.getAttribute('title'), 'Turn in East Bluff Wolves');
+    assert.equal(hunt.querySelector('.sd-reason'), null);
+    assert.equal(button(hunt, 'Take on').length, 0, 'already taken on');
+    finish.click();
+    button(hunt, 'Give up')[0].click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.deepEqual(sent, [['quest.finish', { id: 'th_wolves01' }], ['quest.abandon', { id: 'th_wolves01' }]]);
+
+    assert.equal(squash(hides.querySelector('.ss-w-meter-label').textContent), 'Wolf pelt 2/5');
+    assert.equal(hides.classList.contains('sd-met'), false);
+});
+
+test('quests: Finish is disabled with the reason shown, and a click sends nothing', { skip }, async () => {
+    const sent = [];
+    const away = makeState({
+        threads: [wolves()], beaten: [{ rev: 11, foes: [{ name: 'Wolf', count: 8 }], won: true }], place: { name: 'East Bluff', kind: 'wild' },
+    });
+    const { el } = draw(QUESTS_ID, away, { command: (type, payload) => { sent.push([type, payload]); return { ok: true }; } });
+    const quest = el.querySelector('.sd-quest');
+    const finish = button(quest, 'Finish')[0];
+    assert.equal(finish.disabled, true);
+    assert.equal(finish.getAttribute('title'), 'Turn it in at a settlement or where Orsa is.');
+    assert.equal(squash(quest.querySelector('.sd-reason').textContent), 'Turn it in at a settlement or where Orsa is.');
+    finish.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.deepEqual(sent, []);
+
+    // Not met: the progress reason. Not taken: Take on is offered instead, and Finish says why.
+    const { el: pane } = draw(QUESTS_ID, headState());
+    const hides = pane.querySelectorAll('.sd-quest')[1];
+    assert.equal(button(hides, 'Finish')[0].disabled, true);
+    assert.match(squash(hides.querySelector('.sd-reason').textContent), /^Need 3 more wolf pelt/);
+    const { el: fresh } = draw(QUESTS_ID, makeState({ threads: [wolves({ taken: null })] }));
+    const untaken = fresh.querySelector('.sd-quest');
+    assert.equal(button(untaken, 'Take on').length, 1);
+    assert.equal(squash(untaken.querySelector('.sd-reason').textContent), 'Take it on first: fights count from then.');
+});
+
+test('quests: finished quests are folded away; an empty board says so', { skip }, () => {
+    const { el } = draw(QUESTS_ID, headState());
+    const finished = el.querySelector('details.sd-finished');
+    assert.ok(finished);
+    assert.equal(finished.hasAttribute('open'), false, 'collapsed');
+    assert.match(squash(finished.textContent), /Finished 1 Lost Ring Done — returned it/);
+    const { el: empty } = draw(QUESTS_ID, makeState());
+    assert.equal(empty.querySelector('.sd-offers'), null);
+    assert.equal(empty.querySelector('details.sd-finished'), null);
+    assert.equal(squash(empty.querySelector('.sd-empty').textContent), 'No quests taken on.');
+});
+
+test('quests: rendering again after a turn-in updates the same page', { skip }, () => {
+    const { el, view } = draw(QUESTS_ID, headState());
+    const { run } = makeRunner();
+    const after = headState({ threads: [wolves({ status: 'resolved', ended: { rev: 21, reason: 'paid 8 coin', outcome: 'done' }, rev: 21 })] });
+    view.update({ state: after, q: resolveData(byId[QUESTS_ID].data, (name, args) => run(after, name, args)).q, changes: [], settings: {} });
+    assert.equal(el.querySelectorAll('.sd-quest').length, 0);
+    assert.match(squash(el.querySelector('details.sd-finished').textContent), /East Bluff Wolves Done — paid 8 coin/);
+});
+
+test('director: threads by kind, open first and closed folded, secrets by name, problems newest first', { skip }, () => {
+    const { el } = draw(DIRECTOR_ID, headState());
+    const kinds = el.querySelectorAll('section.sd-kind').map(node => node.getAttribute('data-kind'));
+    assert.deepEqual(kinds, ['quest', 'agenda', 'event', 'clock', 'secret', 'problems']);
+    const quests = el.querySelector('section[data-kind="quest"]');
+    const open = quests.querySelectorAll(':scope > ul > li').map(node => squash(node.querySelector('.sd-key').textContent));
+    assert.deepEqual(open, ['East Bluff Wolves', 'Tanner Pelts', 'Granary Rats']);
+    assert.match(squash(quests.querySelector('[data-thread="th_rats0001"]').textContent), /offered/);
+    const closedBox = quests.querySelector('details.sd-closed');
+    assert.equal(closedBox.hasAttribute('open'), false);
+    assert.match(squash(closedBox.textContent), /Closed 1 Lost Ring done/);
+    const agenda = squash(el.querySelector('section[data-kind="agenda"]').textContent);
+    assert.match(agenda, /Smuggler Vane moving crates at night At: the docks Next: meet the reeve/);
+    const secret = el.querySelector('section[data-kind="secret"] .sd-thread');
+    assert.equal(squash(secret.textContent), 'The Reeve Is Bought', 'a secret shows only its name');
+    const problems = el.querySelectorAll('.sd-problem').map(node => squash(node.textContent));
+    assert.equal(problems.length, 2);
+    assert.match(problems[1], /The story time is not set yet/);
+    assert.equal(el.querySelector('.sd-empty'), null);
+    const { el: none } = draw(DIRECTOR_ID, makeState());
+    assert.equal(squash(none.textContent), 'Nothing tracked yet.');
+});
+
+test('hud: date and time and the place on one line, from the head', { skip }, () => {
+    const { el } = draw(HUD_ID, headState());
+    const hud = el.querySelector('.sd-hud');
+    assert.equal(squash(hud.textContent), 'June 11, 2025, 09:00 am Bluewatch Village');
+    assert.equal(hud.querySelectorAll('span').length, 2);
+    assert.match(byId[HUD_ID].css, /white-space: nowrap/);
+    const { el: bare } = draw(HUD_ID, makeState());
+    assert.equal(bare.querySelectorAll('.sd-hud span').length, 0);
+});
+
+test('status card: time, place, next due, goal and step, progress, with what this reply changed marked', { skip }, () => {
+    const changes = ['/domains/director/time/minutes', '/domains/director/threads/th_wolves01/rev'];
+    const { el } = draw(STATUS_CARD_ID, headState(), { changes });
+    const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
+    assert.deepEqual(rows.slice(0, 4), [
+        ['Time', 'June 11, 2025, 09:00 am'],
+        ['Place', 'Bluewatch Village · Eastmarch'],
+        ['Next', 'Bandit Raid — June 12, 2025, 8:00 pm'],
+        ['Goal', 'East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'],
+    ]);
+    assert.equal(rows[4][0], 'Progress');
+    assert.equal(squash(el.querySelector('.sd-progress .ss-w-meter-label').textContent), 'Wolves 8/3');
+    assert.ok(el.querySelector('.sd-time').classList.contains('sd-new'));
+    assert.ok(el.querySelector('.sd-goal').classList.contains('sd-new'));
+    assert.equal(el.querySelector('.sd-place').classList.contains('sd-new'), false);
+    assert.ok(el.querySelector('.sd-progress').classList.contains('sd-met'));
+    // Nothing tracked: only what there is.
+    const { el: bare } = draw(STATUS_CARD_ID, makeState({ place: { name: 'Nowhere' } }));
+    assert.deepEqual(bare.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place']);
+});
+
+test('status card: each reply\'s card is drawn from that reply\'s state (stateAt), not the head', { skip }, () => {
+    const doc = installFakeDom();
+    doc.head = doc.createElement('head');
+    const { run, calls } = makeRunner();
+    const states = { 1: earlierState(), 3: headState() };
+    const changes = { 1: ['/domains/scene/place'], 3: [] };
+    const messages = {};
+    for (const index of [1, 3]) {
+        const message = doc.createElement('div');
+        message.className = 'mes';
+        message.setAttribute('mesid', String(index));
+        const block = doc.createElement('div');
+        block.className = 'mes_block';
+        message.appendChild(block);
+        doc.body.appendChild(message);
+        messages[index] = message;
+    }
+    const registry = runtime.createScreens();
+    registry.addModule('story-director', part.screens);
+    const compiled = new Map();
+    const render = (el, screen, scope) => {
+        if (!compiled.has(screen.id)) compiled.set(screen.id, runtime.compileTemplate(screen.template));
+        return runtime.renderTemplate(el, compiled.get(screen.id), scope, { evaluate: runtime.evaluate, widgets: runtime.widgets, formatters });
+    };
+    const cards = runtime.createCardMount({
+        screens: registry, render, document: doc, IntersectionObserver: null,
+        stateAt: index => states[index], headIndex: () => 3, carriers: () => [1, 3],
+        changesAt: index => changes[index], messageElement: index => messages[index],
+        query: (name, args, state) => run(state, name, args),
+        enabled: (mount, id) => mount === 'card' && id === STATUS_CARD_ID,
+    });
+    cards.attachAll();
+    cards.toggle(1, STATUS_CARD_ID, true);
+    cards.toggle(3, STATUS_CARD_ID, true);
+    const body = index => messages[index].querySelector('.ss-card-body');
+    const text = index => squash(body(index).textContent);
+
+    assert.match(text(1), /June 10, 2025, 06:30 pm/);
+    assert.match(text(1), /Mill Road · Eastmarch/);
+    assert.match(text(1), /Tanner Pelts — Bring 5 wolf pelts/);
+    assert.match(text(1), /Wolf pelt 1\/5/);
+    assert.doesNotMatch(text(1), /Bluewatch|Wolves 8\/3|Bandit Raid/);
+    assert.ok(body(1).querySelector('.sd-place').classList.contains('sd-new'), 'reply 1 moved the place');
+
+    assert.match(text(3), /June 11, 2025, 09:00 am/);
+    assert.match(text(3), /Bluewatch Village/);
+    assert.match(text(3), /Bandit Raid/);
+    assert.match(text(3), /Wolves 8\/3/);
+    assert.equal(body(3).querySelector('.sd-place').classList.contains('sd-new'), false);
+    assert.equal(body(1).getAttribute('data-ss-screen'), STATUS_CARD_ID);
+
+    // Every binding of reply 1's card ran on reply 1's state.
+    const forOne = calls.filter(call => call.state === states[1]).map(call => call.name);
+    assert.ok(['director.time', 'director.next', 'director.goal', 'quest.progress'].every(name => forOne.includes(name)));
+    cards.destroy();
+});
