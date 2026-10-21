@@ -1,4 +1,4 @@
-// renderLayout(el, layout, { query, command, evaluate, widgets, preview?, commit?, on? }) draws a validated layout
+// renderLayout(el, layout, { query, command, evaluate, widgets, preview?, commit?, on?, onDraft? }) draws a validated layout
 // into any element: a sidebar tab, an overlay page, a card under a reply. What it shows
 // comes only from `query` (so a card for an older reply passes a query over that reply's
 // state); buttons go only through `command` (leave it out for a read-only view).
@@ -363,7 +363,7 @@ function invalid(doc, errors) {
  * of them); `problems` are what went wrong while drawing (a failed query, a bad image
  * from a query, a condition that could not be checked), each with its place.
  */
-export function renderLayout(host, layout, { query, command, evaluate, widgets, preview, commit, on } = {}) {
+export function renderLayout(host, layout, { query, command, evaluate, widgets, preview, commit, on, onDraft } = {}) {
     const doc = host?.ownerDocument ?? globalThis.document;
     const registry = widgetRegistry(widgets);
     const errors = validateLayout(layout, { widgets: registry, meta: false });
@@ -371,7 +371,7 @@ export function renderLayout(host, layout, { query, command, evaluate, widgets, 
     const ctx = {
         doc, query, command, evaluate, widgets: registry,
         // Passed on to widgets only (SPEC §13.5); built-in nodes use query, command, evaluate.
-        extra: Object.fromEntries(Object.entries({ preview, commit, on }).filter(([, fn]) => typeof fn === 'function')),
+        extra: Object.fromEntries(Object.entries({ preview, commit, on, onDraft }).filter(([, fn]) => typeof fn === 'function')),
         problems: [], cache: new Map(), count: 0, pages: memoryFor(host, layout.id),
     };
     const root = el('div', 'ss-l-root', '', doc);

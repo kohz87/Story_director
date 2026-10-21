@@ -78,13 +78,13 @@ export function packsFor(ctx, options = {}) {
 
 /**
  * createRuntime({ ctx, packs?, core = true, modules = [], createStore?, createCommandBus?, notify?,
- * onBlocked?, onSaveError? }) → { registry, settings, store, bus, events, sdk, turn, markReady,
+ * onBlocked?, onSaveError?, onRegister?(def) }) → { registry, settings, store, bus, events, sdk, turn, markReady,
  * initial, packs }. `ctx` is SillyTavern's context (or the testkit's fake); `packs` a
  * createPacksPart() result (default: one over ctx.extensionSettings).
  */
 export function createRuntime({
     ctx, packs = null, core = true, modules = [], createStore = realStore, createCommandBus = realBus,
-    notify, onBlocked = null, onSaveError = null,
+    notify, onBlocked = null, onSaveError = null, onRegister = null,
 } = {}) {
     const registry = createRegistry();
     const packPart = packs ?? packsFor(ctx);
@@ -109,7 +109,7 @@ export function createRuntime({
     const store = createStore({ chat: () => ctx.chat, save: () => ctx.saveChat(), onSaveError });
     const bus = createCommandBus({ store, registry, settings });
     const events = createEvents();
-    const made = createSdk({ store, bus, registry, settings, events, chat: () => ctx.chat });
+    const made = createSdk({ store, bus, registry, settings, events, chat: () => ctx.chat, onRegister: def => onRegister?.(def) });
     sdk = made.sdk;
     const initial = () => initialWithStart(registry);
     const turn = createTurn({ ctx, store, bus, registry, settings, events, onBlocked, initial, ...(notify ? { notify } : {}) });

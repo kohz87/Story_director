@@ -10,6 +10,9 @@
 // prefixes for their own commands.
 export const CAPTURE_PREFIX = 'capture.';
 export const INIT_PREFIX = 'module.init.';
+// The host's module id and the namespace of its standard widgets (MODULES §F9).
+export const HOST_MODULE = 'story-block';
+export const STANDARD_PREFIX = 'ss.';
 
 const KNOWN_KEYS = ['id', 'name', 'version', 'description', 'domains', 'commands', 'queries', 'capture', 'context', 'hooks', 'settings', 'tabs', 'screens', 'widgets'];
 const FIELD_TYPES = ['bool', 'int', 'choice', 'text', 'list'];
@@ -187,7 +190,9 @@ export function definitionProblems(def) {
     }
     if (map(def.widgets, 'widgets')) {
         for (const [name, widget] of Object.entries(def.widgets)) {
-            if (!WIDGET_NAME.test(name) || (typeof def.id === 'string' && !name.startsWith(`${def.id}.`))) problems.push(`the widget name "${name}" must start with the module id and a dot (like "${def.id}.${name.split('.').at(-1)}")`);
+            // Story Block's own standard widgets are `ss.<name>` (MODULES §F9); everyone else uses its id.
+            const prefix = def.id === HOST_MODULE ? STANDARD_PREFIX : `${def.id}.`;
+            if (!WIDGET_NAME.test(name) || (typeof def.id === 'string' && !name.startsWith(prefix))) problems.push(`the widget name "${name}" must start with the module id and a dot (like "${def.id}.${name.split('.').at(-1)}")`);
             if (!isObject(widget)) { problems.push(`widget "${name}" is not an object`); continue; }
             fn(widget.render, `widget "${name}" render`);
         }

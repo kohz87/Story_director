@@ -80,6 +80,21 @@ export function createDialogMount(deps) {
         const isLast = () => at === steps.length - 1;
         const submitType = () => opts.submit ?? body.querySelector('[data-submit]')?.getAttribute('data-submit') ?? null;
 
+        // Widgets that edit the draft (ss.stepper) call api.onDraft(name, value): the value goes into the
+        // draft (a dotted name is a path) and the step is drawn again from it.
+        const setDraft = (name, value) => {
+            const keys = String(name ?? '').split('.').filter(Boolean);
+            if (!keys.length || keys.some(key => key === '__proto__' || key === 'constructor' || key === 'prototype')) return;
+            let node = draft;
+            for (const key of keys.slice(0, -1)) {
+                if (!node[key] || typeof node[key] !== 'object') node[key] = {};
+                node = node[key];
+            }
+            node[keys.at(-1)] = plainCopy({ value }).value ?? null;
+            if (!closed) drawStep();
+        };
+        const stepDeps = { ...deps, api: { ...(deps.api ?? {}), onDraft: setDraft } };
+
         function drawStep() {
             const step = steps[at];
             stepList.replaceChildren(...steps.map((item, i) => {
@@ -94,7 +109,7 @@ export function createDialogMount(deps) {
                 const { steps: _steps, template: _template, layout: _layout, ...rest } = screen;
                 override = { ...rest, title: step.title ?? screen.title, ...(step.template !== undefined ? { template: step.template } : { layout: step.layout }) };
             }
-            drawScreen(body, screenId, 'dialog', { deps, state: headState(deps), draft, index: headIndexOf(deps), screen: override });
+            drawScreen(body, screenId, 'dialog', { deps: stepDeps, state: headState(deps), draft, index: headIndexOf(deps), screen: override });
             backButton.hidden = at === 0;
             nextButton.hidden = isLast();
             // The last step's own [data-submit] button sends the draft; the footer button only stands in

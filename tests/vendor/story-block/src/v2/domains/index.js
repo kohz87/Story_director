@@ -14,6 +14,7 @@ import { DEFAULT_CURRENCY, currencyOf } from './money.js';
 import { renderInventoryTab } from '../ui/inventory-tab.js';
 import { renderSceneTab } from '../ui/scene-tab.js';
 import { createEventsPart } from '../events/index.js';
+import { standardWidgets } from '../view/widgets/index.js';
 import { createPacksPart, packs as liveInstalled, part as livePart, resolveItem as liveResolve, startState as liveStart } from '../packs/index.js';
 
 // The packs part bound to SillyTavern (src/v2/packs/index.js), in createPacksPart()'s shape.
@@ -215,5 +216,7 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
             },
         },
         tabs: merged.tabs,
+        // The standard widgets (SPEC §13.5, MODULES §F9) for layouts, templates and mounts.
+        widgets: { ...standardWidgets },
     };
 }

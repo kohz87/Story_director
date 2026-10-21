@@ -148,10 +148,10 @@ export async function ensureModules({ store, bus, registry, events = null }) {
 
 /**
  * The public sdk. `deps`: { store, bus, registry, settings (createSettings), events
- * (createEvents), chat?: () => Message[], check? }. Returns { sdk, events, markReady }:
+ * (createEvents), chat?: () => Message[], check?, onRegister?(def) (after each registerModule) }. Returns { sdk, events, markReady }:
  * `sdk.ready` resolves to the sdk once the host calls markReady().
  */
-export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule }) {
+export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null }) {
     let markReady;
     const ready = new Promise(resolve => { markReady = () => resolve(sdk); });
     const committed = result => {
@@ -164,6 +164,9 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         /** Registers a module (§6); a module enabled mid-chat gets its initial state now. */
         async registerModule(def) {
             registry.register(def);
+            if (typeof onRegister === 'function') {
+                try { onRegister(def); } catch (error) { console.warn('[Story Suite] a module was registered, but the screens could not follow', error); }
+            }
             await ensureModules({ store, bus, registry, events });
             return sdk;
         },
