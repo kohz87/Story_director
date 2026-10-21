@@ -1,5 +1,8 @@
 # Story Director v0.9.44
 
+> **Story Suite v2 is being built on the `v2` branch.** Story Director v2 module: tracker and quests parts merged; integration, atlas (map) and screens in progress. Progress for the whole suite: [Story Block docs/v2/STATUS.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md). The rest of this README describes v1 until v2 is released.
+
+
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
 injects a short **note** before every reply with what is due, arriving and relevant to the

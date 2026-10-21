@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.0-alpha.1 (in progress, `v2` branch)
+
+Story Suite v2. Story Director v2 module: tracker and quests parts merged; integration, atlas (map) and screens in progress. Status: https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md
+
 ## 0.9.46
 
 - **Quest turn-ins work over plain HTTP.** Checkpoint and completion IDs no longer require `crypto.randomUUID`, which browsers can omit on HTTP LAN hosts. Use with Story Block **0.9.28** to restore journal reads and the Quests tab on those hosts. Existing quests and IDs remain intact; no chat reset or HTTPS change is required.
