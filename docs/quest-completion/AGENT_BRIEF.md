@@ -3,6 +3,11 @@
 Publish through pull requests and merge after CI passes; no paid model calls.
 Keep Complete / Undo complete and Pending labels. Preserve narrative-only quests.
 
+Current work: a shared per-chat metadata journal for durable quest evidence and
+Inventory/Party checkpoints. Coordinate quest coins, delivery, XP and receipts in one
+verified save. Preserve archived prefixes and explicit branch rollback; reject ambiguous
+interior edits. See [PERSISTENCE.md](PERSISTENCE.md). No separate backend or paid calls.
+
 ## Ownership
 
 - Director: accepted terms, eligibility, user intent, receipts and story instructions.

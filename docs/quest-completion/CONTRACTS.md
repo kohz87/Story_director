@@ -52,11 +52,13 @@ explicit terms block completion, while unmeasurable quests keep narrative closur
   A declared success without that receipt blocks later settlement until the conflicting
   reply is corrected; never pay again over an unverified narrative payout.
 - Reconcile omitted or echoed resource effects once; preserve unrelated changes and block
-  ambiguous deltas. Save Inventory, completion and receipt in one serialized message update.
+  ambiguous deltas. Save Inventory, Party XP, completion, receipt and journal checkpoint
+  in one serialized message update, using RPG's existing growth calculation.
   Confirm actual saved state before success; a lost response may still be durable. Restore
   rejected candidates only if untouched; uncertain saves require reload/reconciliation.
 - Replay saved effects without incrementing them. Repeated events/clicks/reloads cannot
-  pay again. Use the existing quest-XP path. Same valid narration swipes may retell a turn-in.
+  pay or award XP again. Automatic XP recognizes coordinated receipts. Same valid
+  narration swipes may retell a turn-in.
 - Deletion/swipe restores prior blocks/claims. Lost evidence or edited acceptance terms
   invalidate dependent success and block further settlement until trustworthy history is
   restored. Do not guess refunds across an edited suffix or inherit sibling-branch claims.
@@ -67,7 +69,9 @@ Capability-check optional version-1 APIs; missing providers produce unavailable 
 Item checks need RPG Inventory/currency helpers but no combat history; Delta is optional.
 Reuse existing replay/change events, keep prompts compact and never inject the battle ledger.
 No direct cross-checkout imports, additional polling, model calls or automatic migrations.
-Preserve proof boundaries; missing/compacted history is incomplete. This does not promise
+Preserve proof boundaries; only proven journal ancestors survive prefix archival. Missing
+anchors or metadata remain incomplete. See [PERSISTENCE.md](PERSISTENCE.md) for the shared
+Inventory/Party journal and rollback contract. This does not promise
 isolation from arbitrary external writers or automatic reconstruction of edited suffixes.
 
 Keep pure/runtime coverage of these rules and real-browser checks for thresholds, location,

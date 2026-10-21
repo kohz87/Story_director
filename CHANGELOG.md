@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.45
+
+- **Long quests retain their history.** Accepted terms and completed state have durable checkpoints in Story Block's shared chat journal. A quest can be handed in hundreds of replies later after hiding or archiving its old messages. Proven archived ancestors seed replay; the active branch determines which defeats and claims count.
+- **Coins and XP settle together.** Complete saves Inventory, Party XP, quest closure, receipts and the checkpoint in one verified transaction. Repeated events do not pay or award XP again. Rollback restores full Party state, including levels and points, while preserving earlier battle XP.
+- Hidden completion replies remain readable through `questsDoneAt`. Ambiguous interior edits require recovery; no guessed refunds or reconstruction of edited suffixes. Preserve chat metadata and at least one recognized reply when archiving. Use RPG Battle **0.5.49** and Story Block **0.9.27** together.
+
 ## 0.9.44
 
 - **A cleared and turned-in quest leaves Pending.** A story-tracked quest whose step says `cleared and turned in for 60 copper` now closes, as `completed and turned in` already did. Merely clearing the site and heading back stays pending. This records the ending without paying coins again; quests with verified targets still require their code-owned turn-in receipt.
