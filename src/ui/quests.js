@@ -53,7 +53,7 @@ function button(label, className, { iconName, title, onClick } = {}) {
 }
 
 function typeLabel(type) {
-    if (!type) return 'Quests';
+    if (!type) return 'Pending';
     return TYPE_LABELS[type] ?? type.replace(/^./, first => first.toUpperCase());
 }
 
@@ -125,7 +125,7 @@ function metaPart(field, value) {
  * when there is no goal), the next step, then who, what for, by when and where on one quiet
  * line, and a longer description last, cut to two lines until it is clicked.
  */
-function renderQuest(record, { formatDate, status, onAbandon, abandoning = null, onKeep = null }) {
+function renderQuest(record, { formatDate, status, onAbandon, abandoning = null, onKeep = null, completion = null, finishing = null, onFinish = null, onUndoFinish = null }) {
     const state = status?.(record) ?? '';
     const pending = Boolean(abandoning?.has?.(record.id));
     const item = el('li', { className: `story-director-record is-quest${state ? ` is-${state}` : ''}` });
@@ -143,6 +143,27 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
     const desc = text(record.fields?.desc);
     const lead = goal || desc;
     if (lead) item.append(el('div', { className: 'story-director-quest-goal', text: lead }));
+    const progress = completion?.(record);
+    if (progress?.managed) {
+        const queued = finishing?.plan?.record === record.id && finishing.attachedTo === null;
+        const label = queued ? 'Turn-in queued for the next reply' : [
+            progress.label || 'Progress unavailable',
+            progress.paymentText && progress.claimable >= progress.required ? progress.paymentText : '',
+            progress.reason,
+        ].filter(Boolean).join(' — ');
+        item.append(el('div', { className: 'story-director-quest-progress', text: label, attrs: { role: 'status' } }));
+        const action = button(queued ? 'Undo complete' : 'Complete', 'story-director-quest-finish', {
+            iconName: queued ? 'fa-rotate-left' : 'fa-check',
+            title: queued ? 'Cancel this turn-in before generation begins.' : progress.reason || 'Turn in this quest with the next reply.',
+            onClick: () => {
+                if (action.disabled) return;
+                if (queued) onUndoFinish?.(record.id);
+                else onFinish?.(record.id);
+            },
+        });
+        action.disabled = queued ? finishing.sentFor !== null : !progress.eligible || typeof onFinish !== 'function';
+        item.append(action);
+    }
     const step = text(record.fields?.step);
     if (step) {
         item.append(el('div', { className: 'story-director-quest-step', attrs: { title: 'next step' } }, [
@@ -152,7 +173,7 @@ function renderQuest(record, { formatDate, status, onAbandon, abandoning = null,
     }
     const parts = [];
     for (const field of Object.keys(META)) {
-        let value = text(record.fields?.[field]);
+        let value = text(field === 'reward' && record.contract ? record.contract.rewardText : record.fields?.[field]);
         if (!value) continue;
         if (field === 'due' && typeof formatDate === 'function') {
             try {
@@ -297,8 +318,8 @@ export function offersShown(offered, status = null) {
  * chosen for the next reply; (0.9.37) `presence(record)`: { here, badge, ask } for an offer (the
  * badge; Take on asks `ask` first while not here), null when nothing tells.
  */
-export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null } = {}) {
-    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo, presence }];
+export function renderQuests(pane, { quests = [], finished = [], offered = [], formatDate = null, status = null, abandoning = null, onAbandon = null, onKeep = null, choosing = null, onTake = null, onDecline = null, onUndo = null, presence = null, completion = null, finishing = null, onFinish = null, onUndoFinish = null } = {}) {
+    lastArgs = [pane, { quests, finished, offered, formatDate, status, abandoning, onAbandon, onKeep, choosing, onTake, onDecline, onUndo, presence, completion, finishing, onFinish, onUndoFinish }];
     const root = el('div', { className: 'story-director-tab story-director-quests' });
     if (!quests.length && offered.length) {
         // (0.9.35) Not "no open quests" above a list of offers: say where they are.
@@ -307,14 +328,14 @@ export function renderQuests(pane, { quests = [], finished = [], offered = [], f
         ]));
     } else if (!quests.length) {
         root.append(el('div', { className: 'story-director-empty' }, [
-            el('p', { className: 'story-director-empty-text', text: 'No open quests.' }),
+            el('p', { className: 'story-director-empty-text', text: 'No pending quests.' }),
             el('p', { className: 'story-director-empty-hint', text: 'A quest starts when your character accepts one: a bounty, a contract, a favour owed. The story writes it as "+ quest …" and it stays here until it is done.' }),
         ]));
     }
     for (const [type, list] of groups(quests)) {
         root.append(el('section', { className: `story-director-section is-quest-group${type ? ` is-${type}` : ''}` }, [
             sub(typeLabel(type), type === 'bounty' ? 'fa-coins' : type === 'main' ? 'fa-crown' : 'fa-scroll', list.length),
-            el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon, abandoning, onKeep }))),
+            el('ul', { className: 'story-director-records' }, list.map(record => renderQuest(record, { formatDate, status, onAbandon, abandoning, onKeep, completion, finishing, onFinish, onUndoFinish }))),
         ]));
     }
     if (offered.length) root.append(renderOffered(offered, { formatDate, status, choosing, onTake, onDecline, onUndo, presence }));

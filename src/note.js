@@ -21,6 +21,8 @@ export const CHANGE_INSTRUCTION = [
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
 
+export const QUEST_INSTRUCTION = 'Measurable jobs: target: defeat 3 wolf, deliver 5 Rat Tail, or possess 1 Travel Permit; reward: 1 silver per wolf, 2 silver, or none. Successful turn-in requires the reader\'s verified Complete instruction; do not close or pay these jobs on your own.';
+
 // How a schedule meets a scene, about 70 tokens; only when something is scheduled. Without
 // it a model handed "Due now: the warrant is filed" tends to stop the scene and stage it.
 export const PACING = [

@@ -32,13 +32,14 @@
 import { makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { DEFAULT_SETTINGS } from './src/defaults.js';
 import { formatOp, parseChanges } from './src/changes.js';
-import { offerPresence } from './src/presence.js';
+import { offerPresence, turnInPresence } from './src/presence.js';
+import { entityKey, evaluateQuest, requirementOf, settlementPlan, turnInInstruction } from './src/quest-completion.js';
 import { activeRecords, emptyTracker, findRecord, givenUpIn, isOffer, offersChosenIn, questsDoneIn, replay, untrackedCorrections, waitsForPay } from './src/tracker.js';
 import { seedFromWorldState } from './src/seed.js';
 import { checkpointDue, compactTracker, compactVisits, shiftTracker, shiftVisits, usableCheckpoint, withCheckpoint } from './src/checkpoints.js';
 import { mirrorOffscreen } from './src/mirror.js';
 import { DEFAULTS, classify, encountersIn, estimateTokens } from './src/relevance.js';
-import { CHANGE_INSTRUCTION, noteParts, noteTokens, staticNote, tailNote, withFixedNote } from './src/note.js';
+import { CHANGE_INSTRUCTION, QUEST_INSTRUCTION, noteParts, noteTokens, staticNote, tailNote, withFixedNote } from './src/note.js';
 import { checkReply } from './src/checks.js';
 import { lapseLines, lapsedOffers, lapsesIn, slippedBeats } from './src/lapses.js';
 import { renderSettings } from './src/ui/settings.js';
@@ -56,7 +57,7 @@ import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, n
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.42';
+const VERSION = '0.9.43';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -258,7 +259,8 @@ function signature(message) {
     for (let index = 0; index < text.length; index++) hash = ((hash * 33) ^ text.charCodeAt(index)) >>> 0;
     // (0.9.15) The reader's abandon stamp is part of what a reply says.
     const stamp = [...abandonedStamp(message), ...takenStamp(message).map(id => `+${id}`)].join('|');
-    return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}${stamp ? `:${stamp}` : ''}`;
+    const proof = JSON.stringify([message?.extra?.storyBlockIdentity, message?.extra?.storyDirectorQuest, message?.extra?.rpgBattleEvidence]);
+    return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}${stamp ? `:${stamp}` : ''}:${proof}`;
 }
 
 // One replay entry per message: its change lines (assistant replies only), its narration
@@ -281,7 +283,10 @@ function entryFor(message, index, sb, cal, own, reference, said = null) {
     const timeText = scene ? sceneTimeText(scene.text) : '';
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
-        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? { said, chosen: abandonedStamp(message), taken: takenStamp(message) } : {}) },
+        entry: { message: index, ops: block ? parsed.ops : null, text: visibleText(message), time: date ? date.abs : null, ...(assistant ? {
+            said, chosen: abandonedStamp(message), taken: takenStamp(message),
+            contractContext: questContextAt(index),
+        } : {}) },
         location: scene ? headerCell(scene.text, 'loc|location|place') : '',
         hadBlock: Boolean(block),
         parseErrors: parsed.errors,
@@ -292,10 +297,13 @@ function entryFor(message, index, sb, cal, own, reference, said = null) {
 function readEntry(chat, index, previous, sb, cal, own) {
     const seed = previous?.tracker ?? emptyTracker();
     const read = entryFor(chat[index], index, sb, cal, own, seed.time ?? null, saidBefore(chat, index, message => isStoryReply(message, sb, own.sceneTag)));
+    const receipts = chat[index].extra?.storyDirectorQuest?.receipts ?? [];
+    read.entry.settlements = receipts.filter(receipt => questReceiptHolds(receipt, index, seed));
     const result = replay([read.entry], { seed });
     return {
         sig: signature(chat[index]),
         tracker: result.tracker,
+        questConflict: previous?.questConflict || read.entry.settlements.length !== receipts.length,
         problems: result.problems,
         hadBlock: read.hadBlock,
         parseErrors: read.parseErrors,
@@ -306,7 +314,7 @@ function readEntry(chat, index, previous, sb, cal, own) {
 // (0.9.30) Checkpoints: the tracker kept at the back of the chat (src/checkpoints.js), in its
 // metadata, so the messages before one are never read again.
 function checkpointKey(own = settings()) {
-    return JSON.stringify([own.calendar ?? null, own.sceneTag ?? '']);
+    return JSON.stringify([own.calendar ?? null, own.sceneTag ?? '', 'verified-quests-v1']);
 }
 
 function checkpoints(ctx = context()) {
@@ -337,6 +345,9 @@ function visitsUpTo(upTo) {
 
 // After a read through the newest message: keep a checkpoint once one is due.
 function keepCheckpoint(ctx, chat, sb, own) {
+    // A measurable contract must retain its proof boundary. Until proof-aware
+    // checkpoint compaction exists, replay it from the retained messages.
+    if (cache.entries.at(-1)?.questConflict || cache.entries.at(-1)?.tracker?.records.some(record => record.contract)) return;
     const meta = chatMeta(ctx);
     if (!meta) return;
     const points = checkpoints(ctx);
@@ -562,7 +573,7 @@ function noteOptions(ctx, tracker, upTo, place = '') {
     const cal = calendar();
     // With capture writing every reply's changes, the model is not asked to.
     const asks = settings(ctx).capture.mode !== 'always';
-    const instructionless = asks ? {} : { instruction: '' };
+    const instructionless = asks ? (questApi() && storyBlock()?.transactionVersion === 1 ? { instruction: `${CHANGE_INSTRUCTION}\n${QUEST_INSTRUCTION}` } : {}) : { instruction: '' };
     const fixes = corrections(travelFindings(tracker, { pack: worldPack(), calendar: cal }));
     // The last reply's `~`/`!` lines on keys that are not tracked, while the model writes them.
     if (asks) fixes.push(...latestReplyCorrections(upTo));
@@ -643,6 +654,9 @@ async function onGenerationInterceptor(_chat, _contextSize, _abort, type = 'norm
         const { selection, tracker, upTo } = situation(type);
         const slot = replacesLastReply(ctx.chat ?? [], type) ? (ctx.chat?.length ?? 1) - 1 : ctx.chat?.length ?? 0;
         const note = noteFor(ctx, selection, { ...noteOptions(ctx, tracker, upTo, selection.place), ...choicesFor(slot, tracker) });
+        const turnIn = prepareQuestTurnIn(slot, tracker, type);
+        if (turnIn) note.tail = [note.tail, turnIn].filter(Boolean).join('\n');
+        questGenerating = true;
         setNote(note);
         const counted = selection.due.length + selection.arriving.length + selection.relevant.length;
         reportStatus(`Last reply: note sent (${counted} tracked ${counted === 1 ? 'item' : 'items'}, ~${estimateTokens(note.fixed) + estimateTokens(note.tail)} tokens, ~${estimateTokens(note.fixed)} of them fixed).`);
@@ -729,6 +743,9 @@ const API = Object.freeze({
             return [];
         }
     },
+    questProgress() {
+        return questRecords().active.map(record => ({ id: record.id, name: record.key, ...questEvaluation(record) }));
+    },
 });
 globalThis.StoryDirector = API;
 
@@ -809,6 +826,7 @@ function watchSuite() {
     if (suiteWatched) return;
     try {
         storySuite().onChange(() => {
+            cache = { chatId: null, entries: [], base: -1 };
             settingsPanel?.setOthers?.(otherSuiteNames());
             settingsPanel?.setSuiteLink?.(suiteLinkShown());
         });
@@ -830,8 +848,13 @@ async function onReply({ messageIndex }) {
     if (!isAssistant(chat[index])) return;
     let redraw = false;
     try {
+        questGenerating = false;
         // Capture first, so the checks below see the changes it wrote.
         if (settings(ctx).capture.mode !== 'off' && !sb.blockInText(chat[index].mes, BLOCK.tag)) await capture(index);
+        await captureQuestContext(index);
+        if (chatIdOf(context()) !== chatIdOf(ctx) || context()?.chat !== chat) return;
+        await settleQuestTurnIn(index);
+        if (chatIdOf(context()) !== chatIdOf(ctx) || context()?.chat !== chat) return;
         const closed = await closeReply(index);
         if (closed.choosing && !closed.drawn) redraw = true;
         const before = trackerAt(index - 1).tracker;
@@ -1492,7 +1515,7 @@ function questStatus(now) {
 function questsTabKey() {
     const ctx = context();
     const chat = ctx?.chat ?? [];
-    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(','), JSON.stringify(abandonState(ctx) ?? null)].join('|');
+    return [chatIdOf(ctx), chat.length, signature(chat.at(-1)), settings().dueSoonDays, JSON.stringify(settings().calendar), [...pendingAbandons(ctx)].join(','), JSON.stringify(abandonState(ctx) ?? null), JSON.stringify(finishState()), questGenerating, questWriting, questApi()?.inventory?.().revision, JSON.stringify(questRecords().active.map(record => questEvaluation(record)))].join('|');
 }
 
 // (0.9.36) NPC State Delta's present cast (names), when it is here: the second source for who
@@ -1532,7 +1555,187 @@ function renderQuestsTab(pane) {
     const formatDate = value => cal.withClock(value, { reference: now });
     const status = questStatus(now);
     // (0.9.27) An offer the reader spoke of stays in view past its date, for its grace (lapses.js).
-    renderQuests(pane, { quests: active, finished, offered: offersShown(offered, status), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => offerHere(record, where) });
+    renderQuests(pane, { quests: active, finished, offered: offersShown(offered, status), formatDate, status, abandoning: pendingAbandons(), onAbandon: id => abandonQuest(id), onKeep: id => keepQuest(id), choosing: pendingOffers(), onTake: id => chooseOffer(id, 'take'), onDecline: id => chooseOffer(id, 'decline'), onUndo: id => undoOffer(id), presence: record => offerHere(record, where), completion: record => questEvaluation(record), finishing: finishState(), onFinish: id => finishQuest(id), onUndoFinish: undoQuestFinish });
+}
+
+// Verified quest turn-ins. Intent lives in chat metadata; accepted terms and receipts
+// live in the owning message's extra, outside model-controlled block text.
+let questGenerating = false;
+let questWriting = false;
+let uncertainQuestWrite = null;
+
+function questApi() {
+    const api = storySuite().api('rpg-battle')?.quests;
+    return api?.version === 1 ? api : null;
+}
+
+function questContextAt(index) {
+    const state = context()?.chat?.[index]?.extra?.storyDirectorQuest;
+    return state?.context?.owner && state.context.owner === storyBlock()?.messageIdentity?.(index) ? state.context : null;
+}
+
+function questReceiptHolds(receipt, index, tracker) {
+    if (receipt?.version !== 1 || !receipt.id || receipt.owner !== storyBlock()?.messageIdentity?.(index)
+        || uncertainQuestWrite === receipt.id || (questWriting && finishState()?.plan?.id === receipt.id)) return false;
+    if (!tracker.records.some(record => record.contract?.id === receipt.quest
+        && JSON.stringify(record.contract) === JSON.stringify(receipt.contract))) return false;
+    if (receipt.contract?.requirement?.action !== 'defeat') return true;
+    const proof = questApi()?.evidence(receipt.contract.cursor);
+    if (proof?.availability !== 'available') return false;
+    const ids = new Set(proof.events.flatMap(event => event.defeated).filter(enemy => entityKey(enemy.name) === receipt.contract.requirement.key).map(enemy => enemy.id));
+    return receipt.claims.every(id => ids.has(id));
+}
+
+function finishState(ctx = context()) {
+    return chatMeta(ctx)?.[SETTINGS_KEY]?.finish ?? null;
+}
+
+function setFinishState(state, ctx = context()) {
+    const meta = chatMeta(ctx);
+    if (!meta) return;
+    meta[SETTINGS_KEY] = { ...(meta[SETTINGS_KEY] ?? {}), finish: state };
+    ctx.saveMetadataDebounced?.();
+}
+
+function questEvaluation(record, { upTo = (context()?.chat?.length ?? 0) - 1, preparing = false } = {}) {
+    const api = questApi();
+    const inventory = api?.inventory({ beforeIndex: upTo + 1 });
+    const evidence = record.contract?.cursor ? api?.evidence(record.contract.cursor) : null;
+    const { tracker, info } = trackerAt(upTo);
+    const claims = tracker.records.flatMap(entry => entry.settlement?.claims ?? []);
+    const scene = sceneTextAt(upTo);
+    const presence = turnInPresence(record.contract, { place: scenePlace(scene), scene, present: npcStateDeltaPresent() });
+    const pending = finishState();
+    const result = evaluateQuest({
+        record, inventory, evidence, claims, presence,
+        busy: api?.busy() || questWriting || (!preparing && (questGenerating || Boolean(pending && pending.attachedTo === null))),
+        parseCoins: api?.parseCoins, formatCoins: api?.formatCoins,
+    });
+    const recovery = uncertainQuestWrite ? 'A quest save is unverified. Reload the chat before retrying.'
+        : info?.questConflict ? 'Quest evidence or accepted terms changed. Recovery is required before another turn-in.' : '';
+    if (result.managed && (storyBlock()?.transactionVersion !== 1 || recovery || pendingAbandons().has(record.id))) {
+        return { ...result, eligible: false, reason: recovery || (pendingAbandons().has(record.id) ? 'Abandonment is queued.' : 'Coordinated saving is unavailable.') };
+    }
+    return result;
+}
+
+async function captureQuestContext(index) {
+    const ctx = context();
+    const sb = storyBlock();
+    const message = ctx.chat[index];
+    if (sb?.transactionVersion !== 1 || questContextAt(index) || message.extra?.storyDirectorQuest?.receipts?.length) return;
+    const ops = parseChanges(sb.blockInText(message.mes, BLOCK.tag)?.text ?? '').ops;
+    const before = trackerAt(index - 1).tracker;
+    const managed = record => record && (record.contract || requirementOf(record.fields, record.extra).managed);
+    const choice = abandonState(ctx);
+    if (!ops.some(op => managed(op) || managed(findRecord(before, op.key)))
+        && !(choice?.sentFor === index && choice.take.some(id => managed(findRecord(before, id))))) return;
+    const owner = sb.messageIdentity(index);
+    if (!owner) return;
+    const api = questApi();
+    const value = {
+        context: { owner, cursor: api?.cursor(index) ?? null, currency: api?.inventory().currency ?? null, place: scenePlace(sceneTextAt(index)) },
+        receipts: [],
+    };
+    const result = await sb.commitBlocks({
+        id: `quest-context:${owner}`, chatId: chatIdOf(ctx), messageIndex: index,
+        expectedText: message.mes, expectedExtra: JSON.stringify(message.extra ?? {}),
+        namespace: 'storyDirectorQuest', value,
+    });
+    if (result.status !== 'durable') throw new Error(`Quest acceptance was not saved: ${result.reason}`);
+}
+
+function finishQuest(id) {
+    const record = questRecords().active.find(entry => entry.id === id);
+    if (!record) return;
+    const evaluation = questEvaluation(record);
+    if (!evaluation.eligible) return notify('warning', evaluation.reason);
+    const plan = settlementPlan(record, evaluation, crypto.randomUUID());
+    setFinishState({ plan, base: questApi().inventory(), attachedTo: null, sentFor: null });
+    notify('info', `${record.key}: turn-in queued for the next reply. Undo is available until generation begins.`);
+    storyBlock()?.refresh?.();
+}
+
+function undoQuestFinish() {
+    if (questGenerating || questWriting || finishState()?.attachedTo !== null) return;
+    setFinishState(null);
+    storyBlock()?.refresh?.();
+}
+
+// The same frozen resources must still qualify before generation and before saving.
+function checkQuestTurnIn(state, index, tracker = trackerAt(index - 1).tracker) {
+    const record = tracker.records.find(entry => entry.contract?.id === state.plan.quest);
+    const evaluation = record && questEvaluation(record, { upTo: index - 1, preparing: true });
+    const valid = evaluation?.eligible && JSON.stringify(evaluation.revisions) === JSON.stringify(state.plan.revisions);
+    return { record, reason: valid ? '' : evaluation?.reason || 'Quest resources changed; choose Complete again.' };
+}
+
+function prepareQuestTurnIn(slot, tracker, type) {
+    const state = finishState();
+    if (!state) return '';
+    if (state.attachedTo !== null && state.attachedTo !== slot) {
+        setFinishState(null);
+        return '';
+    }
+    if (!['normal', 'swipe', 'regenerate'].includes(String(type).toLowerCase())) return '';
+    const { reason } = checkQuestTurnIn(state, slot, tracker);
+    if (reason) {
+        setFinishState(null);
+        notify('warning', `Turn-in canceled: ${reason}`);
+        return '';
+    }
+    setFinishState({ ...state, sentFor: slot });
+    return turnInInstruction(state.plan);
+}
+
+async function settleQuestTurnIn(index) {
+    const ctx = context();
+    const chatId = chatIdOf(ctx);
+    const sb = storyBlock();
+    const state = finishState(ctx);
+    if (!state || state.sentFor !== index || questWriting) return;
+    const message = ctx.chat[index];
+    const tracker = trackerAt(index - 1).tracker;
+    if (message.extra?.storyDirectorQuest?.receipts?.some(receipt => receipt.id === state.plan.id && questReceiptHolds(receipt, index, tracker))) return;
+    const { record, reason } = checkQuestTurnIn(state, index, tracker);
+    if (reason) {
+        setFinishState(null, ctx);
+        notify('warning', `Turn-in was not settled: ${reason}`);
+        return;
+    }
+    questWriting = true;
+    try {
+        const plan = state.plan;
+        const current = sb.blockInText(message.mes, state.base.tag)?.text ?? state.base.text;
+        const inventory = questApi().reconcile(state.base, current, plan);
+        const director = sb.blockInText(message.mes, BLOCK.tag)?.text ?? '';
+        const receipt = { ...structuredClone(plan), owner: sb.messageIdentity(index) };
+        const extra = message.extra?.storyDirectorQuest ?? {};
+        const result = await sb.commitBlocks({
+            id: plan.id, chatId, messageIndex: index,
+            expectedText: message.mes, expectedExtra: JSON.stringify(message.extra ?? {}),
+            changes: [
+                { tag: state.base.tag, text: inventory },
+                { tag: BLOCK.tag, text: `${director}${director ? '\n' : ''}- ${record.key} — completed; verified turn-in (${plan.paymentText})` },
+            ],
+            namespace: 'storyDirectorQuest', value: { ...extra, receipts: [...(extra.receipts ?? []), receipt] },
+        });
+        if (result.status === 'durable') {
+            setFinishState({ ...state, attachedTo: index }, ctx);
+            notify('success', `${record.key}: completed, ${plan.paymentText}.`);
+        } else {
+            if (result.status === 'uncertain') uncertainQuestWrite = plan.id;
+            else setFinishState(null, ctx);
+            notify('error', `Turn-in needs recovery: ${result.reason}`);
+        }
+    } catch (error) {
+        setFinishState(null, ctx);
+        notify('warning', `Turn-in was not settled: ${error.message}`);
+    } finally {
+        questWriting = false;
+        cache = { chatId: null, entries: [], base: -1 };
+        if (chatIdOf(context()) === chatId) sb.refresh?.();
+    }
 }
 
 // (0.9.19) The Journal: what {{user}}'s character saw and heard, from every message's tracker
@@ -1922,7 +2125,7 @@ function registerWithStoryBlock() {
         key: journalTabKey,
         render: pane => renderJournalTab(pane),
     });
-    sb.onReply(payload => void onReply(payload));
+    sb.onReply(payload => onReply(payload));
     registered = true;
     return true;
 }
@@ -1957,6 +2160,8 @@ function registerEvents() {
             lastFindings = [];
             lastFindingsKey = '';
             setNote('');
+            questGenerating = false;
+            uncertainQuestWrite = null;
         });
     }
     for (const event of [events.APP_READY, events.EXTENSION_SETTINGS_LOADED]) {
@@ -1969,8 +2174,20 @@ function registerEvents() {
     // together ends too, and would take the note away before the reply is sent.
     if (events.CHAT_COMPLETION_PROMPT_READY) ctx.eventSource.on(events.CHAT_COMPLETION_PROMPT_READY, keepFixedNote);
     for (const event of [events.MESSAGE_RECEIVED, events.GENERATION_STOPPED]) {
-        if (event) ctx.eventSource.on(event, () => setNote(''));
+        if (event) ctx.eventSource.on(event, () => {
+            setNote('');
+            questGenerating = false;
+            if (event === events.GENERATION_STOPPED) {
+                const state = finishState();
+                if (state?.attachedTo === null) setFinishState({ ...state, sentFor: null });
+            }
+        });
     }
+    if (events.MESSAGE_DELETED) ctx.eventSource.on(events.MESSAGE_DELETED, () => {
+        const state = finishState();
+        if (state && (state.attachedTo !== null || state.sentFor !== null)) setFinishState(null);
+        cache = { chatId: null, entries: [], base: -1 };
+    });
 }
 
 export async function init() {

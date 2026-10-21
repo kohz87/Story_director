@@ -995,3 +995,14 @@
     flex-basis: 100%;
     font-size: 0.85em;
 }
+/* Verified quest progress stays legible in the narrow sidebar. */
+.story-director-quest-progress {
+    margin: 0.4em 0;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.story-director-quest-finish:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}

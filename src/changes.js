@@ -37,7 +37,7 @@ export const QUEST_TYPE_WORDS = Object.freeze({
 
 // A quest's own parts: its category (main, side, bounty, contract…), who gave it, what it
 // asks, what it pays, the step it is at, and (v0.8.2) how hard it is.
-export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step', 'difficulty'];
+export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step', 'difficulty', 'target'];
 
 // A quest's difficulty is one of four words, so other extensions can scale by it (RPG Battle
 // awards quest XP by it). A missing or unreadable one is normal.

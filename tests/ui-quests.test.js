@@ -23,6 +23,30 @@ function render(options) {
 
 const subText = node => node.querySelector('span').textContent;
 
+test('measurable progress and Complete use eligibility, and queued completion offers Undo', () => {
+    const calls = [];
+    const wolf = quest('Wolves');
+    const options = {
+        quests: [wolf], completion: () => ({ managed: true, eligible: false, label: 'Wolves 2/3', reason: 'Need 1 more wolf.' }),
+        onFinish: id => calls.push(id),
+    };
+    let pane = render(options);
+    assert.match(pane.textContent, /Wolves 2\/3/);
+    assert.equal(pane.querySelector('.story-director-quest-finish').disabled, true);
+    assert.equal(pane.querySelector('.story-director-quest-finish').textContent, 'Complete');
+    pane.querySelector('.story-director-quest-finish').click();
+    assert.deepEqual(calls, []);
+    pane = render({ ...options, completion: () => ({ managed: true, eligible: true, label: 'Wolves 8/3', paymentText: '8 silver', claimable: 8, required: 3 }) });
+    pane.querySelector('.story-director-quest-finish').click();
+    assert.deepEqual(calls, ['wolves']);
+    pane = render({ ...options, finishing: { plan: { record: 'wolves' }, attachedTo: null, sentFor: null }, onUndoFinish: () => calls.push('undo') });
+    assert.match(pane.textContent, /Undo complete/);
+    pane.querySelector('.story-director-quest-finish').click();
+    assert.deepEqual(calls, ['wolves', 'undo']);
+    pane = render({ ...options, completion: () => ({ managed: false }) });
+    assert.equal(pane.querySelector('.story-director-quest-finish'), null);
+});
+
 test('grouped by type in a fixed order, untyped last; plural and singular types are one group', () => {
     const pane = render({ quests: [
         quest('Herb run', { goal: 'twelve moonleaf' }),
@@ -32,7 +56,7 @@ test('grouped by type in a fixed order, untyped last; plural and singular types 
         quest('Mill wheel', { type: 'odd job' }),
     ] });
     const groups = pane.querySelectorAll('.story-director-section.is-quest-group');
-    assert.deepEqual(groups.map(group => subText(group.querySelector('.story-director-sub'))), ['Main', 'Bounties', 'Odd job', 'Quests']);
+    assert.deepEqual(groups.map(group => subText(group.querySelector('.story-director-sub'))), ['Main', 'Bounties', 'Odd job', 'Pending']);
     assert.deepEqual(texts(groups[1], '.story-director-record-key'), ['Wolf pelts', 'Kettle Jack']);
     assert.equal(groups[1].querySelector('.story-director-count').textContent, '2');
 });
@@ -82,7 +106,7 @@ test('finished quests fold away with how they ended; empty state explains quests
     assert.equal(fold.open, false);
     assert.match(fold.textContent, /Rat cellar/);
     assert.match(fold.textContent, /cleared, paid 5 copper/);
-    assert.match(pane.querySelector('.story-director-empty-text').textContent, /No open quests/);
+    assert.match(pane.querySelector('.story-director-empty-text').textContent, /No pending quests/);
 });
 
 test('difficulty in the head, unless it is normal (0.9.11)', () => {

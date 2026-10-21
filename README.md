@@ -1,4 +1,4 @@
-# Story Director v0.9.42
+# Story Director v0.9.43
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and
@@ -226,7 +226,20 @@ Battle offers quest XP by difficulty when a quest is finished.
   note tells it as *Lone Grey Wolf — pay waiting from Goldwane 14, 12:00 pm (…); the work is done,
   the hour fails nothing*, the Quests tab marks it **pay waiting**, and a `-` that fails it only
   for time (*deadline passed*, *expired*, *too late*) leaves it open. Any other ending still ends it.
-- **Finishing a quest:** `- Key — outcome` closes it, and the change instruction says so for
+- **Verified completion** (since 0.9.43, with RPG Battle 0.5.48 and Story Block 0.9.26).
+  Give a quest one explicit target and coin reward, for example:
+  `+ quest Wolf bounty — protect the road | giver: Fenna | target: defeat 3 wolves | reward: 1 silver per wolf`.
+  Supported targets are `defeat N creature`, `possess N item` and `deliver N item`; use
+  `reward: none` for no payment. **Pending** shows progress. **Complete** waits for enough
+  unclaimed defeats after acceptance or currently held goods, and for the giver or issuing
+  settlement. Eight eligible wolves at 1 silver each pays 8 silver. The click queues the
+  turn-in; **Undo complete** is available before generation. The next normal story reply
+  receives the exact payout, delivery and completion instruction, and code records omitted
+  effects once. Possess keeps goods; deliver removes the required amount. Unsupported terms,
+  unavailable proof or changed resources block settlement. Keep the acceptance and battle
+  history: old prose is not backfilled, and these quests retain replay history instead of
+  making new compacted checkpoints. See [the completion contract](docs/quest-completion/CONTRACTS.md).
+- **Finishing a narrative quest:** `- Key — outcome` closes it, and the change instruction says so for
   quests ("done or failed: - it"). Models often write the end another way, so these close it too
   (since 0.9.1), with a note in the Director tab: a `~` whose `step:` or `now:` (a quest's) or
   `status:` / `outcome:` (any record) is just *done*, *completed*, *finished*, *failed*,
@@ -235,13 +248,14 @@ Battle offers quest XP by difficulty when a quest is finished.
   confirm it, `step: Completed and turned in to Fenna`, or comes with a reward already taken,
   `reward: Claimed 2 gold`, while `step: done tracking, now the den` stays a step), and a `!` on
   a quest that says it was completed, done, turned in, rewarded or failed. A failure closes the quest without counting as done (no quest XP).
-- **The story closes quests, not a click** (since 0.9.5). When an open quest's own `step` or
+- **The story closes narrative quests** (since 0.9.5). When an open quest's own `step` or
   `now` reads as over (*wolf slain, reward collected*, *delivered*, *failed*) but no line closed
   it, the note adds a **Quest check**: "the story may have finished Sheep-killer. If it has,
   close it with - Key — outcome; if not, leave it." Only while the model writes change lines.
 - **A quest is finished once.** A later line closing it again (models repeat `- Quest — done`)
   changes nothing (since 0.9.7): it stays finished in the reply that first closed it, so RPG
-  Battle's quest XP is never given twice. Reopen it with `+ quest …` and it can be finished anew.
+  Battle's quest XP is never given twice. Reopen a narrative quest with `+ quest …` and it can
+  be finished anew; reopening the same verified contract cannot pay it again.
 - **Giving up** (since 0.9.6): a failure, never quest XP, however it is written: `failed`,
   `abandoned`, `gave up`, `forfeit`, `quit`, `walked away`, `backed out`, `called off`… When
   **your own message** (only yours since 0.9.15) gives up an open quest in so many words, in a
