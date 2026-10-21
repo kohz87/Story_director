@@ -123,34 +123,47 @@ export function parseTarget(fields = {}, summary = '') {
     return null;
 }
 
-// The coin words code reads as money; the unit is kept singular ("silver", "crown").
-const METALS = ['copper', 'silver', 'gold', 'platinum', 'electrum'];
-const COIN_WORDS = Object.freeze({
-    copper: 'copper', silver: 'silver', gold: 'gold', platinum: 'platinum', electrum: 'electrum',
-    cp: 'copper', sp: 'silver', gp: 'gold', pp: 'platinum',
-    coin: 'coin', coins: 'coin', crown: 'crown', crowns: 'crown', mark: 'mark', marks: 'mark',
-    penny: 'penny', pennies: 'penny', pence: 'penny', shilling: 'shilling', shillings: 'shilling',
-    ducat: 'ducat', ducats: 'ducat', florin: 'florin', florins: 'florin', sovereign: 'sovereign', sovereigns: 'sovereign',
-});
-const COIN = `(${Object.keys(COIN_WORDS).join('|')})`;
-const REWARD = new RegExp(
-    `(?:^|[^\\p{L}\\d])${COUNT}\\s+${COIN}(?:\\s+(?:coins?|pieces?))?(?![\\p{L}])`
-    + `(?:\\s*,?\\s*(?:(each|apiece|a\\s+head|per\\s+head)(?![\\p{L}])(?:\\s+([\\p{L}][\\p{L}'-]*))?|(?:per|for\\s+each|for\\s+every|each)\\s+([\\p{L}][\\p{L}'-]*)))?`,
-    'iu');
+// The coin words code reads as money. A chat has one currency (MODULES §F1): the word only says
+// that a number is money; the number is a whole amount of the chat's currency, whatever word the
+// story wrote ("8 silver" pays 8 of it, as v1's numbers were kept as they are).
+const COIN_WORDS = Object.freeze(['copper', 'silver', 'gold', 'platinum', 'electrum', 'cp', 'sp', 'gp', 'pp',
+    'coin', 'coins', 'crown', 'crowns', 'mark', 'marks', 'penny', 'pennies', 'pence', 'shilling', 'shillings',
+    'ducat', 'ducats', 'florin', 'florins', 'sovereign', 'sovereigns', 'denar', 'denars', 'gil']);
+const escape = word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const EACH = `(?:\\s*,?\\s*(?:(each|apiece|a\\s+head|per\\s+head)(?![\\p{L}])(?:\\s+([\\p{L}][\\p{L}'-]*))?|(?:per|for\\s+each|for\\s+every|each)\\s+([\\p{L}][\\p{L}'-]*)))?`;
+
+// The words for money in this chat: the usual coin words plus the chat's own currency name and
+// short form ("Gil", "g"), longest first so "gold coins" is read before "gold".
+function coinPattern(currency) {
+    const own = [currency?.name, currency?.short].map(word => clean(word).toLowerCase()).filter(word => word && /^[\p{L}][\p{L} '-]*$/u.test(word));
+    const words = [...new Set([...COIN_WORDS, ...own.flatMap(word => [word, `${word}s`])])].sort((a, b) => b.length - a.length);
+    return `(${words.map(escape).join('|').replace(/ /g, '\\s+')})`;
+}
+
+function rewardPattern(currency) {
+    return new RegExp(`(?:^|[^\\p{L}\\d])${COUNT}\\s+${coinPattern(currency)}(?:\\s+(?:coins?|pieces?))?(?![\\p{L}])${EACH}`, 'iu');
+}
+
+// A `reward:` label that is only a number ("30", "2 each", "1 per wolf"): money too.
+const BARE_REWARD = new RegExp(`^${COUNT}${EACH}\\.?$`, 'iu');
 
 /**
  * A reward from the `reward:` label, else from the goal text:
- * `{ amount, each, unit, text, per }` — `amount` a whole number of `unit` coins, or null when
- * the reward is not money code can read (a favour, a horse); `each` when it is paid per unit
- * of the target ("1 silver each wolf", "2 copper per tail"), `per` the unit word as written
- * ('' when "each" names none). `reward: none` is `{ amount: 0 }`. No reward written → null.
+ * `{ amount, each, unit, text, per }` — `amount` a whole number of the chat's one currency
+ * (`unit` is always ''; the currency's name comes from `inventory.currency` when it is shown), or
+ * null when the reward is not money code can read (a favour, a horse); `each` when it is paid per
+ * unit of the target ("1 silver each wolf", "2 per tail"), `per` the unit word as written ('' when
+ * "each" names none). `reward: none` is `{ amount: 0 }`. No reward written → null.
+ * `options.currency` ({ name, short }) adds the chat's own currency words to the coin words.
  */
-export function parseReward(fields = {}, summary = '') {
+export function parseReward(fields = {}, summary = '', { currency = null } = {}) {
     const label = clean(fields.reward);
     if (/^(?:none|nothing|no reward|unpaid)\.?$/i.test(label)) return { amount: 0, each: false, unit: '', text: label, per: '' };
     const sources = label ? [label] : [fields.goal, fields.desc, summary].map(clean).filter(Boolean);
+    const pattern = rewardPattern(currency);
     for (const text of sources) {
-        const match = REWARD.exec(text);
+        const bare = text === label ? BARE_REWARD.exec(text) : null;
+        const match = bare ? [bare[0], bare[1], '', bare[2], bare[3], bare[4]] : pattern.exec(text);
         if (!match) continue;
         const amount = countOf(match[1]);
         if (amount === null) continue;
@@ -159,7 +172,7 @@ export function parseReward(fields = {}, summary = '') {
         const per = clean(match[5] || match[4] || '');
         const loose = !match[5] && Boolean(match[4]);
         const text2 = label || match[0].replace(/^[^\p{L}\d]/u, '').trim();
-        return { amount, each, unit: COIN_WORDS[match[2].toLowerCase()], text: text2, per, loose };
+        return { amount, each, unit: '', text: text2, per, loose };
     }
     return label ? { amount: null, each: false, unit: '', text: label, per: '' } : null;
 }
@@ -171,17 +184,21 @@ export function parseReward(fields = {}, summary = '') {
  */
 export function settleReward(reward, target) {
     if (!reward) return null;
-    const { amount, each, unit, text, per, loose } = reward;
+    const { amount, each, text, per, loose } = reward;
     const unitMismatch = per && target && !nameMatches(per, target.noun) && !nameMatches(target.noun, per);
     if (each && (!target || (unitMismatch && !loose))) return { amount: null, each: false, unit: '', text };
-    return { amount, each, unit, text };
+    return { amount, each, unit: '', text };
 }
 
-/** "8 silver", "1 crown", "3 crowns". */
-export function money(amount, unit) {
-    if (!unit) return String(amount);
-    if (amount === 1 || METALS.includes(unit)) return `${amount} ${unit}`;
-    return `${amount} ${unit === 'penny' ? 'pennies' : `${unit}s`}`;
+/** The chat's one currency as `{ name }` from a name, a `{ name }` or nothing (gold, Story Block's default). */
+export function currencyName(currency) {
+    const name = clean(typeof currency === 'string' ? currency : currency?.name);
+    return name || 'gold';
+}
+
+/** "8 gold": an amount of the chat's one currency. */
+export function money(amount, currency) {
+    return `${amount} ${currencyName(currency)}`;
 }
 
 const matchCase = (word, like) => (like[0] && like[0] === like[0].toUpperCase() ? word.replace(/^./, c => c.toUpperCase()) : word);
@@ -202,7 +219,7 @@ export function nounFor(target, n) {
     return words.join(' ');
 }
 
-/** The pay for `units` of the target, in whole `unit` coins, or null when code pays nothing. */
+/** The pay for `units` of the target, a whole amount of the currency, or null when code pays nothing. */
 export function payFor(reward, units) {
     if (!reward || !Number.isSafeInteger(reward.amount) || reward.amount < 0) return null;
     const total = reward.each ? reward.amount * units : reward.amount;
@@ -215,10 +232,10 @@ export function targetText(target) {
     return `${target.kind === 'items' ? 'bring' : 'beat'} ${target.count} ${nounFor(target, target.count)}`;
 }
 
-/** "1 silver per wolf", "8 silver", or the reward as written when it is not money. */
-export function rewardText(reward, target) {
+/** "1 gold per wolf", "8 gold", or the reward as written when it is not money. */
+export function rewardText(reward, target, currency) {
     if (!reward) return '';
     if (reward.amount === null) return reward.text;
-    if (reward.amount === 0) return 'no coin reward';
-    return reward.each ? `${money(reward.amount, reward.unit)} per ${target ? nounFor(target, 1) : 'unit'}` : money(reward.amount, reward.unit);
+    if (reward.amount === 0) return 'no reward in money';
+    return reward.each ? `${money(reward.amount, currency)} per ${target ? nounFor(target, 1) : 'unit'}` : money(reward.amount, currency);
 }

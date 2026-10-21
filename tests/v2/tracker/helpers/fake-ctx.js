@@ -53,7 +53,7 @@ export class Rejected extends Error {
  * Runs `handler(ctx, payload)` as a command on `state`: `{ ok, state, result, ctx }`, or
  * `{ ok: false, code, message, state }` with the state untouched.
  */
-export function runCommand(state, handler, payload, { said = null, settings = {}, seed = 7, carrier = undefined, owned = ['director'] } = {}) {
+export function runCommand(state, handler, payload, { said = null, settings = {}, seed = 7, carrier = undefined, owned = ['director'], call = null } = {}) {
     const rev = state.meta.rev + 1;
     const drafts = {};
     const claims = { ...state.meta.claims };
@@ -69,7 +69,7 @@ export function runCommand(state, handler, payload, { said = null, settings = {}
             drafts[domain] ??= structuredClone(state.domains[domain]);
             return drafts[domain];
         },
-        call: type => { throw new Rejected('UNKNOWN_COMMAND', `No command ${type} in this test.`); },
+        call: call ?? (type => { throw new Rejected('UNKNOWN_COMMAND', `No command ${type} in this test.`); }),
         claim: key => (claims[key] ? false : (claims[key] = true)),
         rng: random,
         roll: () => ({ total: 0, dice: [] }),

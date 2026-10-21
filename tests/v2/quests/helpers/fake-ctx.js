@@ -31,12 +31,15 @@ function sfc32(seed) {
 
 /** Fake commands other modules own, as `(state, payload) => result`, mutating the transaction state. */
 export const fakeCommands = {
-    'wallet.receive'(state, { owner, currency, amount }) {
+    // MODULES §F1/§F5: { owner, amount, note? }, one integer per owner under `coin`.
+    'wallet.receive'(state, payload) {
+        const { owner, amount } = payload;
+        if (Object.keys(payload).some(key => !['owner', 'amount', 'note'].includes(key))) throw codeError('INVALID', 'Unknown field.');
         if (!Number.isSafeInteger(amount) || amount < 0) throw codeError('INVALID', 'Bad amount.');
         const wallets = state.domains.inventory.wallets;
         wallets[owner] ??= {};
-        wallets[owner][currency] = (wallets[owner][currency] ?? 0) + amount;
-        return { summary: `${amount} ${currency} received.` };
+        wallets[owner].coin = (wallets[owner].coin ?? 0) + amount;
+        return { summary: `${amount} gold received.` };
     },
     'inventory.consume'(state, { stack, qty }) {
         const record = state.domains.inventory.stacks[stack];
@@ -62,6 +65,9 @@ export const fakeQueries = {
     'inventory.items'(state) {
         const { stacks, defs } = state.domains.inventory;
         return Object.values(stacks).map(stack => ({ ...clone(stack), name: defs[stack.def]?.name ?? '' }));
+    },
+    'inventory.currency'(state) {
+        return clone(state.currency ?? { name: 'gold', short: 'g' });
     },
     'party.pc'(state) {
         const party = state.domains.party;

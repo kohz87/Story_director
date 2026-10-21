@@ -278,6 +278,58 @@ test('"- … accepted" takes a job on; "- hook Key" beside the reply\'s "+ quest
     assert.deepEqual([accepted.kind, accepted.status, accepted.offer], ['quest', 'active', false]);
 });
 
+test('the reader\'s own words taking a quest on set taken: { rev }, so fights count from there', () => {
+    const single = '+ quest Wolf Hunt — Kill 3 ridge wolves | giver: Danique | reward: 4 silver';
+    const took = story([{ lines: single, said: 'Fine. I\'ll take it.' }]);
+    assert.deepEqual(thread(took, 'Wolf Hunt').taken, { rev: 1 });
+    valid(took);
+    // An offer the reader accepts in a later message: taken at that reply's rev.
+    const offered = story([{ lines: single, said: 'What work is there?' }]);
+    assert.equal(thread(offered, 'Wolf Hunt').taken, null);
+    const later = story([{ lines: '+ quest Wolf Hunt — Kill 3 ridge wolves', said: 'I\'ll do the wolf job.' }], offered);
+    assert.deepEqual(thread(later, 'Wolf Hunt').taken, { rev: 2 });
+    // No message, a refusal, or the story's own main quest: nothing taken on by the reader.
+    assert.equal(thread(story([{ lines: single, said: null }]), 'Wolf Hunt').taken, null);
+    assert.equal(thread(story([{ lines: single, said: 'I won\'t take it.' }]), 'Wolf Hunt').taken, null);
+    assert.equal(thread(story([{ lines: '+ quest The bond — pay it off | type: main', said: '' }]), 'The bond').taken, null);
+    // A quest already taken is not taken again by a later + quest line.
+    const again = story([{ lines: '+ quest Wolf Hunt — Kill 3 ridge wolves', said: 'Yes, the wolves.' }], took);
+    assert.deepEqual(thread(again, 'Wolf Hunt').taken, { rev: 1 });
+});
+
+test('"yes" to one new quest that turns out to be one of two goes back to an untaken offer', () => {
+    const two = '+ quest Wolfhound Hunt — run down 2 wolfhounds | giver: Burl\n+ quest Ferry Run — row the ferry | giver: Ola';
+    const state = story([{ lines: two, said: 'Yes.' }]);
+    for (const key of ['Wolfhound Hunt', 'Ferry Run']) {
+        assert.equal(thread(state, key).offer, true, key);
+        assert.equal(thread(state, key).taken, null, key);
+    }
+    valid(state);
+});
+
+test('typed acceptance asks part quests to take it on (quest.take) when the module has it', () => {
+    const calls = [];
+    const call = (type, payload) => { calls.push({ type, payload }); };
+    const state = makeState();
+    const run = runCommand(state, part.kinds.quest.apply, readLine('+ quest Wolf Hunt — Kill 3 wolves | giver: Danique'), { said: 'I\'ll take it.', call });
+    assert.equal(run.ok, true, run.message);
+    assert.deepEqual(calls.map(entry => entry.type), ['quest.take']);
+    assert.equal(calls[0].payload.id, run.result.data.thread);
+});
+
+test('the carrier the host gives ({ index, swipe, key }) tells replies apart, a swipe too', () => {
+    let state = makeState();
+    const run = (raw, carrier, index) => {
+        state = runCommand(state, part.kinds.hook.apply, readLine(raw, index), { carrier }).state;
+        return state.domains.director.turn;
+    };
+    assert.equal(run('+ hook A — a', { index: 3, swipe: 0, key: '3:0' }, 0).n, 1);
+    assert.equal(run('+ hook B — b', { index: 3, swipe: 0, key: '3:0' }, 1).n, 1);
+    assert.equal(run('+ hook C — c', { index: 3, swipe: 1, key: '3:1' }, 2).n, 2, 'a swipe is another reply');
+    assert.equal(run('+ hook D — d', { index: 5, swipe: 0 }, 3).n, 3, 'index and swipe without a key');
+    assert.equal(state.domains.director.turn.reply, '5:0');
+});
+
 test('the reply a line belongs to: the host\'s carrier when given, else the line\'s place in its block', () => {
     let state = makeState();
     const run = (raw, options) => {

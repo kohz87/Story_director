@@ -20,25 +20,38 @@ const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 const OTHER_QUEST = Object.freeze({ op: '+', kind: 'quest', key: 'Qqxzq Qqxzq', id: 'qqxzq qqxzq', fields: {}, extra: {}, reason: '', raw: '' });
 const OFFERED_TEXT = key => `"${key}" was offered, not taken on: it stays an offer until {{user}} accepts it.`;
 
-/** The revision this command commits as (SPEC §2.4 `rev`), 0 when the host does not say. */
+/** The revision this command commits as (`ctx.rev`, MODULES §F2), 0 when the host does not say. */
 export function revOf(ctx) {
     return Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
 }
 
 /**
- * The reader's own message the reply answers, or null. v1's gate: a job is the reader's to take
- * on, give up or turn down, and only their message can do it. With none, nothing is taken.
+ * The reader's own message the reply answers (the capture ctx's `ctx.chat.lastUser`), or null.
+ * v1's gate: a job is the reader's to take on, give up or turn down, and only their message can
+ * do it. With none, nothing is taken.
  */
 export function readerSaid(ctx) {
-    const said = ctx?.chat?.lastUser ?? ctx?.lastUser ?? null;
+    const said = ctx?.chat?.lastUser ?? null;
     return typeof said === 'string' ? said : null;
 }
 
-// Which reply a line comes from: the carrier when the host says, else read from the line's
+// The capture ctx's carrier `{ index, swipe, key }` as one plain value: its key, else
+// "index:swipe" (a swipe of the same reply is another reply), else a bare index or key.
+function carrierKey(value) {
+    if (value && typeof value === 'object') {
+        if (typeof value.key === 'string' && value.key) return value.key;
+        if (Number.isSafeInteger(value.index)) return `${value.index}:${Number.isSafeInteger(value.swipe) ? value.swipe : 0}`;
+        return null;
+    }
+    return Number.isSafeInteger(value) || (typeof value === 'string' && value) ? value : null;
+}
+
+// Which reply a line comes from: the host's carrier (`ctx.carrier`), else read from the line's
 // place in its block (a first line, or one not after the last line read, starts a reply).
 function replyOf(ctx, line) {
-    for (const value of [line?.carrier, ctx?.carrier, ctx?.message]) {
-        if (Number.isSafeInteger(value) || (typeof value === 'string' && value)) return value;
+    for (const value of [ctx?.carrier, line?.carrier]) {
+        const key = carrierKey(value);
+        if (key !== null) return key;
     }
     return null;
 }
@@ -97,6 +110,8 @@ export function toV1Op(line) {
     };
 }
 
+// Thread IDs come from `ctx.id('th')` (deterministic from the receipt's seed, so a rebuild or a
+// test gives the same ones); from ctx.rng() only for a host that has no ctx.id.
 function newId(ctx, taken) {
     for (let tries = 0; tries < 64; tries += 1) {
         let id = typeof ctx?.id === 'function' ? ctx.id('th') : '';
@@ -193,15 +208,41 @@ export function applyThreadLine(ctx, line) {
             text: finding.message, candidates: finding.candidates,
         });
     }
+    let took = false;
     if (newQuest && thread) {
         // The reply's first new quest, taken while it was the only one: read again once another comes.
         if (crowd) recheckLone(director, ctx, said, thread);
-        else if (!director.turn.quests.length && !offered && director.threads[thread].kind === 'quest' && !(named?.kind === 'quest' && !named.offer)) {
-            director.turn.lone = { id: thread, op: structuredClone(op), was: before };
+        took = takenInWords(ctx, director, thread, named, said);
+        if (!crowd && !director.turn.quests.length && !offered && director.threads[thread].kind === 'quest' && !(named?.kind === 'quest' && !named.offer)) {
+            // Kept without the v1 key `id` (a lowercase name): Story Block checks every `id` in the
+            // state is a well-formed ID. applyOps reads the key from `key` again.
+            const { id: _key, ...loneOp } = op;
+            director.turn.lone = { id: thread, op: structuredClone(loneOp), was: before, took };
         }
         if (!director.turn.quests.includes(thread)) director.turn.quests = [...director.turn.quests, thread];
     }
-    return { summary: `Director: ${raw}`, narrate: false, data: { thread, problems: findings.map(finding => finding.kind) } };
+    return { summary: `Director: ${raw}`, narrate: false, data: { thread, problems: findings.map(finding => finding.kind), ...(took ? { taken: true } : {}) } };
+}
+
+/*
+ * A quest the reader's own words took on (v1's rules made this reply's `+ quest` a quest, not an
+ * offer, and the reader wrote a message) is taken on from now, as the Take on button does: fights
+ * count from this receipt's rev. Part `quests` owns `taken`, `target` and `reward`, so this asks
+ * it with `quest.take`; without that command only `taken` is set. True when it was taken.
+ */
+function takenInWords(ctx, director, id, named, said) {
+    const thread = director.threads[id];
+    if (!said || !String(said).trim() || !thread || thread.kind !== 'quest' || thread.offer || thread.taken || thread.status !== 'active') return false;
+    // Already a quest before this line (an earlier reply took it): not taken now.
+    if (named && named.kind === 'quest' && !named.offer && named.status === 'active') return false;
+    try {
+        ctx.call('quest.take', { id });
+    } catch (error) {
+        if (error?.code !== 'UNKNOWN_COMMAND') throw error;
+        thread.taken = { rev: revOf(ctx) };
+        thread.rev = revOf(ctx);
+    }
+    return Boolean(director.threads[id]?.taken);
 }
 
 // The reply's first `+ quest`, taken on while it was the only new quest, is read again beside the
@@ -210,13 +251,19 @@ function recheckLone(director, ctx, said, current) {
     const lone = director.turn.lone;
     director.turn.lone = null;
     const thread = lone && lone.id !== current ? director.threads[lone.id] : null;
-    if (!thread || thread.status !== 'active' || thread.offer || thread.taken || thread.kind !== 'quest') return;
+    // A quest taken on in this reply's words (lone.took) may still go back to being an offer.
+    if (!thread || thread.status !== 'active' || thread.offer || (thread.taken && !lone.took) || thread.kind !== 'quest') return;
     const was = lone.was ?? 'hook';
     const record = { ...toRecord(thread, []), kind: was };
     const base = { version: 1, records: lone.was ? [record] : [], message: director.turn.n, time: director.time.minutes };
     const again = applyOps(base, [OTHER_QUEST, lone.op], { message: director.turn.n, time: director.time.minutes, said });
     if (!again.problems.some(finding => finding.kind === 'offered' && finding.key !== OTHER_QUEST.key)) return;
     thread.offer = true;
+    if (lone.took) {
+        thread.taken = null;
+        thread.target = null;
+        thread.reward = null;
+    }
     thread.rev = revOf(ctx);
     thread.track = { ...thread.track, was };
     if (!isOffer({ ...record, status: 'active' })) thread.track.typed = true;

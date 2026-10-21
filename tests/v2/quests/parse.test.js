@@ -28,25 +28,34 @@ test('non-targets give none', () => {
     ]) assert.equal(parseTarget(fields), null, JSON.stringify(fields));
 });
 
-test('rewards: fixed, per unit, not money, none', () => {
+test('rewards: one currency, so only the number counts; fixed, per unit, not money, none', () => {
     const table = [
-        ['8 silver', { amount: 8, each: false, unit: 'silver', per: '' }],
-        ['1 silver each wolf', { amount: 1, each: true, unit: 'silver', per: 'wolf' }],
-        ['2 copper per tail', { amount: 2, each: true, unit: 'copper', per: 'tail' }],
-        ['1 silver each', { amount: 1, each: true, unit: 'silver', per: '' }],
-        ['3 crowns apiece', { amount: 3, each: true, unit: 'crown', per: '' }],
-        ['five gold coins', { amount: 5, each: false, unit: 'gold', per: '' }],
-        ['12 sp', { amount: 12, each: false, unit: 'silver', per: '' }],
-        ['10 silver and a horse', { amount: 10, each: false, unit: 'silver', per: '' }],
-        ['a favour from the guild', { amount: null, each: false, unit: '', per: '' }],
-        ['none', { amount: 0, each: false, unit: '', per: '' }],
+        ['8 silver', { amount: 8, each: false, per: '' }],
+        ['1 silver each wolf', { amount: 1, each: true, per: 'wolf' }],
+        ['2 copper per tail', { amount: 2, each: true, per: 'tail' }],
+        ['1 silver each', { amount: 1, each: true, per: '' }],
+        ['3 crowns apiece', { amount: 3, each: true, per: '' }],
+        ['five gold coins', { amount: 5, each: false, per: '' }],
+        ['12 sp', { amount: 12, each: false, per: '' }],
+        ['10 silver and a horse', { amount: 10, each: false, per: '' }],
+        ['30', { amount: 30, each: false, per: '' }],
+        ['2 each', { amount: 2, each: true, per: '' }],
+        ['1 per wolf', { amount: 1, each: true, per: 'wolf' }],
+        ['3 wolf pelts', { amount: null, each: false, per: '' }],
+        ['a favour from the guild', { amount: null, each: false, per: '' }],
+        ['none', { amount: 0, each: false, per: '' }],
     ];
     for (const [reward, want] of table) {
         const got = parseReward({ reward });
-        assert.deepEqual({ amount: got.amount, each: got.each, unit: got.unit, per: got.per }, want, reward);
+        assert.deepEqual({ amount: got.amount, each: got.each, per: got.per }, want, reward);
+        assert.equal(got.unit, '', reward);
         assert.ok(got.text, reward);
     }
+    // The chat's own currency name is money too.
+    assert.equal(parseReward({ reward: '40 Gil' }, '', { currency: { name: 'Gil', short: 'G' } }).amount, 40);
+    assert.equal(parseReward({ goal: 'Kill 3 wolves for 12 denarii' }, '', { currency: { name: 'denarii' } }).amount, 12);
     assert.deepEqual(parseReward({ goal: 'Kill 3 wolves for 1 silver each' }).amount, 1);
+    // A bare number counts only in the reward label, never in the goal text.
     assert.equal(parseReward({ goal: 'Kill 3 wolves' }), null);
     assert.equal(parseReward({}), null);
 });
@@ -54,7 +63,7 @@ test('rewards: fixed, per unit, not money, none', () => {
 test('a per-unit reward must name the target; a loose word after "each" is only a hint', () => {
     const wolves = { noun: 'wolves', count: 3, kind: 'foes' };
     const tails = { noun: 'wolf tails', count: 5, kind: 'items' };
-    assert.deepEqual(settleReward(parseReward({ reward: '1 silver each wolf' }), wolves), { amount: 1, each: true, unit: 'silver', text: '1 silver each wolf' });
+    assert.deepEqual(settleReward(parseReward({ reward: '1 silver each wolf' }), wolves), { amount: 1, each: true, unit: '', text: '1 silver each wolf' });
     assert.equal(settleReward(parseReward({ reward: '2 copper per tail' }), tails).amount, 2);
     assert.deepEqual(settleReward(parseReward({ reward: '1 silver per rat' }), wolves), { amount: null, each: false, unit: '', text: '1 silver per rat' });
     assert.equal(settleReward(parseReward({ reward: '1 silver each, paid on return' }), wolves).each, true);
@@ -82,8 +91,9 @@ test('per-unit pay is computed by code', () => {
     assert.equal(payFor({ amount: 8, each: false }, 3), 8);
     assert.equal(payFor({ amount: null, each: false }, 3), null);
     assert.equal(payFor(null, 3), null);
-    assert.equal(money(8, 'silver'), '8 silver');
-    assert.equal(money(3, 'crown'), '3 crowns');
+    assert.equal(money(8, { name: 'gold' }), '8 gold');
+    assert.equal(money(3, 'Gil'), '3 Gil');
+    assert.equal(money(3), '3 gold');
     assert.equal(nounFor({ noun: 'wolves', count: 3 }, 1), 'wolf');
     assert.equal(nounFor({ noun: 'wolf', count: 1 }, 8), 'wolves');
     assert.equal(nounFor({ noun: 'moonleaf', count: 5 }, 5), 'moonleaf');

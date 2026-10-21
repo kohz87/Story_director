@@ -18,20 +18,31 @@ export function tryQuery(query, name, args, fallback = undefined) {
     }
 }
 
-/** Foes beaten after `sinceRev`, flattened to `[{ name, count }]`; null when no fights module answers. */
-function foesSince(query, sinceRev) {
+/**
+ * Fights won after `sinceRev`: `[{ rev, foes: [{ name, count }] }]` (rev null when the record
+ * has none); null when no fights module answers.
+ */
+function fightsSince(query, sinceRev) {
     const list = tryQuery(query, 'combat.foesBeaten', { sinceRev }, null);
     if (!Array.isArray(list)) return null;
+    const foesOf = foes => foes.map(foe => ({ name: text(foe?.name), count: Number.isSafeInteger(foe?.count) && foe.count > 0 ? foe.count : 1 }))
+        .filter(foe => foe.name);
     // Either beaten entries `{ rev, foes: [{ name, count }], won }` (MODULES §B3) or foes already flat.
     return list.flatMap(entry => {
-        if (Array.isArray(entry?.foes)) {
-            if (entry.won === false) return [];
-            if (Number.isInteger(entry.rev) && Number.isInteger(sinceRev) && entry.rev <= sinceRev) return [];
-            return entry.foes;
-        }
-        return [entry];
-    }).map(foe => ({ name: text(foe?.name), count: Number.isSafeInteger(foe?.count) && foe.count > 0 ? foe.count : 1 }))
-        .filter(foe => foe.name);
+        if (!Array.isArray(entry?.foes)) return [{ rev: null, foes: foesOf([entry]) }];
+        if (entry.won === false) return [];
+        if (Number.isInteger(entry.rev) && Number.isInteger(sinceRev) && entry.rev <= sinceRev) return [];
+        return [{ rev: Number.isInteger(entry.rev) ? entry.rev : null, foes: foesOf(entry.foes) }];
+    });
+}
+
+/** The claim key that keeps one fight from paying two kill quests (MODULES §F7). */
+export const beatenClaim = rev => `beaten:${rev}`;
+
+/** `free(rev)` for a state: a fight no kill quest has claimed yet. */
+export function unclaimedIn(state) {
+    const claims = state?.meta?.claims ?? {};
+    return rev => !Object.hasOwn(claims, beatenClaim(rev));
 }
 
 /** Stacks `[{ stack, name, qty }]` the party holds; null when no inventory answers. */
@@ -69,12 +80,15 @@ export function stateQuery(state) {
 }
 
 /**
- * Progress of a quest thread: `{ have, need, met, source, noun, reason, stacks }`.
+ * Progress of a quest thread: `{ have, need, met, source, noun, reason, stacks, fights }`.
  * `source` is 'fights' or 'inventory' (null without a target). Fights count only after
- * `taken.rev`; a quest never taken on here counts none (its fights could predate it).
+ * `taken.rev`; a quest never taken on here counts none (its fights could predate it). One fight
+ * pays one kill quest (MODULES §F7): `free(rev)` says whether a fight is still unclaimed (another
+ * kill quest turned in with it otherwise); `fights` lists the revs of the fights counted, which a
+ * turn-in claims. Item quests count the inventory and are independent of fights.
  * `stacks` (items only) lists what a turn-in would hand over, in order.
  */
-export function progressOf(thread, query) {
+export function progressOf(thread, query, { free = () => true } = {}) {
     const target = thread?.target;
     if (!target) return { have: 0, need: 0, met: false, source: null, noun: '', reason: 'No target code can count; the story decides when it is done.' };
     const need = target.count;
@@ -87,12 +101,20 @@ export function progressOf(thread, query) {
         const met = have >= need;
         return { have, need, met, source: 'inventory', noun, reason: met ? '' : `Need ${need - have} more ${nounFor(target, need - have)}.`, stacks: matching };
     }
-    if (!thread.taken) return { have: 0, need, met: false, source: 'fights', noun, reason: 'Fights count from when it is taken on.' };
-    const foes = foesSince(query, thread.taken.rev);
-    if (!foes) return { have: 0, need, met: false, source: 'fights', noun, reason: 'No battle record (RPG Battle is not running).' };
-    const have = foes.filter(foe => nameMatches(noun, foe.name)).reduce((sum, foe) => sum + foe.count, 0);
+    if (!thread.taken) return { have: 0, need, met: false, source: 'fights', noun, reason: 'Fights count from when it is taken on.', fights: [] };
+    const fights = fightsSince(query, thread.taken.rev);
+    if (!fights) return { have: 0, need, met: false, source: 'fights', noun, reason: 'No battle record (RPG Battle is not running).', fights: [] };
+    let have = 0;
+    const counted = [];
+    for (const fight of fights) {
+        const beaten = fight.foes.filter(foe => nameMatches(noun, foe.name)).reduce((sum, foe) => sum + foe.count, 0);
+        if (!beaten) continue;
+        if (fight.rev !== null && !free(fight.rev)) continue;
+        have += beaten;
+        if (fight.rev !== null) counted.push(fight.rev);
+    }
     const met = have >= need;
-    return { have, need, met, source: 'fights', noun, reason: met ? '' : `Need ${need - have} more ${nounFor(target, need - have)}.` };
+    return { have, need, met, source: 'fights', noun, reason: met ? '' : `Need ${need - have} more ${nounFor(target, need - have)}.`, fights: counted };
 }
 
 /** "Wolves 8/3". */

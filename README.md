@@ -1,4 +1,16 @@
-# Story Director v0.9.44
+# Story Director v2.0.0-alpha.1
+
+> **v2 (alpha, `v2` branch).** Story Director 2 is a module of **Story Block v2** and needs it
+> (`"dependencies": ["third-party/Story_block"]`); without it, it shows one line in the extensions drawer
+> and does nothing else. Story Block keeps the state in the replies, reads each reply's `<Changes>` block
+> and builds the prompt; Story Director adds the `director` domain (story time, threads, quests), its
+> change-line kinds (`agenda`, `event`, `hook`, `quest`, `clock`, `beat`, `secret`, `time`), the Director
+> note, the commands `quest.take`, `quest.decline`, `quest.abandon`, `quest.finish`, and the Director and
+> Quests tabs. Quest rewards are whole amounts of the chat's one currency, paid once by code; one fight
+> pays one kill quest. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
+> branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
+> is not loaded.
+
 
 A SillyTavern extension that keeps a story's world moving consistently. It **tracks**
 off-screen agendas, world events, hooks, quests and clocks, works out in code what is **due**, and

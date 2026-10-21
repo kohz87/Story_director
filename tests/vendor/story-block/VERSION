@@ -1,0 +1,2 @@
+kohz87/Story_block v2-int 23abdf70b890049d093bdbd6336dd57d8f81dadc
+Copied by hand (testkit/, src/v2/, src/id.js, and src/text.js + src/ui/dom.js that src/v2/packs and src/v2/layout import) until Story Block has npm run sync-testkit.

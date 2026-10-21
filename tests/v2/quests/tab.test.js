@@ -38,7 +38,7 @@ test('active quest shows progress and an enabled Finish when it can be turned in
     const state = makeState({ threads: [wolves()], beaten: [{ rev: 11, foes: [{ name: 'Wolf', count: 8 }], won: true }], scene: { place: { kind: 'settlement' } } });
     const pane = draw(state, { command: (type, payload) => { sent.push([type, payload]); return { ok: true }; } });
     assert.match(pane.textContent, /Wolves 8\/3/);
-    assert.match(pane.textContent, /beat 3 wolves; 1 silver per wolf/);
+    assert.match(pane.textContent, /beat 3 wolves; 1 gold per wolf/);
     const finish = buttons(pane, 'Finish')[0];
     assert.equal(finish.disabled, false);
     finish.click();

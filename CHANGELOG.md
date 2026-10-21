@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0-alpha.1 (v2 branch)
+
+- **A Story Block v2 module.** `index.js` waits for `globalThis.StoryBlock.ready` and registers module `story-director` (`src/v2/module.js`, the tracker and quests parts merged); without Story Block v2 it shows one line in the drawer. The v1 glue moved to `index.v1.js` and is not loaded. The manifest declares `"dependencies": ["third-party/Story_block"]` and no generate interceptor.
+- **Quest rewards in the one currency.** `quest.finish` pays `wallet.receive { owner, amount }` with a whole number; coin words in the story are only read as "this is money", and summaries name the chat's currency from `inventory.currency`.
+- **One fight pays one kill quest.** A turn-in claims each fight it counted (`beaten:<rev>`); another kill quest no longer counts those fights. Item quests count the inventory and stay independent.
+- **Typed acceptance counts.** When the reader's own message takes a quest on, it is taken from that reply (`taken: { rev }`, through `quest.take`), so fights count from there.
+- Rule refusals use `REFUSED`; settings are namespaced per part (`tracker.calendar.months`); thread IDs, revisions and the reply come from the host's capture context.
+
 ## 0.9.46
 
 - **Quest turn-ins work over plain HTTP.** Checkpoint and completion IDs no longer require `crypto.randomUUID`, which browsers can omit on HTTP LAN hosts. Use with Story Block **0.9.28** to restore journal reads and the Quests tab on those hosts. Existing quests and IDs remain intact; no chat reset or HTTPS change is required.

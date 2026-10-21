@@ -3,7 +3,7 @@
 // of SPEC §13 replace hand-built tabs. Draws from the head state only, through textContent.
 
 import { el, button } from '../../ui/dom.js';
-import { placeRule, progressLabel, progressOf, questLists, stateQuery } from './progress.js';
+import { placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { rewardText, targetText } from './parse.js';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -31,6 +31,8 @@ export function renderQuestsTab(root, view, api) {
         }, error => { status.textContent = text(error?.message) || 'That did not work.'; });
     };
     const { offers, active, finished } = questLists(director);
+    const currency = tryQuery(query, 'inventory.currency', {}, null);
+    const free = unclaimedIn(state);
     const sections = [];
 
     if (offers.length) {
@@ -48,11 +50,11 @@ export function renderQuestsTab(root, view, api) {
     if (!active.length) sections.push(el('p', { text: 'No quests taken on.' }));
     else {
         sections.push(el('ul', {}, active.map(thread => {
-            const progress = progressOf(thread, query);
+            const progress = progressOf(thread, query, { free });
             const blocked = finishBlock(thread, progress, state?.domains?.scene);
             const finish = button('Finish', 'story-director-quest-finish', { title: blocked || `Turn in ${thread.key}`, onClick: () => { if (!finish.disabled) run('quest.finish', thread.id); } });
             finish.disabled = Boolean(blocked);
-            const terms = [targetText(thread.target), rewardText(thread.reward, thread.target)].filter(Boolean).join('; ');
+            const terms = [targetText(thread.target), rewardText(thread.reward, thread.target, currency)].filter(Boolean).join('; ');
             return el('li', { attrs: { 'data-quest': thread.id } }, [
                 el('div', { text: thread.key }),
                 text(thread.fields?.goal) ? el('div', { text: text(thread.fields.goal) }) : null,
