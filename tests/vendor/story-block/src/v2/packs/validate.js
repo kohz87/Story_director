@@ -16,6 +16,8 @@ import { CALENDAR_FIELDS, CALENDAR_LIMITS, CALENDAR_START_FIELDS, CHOICE_FIELDS,
 import { byteLength, checkPlain } from './safety.js';
 import { parseRange, satisfies } from './version.js';
 import { foldKey, oneLine } from '../../text.js';
+import { MAX_DEPTH as MAX_TEMPLATE_DEPTH, tooDeep } from '../view/template/html.js';
+import { MAX_AT_DEPTH, cssDepth } from '../view/css.js';
 
 export const HOST_VERSION = '2.0.0';
 
@@ -359,17 +361,18 @@ function linkEvents(events, packId, add) {
     }
 }
 
-// A currency the pack suggests (MODULES §F1): one name for the chat's one currency, used only
-// when the reader has not named one.
+// A currency the pack suggests (MODULES §F1): one name for the chat's one currency (singular, with an
+// optional plural and short form), used only when the reader has not named one.
 function checkCurrency(currency, add) {
-    const short = currency?.short;
-    if (!isObject(currency) || Object.keys(currency).some(key => key !== 'name' && key !== 'short')
+    const { short, plural } = currency ?? {};
+    const optional = (value, max) => value === undefined || (typeof value === 'string' && value.trim() && value.length <= max);
+    if (!isObject(currency) || Object.keys(currency).some(key => !['name', 'plural', 'short'].includes(key))
         || typeof currency.name !== 'string' || !currency.name.trim() || currency.name.length > 24
-        || (short !== undefined && (typeof short !== 'string' || !short.trim() || short.length > 8))) {
-        add('BAD_CURRENCY', 'currency', 'currency must be { "name": "gold" } (at most 24 characters), with an optional "short" of at most 8, like "g".');
+        || !optional(short, 8) || !optional(plural, 24)) {
+        add('BAD_CURRENCY', 'currency', 'currency must be { "name": "mark" } (at most 24 characters), with an optional "plural" of at most 24 ("marks") and "short" of at most 8 ("m").');
         return null;
     }
-    return { name: oneLine(currency.name), short: oneLine(short ?? '') };
+    return { name: oneLine(currency.name), short: oneLine(short ?? ''), ...(plural === undefined ? {} : { plural: oneLine(plural) }) };
 }
 
 // A race or talent for the character creation wizard: { id?, name, note?, stats?, tags? }.
@@ -520,11 +523,14 @@ function checkPlace(record, path, label, add) {
     if (!Array.isArray(aliases) || aliases.some(alias => typeof alias !== 'string' || !alias.trim() || alias.length > LIMITS.name)) say('aliases', 'aliases must be a list of other names for the place.');
     const note = record.note ?? '';
     if (!isText(note, 500)) say('note', 'note must be text of at most 500 characters.');
+    for (const flag of ['hidden', 'secret']) if (record[flag] !== undefined && typeof record[flag] !== 'boolean') say(flag, `${flag} must be true or false.`);
     if (!ok) return null;
     return {
         name: oneLine(record.name, LIMITS.name), aliases: [...new Set(aliases.map(alias => oneLine(alias, LIMITS.name)))],
         region: oneLine(record.region ?? '', LIMITS.name), kind: oneLine(record.kind ?? '', LIMITS.name), layer: oneLine(record.layer ?? '', LIMITS.name),
         x: record.x, y: record.y, note,
+        // `secret` is another word for `hidden`; the map reads either.
+        ...(record.hidden === true || record.secret === true ? { hidden: true } : {}),
     };
 }
 
@@ -783,6 +789,8 @@ function cssUrlProblem(css) {
 }
 
 export function unsafeCss(css) {
+    // A rule's own braces are one level; each @media/@supports around it one more.
+    if (cssDepth(css) > MAX_AT_DEPTH + 1) return `may nest @-rules at most ${MAX_AT_DEPTH} deep`;
     if (CSS_UNSAFE.test(css)) return 'may not use @import, expression(), behavior, -moz-binding, < or backslashes';
     for (const [, , target] of css.matchAll(CSS_URL)) if (!CSS_SAFE_URL.test(target.trim())) return `may load only https or image data URLs (not "${target.trim().slice(0, 40)}")`;
     return cssUrlProblem(css);
@@ -809,6 +817,7 @@ function checkScreens(list, packId, add) {
         if (screen.mounts !== undefined && (!Array.isArray(screen.mounts) || screen.mounts.some(mount => !MOUNTS.includes(mount)))) say('mounts', `mounts must be a list of ${MOUNTS.join(', ')}.`);
         if (screen.template === undefined && screen.layout === undefined) say('template', 'a screen needs a template or a layout.');
         if (screen.template !== undefined && typeof screen.template !== 'string') say('template', 'template must be text (an HTML template).');
+        else if (typeof screen.template === 'string' && tooDeep(screen.template)) say('template', `the template nests elements more than ${MAX_TEMPLATE_DEPTH} deep.`);
         if (screen.layout !== undefined && !isObject(screen.layout)) say('layout', 'layout must be an object: { "root": … }.');
         if (screen.css !== undefined) {
             const why = typeof screen.css === 'string' ? unsafeCss(screen.css) : 'must be text';
@@ -816,6 +825,7 @@ function checkScreens(list, packId, add) {
         }
         if (screen.data !== undefined && !isObject(screen.data)) say('data', 'data must map names to queries: { "pc": { "query": "party.pc" } }.');
         if (screen.steps !== undefined && (!Array.isArray(screen.steps) || screen.steps.some(step => !isObject(step) || (step.template !== undefined && typeof step.template !== 'string')))) say('steps', 'steps must be a list of { "id", "title", "template" }.');
+        else if (Array.isArray(screen.steps) && screen.steps.some(step => typeof step.template === 'string' && tooDeep(step.template))) say('steps', `a step's template nests elements more than ${MAX_TEMPLATE_DEPTH} deep.`);
         const theme = screen.theme === undefined ? {} : checkTheme(screen.theme, add, `${path}.theme`);
         if (ok) out.push({ ...screen, theme, pack: packId });
     });

@@ -51,6 +51,8 @@ export function isCurrencyName(text, currency = DEFAULT_CURRENCY) {
 export function parseAmount(text) {
     const numbers = String(text ?? '').match(/\d[\d,.]*/g) ?? [];
     if (!numbers.length) return { error: 'No amount of money was written.' };
+    // The line's op is the only sign: "+ coin -50" is not a payment of 50 (B3-5).
+    if (/[-−–—]\s*\d/.test(String(text))) return { error: 'Write the amount without a sign; + coin or - coin says whether it is gained or paid.' };
     if (numbers.length > 1) return { error: `"${String(text).trim()}" holds more than one number; write one amount.` };
     const written = numbers[0].replace(/[.,]$/, '');
     if (!/^(?:\d{1,3}(?:,\d{3})+|\d+)$/.test(written)) return { error: `"${written}" is not a whole amount.` };

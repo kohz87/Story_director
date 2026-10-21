@@ -11,6 +11,7 @@ import { SETTLE, part } from '../../../src/v2/time/index.js';
 import { calendarOf, timeSettings } from '../../../src/v2/time/records.js';
 import { DEADLINE_REASON, claimKey } from '../../../src/v2/time/settle.js';
 import { CALENDAR, Chat, SETTINGS, makeState, reply, runCommand, thread } from './helpers/fake-ctx.js';
+import { slotValue } from '../../../src/v2/slot.js';
 
 const calendar = makeCalendar(CALENDAR);
 const at = text => calendar.parse(text).abs;
@@ -49,12 +50,12 @@ test('the hook settles only when the clock moved (or a deadline waits to lapse)'
     assert.equal(first.committed.length, 1, 'the first time seen is recorded');
     assert.equal(first.committed[0].narrate, false);
     assert.equal(first.committed[0].summary, 'Story time settled at Goldwane 12, 08:00 pm.');
-    assert.deepEqual(director(chat.head()).checked, { minutes: at('Goldwane 12, 08:00 pm'), rev: chat.head().meta.rev, lapsed: [], overdue: [], pay: [], due: [] });
+    assert.deepEqual(slotValue(director(chat.head()).checked), { minutes: at('Goldwane 12, 08:00 pm'), rev: chat.head().meta.rev, lapsed: [], overdue: [], pay: [], due: [] });
     chat.answer('');
     assert.deepEqual(chat.send().committed, [], 'the clock did not move');
     chat.answer('! time +2h');
     assert.equal(chat.send().committed.length, 1);
-    assert.equal(director(chat.head()).checked.minutes, at('Goldwane 12, 10:00 pm'));
+    assert.equal(slotValue(director(chat.head()).checked).minutes, at('Goldwane 12, 10:00 pm'));
 });
 
 test('an offer lapses when the clock passes its deadline, told once in v1\'s words', () => {
@@ -76,7 +77,7 @@ test('an offer lapses when the clock passes its deadline, told once in v1\'s wor
     assert.equal(closed.offer, false);
     assert.deepEqual(closed.ended, { rev: chat.head().meta.rev, reason: 'offer lapsed', outcome: 'failed' });
     assert.equal(chat.head().meta.claims[claimKey(offer.id)], true);
-    assert.deepEqual(director(chat.head()).checked.lapsed, [offer.id]);
+    assert.deepEqual(slotValue(director(chat.head()).checked).lapsed, [offer.id]);
     // Told once: the next reply settles nothing more.
     chat.answer('! time +1h');
     assert.equal(chat.send().committed[0].narrate, false);
@@ -266,7 +267,7 @@ test('without ctx.rev the receipt\'s revision is the one the hook expected', () 
     chat.answer('~ time Goldwane 15, 09:00 am');
     chat.send();
     const head = chat.head();
-    assert.equal(director(head).checked.rev, head.meta.rev);
+    assert.equal(slotValue(director(head).checked).rev, head.meta.rev);
     assert.equal(thread(head, 'Rat Culling').ended.rev, head.meta.rev);
 });
 

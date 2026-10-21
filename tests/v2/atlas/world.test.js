@@ -102,7 +102,7 @@ test('item 5: a label left out keeps the kind (scene moves, landmark lines); onl
     assert.equal(placeNamed(state, 'reedmere').kind, 'town');
     // atlas.here: the scene's place with the atlas's kind and the pack's region when the scene has none.
     const moved = at(story(), 'Inspection Quay', { kind: '', region: 'River Confederacy' });
-    assert.deepEqual(query(moved, 'atlas.here', {}, { pack: PACK }), { id: placeNamed(moved, 'inspection quay').id, name: 'Inspection Quay', kind: 'quay', region: 'Bluewatch Village' });
+    assert.deepEqual(query(moved, 'atlas.here', {}, { pack: PACK }), { id: placeNamed(moved, 'inspection quay').id, name: 'Inspection Quay', kind: 'quay', placeKind: 'quay', region: 'Bluewatch Village' });
     assert.equal(query(at(story(), 'Nowhere Known'), 'atlas.here', {}, { pack: PACK }), null);
     assert.equal(query(at(story(), ''), 'atlas.here', {}, { pack: PACK }), null);
 });

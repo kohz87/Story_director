@@ -12,6 +12,7 @@ import { CHANGE_INSTRUCTION, PACING, noteParts, tailNote } from '../../note.js';
 import { classify, estimateTokens } from '../../relevance.js';
 import { givenUpIn, offersChosenIn, untrackedCorrections } from '../../tracker.js';
 import { orderedThreads, toTracker } from './convert.js';
+import { problemList } from './domain.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
 
 export const TAIL_BUDGET = 500;
@@ -21,6 +22,16 @@ export const TAIL_BUDGET = 500;
  * reply paid for all of them; 40 short ones already fill the budget.
  */
 export const TAIL_THREADS = 40;
+/**
+ * How long an open thread may go untouched (replies with Director lines since it was last seen or
+ * changed) before the tail stops reading it (B-b1r2-8), unless it has a date, is a quest the reader
+ * took on, is pinned, is a secret, or the reader's message or the scene's place names it. v1 already
+ * shelves such a thread after 15 quiet replies; this only keeps the work per reply with the live ones.
+ */
+export const IDLE_REPLIES = 60;
+// Ended threads are read for this many replies after (v1's "resolved recently", relevance.js).
+const ENDED_REPLIES = 5;
+const DATED = ['due', 'on', 'arrive'];
 
 const V1_LINES = CHANGE_INSTRUCTION.split('\n');
 const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:'));
@@ -71,18 +82,43 @@ function withoutHeld(director) {
     return { ...director, threads: Object.fromEntries(Object.entries(threads).filter(([, thread]) => !held(thread))) };
 }
 
+const lastTurn = thread => Math.max(...['created', 'changed', 'seen', 'closed', 'engaged']
+    .map(name => thread.track?.[name]?.turn).filter(Number.isSafeInteger), -Infinity);
+
+/**
+ * The threads the tail reads (B-b1r2-8): ended ones only for ENDED_REPLIES replies, open ones until they
+ * have been idle for IDLE_REPLIES (see there). However long the chat, the tail works on the live ones.
+ */
+export function tailThreads(director, { said = '', place = '' } = {}) {
+    const threads = director.threads ?? {};
+    const n = Number.isSafeInteger(director.turn?.n) ? director.turn.n : 0;
+    const words = `${said}\n${place}`.toLowerCase();
+    const keep = thread => {
+        const last = lastTurn(thread);
+        // A thread with no reply count (made outside a reply's lines) is read as before.
+        if (last === -Infinity) return true;
+        if (thread.status !== 'active') return n - last < ENDED_REPLIES;
+        if (n - last < IDLE_REPLIES || thread.kind === 'secret' || thread.taken || thread.track?.pinned) return true;
+        if ((thread.kind === 'quest' && !thread.offer) || DATED.some(name => String(thread.fields?.[name] ?? '').trim())) return true;
+        const key = String(thread.key ?? '').toLowerCase();
+        return Boolean(key) && words.includes(key);
+    };
+    if (Object.values(threads).every(keep)) return director;
+    return { ...director, threads: Object.fromEntries(Object.entries(threads).filter(([, thread]) => keep(thread))) };
+}
+
 /** `context.tail(view)` → `{ lines, optional }` (SPEC §5). */
 export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const state = view?.state;
     const stored = state?.domains?.director;
     if (!stored) return { lines: [], optional: [] };
-    const director = withoutHeld(stored);
+    const said = typeof view?.chat?.lastUser === 'string' ? view.chat.lastUser : '';
+    const director = withoutHeld(tailThreads(stored, { said, place: String(state?.domains?.scene?.place?.name ?? '') }));
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
     const calendar = calendarOf(settings, packCalendarOf(view.query));
     const tracker = toTracker(director);
     const now = director.time?.minutes ?? null;
     const message = director.turn?.n ?? 0;
-    const said = typeof view?.chat?.lastUser === 'string' ? view.chat.lastUser : '';
     const selection = classify(tracker, {
         calendar,
         now,
@@ -102,7 +138,7 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
         selection.arriving = selection.arriving.filter(record => !recapped.has(ids.get(record)));
     }
     // The last reply's lines on names not tracked, as v1 reads its problems.
-    const corrections = untrackedCorrections((director.problems ?? [])
+    const corrections = untrackedCorrections(problemList(director)
         .filter(problem => problem.turn === message)
         .map(problem => ({ ...problem, message: problem.turn })), { message });
     const parts = noteParts(selection, {

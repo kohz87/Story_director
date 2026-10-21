@@ -15,6 +15,7 @@ import { part } from '../../../src/v2/time/index.js';
 import { AWAY_ARRIVAL_V2, AWAY_DEADLINE_V2, AWAY_RECORD_V2, RECAP_BUDGET, buildRecap, v2Asks } from '../../../src/v2/time/recap.js';
 import { standing } from '../../../src/v2/time/settle.js';
 import { CALENDAR, Chat, SETTINGS, thread } from './helpers/fake-ctx.js';
+import { slotValue } from '../../../src/v2/slot.js';
 
 const calendar = makeCalendar(CALENDAR);
 const at = text => calendar.parse(text).abs;
@@ -63,7 +64,7 @@ test('a small jump builds none; the threshold is the reader\'s (v1: a jump of ex
     const small = begun(WORLD, { start: 'Goldwane 14, 08:00 am' });
     small.answer('! time +2h');
     assert.deepEqual(small.send().tail.lines, []);
-    assert.equal(director(small.head()).recap ?? null, null);
+    assert.equal(slotValue(director(small.head()).recap), null);
     const six = begun(WORLD, { start: 'Goldwane 14, 06:00 am' });
     six.answer('! time +6h');
     assert.equal(six.send().tail.lines.length, 1, 'six hours, the default threshold');
@@ -94,7 +95,7 @@ test('told once: to the reply after the jump and its swipes, not to the reply af
     const next = chat.send();
     assert.deepEqual(next.tail.lines, []);
     assert.equal(next.committed.length, 1);
-    assert.equal(director(chat.head()).recap, null);
+    assert.equal(slotValue(director(chat.head()).recap), null);
     assert.equal(part.queries['time.recap'](chat.head()), null);
     // And nothing after that.
     chat.answer('');
@@ -115,7 +116,7 @@ test('without the chat\'s length, a later receipt is what makes the recap old', 
     chat.send();
     const state = chat.head();
     const view = (s, length) => ({ state: s, settings: () => SETTINGS, chat: length === undefined ? {} : { length } });
-    const recap = director(state).recap;
+    const recap = slotValue(director(state).recap);
     assert.equal(part.context.tail({ state, settings: () => SETTINGS, chat: {} }).lines.length, 1);
     const later = { ...state, meta: { ...state.meta, rev: state.meta.rev + 1 } };
     assert.deepEqual(part.context.tail(view(later)).lines, []);
@@ -136,7 +137,7 @@ test('a jump that brings too much is cut to about 200 tokens, the rest counted',
     const shown = (line.match(/Market stall/g) ?? []).length;
     assert.ok(shown >= 1 && shown < 30);
     assert.match(line, new RegExp(`And ${30 - shown} more\\. ${AWAY_CUE.replace(/[{}.]/g, '\\$&')}`));
-    assert.equal(director(chat.head()).recap.threads.length, shown);
+    assert.equal(slotValue(director(chat.head()).recap).threads.length, shown);
 });
 
 test('a quest deadline that passed in the gap asks the story in v2\'s lines', () => {

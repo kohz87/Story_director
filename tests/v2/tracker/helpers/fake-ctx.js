@@ -3,6 +3,7 @@
 // touched domains are validated, and a throw or a validation error keeps the state as it was.
 
 import { part } from '../../../../src/v2/tracker/index.js';
+import { problemList } from '../../../../src/v2/tracker/domain.js';
 
 function deepFreeze(value) {
     if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -147,5 +148,5 @@ export function thread(state, key) {
 /** The director's problems of the latest reply. */
 export function lastProblems(state) {
     const director = state.domains.director;
-    return director.problems.filter(problem => problem.turn === director.turn.n);
+    return problemList(director).filter(problem => problem.turn === director.turn.n);
 }

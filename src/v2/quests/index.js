@@ -15,10 +15,10 @@
 
 import { lineKey, questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
-import { NOT_MET_YET, beatenClaim, finishRule, isHeld, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
+import { NOT_MET_YET, beatenClaim, finishRule, isHeld, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { heldText, questRank, rankHeldText, ranksOf, rewardHold } from './ranks.js';
 // The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
-import { PROBLEM_LIMIT, PROBLEM_ROOM } from '../tracker/domain.js';
+import { addProblem, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
 
 export { questLists };
 
@@ -146,15 +146,12 @@ function termsFor(query, inventory, thread, currency) {
 
 /*
  * A written rank held to the party's (questRank): a Problem on the Director tab, once per quest (a
- * Problem already on the list for it is not repeated). Appended as the tracker part appends its own,
- * cut back to the newest PROBLEM_LIMIT once the list reaches PROBLEM_ROOM.
+ * Problem already on the list for it is not repeated), kept as the tracker part keeps its own.
  */
 function rankProblem(ctx, director, thread, note) {
-    if (!note || !Array.isArray(director.problems)) return;
-    if (director.problems.some(problem => problem?.kind === 'rank-held' && problem.key === thread.key)) return;
-    const entry = { rev: ctx.rev, turn: Number.isSafeInteger(director.turn?.n) ? director.turn.n : 0, kind: 'rank-held', severity: 'info', key: thread.key, text: `${thread.key}: ${note}.` };
-    if (director.problems.length >= PROBLEM_ROOM) director.problems = [...director.problems.slice(-(PROBLEM_LIMIT - 1)), entry];
-    else director.problems.push(entry);
+    if (!note) return;
+    if (problemList(director).some(problem => problem?.kind === 'rank-held' && problem.key === thread.key)) return;
+    addProblem(director, ctx, { kind: 'rank-held', severity: 'info', key: thread.key, text: `${thread.key}: ${note}.` });
 }
 
 function termsOf(ctx, thread, currency = currencyOf(ctx.query)) {
@@ -191,28 +188,30 @@ const isOver = thread => Boolean(thread.ended) || thread.status !== 'active';
 
 /*
  * A goal code cannot count is met on the story's word alone (F83, F94), so one reply turns in at most
- * one such quest (B-b3-r2-5): `director.turn.vouched` is the one this reply turned in. The tracker starts
+ * one such quest (B-b3-r2-5): `vouched` in `director.turn.now` is the one this reply turned in. The tracker starts
  * a fresh `turn` for each reply's Director lines, so the mark goes with the reply (and a click after the
  * reply counts against it too). `{ ok: false, word: true, other, reason }` when another quest already
  * took this reply's turn-in, else null.
  */
 function wordRule(director, thread, target) {
     if (target) return null;
-    const used = director?.turn?.vouched;
+    const used = replyTurn(director).vouched;
     if (typeof used !== 'string' || !used || used === thread.id) return null;
     const other = text(director.threads?.[used]?.key) || 'another quest';
     return { ok: false, word: true, other, reason: `One reply turns in only one quest on the story's word alone (${other} was); it is ready for the next reply.` };
 }
 
 /**
- * The scene for the place rule, with the kind the atlas knows (`atlas.here`) when the scene has none:
- * a `~ place` line that moves the scene without `| kind:` leaves the scene's kind empty, and the place
- * was a settlement all the same.
+ * The scene for the place rule, with the kind the atlas knows (`atlas.here`) when the scene's is not a
+ * settlement's: a `~ place` line that moves the scene without `| kind:` leaves the scene's kind empty
+ * (Story Block before 2.0.0-alpha.2) or keeps the last place's ("wild" from the ridge, back in town),
+ * and the place the map knows was a settlement all the same.
  */
 export function hereScene(query, scene) {
-    if (text(scene?.place?.kind)) return scene;
+    const own = text(scene?.place?.kind);
+    if (isSettlementKind(own)) return scene;
     const here = tryQuery(query, 'atlas.here', {}, null);
-    const kind = text(here?.kind);
+    const kind = [here?.placeKind, here?.kind].map(text).find(isSettlementKind) ?? (own ? '' : text(here?.kind));
     return kind ? { ...(scene ?? {}), place: { ...(scene?.place ?? {}), kind } } : scene;
 }
 
@@ -298,7 +297,10 @@ function finish(ctx, payload) {
     if (!place.ok) fail(ctx, CODES.wrongPlace, `${thread.key} cannot be turned in here. ${place.reason}`);
     const word = wordRule(director, thread, target);
     if (word) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${word.reason}`);
-    if (!target && director.turn && typeof director.turn === 'object') director.turn.vouched = thread.id;
+    if (!target) {
+        const now = replyDraft(director);
+        if (now) now.vouched = thread.id;
+    }
 
     // Fetched items are handed over: exactly the target's count, stack by stack.
     const consumed = [];

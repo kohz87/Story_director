@@ -149,6 +149,9 @@ function samePersonName(a, b) {
 // gives a settlement ("village", "lock town", "fortress city"), as `atlas.here` reports it.
 const SETTLEMENT_KIND = /(?:^|[^\p{L}])(?:settlement|village|town|city|hamlet|capital)(?![\p{L}])/u;
 
+/** Whether a place kind is one a quest is turned in at. */
+export const isSettlementKind = kind => SETTLEMENT_KIND.test(text(kind).toLowerCase());
+
 /**
  * The place rule for a turn-in: in a settlement (`scene.place.kind`, or the atlas's kind when the scene
  * has none: quests/index.js hereScene), or with the giver in `scene.present` (whole-word names: "Fenna"

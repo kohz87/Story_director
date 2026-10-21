@@ -1,8 +1,8 @@
 // Story Director v2, part **atlas**: the `atlas` domain's shape, validator and name index (pure).
 //
 // atlas = {
-//   places: { [id]: { id, name, region, kind, layer, x?, y?, discovered, rev } },
-//   routes: { [id]: { id, from, to, kind, days?, hours? } },
+//   places: { [id]: { id, name, region, kind, layer, x?, y?, discovered, rev, made? } },
+//   routes: { [id]: { id, from, to, kind, days?, hours?, made? } },
 //   keys:   { [keyOf(name or alias)]: placeId },
 //   focus:  null | placeId | 'pack:<key>',        // the place the reader picked on the map
 // }
@@ -13,7 +13,9 @@
 // an alias). `discovered` is false for a place only a route line named, until the story goes
 // there or describes it. `layer` is the place's plane ("underground"), '' on the surface.
 // Numbers are whole (SPEC §2.1, and the host keeps a whole number whole): coordinates in map
-// units, a route's time in whole days and hours.
+// units, a route's time in whole days and hours. `made` is the reply whose lines added the place or
+// route (its record ID, Story Block's ctx.carrier.sid): a reply's new ones are counted from it
+// (capture.js NEW_PER_REPLY), so no count is kept that a deleted reply could leave wrong (B-b1r2-7).
 
 export const PLACE_ID = /^pl_[0-9a-z]{8}$/;
 export const ROUTE_ID = /^rt_[0-9a-z]{8}$/;
@@ -26,12 +28,18 @@ export function initialAtlas() {
     return { places: {}, routes: {}, keys: {}, focus: null };
 }
 
-/** The key a name is found by: v1's place book key (apostrophes dropped, spaces folded, lowercase). */
-export const keyOf = name => String(name ?? '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// Invisible format marks (zero-width spaces and joiners, bidi overrides): "Ro\u200Bpe" and "\u202ERope"
+// are "Rope", as Story Block reads its own names (names.js).
+const INVISIBLE = /\p{Cf}+/gu;
 
-/** A name as it is kept: markdown marks dropped, spaces folded, at most 80 characters. */
+/** The key a name is found by: v1's place book key (apostrophes dropped, spaces folded, lowercase). */
+export const keyOf = name => String(name ?? '').replace(INVISIBLE, '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// The key as it was made before invisible marks were dropped, so a map saved then still checks out.
+const keptKeyOf = name => String(name ?? '').normalize('NFKC').replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** A name as it is kept: invisible marks and markdown marks dropped, NFC, spaces folded, at most 80 characters. */
 export function cleanName(name) {
-    return String(name ?? '').replace(/\*\*|__|[*`]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME).trim();
+    return String(name ?? '').replace(INVISIBLE, '').normalize('NFC').replace(/\*\*|__|[*`]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME).trim();
 }
 
 /** A kind, region or layer word as it is kept: lowercase for kinds, as written for the rest. */
@@ -103,8 +111,9 @@ function placeErrors(id, place) {
     else if (hasX && !(isInt(place.x) && isInt(place.y))) errors.push(`${at}: x and y must be whole map units.`);
     if (typeof place.discovered !== 'boolean') errors.push(`${at}.discovered must be true or false.`);
     if (!isInt(place.rev) || place.rev < 0) errors.push(`${at}.rev must be a whole number.`);
+    if (place.made !== undefined && !(typeof place.made === 'string' && place.made && place.made.length <= MAX_NAME)) errors.push(`${at}.made must name a reply.`);
     for (const key of Object.keys(place)) {
-        if (!['id', 'name', 'region', 'kind', 'layer', 'x', 'y', 'discovered', 'rev'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
+        if (!['id', 'name', 'region', 'kind', 'layer', 'x', 'y', 'discovered', 'rev', 'made'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
     }
     return errors;
 }
@@ -121,8 +130,9 @@ function routeErrors(id, route, places) {
         if (route[field] !== undefined && !(isInt(route[field]) && route[field] >= 0)) errors.push(`${at}.${field} must be a whole number.`);
     }
     if (routeHours(route) === 0) errors.push(`${at} takes no time at all.`);
+    if (route.made !== undefined && !(typeof route.made === 'string' && route.made && route.made.length <= MAX_NAME)) errors.push(`${at}.made must name a reply.`);
     for (const key of Object.keys(route)) {
-        if (!['id', 'from', 'to', 'kind', 'days', 'hours'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
+        if (!['id', 'from', 'to', 'kind', 'days', 'hours', 'made'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
     }
     return errors;
 }
@@ -140,10 +150,10 @@ export function validateAtlas(slice) {
     else if (places) {
         for (const [key, id] of Object.entries(slice.keys)) {
             if (!Object.hasOwn(places, id)) errors.push(`atlas.keys["${key}"] points at no place.`);
-            else if (key !== keyOf(key) || !key) errors.push(`atlas.keys["${key}"] is not a name key.`);
+            else if (!key || (key !== keyOf(key) && key !== keptKeyOf(key))) errors.push(`atlas.keys["${key}"] is not a name key.`);
         }
         for (const place of Object.values(places)) {
-            if (typeof place?.name === 'string' && slice.keys[keyOf(place.name)] !== place.id) errors.push(`"${place.name}" is missing from atlas.keys.`);
+            if (typeof place?.name === 'string' && slice.keys[keyOf(place.name)] !== place.id && slice.keys[keptKeyOf(place.name)] !== place.id) errors.push(`"${place.name}" is missing from atlas.keys.`);
         }
     }
     const focus = slice.focus;

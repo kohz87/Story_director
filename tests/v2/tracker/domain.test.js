@@ -23,7 +23,7 @@ test('the part has the shape MODULES §A names', () => {
 
 test('initial: an empty director, plain JSON, valid; each call a fresh copy', () => {
     const director = part.domains.director.initial();
-    assert.deepEqual(director, { time: { minutes: null }, threads: {}, keys: {}, problems: [], turn: { n: 0, reply: null, index: -1, from: null, quests: [], lone: null } });
+    assert.deepEqual(director, { time: { minutes: null }, threads: {}, keys: {}, problems: {}, turn: { n: 0, now: null }, checked: null, recap: null });
     assert.deepEqual(JSON.parse(JSON.stringify(director)), director);
     assert.deepEqual(validate(director), []);
     director.threads.x = 1;
@@ -64,6 +64,11 @@ test('the validator accepts what capture writes and rejects every malformed part
         [d => { d.problems = Array.from({ length: 101 }, () => ({ rev: 1, kind: 'x', text: 'y' })); }, /at most 100/],
         [d => { d.problems = [{ kind: 'x', text: 'y' }]; }, /rev, kind and text/],
         [d => { d.turn = { n: -1 }; }, /turn is malformed/],
+        [d => { d.turn = { n: 1, now: [{ quests: 'x' }] }; }, /turn is malformed/],
+        [d => { d.turn = { n: 1, now: { quests: [] } }; }, /turn is malformed/],
+        [d => { d.problems = { '1.0': { kind: 'x', text: 'y' } }; }, /rev, kind and text/],
+        [d => { d.problems = { x: { rev: 1, kind: 'x', text: 'y' } }; }, /"<rev>.<n>" keys/],
+        [d => { d.problems = Object.fromEntries(Array.from({ length: 201 }, (_, n) => [`1.${n}`, { rev: 1, kind: 'x', text: 'y' }])); }, /at most 200/],
     ];
     for (const [change, message] of cases) {
         const errors = broken(change);

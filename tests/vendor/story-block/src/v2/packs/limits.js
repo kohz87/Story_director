@@ -45,7 +45,8 @@ export const PRESET_FIELDS = Object.freeze(['id', 'name', 'note', 'race', 'talen
 // A stat name as creation and items use it: STR, DEX … (short capital letters).
 export const STAT_NAME = /^[A-Z]{2,12}$/;
 // Map data for Story Director's atlas (coordinates in map units, distances in km).
-export const PLACE_FIELDS = Object.freeze(['name', 'slug', 'aliases', 'region', 'kind', 'layer', 'x', 'y', 'note']);
+// `hidden: true` (or its alias `secret: true`): the map keeps the place off until the story goes there.
+export const PLACE_FIELDS = Object.freeze(['name', 'slug', 'aliases', 'region', 'kind', 'layer', 'x', 'y', 'note', 'hidden', 'secret']);
 export const ROUTE_FIELDS = Object.freeze(['slug', 'from', 'to', 'kind', 'km', 'hours', 'corridor', 'note']);
 // Display terms a pack suggests (MODULES §F25): `{ id?, name?, levelName?, xpName?, tiers? }`, `tiers`
 // being `true` or `{ size?, numerals?, enabled? }`. A term is a label in RPG Battle's blocks
