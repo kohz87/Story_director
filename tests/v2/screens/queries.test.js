@@ -78,17 +78,27 @@ test('director.next reads dates on the reader\'s calendar from the settings', ()
 
 test('quest.board: offers, active quests with progress and Finish, finished latest first', () => {
     const board = run(headState(), 'quest.board');
-    assert.deepEqual(board.offers, [{ id: 'th_rats0001', key: 'Granary Rats', goal: 'kill 6 rats in the granary', giver: 'Miller Fenna', reward: '5 coin', due: '' }]);
+    const [offer] = board.offers;
+    assert.deepEqual({ ...offer, details: undefined }, {
+        id: 'th_rats0001', key: 'Granary Rats', goal: 'kill 6 rats in the granary', giver: 'Miller Fenna', reward: '5 coin', due: '',
+        status: { state: 'offered', text: 'Offered — say you take it' }, details: undefined,
+    });
+    assert.equal(board.offers.length, 1);
     assert.deepEqual(board.active.map(quest => quest.id), ['th_wolves01', 'th_pelts001']);
     const [hunt, hides] = board.active;
-    assert.deepEqual(hunt.progress, { have: 8, need: 3, met: true, source: 'fights', label: 'Wolves 8/3', reason: '', finish: { ok: true, reason: '' } });
+    assert.deepEqual(hunt.progress, { have: 8, need: 3, met: true, ready: false, source: 'fights', label: 'Wolves 8/3', reason: '', finish: { ok: true, reason: '' } });
+    assert.deepEqual(hunt.status, { state: 'here', text: 'Ready to turn in — 8/3 wolves' });
+    assert.equal(hunt.note, 'Hunt along the ridge', 'the progress note (F85)');
     assert.equal(hunt.meter, true);
     assert.deepEqual(hunt.finish, { show: true, blocked: false, reason: '', title: 'Turn in East Bluff Wolves' });
     assert.equal(hunt.reward, '1 coin each wolf');
     assert.equal(hides.progress.label, 'Wolf pelt 2/5');
     assert.deepEqual(hides.finish, { show: true, blocked: true, reason: hides.progress.reason, title: hides.progress.reason });
     assert.match(hides.finish.reason, /Need 3 more/);
-    assert.deepEqual(board.finished, [{ id: 'th_ring0001', key: 'Lost Ring', outcome: 'done', outcomeText: 'Done', reason: 'returned it' }]);
+    assert.deepEqual(hides.status, { state: 'notyet', text: 'Not yet: 2/5 wolf pelt' });
+    assert.deepEqual(board.finished.map(entry => ({ ...entry, details: undefined })), [{ id: 'th_ring0001', key: 'Lost Ring', outcome: 'done', outcomeText: 'Done', reason: 'returned it', details: undefined }]);
+    assert.equal(board.finished[0].details.goal, 'find the ring');
+    assert.equal(board.heldCount, 0);
     assert.deepEqual([board.hasOffers, board.hasActive, board.hasFinished, board.finishedCount], [true, true, true, 1]);
 });
 
@@ -104,13 +114,14 @@ test('quest.board: Finish says why it is off (not taken, not met, wrong place) a
 
     const untaken = makeState({ threads: [wolves({ taken: null })], beaten, ...away });
     assert.deepEqual(finishOf(untaken), { show: true, blocked: true, reason: 'Take it on first: fights count from then.' });
-    assert.equal(run(untaken, 'quest.board').active[0].canTake, true);
+    assert.deepEqual(run(untaken, 'quest.board').active[0].status, { state: 'untaken', text: 'Not taken on yet — say you take it on' });
 
     const short = makeState({ threads: [wolves()], beaten: [{ rev: 11, foes: [{ name: 'Wolf', count: 1 }], won: true }], ...away });
     assert.deepEqual(finishOf(short), { show: true, blocked: true, reason: 'Need 2 more wolves.' });
 
     const wild = makeState({ threads: [wolves()], beaten, ...away });
     assert.deepEqual(finishOf(wild), { show: true, blocked: true, reason: 'Turn it in at a settlement or where Orsa is.' });
+    assert.deepEqual(run(wild, 'quest.board').active[0].status, { state: 'ready', text: 'Ready — 8/3 wolves; turn it in at a settlement or where Orsa is.' });
 
     const withGiver = makeState({ threads: [wolves()], beaten, ...away, present: ['Orsa the huntress'] });
     assert.deepEqual(finishOf(withGiver), { show: true, blocked: false, reason: '' });
@@ -118,11 +129,16 @@ test('quest.board: Finish says why it is off (not taken, not met, wrong place) a
     const noGiver = makeState({ threads: [wolves({ fields: { goal: 'kill 3 wolves' } })], beaten, ...away });
     assert.equal(finishOf(noGiver).reason, 'Turn it in at a settlement.');
 
-    // A quest code cannot count (no target in its terms): no Finish, the story decides.
-    const story = makeState({ threads: [thread('th_mill0001', 'quest', 'Old Mill', { goal: 'see what haunts the mill' }, { taken: { rev: 1 } })] });
+    // A quest code cannot count (F83): no meter; not yet until the story says its goal is met, then Ready.
+    const story = makeState({ threads: [thread('th_mill0001', 'quest', 'Old Mill', { goal: 'see what haunts the mill' }, { taken: { rev: 1 } })], ...away });
     const mill = run(story, 'quest.board').active[0];
     assert.equal(mill.meter, false);
-    assert.deepEqual(mill.finish, { show: false, blocked: true, reason: '', title: 'Turn in Old Mill' });
+    assert.deepEqual(mill.finish, { show: true, blocked: true, reason: 'The story has not said its goal is met yet.', title: 'The story has not said its goal is met yet.' });
+    assert.deepEqual(mill.status, { state: 'notyet', text: 'Not yet: the story has not said its goal is met yet.' });
+    const met = run(makeState({ threads: [thread('th_mill0001', 'quest', 'Old Mill', { goal: 'see what haunts the mill', giver: 'Hobb' }, { taken: { rev: 1 }, ready: { rev: 4 } })], ...away, present: ['Hobb'] }), 'quest.board').active[0];
+    assert.equal(met.ready, true);
+    assert.deepEqual(met.status, { state: 'here', text: 'Ready to turn in — goal met' });
+    assert.equal(met.finish.blocked, false);
 });
 
 test('finishState takes the quests part\'s own verdict from quest.progress; it never works out the place itself', () => {
@@ -192,4 +208,30 @@ test('director.problems: v1\'s {{user}} through the host\'s substitute, else "yo
     assert.match(queries['director.problems'](state, {}, { substitute: () => { throw new Error('x'); } })[2].text, /a quest you finished/);
     assert.equal(readerWords('Ask {{User}}.'), 'Ask you.');
     assert.deepEqual(run(makeState(), 'director.problems'), []);
+});
+
+test('director.problems: a Problem about an offer or a missing goal goes once that is no longer so', () => {
+    const problems = [
+        { rev: 3, kind: 'offered', key: 'Granary Rats', text: '"Granary Rats" was offered, not taken on: it stays an offer until {{user}} accepts it.' },
+        { rev: 3, kind: 'offered', key: 'East Bluff Wolves', text: '"East Bluff Wolves" was offered, not taken on.' },
+        { rev: 4, kind: 'no-goal', key: 'Miller Trouble', text: '"Miller Trouble" has no goal.' },
+        { rev: 4, kind: 'no-goal', key: 'Old Mill', text: '"Old Mill" has no goal.' },
+        { rev: 5, kind: 'time', text: 'The story time is not set yet.' },
+    ];
+    const vague = thread('th_vague001', 'quest', 'Miller Trouble', {}, { summary: 'help the miller', taken: { rev: 2 } });
+    const given = thread('th_mill0001', 'quest', 'Old Mill', { goal: 'see what haunts the mill' }, { taken: { rev: 2 } });
+    const state = makeState({ threads: [rats(), wolves(), vague, given], problems });
+    assert.deepEqual(run(state, 'director.problems').map(problem => [problem.kind, problem.rev]), [['offered', 3], ['no-goal', 4], ['time', 5]],
+        'the taken wolves and the mill with its goal are left out');
+    // Without the quests part's details, a goal: field decides.
+    const { 'quest.details': _details, ...noDetails } = makeQueries();
+    assert.equal(makeRunner(noDetails).run(state, 'director.problems').length, 3);
+});
+
+test('quest.board: an offer held by the cooldown (F88) is left out until its reply comes, and counted', () => {
+    const state = makeState({ threads: [rats({ shown: { turn: 9 } })] });
+    const board = run(state, 'quest.board');
+    assert.deepEqual([board.offers, board.heldCount, board.hasOffers], [[], 1, false]);
+    const later = makeState({ threads: [rats({ shown: { turn: 3 } })] });
+    assert.deepEqual(run(later, 'quest.board').offers.map(offer => offer.id), ['th_rats0001']);
 });

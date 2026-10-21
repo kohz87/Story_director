@@ -33,7 +33,7 @@ export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
     hook: '+ hook Name — an open thread (a job only offered: | giver: who | reward: what)',
-    quest: '+ quest Name — a job {{user}} accepted | giver: | goal: | reward: | step: | due: | difficulty: easy|normal|hard|nightmare; ~ quest Name | step: …; - quest Name — done|failed|abandoned',
+    quest: '+ quest Name — a job {{user}} accepted | giver: | goal: what counts as done | reward: | due: | rank: or difficulty: easy|normal|hard|nightmare; ~ quest Name | progress: … | met: yes|no; - quest Name — turned in|failed|abandoned',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',
@@ -56,11 +56,21 @@ function recappedIds(view) {
     }
 }
 
+// An offer held back by the offer cooldown (F88) is not told to the story until its reply comes.
+function withoutHeld(director) {
+    const turn = Number.isSafeInteger(director.turn?.n) ? director.turn.n : 0;
+    const held = thread => thread?.kind === 'quest' && thread.offer && !thread.taken && Number.isSafeInteger(thread.shown?.turn) && thread.shown.turn > turn;
+    const threads = director.threads ?? {};
+    if (!Object.values(threads).some(held)) return director;
+    return { ...director, threads: Object.fromEntries(Object.entries(threads).filter(([, thread]) => !held(thread))) };
+}
+
 /** `context.tail(view)` → `{ lines, optional }` (SPEC §5). */
 export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const state = view?.state;
-    const director = state?.domains?.director;
-    if (!director) return { lines: [], optional: [] };
+    const stored = state?.domains?.director;
+    if (!stored) return { lines: [], optional: [] };
+    const director = withoutHeld(stored);
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
     const calendar = calendarOf(settings, packCalendarOf(view.query));
     const tracker = toTracker(director);

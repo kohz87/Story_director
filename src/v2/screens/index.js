@@ -5,10 +5,10 @@
 // them by id (§13.7).
 //
 // The screens bind to the tracker's and quests' queries (`director.time`, `director.threads`,
-// `quest.progress`) and to four view queries this part adds (queries.js: `director.goal`,
+// `quest.progress`, `quest.details`) and to four view queries this part adds (queries.js: `director.goal`,
 // `director.next`, `quest.board`, `director.problems`), which work out what a template cannot
-// (sorting, dates, the Finish state from `quest.progress`'s `finish`, `{{user}}` in problem texts)
-// from those same queries. No commands, domains or change-line kinds of its own. The status card is
+// (sorting, dates, each quest's status line and details, `{{user}}` in problem texts) from those same
+// queries. No screen draws a command button (F95): quests follow the reader's words and the story. No commands, domains or change-line kinds of its own. The status card is
 // on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
 import { directorScreen } from './director.js';

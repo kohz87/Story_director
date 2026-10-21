@@ -69,7 +69,9 @@ export function runCommand(state, handler, payload, { said = null, settings = {}
             drafts[domain] ??= structuredClone(state.domains[domain]);
             return drafts[domain];
         },
-        call: call ?? (type => { throw new Rejected('UNKNOWN_COMMAND', `No command ${type} in this test.`); }),
+        cause: 'story',
+        // A test's `call(type, payload, ctx)` runs sub-commands in this same transaction.
+        call: call ? (type, payload) => call(type, payload, ctx) : (type => { throw new Rejected('UNKNOWN_COMMAND', `No command ${type} in this test.`); }),
         claim: key => (claims[key] ? false : (claims[key] = true)),
         rng: random,
         roll: () => ({ total: 0, dice: [] }),

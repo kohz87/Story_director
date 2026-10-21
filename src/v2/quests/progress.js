@@ -88,9 +88,15 @@ export function stateQuery(state) {
  * turn-in claims. Item quests count the inventory and are independent of fights.
  * `stacks` (items only) lists what a turn-in would hand over, in order.
  */
-export function progressOf(thread, query, { free = () => true } = {}) {
+export function progressOf(thread, query, { free = () => true, closing = false } = {}) {
     const target = thread?.target;
-    if (!target) return { have: 0, need: 0, met: false, source: null, noun: '', reason: 'No target code can count; the story decides when it is done.' };
+    if (!target) {
+        // A goal code cannot count (F83): met once the story said so (`met: yes`, `ready`), or when the
+        // story itself turns it in (`closing`, F94: its word is taken at turn-in).
+        const ready = Boolean(thread?.ready);
+        const met = ready || closing;
+        return { have: 0, need: 0, met, ready, source: null, noun: '', reason: met ? '' : NOT_MET_YET };
+    }
     const need = target.count;
     const noun = target.noun;
     if (target.kind === 'items') {
@@ -116,6 +122,9 @@ export function progressOf(thread, query, { free = () => true } = {}) {
     const met = have >= need;
     return { have, need, met, source: 'fights', noun, reason: met ? '' : `Need ${need - have} more ${nounFor(target, need - have)}.`, fights: counted };
 }
+
+/** Why a quest code cannot count is not done yet: the story has not said its goal is met. */
+export const NOT_MET_YET = 'The story has not said its goal is met yet.';
 
 /** "Wolves 8/3". */
 export function progressLabel(thread, progress) {
@@ -157,18 +166,31 @@ export function finishRule(thread, progress, scene) {
     if (!thread) return { ok: false, reason: 'There is no such quest.' };
     if (thread.ended || thread.status !== 'active') return { ok: false, reason: `${text(thread.key)} is already over.` };
     if (!thread.taken) return { ok: false, reason: 'Take it on first.' };
-    if (!thread.target) return { ok: false, reason: 'No target code can count; the story decides when it is done.' };
     if (!progress?.met) return { ok: false, reason: text(progress?.reason) || 'Not done yet.' };
     return placeRule(thread, scene);
 }
 
-/** Plain lists the Quests board and the tail use: open offers, active quests, finished ones (latest first). */
+/**
+ * Whether an offer is held back (F88): the story offered it within the offer cooldown of the one before,
+ * so it waits, kept but not shown, until reply `shown.turn` (the tracker's `director.turn.n`).
+ */
+export function isHeld(thread, director) {
+    const turn = Number.isSafeInteger(director?.turn?.n) ? director.turn.n : 0;
+    return Boolean(thread?.offer) && !thread.taken && Number.isSafeInteger(thread.shown?.turn) && thread.shown.turn > turn;
+}
+
+/**
+ * Plain lists the Quests board and the tail use: open offers (not the held ones, which are `held`), active
+ * quests, finished ones (latest first).
+ */
 export function questLists(director) {
     const quests = Object.values(director?.threads ?? {}).filter(thread => thread?.kind === 'quest');
     const byKey = (a, b) => text(a.key).localeCompare(text(b.key)) || (a.id < b.id ? -1 : 1);
     const open = thread => thread.status === 'active' && !thread.ended;
+    const offered = thread => open(thread) && thread.offer && !thread.taken;
     return {
-        offers: quests.filter(thread => open(thread) && thread.offer && !thread.taken).sort(byKey),
+        offers: quests.filter(thread => offered(thread) && !isHeld(thread, director)).sort(byKey),
+        held: quests.filter(thread => offered(thread) && isHeld(thread, director)).sort(byKey),
         active: quests.filter(thread => open(thread) && !(thread.offer && !thread.taken)).sort(byKey),
         finished: quests.filter(thread => !open(thread))
             .sort((a, b) => (b.ended?.rev ?? b.rev ?? 0) - (a.ended?.rev ?? a.rev ?? 0) || byKey(a, b)),

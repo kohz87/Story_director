@@ -1,13 +1,35 @@
 // Story Director v2, part screens: `story-director/quests` (SPEC §13.1), the Quests tab and game-view
-// screen. Offers with Take on / Turn down; active quests with their progress as an `ss.meter`
-// ("Wolves 8/3") and Finish, which stays off with the reason until the quest can be turned in;
-// finished quests folded away. Everything it shows comes from `quest.board` (queries.js), on the
-// head state; the buttons run the quests part's commands with `{ id }`, and those commands check
-// every rule again.
+// screen. Offers, active quests with their progress as an `ss.meter` ("Wolves 8/3") and the rolling
+// progress note, finished quests folded away. No buttons (F95): taking on, turning down and giving up come
+// from the reader's own words, turning in from the story (code checks and pays); each row says where the
+// quest stands instead ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
+// it"). Every row opens its details (F84: goal, progress note, terms, giver, due, taken and ended dates,
+// history) in a screen-local `<details>` panel: templates have no dialog to open with a quest's data. The
+// commands stay in the SDK for a card's or pack's own buttons. Everything comes from `quest.board`
+// (queries.js), on the head state.
 
 import { BASE_CSS } from './style.js';
 
 export const QUESTS_ID = 'story-director/quests';
+
+// The details panel of one row: `x` is the row's loop name.
+const details = x => `
+        <details class="sd-more">
+          <summary>Details</summary>
+          <dl class="sd-facts">
+            <div data-if="${x}.details.goal"><dt>Goal</dt><dd>{{ ${x}.details.goal }}</dd></div>
+            <div data-if="${x}.details.note"><dt>Progress</dt><dd>{{ ${x}.details.note }}</dd></div>
+            <div data-if="${x}.details.terms"><dt>Terms</dt><dd>{{ ${x}.details.terms }}</dd></div>
+            <div data-if="${x}.details.rank"><dt>Rank</dt><dd>{{ ${x}.details.rank }}</dd></div>
+            <div data-if="${x}.details.giver"><dt>Giver</dt><dd>{{ ${x}.details.giver }}</dd></div>
+            <div data-if="${x}.details.due"><dt>Due</dt><dd>{{ ${x}.details.due }}</dd></div>
+            <div data-if="${x}.details.taken"><dt>Taken on</dt><dd>{{ ${x}.details.taken }}</dd></div>
+            <div data-if="${x}.details.ended"><dt>Ended</dt><dd>{{ ${x}.details.ended }}</dd></div>
+          </dl>
+          <ol class="sd-history" data-if="${x}.details.hasHistory" aria-label="History">
+            <li data-each="${x}.details.history as h">{{ h.text }}</li>
+          </ol>
+        </details>`;
 
 const TEMPLATE = `
 <div class="sd-quests">
@@ -22,10 +44,7 @@ const TEMPLATE = `
           <span data-if="o.reward">Reward: {{ o.reward }}</span>
           <span data-if="o.due">Due {{ o.due }}</span>
         </p>
-        <div class="sd-actions">
-          <button class="menu_button sd-btn sd-take" data-command="quest.take" data-payload='{"id":"{{ o.id }}"}' title="Take on {{ o.key }}">Take on</button>
-          <button class="menu_button sd-btn sd-quiet sd-decline" data-command="quest.decline" data-payload='{"id":"{{ o.id }}"}' title="Turn down {{ o.key }}">Turn down</button>
-        </div>
+        <p class="sd-status" data-state="{{ o.status.state }}" role="note">{{ o.status.text }}</p>${details('o')}
       </li>
     </ul>
   </section>
@@ -35,10 +54,10 @@ const TEMPLATE = `
     <p class="sd-empty" data-if="!q.board.hasActive">No quests taken on.</p>
     <ul class="sd-list">
       <li class="sd-card sd-quest" data-each="q.board.active as a" data-quest="{{ a.id }}"
-          data-class="sd-met: a.progress.met; sd-ready: !a.finish.blocked">
+          data-class="sd-met: a.ready; sd-ready: a.status.state == 'here'">
         <span class="sd-key">{{ a.key }}</span>
         <p class="sd-line" data-if="a.goal">{{ a.goal }}</p>
-        <p class="sd-line sd-step" data-if="a.step"><span class="sd-tag">Now</span> {{ a.step }}</p>
+        <p class="sd-line sd-step" data-if="a.note"><span class="sd-tag">Now</span> {{ a.note }}</p>
         <p class="sd-meta">
           <span data-if="a.giver">From {{ a.giver }}</span>
           <span data-if="a.reward">Reward: {{ a.reward }}</span>
@@ -47,13 +66,7 @@ const TEMPLATE = `
         <div class="sd-progress" data-if="a.meter">
           <ss-widget name="ss.meter" data-props='{"value":{{ a.progress.have }},"max":{{ a.progress.need }},"label":"{{ a.progress.label }}","text":"{{ a.progress.have }} of {{ a.progress.need }}","showValue":false,"tone":"accent"}'></ss-widget>
         </div>
-        <div class="sd-actions">
-          <button class="menu_button sd-btn sd-take" data-if="a.canTake" data-command="quest.take" data-payload='{"id":"{{ a.id }}"}' title="Count toward {{ a.key }} from now">Take on</button>
-          <button class="menu_button sd-btn sd-finish" data-if="a.finish.show" data-command="quest.finish" data-payload='{"id":"{{ a.id }}"}'
-                  data-bind-attr="disabled: a.finish.blocked; title: a.finish.title; aria-disabled: a.finish.blocked">Finish</button>
-          <button class="menu_button sd-btn sd-quiet sd-abandon" data-command="quest.abandon" data-payload='{"id":"{{ a.id }}"}' title="Give up {{ a.key }}">Give up</button>
-        </div>
-        <p class="sd-reason" data-if="a.finish.reason" role="note">{{ a.finish.reason }}</p>
+        <p class="sd-status" data-state="{{ a.status.state }}" role="note">{{ a.status.text }}</p>${details('a')}
       </li>
     </ul>
   </section>
@@ -63,7 +76,7 @@ const TEMPLATE = `
     <ul class="sd-list">
       <li class="sd-done" data-each="q.board.finished as f" data-quest="{{ f.id }}" data-outcome="{{ f.outcome }}">
         <span class="sd-key">{{ f.key }}</span> <span class="sd-tag">{{ f.outcomeText }}</span>
-        <small data-if="f.reason"> — {{ f.reason }}</small>
+        <small data-if="f.reason"> — {{ f.reason }}</small>${details('f')}
       </li>
     </ul>
   </details>
@@ -75,7 +88,20 @@ const CSS = `${BASE_CSS}
 .sd-progress { margin-top: 2px; }
 .sd-progress .ss-w-meter-label { font-weight: bold; font-variant-numeric: tabular-nums; }
 .sd-met .sd-progress .ss-w-meter { --ss-w-tone: var(--sd-good); }
-.sd-ready .sd-finish { border-color: var(--sd-good); }
+.sd-status { margin: 2px 0 0; font-size: 0.9em; }
+.sd-status[data-state="here"] { color: var(--sd-good); font-weight: bold; }
+.sd-status[data-state="ready"] { color: var(--sd-good); }
+.sd-status[data-state="notyet"], .sd-status[data-state="untaken"] { opacity: 0.8; }
+.sd-ready { border-color: var(--sd-good); }
+.sd-more > summary { cursor: pointer; min-height: 28px; padding: 4px 0; font-size: 0.85em; opacity: 0.8; }
+.sd-more[open] { padding: 6px 10px; border: 1px solid var(--sd-border); border-radius: var(--sd-radius);
+  background: var(--sd-surface); }
+.sd-facts { display: grid; gap: 2px; margin: 4px 0; }
+.sd-facts > div { display: grid; grid-template-columns: 6.5em 1fr; gap: 6px; }
+.sd-facts dt { opacity: 0.7; }
+.sd-facts dd { margin: 0; overflow-wrap: anywhere; }
+.sd-history { margin: 4px 0 0; padding-left: 1.2em; font-size: 0.85em; opacity: 0.85; }
+.sd-history li { overflow-wrap: anywhere; }
 .sd-step .sd-tag { margin-right: 4px; }
 .sd-finished > summary { cursor: pointer; list-style-position: inside; padding: 8px 0; min-height: 28px; }
 .sd-finished .sd-list { gap: 4px; }

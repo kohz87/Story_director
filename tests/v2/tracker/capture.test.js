@@ -195,7 +195,8 @@ test('offers: a + quest the reader did not take stays an offer until they accept
     const offers = '+ quest Rat Culling — Kill granary rats | type: side | giver: Danique | reward: 8 copper a sack\n+ quest Wolf Hunt — Kill ridge wolves | type: side | giver: Danique | reward: 4 silver';
     const offered = story([{ lines: offers, said: 'I pay the fee and ask what work there is.' }]);
     assert.deepEqual(threads(offered).map(entry => [entry.key, entry.kind, entry.offer]), [['Rat Culling', 'quest', true], ['Wolf Hunt', 'quest', true]]);
-    assert.deepEqual(kinds(offered), ['offered', 'offered']);
+    // Neither names a goal code can read (F82): kept, and flagged.
+    assert.deepEqual(kinds(offered), ['offered', 'no-goal', 'offered', 'no-goal']);
     assert.deepEqual(threads(offered, { offer: true }).length, 2);
     valid(offered);
     // Taking one by name: only that one.
@@ -227,7 +228,7 @@ test('"yes" takes the reply\'s one new quest only; with two, the reader\'s words
     assert.deepEqual(offers("I'll take the ferry run."), [['Wolfhound Hunt', true], ['Ferry Run', false]]);
     assert.deepEqual(offers("We'll join the wolfhound hunt."), [['Wolfhound Hunt', false], ['Ferry Run', true]]);
     const yes = story([hook, { lines: two, said: 'Yes.' }]);
-    assert.deepEqual(kinds(yes), ['offered', 'offered'], 'the first line\'s "a quest now" is taken back');
+    assert.deepEqual(kinds(yes), ['offered', 'no-goal', 'offered'], 'the first line\'s "a quest now" is taken back (the hook\'s missing goal was flagged when it was offered)');
     valid(yes);
     for (const said of ["We'll join the wolfhound hunt.", 'Count us in, Burl.', "Sure, I'm up for it.", 'Yes.']) {
         assert.equal(thread(story([hook, { lines: '+ quest Wolfhound Hunt — run down the wolfhounds | giver: Burl | reward: 1 gold', said }]), 'Wolfhound Hunt').offer, false, said);
