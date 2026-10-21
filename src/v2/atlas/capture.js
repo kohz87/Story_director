@@ -23,10 +23,15 @@ const queryOf = ctx => (typeof ctx?.query === 'function' ? (name, args) => ctx.q
  * The atlas place for `name`, made when there is none: `{ place, created, changed }`.
  * A name the atlas lacks is looked up in the packs (by name or alias), and the pack's spelling,
  * region, kind and plane are used; its coordinates stay the pack's (read live, world.js), so
- * `coords` (the story's) are kept only for a place no pack knows. `overwrite`: the given region,
- * kind and layer replace the place's (a landmark line), else they only fill empty fields.
+ * `coords` (the story's) are kept only for a place no pack knows.
+ * `overwrite` (a landmark line, which says these on purpose): a given region, kind or layer
+ * replaces the place's, and an empty one ('') clears it; one left out (undefined) keeps it.
+ * Otherwise (the scene's place, a route's ends) they only fill empty fields, and a pack place's
+ * region wins over the given one: the scene's region is the wider area the story is in ("River
+ * Confederacy"), the pack's is where the place is ("Bluewatch Village"). A region that only
+ * repeats the given one gives way to the pack's, so a place saved before this rule is mended.
  */
-export function ensurePlace(atlas, ctx, pack, name, { discovered = true, region = '', kind = '', layer = '', coords = null, aliases = [], overwrite = false } = {}) {
+export function ensurePlace(atlas, ctx, pack, name, { discovered = true, region, kind, layer, coords = null, aliases = [], overwrite = false } = {}) {
     const given = cleanName(name);
     const fromPack = packPlace(pack, given);
     let place = findPlace(atlas, given) ?? (fromPack ? findPlace(atlas, fromPack.name) : null);
@@ -36,7 +41,11 @@ export function ensurePlace(atlas, ctx, pack, name, { discovered = true, region 
     if (!place) {
         const id = newId(ctx, 'pl', atlas.places);
         const display = fromPack?.name ?? given;
-        place = { id, name: display, region: region || fromPack?.region || '', kind: kind || fromPack?.kind || '', layer: layer || fromPack?.layer || '', discovered, rev };
+        const first = (given, packs) => (overwrite && given !== undefined ? given : given || packs || '');
+        place = {
+            id, name: display, region: overwrite ? first(region, fromPack?.region) : fromPack?.region || region || '',
+            kind: first(kind, fromPack?.kind), layer: first(layer, fromPack?.layer), discovered, rev,
+        };
         if (coords && !fromPack) Object.assign(place, { x: Math.round(coords.x), y: Math.round(coords.y) });
         atlas.places[id] = place;
         atlas.keys[keyOf(display)] = id;
@@ -49,11 +58,20 @@ export function ensurePlace(atlas, ctx, pack, name, { discovered = true, region 
             place.discovered = true;
             changed = true;
         }
-        for (const [field, value] of [['region', region], ['kind', kind], ['layer', layer]]) {
-            if (value && place[field] !== value && (overwrite || !place[field])) {
-                place[field] = value;
-                changed = true;
+        for (const [field, given] of [['region', region], ['kind', kind], ['layer', layer]]) {
+            let value = given;
+            if (!overwrite && field === 'region' && fromPack?.region) {
+                value = fromPack.region;
+                // A region that only repeats the scene's is the scene's word, not the reader's: mend it.
+                if (place.region && place.region === given && place.region !== value) {
+                    place.region = value;
+                    changed = true;
+                    continue;
+                }
             }
+            if (overwrite ? value === undefined || place[field] === value : !value || place[field]) continue;
+            place[field] = value;
+            changed = true;
         }
         if (coords && !fromPack && place.x === undefined) {
             Object.assign(place, { x: Math.round(coords.x), y: Math.round(coords.y) });
@@ -181,11 +199,14 @@ export function applyLandmarkLine(ctx, line) {
     const pack = packWorld(queryOf(ctx));
     const known = Boolean(findPlace(atlas, name) ?? findPlace(atlas, packPlace(pack, name)?.name));
     const aliases = asText(labels.aka ?? labels.alias).split(/\s*[,;]\s*/).map(cleanName).filter(Boolean);
+    // A label left out keeps what the place has; one written empty (`| kind: `) clears it.
+    const said = (value, options) => (value === undefined || value === null ? undefined : cleanWord(value, options));
+    const kind = said(labels.kind, { lower: true });
     const { place, created } = ensurePlace(atlas, ctx, pack, name, {
         discovered: true,
-        region: cleanWord(labels.region),
-        kind: cleanWord(labels.kind, { lower: true }) || (known ? '' : 'landmark'),
-        layer: cleanWord(labels.plane ?? labels.layer),
+        region: said(labels.region),
+        kind: kind === undefined && !known && !packPlace(pack, name) ? 'landmark' : kind,
+        layer: said(labels.plane ?? labels.layer),
         coords: coordsOf(labels.at) ?? location.coords,
         aliases,
         overwrite: true,
