@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     at, closed, earlierState, fair, headState, makeQueries, makeRunner, makeState, pelts, plot, raid, rats, ring, smuggler, thread, wolves,
 } from './helpers/fixtures.js';
-import { calendarSetting, createScreensPart, finishState, questBoard } from '../../../src/v2/screens/index.js';
+import { calendarSetting, createScreensPart, finishState, questBoard, readerWords } from '../../../src/v2/screens/index.js';
 
 const { run } = makeRunner();
 
@@ -49,7 +49,8 @@ test('director.next reads dates on the reader\'s calendar from the settings', ()
         preset: 'custom', era: '', leapYears: false, week: [],
         months: [{ name: 'Goldwane', days: 30 }, { name: 'Haywane', days: 30 }],
     };
-    const queries = makeQueries({ settings: () => ({ calendar }) });
+    // Without the tracker's director.calendar the screens read the setting they are given …
+    const { 'director.calendar': _calendar, ...queries } = makeQueries({ settings: () => ({ calendar }) });
     const custom = makeRunner(queries).run;
     const threads = [
         thread('th_feast001', 'event', 'Feast', { on: 'Haywane 2' }),
@@ -59,14 +60,20 @@ test('director.next reads dates on the reader\'s calendar from the settings', ()
     assert.equal(next.key, 'Toll');
     // The module's own settings hold the tracker's calendar namespaced and flat (src/v2/module.js).
     const flat = { 'tracker.calendar.preset': 'custom', 'tracker.calendar.months': calendar.months, 'tracker.calendar.week': [], 'tracker.dormantDays': 30 };
-    const fromModule = makeRunner({ ...makeQueries(), ...createScreensPart({ settings: () => flat }).queries }).run;
+    const { 'director.calendar': _flat, ...flatQueries } = makeQueries();
+    const fromModule = makeRunner({ ...flatQueries, ...createScreensPart({ settings: () => flat }).queries }).run;
     assert.equal(fromModule(makeState({ threads }), 'director.next').key, 'Toll');
     assert.deepEqual(calendarSetting(flat), { preset: 'custom', months: calendar.months, week: [] });
     assert.equal(calendarSetting({ 'tracker.dormantDays': 30 }), null);
     assert.equal(calendarSetting(null), null);
     // Settings that cannot be read fall back to the Gregorian calendar instead of failing.
-    const broken = makeRunner({ ...makeQueries(), ...createScreensPart({ settings: () => { throw new Error('no sdk'); } }).queries }).run;
+    const broken = makeRunner({ ...flatQueries, ...createScreensPart({ settings: () => { throw new Error('no sdk'); } }).queries }).run;
     assert.equal(broken(headState(), 'director.next').id, 'th_raid0001');
+    // … and with it, the chat's calendar: here the enabled pack's (the tracker's default preset `pack`).
+    const pack = { pack: 'ersveil', era: 'CY', months: calendar.months, start: null };
+    const withPack = makeRunner({ ...makeQueries(), 'packs.calendar': () => pack }).run;
+    assert.equal(withPack(makeState({ threads }), 'director.next').key, 'Toll');
+    assert.equal(run(makeState({ threads }), 'director.next'), null, 'Goldwane is no Gregorian month');
 });
 
 test('quest.board: offers, active quests with progress and Finish, finished latest first', () => {
@@ -74,7 +81,7 @@ test('quest.board: offers, active quests with progress and Finish, finished late
     assert.deepEqual(board.offers, [{ id: 'th_rats0001', key: 'Granary Rats', goal: 'kill 6 rats in the granary', giver: 'Miller Fenna', reward: '5 coin', due: '' }]);
     assert.deepEqual(board.active.map(quest => quest.id), ['th_wolves01', 'th_pelts001']);
     const [hunt, hides] = board.active;
-    assert.deepEqual(hunt.progress, { have: 8, need: 3, met: true, source: 'fights', label: 'Wolves 8/3', reason: '' });
+    assert.deepEqual(hunt.progress, { have: 8, need: 3, met: true, source: 'fights', label: 'Wolves 8/3', reason: '', finish: { ok: true, reason: '' } });
     assert.equal(hunt.meter, true);
     assert.deepEqual(hunt.finish, { show: true, blocked: false, reason: '', title: 'Turn in East Bluff Wolves' });
     assert.equal(hunt.reward, '1 coin each wolf');
@@ -118,13 +125,15 @@ test('quest.board: Finish says why it is off (not taken, not met, wrong place) a
     assert.deepEqual(mill.finish, { show: false, blocked: true, reason: '', title: 'Turn in Old Mill' });
 });
 
-test('finishState takes the quests part\'s own verdict when quest.progress gives one', () => {
+test('finishState takes the quests part\'s own verdict from quest.progress; it never works out the place itself', () => {
     const taken = wolves();
-    assert.deepEqual(finishState(taken, { have: 3, need: 3, met: true, finish: { ok: false, reason: 'Not here.' } }, { place: { kind: 'settlement' } }),
+    assert.deepEqual(finishState(taken, { have: 3, need: 3, met: true, finish: { ok: false, reason: 'Not here.' } }),
         { show: true, blocked: true, reason: 'Not here.' });
-    assert.deepEqual(finishState(taken, { have: 3, need: 3, met: true, finish: { ok: true, reason: '' } }, { place: { kind: 'wild' } }),
+    assert.deepEqual(finishState(taken, { have: 3, need: 3, met: true, finish: { ok: true, reason: '' } }),
         { show: true, blocked: false, reason: '' });
-    assert.deepEqual(finishState(taken, null, null), { show: false, blocked: true, reason: '' });
+    // Without a verdict (an older quests part) Finish is offered and quest.finish itself checks the place.
+    assert.deepEqual(finishState(taken, { have: 3, need: 3, met: true }), { show: true, blocked: false, reason: '' });
+    assert.deepEqual(finishState(taken, null), { show: false, blocked: true, reason: '' });
 });
 
 test('quest.board keeps at most 20 finished quests, latest first, and counts them all', () => {
@@ -159,4 +168,28 @@ test('the view queries read only the state they are given (a card\'s reply, not 
     const board = run(head, 'quest.board');
     board.active.length = 0;
     assert.equal(run(head, 'quest.board').active.length, 2);
+});
+
+test('director.problems: v1\'s {{user}} through the host\'s substitute, else "you" with the verb put right', () => {
+    const problems = [
+        { rev: 3, kind: 'offered', text: '"Rats" was offered, not taken on: it stays an offer until {{user}} accepts it.' },
+        { rev: 4, kind: 'not-chosen', text: '"Rats" stays open: giving it up or turning it down is {{user}}\'s choice, and their message did not make it.' },
+        { rev: 5, kind: 'done-offer', text: '"Rats" was offered and the story says it is done: it is a quest {{user}} finished.' },
+    ];
+    const state = makeState({ problems });
+    const plain = run(state, 'director.problems').map(problem => problem.text);
+    assert.deepEqual(plain, [
+        '"Rats" was offered, not taken on: it stays an offer until you accept it.',
+        '"Rats" stays open: giving it up or turning it down is your choice, and your message did not make it.',
+        '"Rats" was offered and the story says it is done: it is a quest you finished.',
+    ]);
+    const queries = makeQueries();
+    const named = queries['director.problems'](state, {}, { query: () => null, substitute: text => text.replace(/\{\{user\}\}/g, 'Astra') });
+    assert.equal(named[0].text, '"Rats" was offered, not taken on: it stays an offer until Astra accepts it.');
+    assert.deepEqual(named.map(problem => [problem.rev, problem.kind]), [[3, 'offered'], [4, 'not-chosen'], [5, 'done-offer']]);
+    // A substitute that leaves the macro, or throws, still reads "you".
+    assert.match(queries['director.problems'](state, {}, { substitute: text => text })[2].text, /a quest you finished/);
+    assert.match(queries['director.problems'](state, {}, { substitute: () => { throw new Error('x'); } })[2].text, /a quest you finished/);
+    assert.equal(readerWords('Ask {{User}}.'), 'Ask you.');
+    assert.deepEqual(run(makeState(), 'director.problems'), []);
 });

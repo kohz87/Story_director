@@ -12,8 +12,11 @@ const validate = director => part.domains.director.validate(director, {});
 test('the part has the shape MODULES §A names', () => {
     assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
     assert.deepEqual(Object.keys(part.domains), ['director']);
-    assert.deepEqual(Object.keys(part.queries), ['director.time', 'director.threads', 'director.thread']);
-    assert.deepEqual(part.tabs.map(tab => [tab.id, tab.title]), [['director', 'Director']]);
+    assert.deepEqual(Object.keys(part.queries), ['director.time', 'director.calendar', 'director.threads', 'director.thread']);
+    assert.deepEqual(Object.keys(part.commands), ['director.seed']);
+    assert.deepEqual(Object.keys(part.hooks), ['beforeGenerate']);
+    // The Director screen is the screens part's `story-director/director`.
+    assert.deepEqual(part.tabs, []);
     assert.equal(typeof part.context.static, 'function');
     assert.equal(typeof part.context.tail, 'function');
 });
@@ -95,6 +98,6 @@ test('queries: time, threads by kind, status and offer, one thread by key, alias
     assert.equal(wolf.track, undefined, 'bookkeeping stays inside');
     wolf.fields.step = 'changed';
     assert.equal(state.domains.director.threads[wolf.id].fields.step, 'tracking');
-    assert.deepEqual(part.queries['director.time'](makeState()), { minutes: null });
+    assert.deepEqual(part.queries['director.time'](makeState()), { minutes: null, text: '' });
     assert.deepEqual(part.queries['director.threads'](makeState(), { kind: 'quest' }), []);
 });

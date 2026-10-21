@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { makeCalendar } from '../../../src/calendar.js';
 import { part } from '../../../src/v2/tracker/index.js';
-import { durationMinutes, settingsDefaults } from '../../../src/v2/tracker/time.js';
+import { calendarOf, durationMinutes, settingsDefaults } from '../../../src/v2/tracker/time.js';
 import { lastProblems, makeState, readLine, reply, runCommand, thread } from './helpers/fake-ctx.js';
 
 const gregorian = makeCalendar('gregorian');
@@ -39,7 +39,7 @@ test('~ time sets the clock; ! time moves it on; ctx.time() reads it', () => {
     assert.equal(gregorian.format(minutes(state)), 'March 6, 2026, 07:00 am');
     state = reply(state, '~ time noon').state;
     assert.equal(gregorian.format(minutes(state)), 'March 6, 2026, 12:00 pm');
-    assert.deepEqual(part.queries['director.time'](state), { minutes: minutes(state) });
+    assert.deepEqual(part.queries['director.time'](state), { minutes: minutes(state), text: 'March 6, 2026, 12:00 pm' });
     assert.deepEqual(part.domains.director.validate(state.domains.director, state), []);
 });
 
@@ -63,8 +63,10 @@ test('time lines the clock cannot use are Problems and change nothing', () => {
 test('the calendar is the reader\'s: settings section Calendar, v1 defaults', () => {
     assert.equal(part.settings.section, 'Calendar');
     assert.deepEqual(part.settings.defaults, settingsDefaults());
-    assert.equal(part.settings.defaults.calendar.preset, 'gregorian');
+    // `pack`: the enabled pack's calendar when one has it, else Gregorian (below).
+    assert.equal(part.settings.defaults.calendar.preset, 'pack');
     assert.equal(part.settings.defaults.calendar.months[0].name, 'January');
+    assert.equal(calendarOf(part.settings.defaults).config.preset, 'gregorian');
     let state = reply(makeState(), '~ time CY 611, Goldwane 12, 12:45 pm', { settings: CUSTOM }).state;
     const custom = makeCalendar(CUSTOM.calendar);
     assert.equal(custom.format(minutes(state)), 'CY 611, Goldwane 12, 12:45 pm');

@@ -4,6 +4,8 @@
 // step) and that quest's progress. A card shows **that reply's** state: Story Block's card mount runs
 // these bindings on `stateAt(index)`, so an older reply keeps the time, place and goal it had, and a
 // line that reply changed is marked (`changed(…)` reads that reply's own changes).
+// On under every reply by default, collapsed to its header (MODULES §F24): `defaultOn: true` is the field
+// Story Block's screen registry reads (`cardsOn(id)`: the reader's own on/off wins, else `defaultOn`).
 
 import { BASE_CSS } from './style.js';
 
@@ -11,9 +13,9 @@ export const STATUS_CARD_ID = 'story-director/status-card';
 
 const TEMPLATE = `
 <dl class="sd-status">
-  <div class="sd-row sd-time" data-if="fmt.time(q.time.minutes)" data-class="sd-new: changed('state.director.time')">
+  <div class="sd-row sd-time" data-if="q.time.text" data-class="sd-new: changed('state.director.time')">
     <dt><i class="fa-solid fa-clock" aria-hidden="true"></i> Time</dt>
-    <dd>{{ fmt.time(q.time.minutes) }}</dd>
+    <dd>{{ q.time.text }}</dd>
   </div>
   <div class="sd-row sd-place" data-if="state.scene.place.name" data-class="sd-new: changed('state.scene.place')">
     <dt><i class="fa-solid fa-location-dot" aria-hidden="true"></i> Place</dt>
@@ -63,6 +65,7 @@ export const statusCardScreen = Object.freeze({
     title: 'Status',
     icon: 'fa-compass',
     mounts: ['card'],
+    defaultOn: true,
     data: {
         time: { query: 'director.time' },
         next: { query: 'director.next' },

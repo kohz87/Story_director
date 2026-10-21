@@ -2,12 +2,18 @@
 
 ## 2.0.0-alpha.1 (in progress, `v2` branch)
 
-Story Suite v2. Story Director v2 module: tracker and quests parts merged; integration, atlas (map) and screens in progress. Status: https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md
+Story Suite v2. Story Director v2 module: tracker, quests, time, atlas and screens parts merged into one module. Status: https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md
 
 - **A Story Block v2 module.** `index.js` waits for `globalThis.StoryBlock.ready` and registers module `story-director` (`src/v2/module.js`, the tracker and quests parts merged); without Story Block v2 it shows one line in the drawer. The v1 glue moved to `index.v1.js` and is not loaded. The manifest declares `"dependencies": ["third-party/Story_block"]` and no generate interceptor.
 - **Quest rewards in the one currency.** `quest.finish` pays `wallet.receive { owner, amount }` with a whole number; coin words in the story are only read as "this is money", and summaries name the chat's currency from `inventory.currency`.
 - **One fight pays one kill quest.** A turn-in claims each fight it counted (`beaten:<rev>`); another kill quest no longer counts those fights. Item quests count the inventory and stay independent.
 - **Typed acceptance counts.** When the reader's own message takes a quest on, it is taken from that reply (`taken: { rev }`, through `quest.take`), so fights count from there.
+- **Screens instead of hand-built tabs.** The module registers the screens part's Quests, Director, status card and time-and-place strip and the atlas's Map (`def.screens`, every part's in order; `def.widgets` likewise; an id in two parts is refused). The old Quests and Director tabs are gone. The status card says `defaultOn: true`, so it shows under every reply, collapsed, until the reader turns it off.
+- **Finish says why, from one rule.** `quest.progress` returns `finish: { ok, reason }`, `quest.finish`'s own checks in its order (over, taken on, a countable target, met, the place: a settlement or the giver present). The Quests board shows that reason instead of working the place rule out again.
+- **The pack's calendar and start date.** The calendar setting has a new default, `pack`: the first enabled pack's calendar (`packs.calendar`), else Gregorian; `gregorian` and `custom` stay the reader's own. When the story has not set the time and the pack gives a start, the clock is set to it before the first reply (`director.seed`, a `system` receipt, claim `clock:seed`), so dated deadlines and events work from turn one. `director.time` gives the time written on that calendar (`text`), which the status card and the strip show; `director.calendar` gives the calendar as data.
+- **Deadlines lapse on the reader's calendar.** A part's `settings.reads` hands it another part's setting (the time part reads `tracker.calendar`, as the chat uses it), so custom and pack calendars slip and lapse too. What the *While away* recap tells is left off the Director note's *Due now* and *Arriving* for that reply, as in v1.
+- **The map uses the reader's map settings.** Queries get `tools.settings()` (their part's own) and `tools.substitute()`; `atlas.routes` and `atlas.travel` take the reader's map settings when the caller gives none.
+- **Problems name the reader.** The Director screen's problems come from `director.problems`, with v1's `{{user}}` written out through Story Block's `sdk.substitute` (else "you").
 - Rule refusals use `REFUSED`; settings are namespaced per part (`tracker.calendar.months`); thread IDs, revisions and the reply come from the host's capture context.
 
 ## 0.9.46

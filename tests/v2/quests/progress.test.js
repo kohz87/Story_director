@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part, QUEST_STATIC } from '../../../src/v2/quests/index.js';
-import { fakeQueries, makeState, quest } from './helpers/fake-ctx.js';
+import { fakeQueries, makeHost, makeState, quest } from './helpers/fake-ctx.js';
 
 const progress = part.queries['quest.progress'];
 const fight = (rev, foes, won = true) => ({ rev, foes, won });
@@ -16,7 +16,7 @@ test('progress for foes counts only fights after taken.rev, whole words', () => 
         fight(9, [{ name: 'Wolf', count: 5 }]), fight(10, [{ name: 'Wolf', count: 5 }]),
         fight(11, [{ name: 'Dire Wolf', count: 2 }, { name: 'Wolfhound Handler', count: 3 }]),
     ] });
-    const want = { have: 2, need: 3, met: false, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.' };
+    const want = { have: 2, need: 3, met: false, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.', finish: { ok: false, reason: 'Need 1 more wolf.' } };
     // Through the documented state layouts (no query handed to the query) …
     assert.deepEqual(progress(state, { id: 'th_wolves01' }), want);
     // … and through the host's queries when it passes them.
@@ -25,7 +25,7 @@ test('progress for foes counts only fights after taken.rev, whole words', () => 
     assert.deepEqual(progress(state, { id: 'th_wolves01' }, { query }), want);
     assert.deepEqual(seen, [['combat.foesBeaten', { sinceRev: 10 }]]);
     state.domains.combat.beaten.push(fight(12, [{ name: 'Wolves', count: 6 }]));
-    assert.deepEqual(progress(state, { key: 'EastBluffWolves' }), { ...want, have: 8, met: true, label: 'Wolves 8/3', reason: '' });
+    assert.deepEqual(progress(state, { key: 'EastBluffWolves' }), { ...want, have: 8, met: true, label: 'Wolves 8/3', reason: '', finish: { ok: false, reason: 'Turn it in at a settlement or where Orsa is.' } });
 });
 
 test('progress accepts foes already flattened by the combat query', () => {
@@ -43,8 +43,8 @@ test('progress for items reads the inventory; no target and unknown quests', () 
         defs: [{ id: 'story/moonleaf', name: 'Moonleaf' }, { id: 'story/moon', name: 'Moon Charm' }],
         stacks: [{ id: 'it_aaaaaaa1', def: 'story/moonleaf', qty: 2 }, { id: 'it_bbbbbbb2', def: 'story/moonleaf', qty: 1 }, { id: 'it_ccccccc3', def: 'story/moon', qty: 9 }],
     });
-    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.' });
-    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, source: null, noun: '', label: '', reason: 'No target code can count; the story decides when it is done.' });
+    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'Take it on first.' } });
+    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, source: null, noun: '', label: '', reason: 'No target code can count; the story decides when it is done.', finish: { ok: false, reason: 'No target code can count; the story decides when it is done.' } });
     assert.equal(progress(state, { id: 'th_nope0001' }), null);
 });
 
@@ -97,6 +97,20 @@ test('the part has the MODULES §A shape and no domain of its own', () => {
     assert.deepEqual(part.domains, {});
     assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.decline', 'quest.abandon', 'quest.finish']);
     assert.deepEqual(Object.keys(part.queries), ['quest.progress']);
-    assert.equal(part.tabs[0].id, 'quests');
-    assert.equal(part.tabs[0].title, 'Quests');
+    // The Quests board is the screens part's screen now.
+    assert.deepEqual(part.tabs, []);
+});
+
+test('quest.progress finish: quest.finish\'s own rule in its order, the place rule last', () => {
+    const met = [fight(11, [{ name: 'Wolf', count: 3 }])];
+    const finishOf = (thread, scene = {}) => progress(makeState({ threads: [thread], beaten: met, scene }), { id: thread.id }).finish;
+    assert.deepEqual(finishOf(wolves()), { ok: false, reason: 'Turn it in at a settlement or where Orsa is.' });
+    assert.deepEqual(finishOf(wolves(), { place: { name: 'Bluewatch', kind: 'settlement' } }), { ok: true, reason: '' });
+    assert.deepEqual(finishOf(wolves(), { present: ['Orsa the Hunter'] }), { ok: true, reason: '' });
+    assert.deepEqual(finishOf(wolves({ taken: null }), { place: { kind: 'settlement' } }), { ok: false, reason: 'Take it on first.' });
+    assert.deepEqual(finishOf(wolves({ status: 'resolved', ended: { rev: 12, reason: 'turned in', outcome: 'done' } })), { ok: false, reason: 'EastBluffWolves is already over.' });
+    // It agrees with quest.finish: a met quest in a settlement turns in, elsewhere it is refused for the same reason.
+    const elsewhere = makeHost(makeState({ threads: [wolves()], beaten: met })).run(part.commands['quest.finish'], { id: 'th_wolves01' });
+    assert.equal(elsewhere.code, 'REFUSED');
+    assert.match(elsewhere.message, /Turn it in at a settlement or where Orsa is\./);
 });

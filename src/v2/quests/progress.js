@@ -148,7 +148,21 @@ export function placeRule(thread, scene) {
     return { ok: false, reason: giver ? `Turn it in at a settlement or where ${giver} is.` : 'Turn it in at a settlement.' };
 }
 
-/** Plain lists the Quests tab and the tail use: open offers, active quests, finished ones (latest first). */
+/**
+ * Whether `quest.finish` would turn `thread` in now (`progress` from progressOf, `scene` Story Block's
+ * scene): `{ ok, reason }`, checked in quest.finish's order: over, taken on, a target code can count,
+ * the target met, the place rule. The reason is the first refusal, in plain words.
+ */
+export function finishRule(thread, progress, scene) {
+    if (!thread) return { ok: false, reason: 'There is no such quest.' };
+    if (thread.ended || thread.status !== 'active') return { ok: false, reason: `${text(thread.key)} is already over.` };
+    if (!thread.taken) return { ok: false, reason: 'Take it on first.' };
+    if (!thread.target) return { ok: false, reason: 'No target code can count; the story decides when it is done.' };
+    if (!progress?.met) return { ok: false, reason: text(progress?.reason) || 'Not done yet.' };
+    return placeRule(thread, scene);
+}
+
+/** Plain lists the Quests board and the tail use: open offers, active quests, finished ones (latest first). */
 export function questLists(director) {
     const quests = Object.values(director?.threads ?? {}).filter(thread => thread?.kind === 'quest');
     const byKey = (a, b) => text(a.key).localeCompare(text(b.key)) || (a.id < b.id ? -1 : 1);

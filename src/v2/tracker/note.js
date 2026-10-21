@@ -11,8 +11,8 @@
 import { CHANGE_INSTRUCTION, PACING, noteParts, tailNote } from '../../note.js';
 import { classify, estimateTokens } from '../../relevance.js';
 import { givenUpIn, offersChosenIn, untrackedCorrections } from '../../tracker.js';
-import { toTracker } from './convert.js';
-import { calendarOf, settingsFrom } from './time.js';
+import { orderedThreads, toTracker } from './convert.js';
+import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
 
 export const TAIL_BUDGET = 500;
 
@@ -45,13 +45,24 @@ function v2Lines(text) {
     return text.replace(/close it with - Key — /g, 'close it with - quest Key — ');
 }
 
+// The thread ids the time part's recap for this reply tells (empty without the time part).
+function recappedIds(view) {
+    if (typeof view?.query !== 'function') return new Set();
+    try {
+        const recap = view.query('time.recap', {});
+        return new Set(Array.isArray(recap?.threads) ? recap.threads : []);
+    } catch {
+        return new Set();
+    }
+}
+
 /** `context.tail(view)` → `{ lines, optional }` (SPEC §5). */
 export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const state = view?.state;
     const director = state?.domains?.director;
     if (!director) return { lines: [], optional: [] };
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
-    const calendar = calendarOf(settings);
+    const calendar = calendarOf(settings, packCalendarOf(view.query));
     const tracker = toTracker(director);
     const now = director.time?.minutes ?? null;
     const message = director.turn?.n ?? 0;
@@ -64,6 +75,14 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
         recentText: said,
         settings: { dormantReplies: settings.dormantReplies, dormantDays: settings.dormantDays, dueSoonDays: settings.dueSoonDays },
     });
+    // What the While away recap (the time part's `time.recap`) tells is not repeated under Due now or
+    // Arriving (v1 note.js: the recapped items leave those lines).
+    const recapped = recappedIds(view);
+    if (recapped.size) {
+        const ids = new Map(orderedThreads(director).map((thread, index) => [tracker.records[index], thread.id]));
+        selection.due = selection.due.filter(record => !recapped.has(ids.get(record)));
+        selection.arriving = selection.arriving.filter(record => !recapped.has(ids.get(record)));
+    }
     // The last reply's lines on names not tracked, as v1 reads its problems.
     const corrections = untrackedCorrections((director.problems ?? [])
         .filter(problem => problem.turn === message)

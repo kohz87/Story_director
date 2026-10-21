@@ -13,7 +13,7 @@ import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps, isOffer } from '../../tracker.js';
 import { fromRecord, keysOf, orderedThreads, toRecord, toTracker } from './convert.js';
 import { PROBLEM_LIMIT } from './domain.js';
-import { calendarOf, settingsFrom, timeAfter } from './time.js';
+import { calendarOf, packCalendarOf, settingsFrom, timeAfter } from './time.js';
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 // A stand-in for "another new quest in this reply" (see applyThreadLine): a name nobody writes.
@@ -276,7 +276,7 @@ export function applyTimeLine(ctx, line) {
     const director = ctx.draft('director');
     beginTurn(director, ctx, line);
     const settings = settingsFrom(typeof ctx.settings === 'function' ? ctx.settings() : ctx.settings);
-    const calendar = calendarOf(settings);
+    const calendar = calendarOf(settings, packCalendarOf(ctx.query));
     const next = timeAfter(line, director.time.minutes, calendar);
     if (next.error) {
         addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? ''), op: line?.op, text: next.error });

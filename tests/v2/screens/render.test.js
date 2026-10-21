@@ -218,7 +218,9 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
         doc.body.appendChild(message);
         messages[index] = message;
     }
-    const registry = runtime.createScreens();
+    // The reader's screen settings (extension_settings.storySuite.{screens, cards} live): none yet.
+    let reader = {};
+    const registry = runtime.createScreens({ reader: () => reader, saveReader: next => { reader = next; } });
     registry.addModule('story-director', part.screens);
     const compiled = new Map();
     const render = (el, screen, scope) => {
@@ -230,8 +232,9 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
         stateAt: index => states[index], headIndex: () => 3, carriers: () => [1, 3],
         changesAt: index => changes[index], messageElement: index => messages[index],
         query: (name, args, state) => run(state, name, args),
-        enabled: (mount, id) => mount === 'card' && id === STATUS_CARD_ID,
     });
+    // No `enabled` given: the registry's cardsOn decides, and the status card says `defaultOn: true`.
+    assert.equal(registry.cardsOn(STATUS_CARD_ID), true);
     cards.attachAll();
     cards.toggle(1, STATUS_CARD_ID, true);
     cards.toggle(3, STATUS_CARD_ID, true);
@@ -255,5 +258,10 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     // Every binding of reply 1's card ran on reply 1's state.
     const forOne = calls.filter(call => call.state === states[1]).map(call => call.name);
     assert.ok(['director.time', 'director.next', 'director.goal', 'quest.progress'].every(name => forOne.includes(name)));
+    // The reader turns it off: gone from under the replies.
+    registry.setCards(STATUS_CARD_ID, false);
+    cards.refreshAll({ force: true });
+    assert.deepEqual(reader.cards, { [STATUS_CARD_ID]: false });
+    assert.ok(messages[1].querySelector('.ss-card') === null && messages[3].querySelector('.ss-card') === null, 'no card once turned off');
     cards.destroy();
 });
