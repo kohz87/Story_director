@@ -81,4 +81,3 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const text = v2Lines(tailNote(parts));
     return { lines: text ? text.split('\n') : [], optional: [] };
 }
-
