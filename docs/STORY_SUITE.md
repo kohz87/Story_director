@@ -67,6 +67,19 @@ kept as before, and its instruction points the model at NPC State Delta's cards.
 
 ## For developers
 
+### Verified quest completion (unreleased)
+
+`StoryDirector.questProgress()` returns active quest evaluation copies: identity,
+managed/eligible/availability, required/observed/claimable counts, claims, payment,
+consumption, revisions and blocked reason. `questsDoneAt()` remains the XP integration.
+`target: defeat|possess|deliver N entity` and fixed/per-unit coin rewards drive Complete;
+Undo complete cancels before generation. The next story reply receives exact instructions.
+
+`extra.storyDirectorQuest` stores acceptance `context` and settlement `receipts`;
+`chatMetadata.storyDirector.finish` holds queued intent. Requires Block transaction v1
+and RPG `quests.version === 1`; Delta presence is optional. See the
+[contracts](quest-completion/CONTRACTS.md) and [status](quest-completion/IMPLEMENTATION_STATUS.md).
+
 ```js
 import { storySuite, isSourceOfTruth } from './src/suite.js';
 const suite = storySuite();

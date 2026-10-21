@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.43
+
+- **Complete verified quests from the Quests tab.** Targets such as `defeat 3 wolves`, `possess 1 Travel Permit` and `deliver 5 Rat Tail` show progress under **Pending**. **Complete** becomes available when the target is met and the giver is present or you are in the issuing settlement. **Undo complete** cancels before generation. The next story reply receives the exact completion, payment and delivery instruction; code saves effects the model leaves out once.
+- **Accepted terms and earned rewards are checked by code.** Defeats count after acceptance, paid bounties cannot share defeats, possession keeps goods, and delivery removes the required quantity. Eight eligible wolves at 1 silver each pays 8 silver. Receipts prevent repeat payouts; edited or missing proof blocks further turn-in for recovery.
+- Verified completion requires RPG Battle **0.5.48** and Story Block **0.9.26**. Unmeasurable quests keep narrative completion; old prose battles are not backfilled.
+
 ## 0.9.42
 
 - **A quest whose step says it is done and turned in is closed.** A model wrote `~ EastBluffWolves — reward: Claimed 2 gold | step: Completed and turned in to Fenna` every reply instead of a `-` line, and the quest stayed on the Quests tab as active: a step only closed a quest when the ending stood alone or before punctuation (*completed — Garrow paid*). Now a step that opens with the ending and goes on to confirm it (*Completed and turned in to Fenna*, *Done — bounty paid*) closes the quest too, as does one whose line carries a reward already taken (*reward: Claimed 2 gold*). A step that goes on to more work (*done tracking, now the den*, *Completed and heading back to Fenna*) is still a step.
