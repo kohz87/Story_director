@@ -31,6 +31,7 @@
 
 import { makeCalendar, normalizeCalendar, sharedCalendar } from './src/calendar.js';
 import { DEFAULT_SETTINGS } from './src/defaults.js';
+import { randomId } from './src/id.js';
 import { formatOp, parseChanges } from './src/changes.js';
 import { offerPresence, turnInPresence } from './src/presence.js';
 import { entityKey, evaluateQuest, requirementOf, settlementPlan, turnInInstruction } from './src/quest-completion.js';
@@ -57,7 +58,7 @@ import { buildPlaceBook, estimateTrip, findBookPlace, formatTrip, mapSettings, n
 import { isSourceOfTruth, storySuite } from './src/suite.js';
 import { makeManage, sourceChoices as validSourceChoices, suiteAnnouncement, suiteOpener } from './src/manage.js';
 
-const VERSION = '0.9.45';
+const VERSION = '0.9.46';
 const SETTINGS_KEY = 'storyDirector';
 // (0.9.38) Story Suite's cache-friendly layout: the fixed part of the note early (in the
 // prompt, after the main prompt), byte-identical every reply; the rest at the end of the chat.
@@ -1650,7 +1651,7 @@ async function saveQuestCheckpoint(index) {
     const value = questCheckpoint(index, tracker, info?.questConflict);
     if (prior && JSON.stringify([prior.tracker.records, prior.tracker.time, prior.questConflict])
         === JSON.stringify([value.tracker.records, value.tracker.time, value.questConflict])) return;
-    const result = await sb.commitBlocks({ id: `director-state:${crypto.randomUUID()}`, chatId: chatIdOf(ctx), messageIndex: index,
+    const result = await sb.commitBlocks({ id: `director-state:${randomId()}`, chatId: chatIdOf(ctx), messageIndex: index,
         expectedText: message.mes, expectedExtra: JSON.stringify(message.extra ?? {}), namespace: 'storyDirectorState', value });
     if (result.status !== 'durable') {
         if (result.status === 'uncertain') uncertainQuestWrite = result.id ?? 'checkpoint';
@@ -1699,7 +1700,7 @@ function finishQuest(id) {
     if (!record) return;
     const evaluation = questEvaluation(record);
     if (!evaluation.eligible) return notify('warning', evaluation.reason);
-    const plan = settlementPlan(record, evaluation, crypto.randomUUID());
+    const plan = settlementPlan(record, evaluation, randomId());
     setFinishState({ plan, base: questApi().inventory(), attachedTo: null, sentFor: null });
     notify('info', `${record.key}: turn-in queued for the next reply. Undo is available until generation begins.`);
     storyBlock()?.refresh?.();

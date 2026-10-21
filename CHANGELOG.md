@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.46
+
+- **Quest turn-ins work over plain HTTP.** Checkpoint and completion IDs no longer require `crypto.randomUUID`, which browsers can omit on HTTP LAN hosts. Use with Story Block **0.9.28** to restore journal reads and the Quests tab on those hosts. Existing quests and IDs remain intact; no chat reset or HTTPS change is required.
+
 ## 0.9.45
 
 - **Long quests retain their history.** Accepted terms and completed state have durable checkpoints in Story Block's shared chat journal. A quest can be handed in hundreds of replies later after hiding or archiving its old messages. Proven archived ancestors seed replay; the active branch determines which defeats and claims count.
