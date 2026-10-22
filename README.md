@@ -18,8 +18,8 @@
 > story: you take one on, turn it down or give it up in your own words, and when the story turns a quest in
 > code checks the target (or, for a goal code cannot count, the story's `met: yes`) and the place, then
 > pays, held inside the quest's rank range (F to S, or the pack's or RPG Battle's ladder; a rank the story
-> writes is held to one above the party's own, or to the party's own when only the story vouches for the
-> goal); a turn-in that fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
+> writes is held to the party's own, and one reply pays at most that rank's top in rewards the story
+> wrote, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
 > it") and opens its details (goal, progress note, terms, dates, history). The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
 > branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)

@@ -123,7 +123,7 @@ test('finish, foes: counts whole-word matches since taken, pays 1 gold for each 
     assert.equal(result.receipt.data.units, 3);
     assert.equal(result.receipt.data.xp, null);           // no party.grantXp: none, and no failure
     assert.ok(host.calls.some(call => call.type === 'party.grantXp'));
-    assert.deepEqual(host.calls.find(call => call.type === 'wallet.receive').payload, { owner: 'party', amount: 3, note: 'EastBluffWolves reward' });
+    assert.deepEqual(host.calls.find(call => call.type === 'wallet.receive').payload, { owner: 'party', amount: 3, note: 'EastBluffWolves reward', story: true }, 'the story wrote the reward (RX-E-1)');
 });
 
 test('finish grants XP through party.grantXp when RPG Battle has it', () => {

@@ -1,5 +1,5 @@
 // Coordinator decisions after the break rounds ("code sets numbers"): a rank the story writes is at most
-// one above the party's own, and a thread's summary is at most 600 characters.
+// the party's own (one above it until RX-E-1), and a thread's summary is at most 600 characters.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,31 +27,32 @@ function wolves(fields, { level = 1, queries = fakeQueries } = {}) {
 
 const rankProblems = host => problemList(host.state.domains.director).filter(problem => problem.kind === 'rank-held');
 
-test('questRank: a written rank is held to one above the party\'s own; a pack\'s rank is not', () => {
-    assert.equal(WRITTEN_RANKS_ABOVE, 1);
+test('questRank: a written rank is held to the party\'s own; a pack\'s rank is not', () => {
+    assert.equal(WRITTEN_RANKS_ABOVE, 0);
     const S = { fields: { rank: 'S' } };
-    // Level 12: the party is E (6–12), so a written rank is at most D.
-    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[2], by: 'written', said: DEFAULT_RANKS[6] });
-    assert.deepEqual(questRank({ fields: { rank: 'D' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[2], by: 'written' });
-    assert.equal(questRank(S, DEFAULT_RANKS, { level: null }).rank.id, 'E', 'level not known: the lowest rank, one above it');
+    // Level 12: the party is E (6–12), so a written rank is at most E.
+    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written', said: DEFAULT_RANKS[6] });
+    assert.deepEqual(questRank({ fields: { rank: 'D' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written', said: DEFAULT_RANKS[2] });
+    assert.deepEqual(questRank({ fields: { rank: 'E' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written' });
+    assert.equal(questRank(S, DEFAULT_RANKS, { level: null }).rank.id, 'F', 'level not known: the lowest rank');
     assert.equal(questRank(S, DEFAULT_RANKS, { level: 55 }).rank.id, 'S');
     assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 1, pack: { letter: 'S' } }), { rank: DEFAULT_RANKS[6], by: 'pack' });
 });
 
-test('a quest written S-rank for a level-12 party is paid as D, with a receipt note and one Problem', () => {
+test('a quest written S-rank for a level-12 party is paid as E, with a receipt note and one Problem', () => {
     const { host, taken } = wolves({ reward: '9999999 gold', rank: 'S' }, { level: 12 });
-    const note = 'the story said S-rank; held to D-rank for a level-12 party';
-    assert.match(taken.receipt.summary, new RegExp(`D-rank; ${note}\\.$`));
+    const note = 'the story said S-rank; held to E-rank for a level-12 party';
+    assert.match(taken.receipt.summary, new RegExp(`E-rank; ${note}\\.$`));
     assert.deepEqual(rankProblems(host).map(problem => [problem.key, problem.text]), [['Wolves', `Wolves: ${note}.`]]);
     const done = host.run(finish, { id: 'th_wolves01' });
     assert.equal(done.ok, true, done.message);
-    assert.deepEqual(done.receipt.data.paid, { amount: 1000, said: 9999999, rank: 'D', range: [230, 1000] });
-    assert.match(done.receipt.summary, new RegExp(`1000 gold paid \\(reward clamped to D-rank range: 230–1000 gold \\(clamped from 9999999 gold\\)\\) \\(${note}\\)\\.$`));
+    assert.deepEqual(done.receipt.data.paid, { amount: 230, said: 9999999, rank: 'E', range: [50, 230] });
+    assert.match(done.receipt.summary, new RegExp(`230 gold paid \\(reward clamped to E-rank range: 50–230 gold \\(clamped from 9999999 gold\\)\\) \\(${note}\\)\\.$`));
     assert.equal(rankProblems(host).length, 1, 'the Problem is not repeated at turn-in');
 });
 
 test('a written rank the party may take, and a pack quest\'s own rank, are paid as they are', () => {
-    const own = wolves({ reward: '9999999 gold', rank: 'E' }, { level: 1 });
+    const own = wolves({ reward: '9999999 gold', rank: 'F' }, { level: 1 });
     assert.doesNotMatch(own.taken.receipt.summary, /the story said/);
     assert.deepEqual(rankProblems(own.host), []);
     const queries = { ...fakeQueries, 'packs.content': (_state, { kind } = {}) => (kind === 'quests' ? [{ pack: 'p', name: 'Wolves', letter: 'S', reward: '9999999 gold' }] : []) };
