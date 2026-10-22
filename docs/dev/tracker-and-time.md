@@ -24,8 +24,18 @@ this repo's README "The change lines", "The note".
 - **Turn-ins are checked where the reply ends up:** lines run in reply order, and the story often writes
   `- quest … — turned in` before the `~ place` / `+ present` lines. A turn-in the place rule alone refuses
   waits (`turn.now.pending`, `quest-lines.js storyTurnIn`); a later Director line of the same reply pays it
-  once the place holds (`settleTurnIns`, merged into that line's receipt as `settled`), and the step before
-  the next reply (`quest.settle`, a beforeGenerate command, `replan`) pays or refuses it on the final scene.
+  once the place holds (`settleTurnIns`, merged into that line's receipt as `settled`), and Story Block's
+  `afterCapture` step right after the reply's last line (`quest.settle`, cause `system`, kept on that reply)
+  pays or refuses it on the final scene, in that reply. The beforeGenerate `quest.settle` (`replan`) is the
+  fallback for an older Story Block without `afterCapture`; with it, nothing is left waiting for it.
+  A place-only refusal at the end of a reply stays retriable in `turn.now.refused` for that reply's
+  Continue (`quest.settle { id, retry: true }`, `director.retriable`); paying it takes the refusal's Problem back.
+- **Safeguard:** the afterCapture step also turns a ready quest in from where things stand when the reply shows
+  it was (`turn.now.intent` from `~`/`!` quest lines in `TURN_IN_WORDS`, the story's coin equal to the reward, the
+  reward item given; `quest.autoTurnIns`, `quest.settle { id, auto: true }`), and takes back a `+ coin` that
+  repeats a reward already paid (`quest.repeatedCoin`, `{ repeated: true }`). The story's own coin this reply is
+  counted as a turn-in's reward (claim `storycoin:<sid>`). `quests.wordTurnIns` (1–5) is the story's-word
+  turn-ins per reply (`turn.now.words` past 1).
 - **Quests:** a job accepted is `taken`; goals counted by code where it can (foes beaten from RPG Battle's
   `combat.foesBeaten` when present), `met:` when the story says a goal code cannot count is met; rewards priced
   by code (coin forms through Story Block's currency), story-written pay within the per-reply story budget.

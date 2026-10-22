@@ -51,7 +51,7 @@ test('F83: the tail lists at most three open taken quests code cannot count, one
     assert.ok(long.length < 140, 'the goal is cut short');
     // Ready ones are not asked about again: they are ready to turn in.
     const ready = part.context.tail(viewOf(makeState({ threads: [ring({ ready: { rev: 9 } })], scene: settlement }))).lines;
-    assert.deepEqual(ready, ['Quests ready to turn in here (code checks and pays when the story turns one in): Lost Ring (goal met).']);
+    assert.deepEqual(ready, ['Ready to turn in: Lost Ring (to Mara, here).']);
 });
 
 test('F83: the static part says how to mark a goal met, with the pacing lines, and has no numbers', () => {

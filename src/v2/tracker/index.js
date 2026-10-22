@@ -11,7 +11,7 @@ import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
 import { initialDirector, queries, validateDirector } from './domain.js';
 import { GRAMMAR, GRAMMAR_ALONE, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
-import { SETTLE, settleCommand, settleHook } from './quest-lines.js';
+import { SETTLE, afterCaptureHook, settleCommand, settleHook } from './quest-lines.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
@@ -42,9 +42,12 @@ export const part = {
         tail: view => directorTail(view),
         budget: TAIL_BUDGET,
     },
-    // Before each reply: the clock from a pack's start, and the turn-ins the last reply left waiting for
-    // the scene it ended up in (quest-lines.js).
-    hooks: { beforeGenerate: beforeGenerate },
+    // Right after a reply's last story line (Story Block's afterCapture, MODULES §F121): the turn-ins the
+    // reply left waiting, settled on the scene it ended up in, in that reply. Before each reply: the clock
+    // from a pack's start, and (on an older Story Block, which never calls afterCapture) the same turn-ins,
+    // which the step before the next reply then settles (quest-lines.js). A Continue's afterCapture also
+    // pays a turn-in the place refused at the end of the reply's first part, once the party is there.
+    hooks: { beforeGenerate: beforeGenerate, afterCapture: afterCaptureHook },
     settings: {
         section: 'Calendar',
         defaults: settingsDefaults(),

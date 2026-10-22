@@ -252,8 +252,8 @@ const linesOf = value => (Array.isArray(value) ? value.filter(line => typeof lin
 // property), so Story Block can leave it out while the reader has that feature off.
 const withFeature = (fn, from) => (typeof from?.feature === 'string' ? Object.assign(fn, { feature: from.feature }) : fn);
 
-// Several parts' functions under one hook name, called in part order. beforeGenerate answers
-// (string[] | { lines, commands }) are joined; canGenerate gives the first refusal; any other
+// Several parts' functions under one hook name, called in part order. beforeGenerate and afterCapture
+// answers (string[] | { lines, commands }) are joined; canGenerate gives the first refusal; any other
 // hook gives the last answer that is not undefined.
 function mergeHook(name, entries, shared) {
     const partView_ = (ns, view) => partView(ns, view, shared);
@@ -262,7 +262,7 @@ function mergeHook(name, entries, shared) {
         return (view, ...rest) => fn(partView_(ns, view), ...rest);
     }
     return async (view, ...rest) => {
-        if (name === 'beforeGenerate') {
+        if (name === 'beforeGenerate' || name === 'afterCapture') {
             const lines = [];
             const commands = [];
             for (const [ns, fn] of entries) {

@@ -15,7 +15,7 @@ import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps } from '../../tracker.js';
 import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toTracker } from './convert.js';
 import { addProblem, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
-import { applyMet, capNote, noGoalProblem, onlyOwnLabels, questHasGoal, settleTurnIns, splitQuestLine, storyTurnIn, withSettled } from './quest-lines.js';
+import { TURN_IN_WORDS, lineWords, applyMet, capNote, noGoalProblem, onlyOwnLabels, questHasGoal, settleTurnIns, splitQuestLine, storyTurnIn, withSettled } from './quest-lines.js';
 import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } from './time.js';
 
 /** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
@@ -300,6 +300,11 @@ function threadLine(ctx, given) {
     const again = op.op === '-' && named?.status === 'active' && turn.quests.includes(named.id);
     if (again) ops.unshift({ op: '+', kind: 'quest', key: named.key, id: lineKey(named.key), fields: {}, extra: {}, reason: '', raw: '' });
     const newQuest = op.op === '+' && op.kind === 'quest';
+    // A line about a taken quest in turn-in words that does not close it ("~ quest X — Elula pays you"):
+    // the reply's intent, which the afterCapture step may act on (quests/index.js quest.autoTurnIns).
+    if (named && named.kind === 'quest' && named.status === 'active' && named.taken && (op.op === '~' || op.op === '!') && TURN_IN_WORDS.test(lineWords(given))) {
+        if (!turn.intent?.includes(named.id)) turn.intent = [...(Array.isArray(turn.intent) ? turn.intent : []), named.id];
+    }
     // F94: a taken quest the story closes as done is turned in by code, or kept open with the reason.
     if (named && named.kind === 'quest' && named.status === 'active' && named.taken && op.op !== '+') {
         const trial = rulesOn(toTracker(director), ops, director, said);

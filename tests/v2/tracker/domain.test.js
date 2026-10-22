@@ -12,9 +12,9 @@ const validate = director => part.domains.director.validate(director, {});
 test('the part has the shape MODULES §A names', () => {
     assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
     assert.deepEqual(Object.keys(part.domains), ['director']);
-    assert.deepEqual(Object.keys(part.queries), ['director.time', 'director.calendar', 'director.threads', 'director.thread']);
+    assert.deepEqual(Object.keys(part.queries), ['director.time', 'director.calendar', 'director.retriable', 'director.threads', 'director.thread']);
     assert.deepEqual(Object.keys(part.commands), ['director.seed', 'quest.settle']);
-    assert.deepEqual(Object.keys(part.hooks), ['beforeGenerate']);
+    assert.deepEqual(Object.keys(part.hooks), ['beforeGenerate', 'afterCapture']);
     // The Director screen is the screens part's `story-director/director`.
     assert.deepEqual(part.tabs, []);
     assert.equal(typeof part.context.static, 'function');

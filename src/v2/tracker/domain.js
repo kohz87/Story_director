@@ -6,7 +6,7 @@
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
 //   (a quest thread may also carry `ready: { rev }`, F83, and an older chat's offer `shown: { turn }`, F88)
-//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, paid, pending? }] },
+//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, words?, paid, pending?, refused?, intent? }] },
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
 // }
@@ -17,7 +17,12 @@
 // how many threads it added, and the one quest it turned in on the story's word alone (`vouched`, a
 // thread id, which the quests part marks; B-b3-r2-5) and what its quest turn-ins paid of rewards the
 // story wrote (`paid`, the quests part's per-reply tally; RX-E-1), and the quests the story turned in
-// that wait for where the reply ends up (`pending`, thread ids; quest-lines.js), only once there is one.
+// that wait for where the reply ends up (`pending`, thread ids; quest-lines.js), only once there is one,
+// and the ones refused by the place alone at the end of the reply, which a Continue of the same reply
+// may still pay (`refused`: [{ id, problem: the refusal's problem key, ready: whether it set `ready` }]),
+// the quests turned in on the story's word when the reader allows more than one a reply (`words`, ids),
+// and the quests a line of the reply spoke of as turned in without closing them (`intent`, ids), which the
+// afterCapture step may turn in from where things stand (quests/index.js quest.autoTurnIns).
 // Later replies never write inside what an earlier reply wrote (B-b1r2-12): `turn.now` is a slot
 // (../slot.js), written whole at a path that is always there; a problem is added under its own key (the
 // receipt's rev and its number in that receipt) and never changed, and the oldest past PROBLEM_ROOM are
@@ -66,6 +71,10 @@ export function replyTurn(director) {
         vouched: typeof now?.vouched === 'string' ? now.vouched : null,
         paid: isInt(now?.paid) && now.paid > 0 ? now.paid : 0,
         pending: Array.isArray(now?.pending) ? now.pending.filter(id => typeof id === 'string' && id) : [],
+        refused: Array.isArray(now?.refused) ? now.refused.filter(entry => isRecord(entry) && typeof entry.id === 'string' && entry.id) : [],
+        // The first story's-word turn-in (`vouched`) and the others the reader's limit let through (`words`).
+        words: [...new Set([now?.vouched, ...(Array.isArray(now?.words) ? now.words : [])].filter(id => typeof id === 'string' && id))],
+        intent: Array.isArray(now?.intent) ? now.intent.filter(id => typeof id === 'string' && id) : [],
     };
 }
 
@@ -114,7 +123,7 @@ export function problemList(director) {
 
 /**
  * Adds a problem to the Director's list (a draft): under a key of its own, so it is one `add` that
- * never depends on another reply's; past PROBLEM_ROOM the oldest go.
+ * never depends on another reply's; past PROBLEM_ROOM the oldest go. Returns its key.
  */
 export function addProblem(director, ctx, problem) {
     const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
@@ -130,6 +139,7 @@ export function addProblem(director, ctx, problem) {
     director.problems[`${rev}.${n}`] = entry;
     const keys = Object.keys(director.problems);
     if (keys.length > PROBLEM_ROOM) for (const key of keys.sort(byKey).slice(0, keys.length - PROBLEM_ROOM)) delete director.problems[key];
+    return `${rev}.${n}`;
 }
 
 /** Removes the problems `drop(problem)` says have gone (a draft). */
@@ -251,6 +261,16 @@ export const queries = {
     'director.calendar': (_state, _args, tools) => {
         const { settings, pack } = queryCalendar(tools);
         return calendarConfig(settings, pack);
+    },
+    /**
+     * The quests whose story turn-in the place alone refused at the end of the reply the query is asked
+     * for (`tools.reply`, the head reply), which a Continue of that reply may still pay: thread ids. Empty
+     * for any other reply, so a later reply never pays a turn-in an earlier one wrote (quest-lines.js).
+     */
+    'director.retriable': (state, _args, tools) => {
+        const turn = replyTurn(state?.domains?.director);
+        const sid = tools?.reply?.sid;
+        return typeof sid === 'string' && sid && turn.reply === sid ? turn.refused.map(entry => entry.id) : [];
     },
     /** Threads in tracker order, filtered by `kind`, `status` and `offer` when given. */
     'director.threads': (state, { kind = null, status = null, offer = null } = {}) => orderedThreads(state?.domains?.director)

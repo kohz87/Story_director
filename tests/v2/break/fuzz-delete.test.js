@@ -118,12 +118,15 @@ function replyLines(r, n) {
     }
     // A quest turned in on the story's word, the giver arriving after the turn-in line (or not at all): it
     // waits for where the reply ends up, and is paid or refused by a later Director line or the step
-    // before the next reply (quest.settle).
+    // before the next reply (quest.settle). Or written as a line that does not close it ("Fenna pays you"),
+    // which the afterCapture step turns in from where things stand; and the story's own `+ coin` for it now
+    // and then, before or after, counted as the reward or taken back (never paid twice).
     if (quests.length && r.chance(0.4)) {
         const key = r.pick(quests);
-        lines.push(`~ quest ${key} | met: yes`, `- quest ${key} — turned in`);
+        lines.push(`~ quest ${key} | met: yes`, r.chance(0.7) ? `- quest ${key} — turned in` : `~ quest ${key} — Fenna pays you`);
         if (r.chance(0.6)) lines.push(r.chance(0.5) ? '+ present Fenna' : `~ place ${r.pick(BASE_PLACES)} | kind: town`);
         if (r.chance(0.5)) lines.push(`! time +${r.int(1, 3)}h`);
+        if (r.chance(0.3)) lines.push(`+ coin ${r.int(1, 20)}`);
     }
     for (const key of own) {
         if (r.chance(0.3)) lines.push(`~ hook ${key} | now: nearby`);
