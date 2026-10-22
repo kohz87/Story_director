@@ -283,8 +283,34 @@ export function currencyName(currency) {
     return name || 'gold';
 }
 
-/** "1 mark", "8 marks": an amount of the chat's one currency (its plural for any amount but one). */
+/**
+ * "1 mark", "8 marks": an amount of the chat's one currency (its plural for any amount but one). With coins
+ * (`inventory.currency`'s `coins`, the reader's Coins setting or a pack's currency), the way Story Block
+ * writes an amount in its wallet and receipts (money.js formatAmount): mixed coins, largest first ("3 silver
+ * 5 pennies"), or the smallest coin alone with `display: 'base'` ("35 pennies"), so a quest's terms name
+ * the money as the wallet does.
+ */
 export function money(amount, currency) {
+    const coins = typeof currency === 'object' && Array.isArray(currency?.coins)
+        ? currency.coins.filter(coin => Number.isSafeInteger(coin?.value) && coin.value > 0 && clean(coin.name)) : [];
+    const n = Number(amount);
+    if (coins.length && Number.isSafeInteger(n) && n >= 0) {
+        const named = (coin, count) => `${count} ${count === 1 ? clean(coin.name) : clean(coin.plural) || clean(coin.name)}`;
+        const one = coins.find(coin => coin.value === 1);
+        const base = one ?? { name: currencyName(currency), plural: clean(currency?.plural) || currencyName(currency) };
+        if (currency.display === 'base' || n === 0) return named(base, n);
+        const parts = [];
+        let rest = n;
+        const shown = coins.filter((coin, index) => coins.findIndex(other => other.value === coin.value) === index);
+        for (const coin of [...shown].sort((a, b) => b.value - a.value)) {
+            const count = Math.floor(rest / coin.value);
+            if (!count) continue;
+            parts.push(named(coin, count));
+            rest -= count * coin.value;
+        }
+        if (rest) parts.push(named(base, rest));
+        return parts.join(' ');
+    }
     const name = currencyName(currency);
     const plural = typeof currency === 'object' ? clean(currency?.plural) : '';
     return `${amount} ${Math.abs(Number(amount)) === 1 || !plural ? name : plural}`;

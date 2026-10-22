@@ -221,6 +221,10 @@ export function noteFactsQuery(_state, { after = null, minutes = null } = {}, to
         const thread = typeof receipt.data?.quest === 'string' ? receipt.data.quest : typeof receipt.data?.thread === 'string' ? receipt.data.thread : null;
         const said = typeof receipt.summary === 'string' ? receipt.summary.trim() : '';
         if (thread && said) quests.push({ rev: receipt.rev, thread, text: said });
+        // Turn-ins a later Director line settled (tracker/quest-lines.js withSettled): each quest's history too.
+        for (const item of Array.isArray(receipt.data?.settled) ? receipt.data.settled : []) {
+            if (typeof item?.quest === 'string' && item.quest !== thread && said) quests.push({ rev: receipt.rev, thread: item.quest, text: said });
+        }
     }
     return { entries, quests, minutes: walk.minutes, rev: revs.length ? Math.max(...revs) : null, settle: walk.settle ? { ...walk.settle } : null };
 }

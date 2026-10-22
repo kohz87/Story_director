@@ -26,7 +26,11 @@
 > ladder has no levels to band, so quests keep Story Director's own ranks, the pack's else F to S, and
 > Quests → **Quest ranks follow the rank ladder** off keeps them always; a rank the story
 > writes is held to the party's own, and one reply pays at most that rank's top in money the story
-> wrote, its own coin lines and quest rewards together, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
+> wrote, its own coin lines and quest rewards together, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The place is checked where the reply ends up: a reply
+> that writes the turn-in before the `~ place` / `+ present` lines that bring the party to the giver is paid
+> at its next Director line (often its `! time`), else just before the next reply is written (until then
+> the quest says "Turned in by the story — checked where this reply ends up"). Terms and the row's reward name the money as the wallet
+> does (the chat's coins, mixed and largest first). The Quests screen has no buttons: each row says
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves") and opens its details
 > (goal, progress note, terms, dates, history). An older chat's offers still load; they are shown nowhere
 > (the Director tab tags them "offered") and become the quest when the story writes `+ quest` for one.
@@ -906,8 +910,10 @@ The v1 rules above hold, in v2's shape (Story Block v2, the Director tab):
 The Director tab shows quests, hooks and world events openly. Agendas, planned beats, clocks and secrets
 (and the problems about them) are behind a **Reveal** panel that shows only how many there are; nothing of
 them is put on the page until you reveal it. The choice is per chat and remembered in this browser (a
-swipe or a reload does not hide it again); **Hide** hides it again. The status card under each reply then
-names no agenda, beat or clock as *Next*. The story's prompt gets all of it either way. Turn hiding off for
+swipe or a reload does not hide it again); **Hide** hides it again. The status card under each reply never
+names what comes next (a spoiler there): it shows the time, the place with its map coordinates when the
+atlas knows them ("Guild Office · 59, 110"), the weather when the story set one (Story Block's
+`scene.weather`, from a `~ weather <text>` line), the current goal and its progress. The story's prompt gets all of it either way. Turn hiding off for
 every chat with **Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press
 Reveal**.
 

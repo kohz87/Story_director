@@ -18,8 +18,14 @@ this repo's README "The change lines", "The note".
   same reply (same `sid`), so the limit holds across it. Invalid times are refused as Problems.
 - Calendar: the reader's, else the enabled pack's (`packs.calendar`), else Gregorian; read-only while "pack".
 - **Per-reply bookkeeping:** `turn.now` is a slot written whole (one entry keyed by the reply `sid`):
-  quests added, the one lone quest, threads added, at most one story-vouched turn-in, story reward paid.
-  Later replies never write inside what an earlier reply wrote.
+  quests added, the one lone quest, threads added, at most one story-vouched turn-in, story reward paid,
+  and the story turn-ins waiting for where the reply ends up (`pending`). Later replies never write inside
+  what an earlier reply wrote.
+- **Turn-ins are checked where the reply ends up:** lines run in reply order, and the story often writes
+  `- quest … — turned in` before the `~ place` / `+ present` lines. A turn-in the place rule alone refuses
+  waits (`turn.now.pending`, `quest-lines.js storyTurnIn`); a later Director line of the same reply pays it
+  once the place holds (`settleTurnIns`, merged into that line's receipt as `settled`), and the step before
+  the next reply (`quest.settle`, a beforeGenerate command, `replan`) pays or refuses it on the final scene.
 - **Quests:** a job accepted is `taken`; goals counted by code where it can (foes beaten from RPG Battle's
   `combat.foesBeaten` when present), `met:` when the story says a goal code cannot count is met; rewards priced
   by code (coin forms through Story Block's currency), story-written pay within the per-reply story budget.

@@ -6,7 +6,7 @@
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
 //   (a quest thread may also carry `ready: { rev }`, F83, and an older chat's offer `shown: { turn }`, F88)
-//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, paid }] },
+//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, paid, pending? }] },
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
 // }
@@ -16,7 +16,8 @@
 // `now`: the reply, the line last read, the clock when it began, its new quests, its one lone quest,
 // how many threads it added, and the one quest it turned in on the story's word alone (`vouched`, a
 // thread id, which the quests part marks; B-b3-r2-5) and what its quest turn-ins paid of rewards the
-// story wrote (`paid`, the quests part's per-reply tally; RX-E-1).
+// story wrote (`paid`, the quests part's per-reply tally; RX-E-1), and the quests the story turned in
+// that wait for where the reply ends up (`pending`, thread ids; quest-lines.js), only once there is one.
 // Later replies never write inside what an earlier reply wrote (B-b1r2-12): `turn.now` is a slot
 // (../slot.js), written whole at a path that is always there; a problem is added under its own key (the
 // receipt's rev and its number in that receipt) and never changed, and the oldest past PROBLEM_ROOM are
@@ -64,6 +65,7 @@ export function replyTurn(director) {
         added: isInt(now?.added) ? now.added : 0,
         vouched: typeof now?.vouched === 'string' ? now.vouched : null,
         paid: isInt(now?.paid) && now.paid > 0 ? now.paid : 0,
+        pending: Array.isArray(now?.pending) ? now.pending.filter(id => typeof id === 'string' && id) : [],
     };
 }
 

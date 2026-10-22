@@ -15,7 +15,7 @@ import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps } from '../../tracker.js';
 import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toTracker } from './convert.js';
 import { addProblem, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
-import { applyMet, capNote, noGoalProblem, onlyOwnLabels, questHasGoal, splitQuestLine, storyTurnIn } from './quest-lines.js';
+import { applyMet, capNote, noGoalProblem, onlyOwnLabels, questHasGoal, settleTurnIns, splitQuestLine, storyTurnIn, withSettled } from './quest-lines.js';
 import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } from './time.js';
 
 /** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
@@ -85,6 +85,15 @@ function replyOf(ctx, line) {
  * bookkeeping (`turn.now`) to change in place: it is written whole with the line (domain.js).
  */
 export function beginTurn(director, ctx, line) {
+    const { fresh, place } = turnOf(director, ctx, line);
+    const now = fresh ? null : replyDraft(director);
+    if (!now) return startReply(director, { reply: replyOf(ctx, line), index: place });
+    if (now.index !== place) now.index = place;
+    return now;
+}
+
+// Whether `line` starts another reply's Director lines (`fresh`), and the place kept for it (beginTurn).
+function turnOf(director, ctx, line) {
     const turn = replyTurn(director);
     const reply = replyOf(ctx, line);
     const index = Number.isSafeInteger(line?.index) ? line.index : -1;
@@ -98,11 +107,18 @@ export function beginTurn(director, ctx, line) {
     const fresh = sid ? reply !== turn.reply
         : reply !== null ? reply !== turn.reply || (index >= 0 && index <= turn.index)
             : index <= 0 || index <= turn.index;
-    const now = fresh ? null : replyDraft(director);
-    const place = sid ? -1 : index;
-    if (!now) return startReply(director, { reply, index: place });
-    if (now.index !== place) now.index = place;
-    return now;
+    return { fresh, place: sid ? -1 : index };
+}
+
+/*
+ * The turn-ins waiting for the reply's scene (quest-lines.js settleTurnIns), checked before a Director
+ * line runs: within the same reply, the ones the place rule now allows are paid (the reply's place lines
+ * came in between); when the line starts another reply, the last reply's are settled for good (the step
+ * before the reply, `quest.settle`, normally did that already).
+ */
+function settleBefore(ctx, director, line) {
+    if (!replyTurn(director).pending.length) return [];
+    return settleTurnIns(ctx, director, { addProblem, final: turnOf(director, ctx, line).fresh });
 }
 
 // `Hook: Sheepfold Wolves`, a kind and a colon written in front of the name (v1 0.9.10). Invisible
@@ -251,6 +267,11 @@ const rulesOn = (tracker, ops, director, said) => applyOps(tracker, ops, { messa
 
 /** `apply(ctx, line)` for agenda, event, hook, quest, clock, beat and secret lines. */
 export function applyThreadLine(ctx, given) {
+    const settled = settleBefore(ctx, ctx.draft('director'), given);
+    return withSettled(settled, threadLine(ctx, given));
+}
+
+function threadLine(ctx, given) {
     const director = ctx.draft('director');
     const turn = beginTurn(director, ctx, given);
     const raw = lineText(given);
@@ -386,6 +407,11 @@ function metOnly(ctx, director, line, met, metText, raw) {
 
 /** `apply(ctx, line)` for `time` lines: `~ time <date, clock time>`, `! time +2h`. */
 export function applyTimeLine(ctx, line) {
+    const settled = settleBefore(ctx, ctx.draft('director'), line);
+    return withSettled(settled, timeLine(ctx, line));
+}
+
+function timeLine(ctx, line) {
     const director = ctx.draft('director');
     // `from`: the clock when this reply's first Director line was read. maxJump holds for the whole
     // reply, so a reply that repeats "! time +30d" moves the clock 30 days in all (C2-5).

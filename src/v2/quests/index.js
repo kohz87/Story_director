@@ -70,7 +70,10 @@ function stampOf(director, rev) {
 /** The chat's one currency (`inventory.currency`, MODULES §F1), `{ name, plural, short }`; gold without it. */
 function currencyOf(query) {
     const currency = tryQuery(query, 'inventory.currency', {}, null);
-    return { name: currencyName(currency), plural: text(currency?.plural), short: text(currency?.short), ...(Array.isArray(currency?.coins) && currency.coins.length ? { coins: currency.coins } : {}) };
+    return {
+        name: currencyName(currency), plural: text(currency?.plural), short: text(currency?.short),
+        ...(Array.isArray(currency?.coins) && currency.coins.length ? { coins: currency.coins, ...(currency.display === 'base' ? { display: 'base' } : {}) } : {}),
+    };
 }
 
 /** The player character's name for summaries ("Astra"), else "The party". */
@@ -247,7 +250,7 @@ function termsText(target, reward, currency, rank = null, { by = null } = {}) {
     const said = rewardText(reward, target, currency);
     return [
         targetText(target),
-        said ? `${said}${hold.held ? ` (${heldText(rank, money(total, currency), currencyName(currency))})` : ''}` : '',
+        said ? `${said}${hold.held ? ` (${heldText(rank, money(total, currency), currency)})` : ''}` : '',
         // A rank the difficulty gave is not the quest's own: its name is not shown.
         rank && by !== 'difficulty' ? rank.title : '',
     ].filter(Boolean).join('; ');
@@ -422,12 +425,11 @@ function finish(ctx, payload) {
         : target.kind === 'items'
             ? `${target.count} ${nounFor(target, target.count)} handed over (target ${target.count})`
             : `${progress.have} ${nounFor(target, progress.have)} beaten (target ${target.count})`;
-    const currencyWord = currencyName(currency);
     const fromPack = written && Number.isSafeInteger(written.amount) ? ` (the pack's reward for ${thread.key}; the story said ${rewardText(written, target, currency)})` : '';
     const rankText = (rankNote || levelNote) && hold.held ? ` (${rankNote || levelNote})` : '';
     if (rankNote) rankProblem(ctx, director, thread, rankNote);
     const budgetText = paid?.owed ? ` (${money(paid.owed, currency)} was owed; one reply may give no more)` : '';
-    const payText = paid ? `${money(paid.amount, currency)} paid${hold.held ? ` (${heldText(rank, money(said, currency), currencyWord)})` : ''}${rankText}${fromPack}${budgetText}`
+    const payText = paid ? `${money(paid.amount, currency)} paid${hold.held ? ` (${heldText(rank, money(said, currency), currency)})` : ''}${rankText}${fromPack}${budgetText}`
         : reward?.amount === 0 ? 'no reward in money'
             : reward?.text ? `reward as the story tells it: ${reward.text}`
                 : 'no reward was named';
@@ -458,9 +460,13 @@ function progressQuery(state, args = {}, tools = null) {
     const view = { ...thread, target };
     const progress = progressOf(view, query, { free: unclaimedIn(state), closing: args?.closing === true });
     const { have, need, met, source, noun, reason } = progress;
-    const rule = finishRule(view, progress, hereScene(query, state?.domains?.scene));
+    const scene = hereScene(query, state?.domains?.scene);
+    const rule = finishRule(view, progress, scene);
     const director = state?.domains?.director;
     let finish = rule.ok ? wordRule(director, thread, counted) ?? rule : rule;
+    // Refused only by where the scene is: the story's own turn-in then waits for the scene the reply ends
+    // up in (the tracker's pending turn-ins, tracker/quest-lines.js), as its place lines may come after it.
+    const placeOnly = !rule.ok && progress.met && !isOver(thread) && Boolean(thread.taken) && !placeRule(view, scene).ok;
     if (finish.ok && progress.met) {
         const currency = currencyOf(query);
         const terms = termsFor(query, state?.domains?.inventory, thread, currency);
@@ -468,7 +474,7 @@ function progressQuery(state, args = {}, tools = null) {
     }
     return {
         have, need, met, ready: !counted && Boolean(thread.ready), countable: Boolean(counted), source, noun, label: progressLabel(view, { have, need }), reason, finish,
-        ...(args?.closing === true ? { refusal: storyRefusal(view, progress, finish) } : {}),
+        ...(args?.closing === true ? { refusal: storyRefusal(view, progress, finish), place: placeOnly } : {}),
     };
 }
 
@@ -508,9 +514,11 @@ const lowerFirst = value => value.replace(/^./, c => c.toLowerCase());
  * Where a quest stands, in words for its row (F95): `{ state, text }`, state one of untaken (an older
  * chat's quest nothing took on), ready, here (ready, and it can be turned in here), notyet, over.
  */
-function statusOf(thread, target, progress, finish) {
+function statusOf(thread, target, progress, finish, waiting = false) {
     if (isOver(thread)) return { state: 'over', text: '' };
     if (!thread.taken) return { state: 'untaken', text: 'Not taken on' };
+    // The story turned it in; code checks it where the reply ends up (tracker/quest-lines.js).
+    if (waiting) return { state: 'ready', text: 'Turned in by the story — checked where this reply ends up, before the next reply' };
     const label = target ? countText(target, progress) : 'goal met';
     if (progress.met) {
         return finish.ok ? { state: 'here', text: `Ready to turn in — ${label}` } : { state: 'ready', text: `Ready — ${label}; ${lowerFirst(text(finish.reason))}` };
@@ -541,7 +549,7 @@ function historyOf(tools, id) {
     const seen = new Set(kept.map(item => item.rev));
     const fresh = (Array.isArray(list) ? list : [])
         .map(entry => entry?.receipt ?? entry)
-        .filter(receipt => receipt && (receipt.data?.quest === id || receipt.data?.thread === id) && text(receipt.summary) && !seen.has(receipt.rev))
+        .filter(receipt => receipt && (receipt.data?.quest === id || receipt.data?.thread === id || (Array.isArray(receipt.data?.settled) && receipt.data.settled.some(item => item?.quest === id))) && text(receipt.summary) && !seen.has(receipt.rev))
         .map(receipt => ({ rev: Number.isSafeInteger(receipt.rev) ? receipt.rev : null, text: cut(text(receipt.summary).replace(/^Director: /, ''), 200) }));
     return [...kept.map(item => ({ rev: item.rev, text: cut(text(item.text), 200) })), ...fresh]
         .sort((a, b) => (a.rev ?? Infinity) - (b.rev ?? Infinity))
@@ -551,7 +559,7 @@ function historyOf(tools, id) {
 /**
  * `quest.details({ id | key })` → everything the Quests screen shows of one quest (F84), or null:
  * `{ id, key, goal, hasGoal, countable, note, giver, due, rank: { id, title, reward } | null,
- *    terms: { target, reward, held, text }, ready, taken: { rev, at? } | null,
+ *    terms: { target, reward, held, text }, ready, waiting, taken: { rev, at? } | null,
  *    ended: { rev, at?, reason, outcome } | null, status: { state, text }, history: [{ rev, text }] }`.
  * `note` is the rolling progress note (the story's `progress:` or `step:`, F85), at most NOTE_CHARS.
  */
@@ -583,14 +591,15 @@ function detailsQuery(state, args = {}, tools = null) {
         terms: {
             target: targetText(target),
             reward: rewardText(reward, target, currency),
-            held: hold.held ? heldText(rank, money(total, currency), currencyName(currency)) : '',
+            held: hold.held ? heldText(rank, money(total, currency), currency) : '',
             text: termsText(target, reward, currency, rank, { by: rankBy }),
             level: levelNote,
         },
         ready: !counted && Boolean(thread.ready),
+        waiting: replyTurn(director).pending.includes(thread.id),
         taken: thread.taken ? { ...thread.taken } : null,
         ended: thread.ended ? { ...thread.ended } : null,
-        status: statusOf(thread, counted, progress, finish),
+        status: statusOf(thread, counted, progress, finish, replyTurn(director).pending.includes(thread.id)),
         history: historyOf(tools, thread.id),
     };
 }

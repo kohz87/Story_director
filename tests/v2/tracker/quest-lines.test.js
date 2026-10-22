@@ -186,9 +186,17 @@ test('F94: a check that fails keeps the quest open, unpaid, with a Problem and a
     // Away from a settlement and the giver: the place is the reason.
     let away = wolfCull(options, 'wild');
     away = withFights(away, [{ rev: thread(away, 'Wolf Cull').taken.rev + 1, foes: [{ name: 'Wolf', count: 3 }], won: true }]);
-    const wild = reply(away, '- quest Wolf Cull — done', { said: 'Done.', ...options }).state;
-    assert.equal(lastProblems(wild)[0].text, 'The story says Wolf Cull was turned in, but it can only be turned in at a settlement or where Orsa is; it stays open.');
+    // The place alone refuses it: it waits for where the reply ends up (a later line may bring Orsa), and
+    // is refused when the reply ends there (here: the next reply's first Director line; live, the step
+    // before the next reply, quest.settle).
+    const waited = reply(away, '- quest Wolf Cull — done', { said: 'Done.', ...options });
+    assert.deepEqual([waited.results[0].narrate, waited.results[0].data.waiting], [false, true]);
+    assert.deepEqual(lastProblems(waited.state).filter(problem => problem.kind === 'turn-in'), []);
+    const wild = reply(waited.state, '! time +1h', { said: 'And?', ...options }).state;
+    const refusals = Object.values(wild.domains.director.problems).filter(problem => problem.kind === 'turn-in');
+    assert.deepEqual(refusals.map(problem => problem.text), ['The story says Wolf Cull was turned in, but it can only be turned in at a settlement or where Orsa is; it stays open.']);
     assert.equal(thread(wild, 'Wolf Cull').status, 'active');
+    assert.deepEqual(paid, []);
     // No battle record at all (Story Director alone): the kill goal is the story's word, and it is paid.
     const none = reply(Object.freeze({ ...wolfCull(options), domains: Object.freeze({ ...wolfCull(options).domains, combat: undefined }) }), '- quest Wolf Cull — done', { said: 'Done.', ...options });
     assert.match(none.results[0].summary, /^The party turns in Wolf Cull: goal met .*on the story's word \(no fights are counted\), \d+ gold paid\.$/);

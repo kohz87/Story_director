@@ -1,7 +1,10 @@
 // Story Director v2, part screens: `story-director/status-card` (SPEC §13.1), the inline card under
 // each reply (mount `card`). A clean two-column card, labels on the left: the story time, the
-// place, the next thing coming due, the current goal (the active quest touched last: its goal and
-// step) and that quest's progress. A card shows **that reply's** state: Story Block's card mount runs
+// place (with its map coordinates when the atlas knows them), the weather (Story Block's
+// `scene.weather`, when the story set one), the current goal (the active quest touched last: its goal
+// and step) and that quest's progress. Only what {{user}} knows (world/known.js): the next thing coming
+// due is not here (a planned beat or clock would spoil the story); the Director screen shows it, behind
+// Reveal. A card shows **that reply's** state: Story Block's card mount runs
 // these bindings on `stateAt(index)`, so an older reply keeps the time, place and goal it had, and a
 // line that reply changed is marked (`changed(…)` reads that reply's own changes).
 // On under every reply by default, collapsed to its header (MODULES §F24): `defaultOn: true` is the field
@@ -19,11 +22,11 @@ const TEMPLATE = `
   </div>
   <div class="sd-row sd-place" data-if="state.scene.place.name" data-class="sd-new: changed('state.scene.place')">
     <dt><i class="fa-solid fa-location-dot" aria-hidden="true"></i> Place</dt>
-    <dd>{{ state.scene.place.name }}<small data-if="state.scene.place.region"> · {{ state.scene.place.region }}</small></dd>
+    <dd>{{ state.scene.place.name }}<small class="sd-coords" data-if="q.status.coords"> · {{ q.status.coords }}</small><small data-if="state.scene.place.region"> · {{ state.scene.place.region }}</small></dd>
   </div>
-  <div class="sd-row sd-next" data-if="q.next" data-class="sd-due: q.next.reached">
-    <dt><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i> Next</dt>
-    <dd><b>{{ q.next.key }}</b><small data-if="q.next.when"> — {{ q.next.when }}</small><span class="sd-tag sd-due-tag" data-if="q.next.reached">due</span></dd>
+  <div class="sd-row sd-weather" data-if="q.status.weather">
+    <dt><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> Weather</dt>
+    <dd>{{ q.status.weather }}</dd>
   </div>
   <div class="sd-row sd-goal" data-if="q.goal" data-class="sd-new: changed(state.director.threads[q.goal.id])">
     <dt><i class="fa-solid fa-flag" aria-hidden="true"></i> Goal</dt>
@@ -49,8 +52,7 @@ const CSS = `${BASE_CSS}
 .sd-step { display: block; }
 .sd-new > dd { color: var(--sd-accent); }
 .sd-new > dt::after { content: " •"; color: var(--sd-accent); }
-.sd-due > dd b { color: var(--sd-warn); }
-.sd-due-tag { margin-left: 6px; border-color: var(--sd-warn); color: var(--sd-warn); }
+.sd-coords { font-variant-numeric: tabular-nums; }
 .sd-progress > dd { align-self: center; }
 .sd-progress .ss-w-meter-label { font-variant-numeric: tabular-nums; }
 .sd-met .ss-w-meter { --ss-w-tone: var(--sd-good); }
@@ -68,8 +70,8 @@ export const statusCardScreen = Object.freeze({
     defaultOn: true,
     data: {
         time: { query: 'director.time' },
-        // `shown`: while behind the scenes is hidden, the card names no agenda, beat or clock (reveal.js).
-        next: { query: 'director.next', args: { shown: true } },
+        // The place's map coordinates and the weather (screens/queries.js statusExtras).
+        status: { query: 'director.status' },
         goal: { query: 'director.goal' },
         progress: { query: 'quest.progress', args: { id: '$goal.id' } },
     },

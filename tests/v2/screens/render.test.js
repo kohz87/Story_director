@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { resolveData, runtime, skipReason } from './helpers/runtime.js';
-import { at, calendar, earlierState, headState, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
+import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
 import { DIRECTOR_ID, HUD_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, part, screens } from '../../../src/v2/screens/index.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
 
@@ -22,8 +22,8 @@ const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
 const formatters = { time: minutes => (Number.isInteger(minutes) ? calendar.format(minutes) : '') };
 const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0] } = {}) {
-    const { run } = makeRunner();
+function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0], queries = makeQueries() } = {}) {
+    const { run } = makeRunner(queries);
     const screen = byId[id];
     const doc = installFakeDom();
     doc.head = doc.createElement('head');
@@ -193,18 +193,23 @@ test('hud: date and time and the place on one line, from the head', { skip }, ()
     assert.equal(bare.querySelectorAll('.sd-hud span').length, 0);
 });
 
-test('status card: time, place, next due, goal and step, progress, with what this reply changed marked', { skip }, () => {
+test('status card: time, place, goal and step, progress, with what this reply changed marked; no next beat', { skip }, () => {
     const changes = ['/domains/director/time/minutes', '/domains/director/threads/th_wolves01/rev'];
     const { el } = draw(STATUS_CARD_ID, headState(), { changes });
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
-    assert.deepEqual(rows.slice(0, 4), [
+    assert.deepEqual(rows.slice(0, 3), [
         ['Time', 'June 11, 2025, 09:00 am'],
         ['Place', 'Bluewatch Village · Eastmarch'],
-        // Behind the scenes hidden (the default): the card names no clock, agenda or beat (reveal.js).
-        ['Next', 'Harvest Fair — June 14, 2025'],
         ['Goal', 'East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'],
     ]);
-    assert.equal(rows[4][0], 'Progress');
+    assert.equal(rows[3][0], 'Progress');
+    // What comes next is the Director screen's, behind Reveal: a spoiler under the reply (user, beta).
+    assert.equal(el.querySelector('.sd-next'), null);
+    assert.equal(byId[STATUS_CARD_ID].data.next, undefined);
+    assert.equal(rows.some(([label]) => label === 'Next'), false);
+    // No atlas place and no weather query here: neither is shown.
+    assert.equal(el.querySelector('.sd-coords'), null);
+    assert.equal(el.querySelector('.sd-weather'), null);
     assert.equal(squash(el.querySelector('.sd-progress .ss-w-meter-label').textContent), 'Wolves 8/3');
     assert.ok(el.querySelector('.sd-time').classList.contains('sd-new'));
     assert.ok(el.querySelector('.sd-goal').classList.contains('sd-new'));
@@ -213,6 +218,35 @@ test('status card: time, place, next due, goal and step, progress, with what thi
     // Nothing tracked: only what there is.
     const { el: bare } = draw(STATUS_CARD_ID, makeState({ place: { name: 'Nowhere' } }));
     assert.deepEqual(bare.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place']);
+});
+
+test('status card: the place\'s map coordinates when the atlas knows it, and Story Block\'s weather when the story set one', { skip }, () => {
+    const queries = {
+        ...makeQueries(),
+        'atlas.here': () => ({ id: 'pl_guild001', name: 'Bluewatch Village', kind: 'settlement' }),
+        'atlas.place': (_state, args) => (args?.id === 'pl_guild001' ? { id: 'pl_guild001', name: 'Bluewatch Village', x: 59.4, y: 110 } : null),
+        // The contract of the coming Story Block query (scene.weather → { text } | null, from `~ weather <text>`).
+        'scene.weather': () => ({ text: 'Light rain over the sluices' }),
+    };
+    const { el, warnings } = draw(STATUS_CARD_ID, headState(), { queries });
+    assert.deepEqual(warnings, []);
+    const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
+    assert.deepEqual(rows.slice(0, 3), [
+        ['Time', 'June 11, 2025, 09:00 am'],
+        ['Place', 'Bluewatch Village · 59, 110 · Eastmarch'],
+        ['Weather', 'Light rain over the sluices'],
+    ]);
+    // Unknown to the atlas, no position, no weather (null): nothing of either, and no error.
+    for (const more of [
+        { 'atlas.here': () => null, 'scene.weather': () => null },
+        { 'atlas.here': () => ({ id: 'pl_guild001' }), 'atlas.place': () => ({ id: 'pl_guild001', x: null, y: 4 }), 'scene.weather': () => ({ text: '  ' }) },
+        { 'atlas.here': () => { throw new Error('no atlas'); }, 'scene.weather': () => { throw new Error('older Story Block'); } },
+    ]) {
+        const { el: plain } = draw(STATUS_CARD_ID, headState(), { queries: { ...makeQueries(), ...more } });
+        assert.equal(plain.querySelector('.sd-coords'), null);
+        assert.equal(plain.querySelector('.sd-weather'), null);
+        assert.equal(squash(plain.querySelector('.sd-place dd').textContent), 'Bluewatch Village · Eastmarch');
+    }
 });
 
 test('status card: each reply\'s card is drawn from that reply\'s state (stateAt), not the head', { skip }, () => {
@@ -264,15 +298,14 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
 
     assert.match(text(3), /June 11, 2025, 09:00 am/);
     assert.match(text(3), /Bluewatch Village/);
-    assert.match(text(3), /Harvest Fair/);
-    assert.doesNotMatch(text(3), /Bandit Raid/, 'a clock is behind the scenes');
+    assert.doesNotMatch(text(3), /Harvest Fair|Bandit Raid/, 'no next beat under a reply');
     assert.match(text(3), /Wolves 8\/3/);
     assert.equal(body(3).querySelector('.sd-place').classList.contains('sd-new'), false);
     assert.equal(body(1).getAttribute('data-ss-screen'), STATUS_CARD_ID);
 
     // Every binding of reply 1's card ran on reply 1's state.
     const forOne = calls.filter(call => call.state === states[1]).map(call => call.name);
-    assert.ok(['director.time', 'director.next', 'director.goal', 'quest.progress'].every(name => forOne.includes(name)));
+    assert.ok(['director.time', 'director.status', 'director.goal', 'quest.progress'].every(name => forOne.includes(name)) && !forOne.includes('director.next'));
     // The reader turns it off: gone from under the replies.
     registry.setCards(STATUS_CARD_ID, false);
     cards.refreshAll({ force: true });
