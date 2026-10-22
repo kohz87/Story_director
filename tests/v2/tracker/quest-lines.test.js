@@ -235,4 +235,3 @@ test('F83/F94: met: yes and the turn-in in one reply; a met line after the close
     assert.equal(thread(after, 'Lost Ring').status, 'resolved');
     assert.match(lastProblems(after).at(-1).text, /not an open quest/);
 });
-
