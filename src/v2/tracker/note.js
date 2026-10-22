@@ -86,8 +86,14 @@ export function withoutEncounters(tracker) {
 
 // v1's quest checks name a record bare ("- Key — outcome"); every v2 line names its kind.
 function v2Lines(text) {
-    return text.replace(/close it with - Key — /g, 'close it with - quest Key — ');
+    return text.replace(/close it with - Key — /g, 'close it with - quest Key — ')
+        // v2 has no offers (#99): a hook the reader may be taking on becomes the quest when they accept.
+        .replace(TAKING_V1, TAKING_V2);
 }
+
+// v1's quest check for a hook the reader's message may take on ends "leave it an offer"; v2 keeps no offers.
+const TAKING_V1 = 'If they do, write + quest Key with its parts (no - line for the hook); if not, leave it an offer.';
+const TAKING_V2 = 'Write + quest Key with its parts when {{user}} accepts (no - line for the hook); if not, leave it.';
 
 // The thread ids the time part's recap for this reply tells (empty without the time part).
 function recappedIds(view) {

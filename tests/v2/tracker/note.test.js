@@ -79,7 +79,9 @@ test('the tail: header with time and place, due now, kind lines, secrets by name
     ]);
     // The reader's message: a job given up, an offer taken on or turned down.
     assert.ok(tail(state, 'I give up on the wolf hunt.').lines.includes('Quest check: {{user}} may be giving up Wolf Hunt. If they do, close it with - quest Key — abandoned; if not, leave it.'));
-    assert.ok(tail(state, 'I accept the herb run.').lines.includes('Quest check: {{user}} may be taking on Herb run. If they do, write + quest Key with its parts (no - line for the hook); if not, leave it an offer.'));
+    assert.ok(tail(state, 'I accept the herb run.').lines.includes('Quest check: {{user}} may be taking on Herb run. Write + quest Key with its parts when {{user}} accepts (no - line for the hook); if not, leave it.'));
+    // v2 has no offers (#99): the check never asks the story to leave a job as one.
+    assert.ok(!tail(state, 'I accept the herb run.').lines.join('\n').includes('offer'));
     assert.ok(tail(state, 'No thanks, not interested in herbs.').lines.at(-1).startsWith('Quest check: {{user}} may be turning down Herb run. If they do, close it with - quest Key — declined'));
     // A quest whose step reads finished is asked about, never closed for the story.
     const finished = story([{ lines: '~ quest Wolf Hunt | step: wolves slain, reward collected — waiting on Danique' }], state);
