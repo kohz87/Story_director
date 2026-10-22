@@ -23,7 +23,9 @@ kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
 
 export const part = {
     domains: {
-        director: { initial: initialDirector, validate: validateDirector },
+        // The story clock is a count (SPEC §2.2 "Counts move"): every move keeps the minutes it replaced
+        // (`was`), so a reply deleted in the middle takes its own move back and later moves add theirs.
+        director: { initial: initialDirector, validate: validateDirector, counters: ['time/minutes'] },
     },
     commands: { [SEED]: seedCommand },
     queries,

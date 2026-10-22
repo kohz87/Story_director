@@ -22,7 +22,7 @@ const TEMPLATE = `
   <ol class="dy-list" data-if="q.board.hasDays" aria-label="Story days, newest first">
     <li class="dy-day" data-each="q.board.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}">
       <details class="dy-fold">
-        <summary class="dy-head"><span class="dy-date">{{ d.date }}</span> <span class="dy-line">{{ d.line }}</span></summary>
+        <summary class="dy-head"><span class="dy-date">{{ d.date }}</span> <span class="dy-line">{{ d.short }}</span></summary>
         <div class="dy-body">
           <p class="dy-short" data-if="d.brief">Only this line is kept for an older day.</p>
           <ul class="dy-facts" data-if="d.hasFacts">
