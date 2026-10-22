@@ -19,6 +19,8 @@ export const CHANGES_CARD_SCREEN_ID = 'story-block/changes-card';
 const C = STRINGS.card;
 const T = STRINGS.summary;
 
+// `assisted` (MODULES §F123): the lines the Assist safety net applied on this reply ([{ line, late }],
+// from its receipts), each shown with "(assist)" or "(assist, from the previous reply)".
 // `refused` is not a state path: the host puts the reply's refused change lines in the card's scope
 // (ui-host.js, from the turn's problems for that reply: [{ line, reason }]). A screen drawn without it
 // (another host, a test) simply has none.
@@ -67,6 +69,12 @@ const TEMPLATE = `
       <span><span class="label">${html(C.notApplied)}</span> <span class="raw">{{ r.line }}</span><span class="why" data-if="r.reason"> — {{ r.reason }}</span></span>
     </li>
   </ul>
+  <ul class="assisted" data-if="len(assisted) > 0" title="${html(C.assistTitle)}">
+    <li class="line" data-each="assisted as a">
+      <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+      <span><span class="raw">{{ a.line }}</span> <span class="muted" data-if="!a.late">${html(C.assist)}</span><span class="muted" data-if="a.late">${html(C.assistLate)}</span></span>
+    </li>
+  </ul>
 </div>`;
 
 const CSS = `${BASE_CSS}
@@ -93,6 +101,10 @@ const CSS = `${BASE_CSS}
 .refused .line { flex-wrap: nowrap; }
 .refused .line > i { color: var(--sb-em); }
 .refused .line > span { flex: 1 1 0; min-width: 0; }
+.assisted { display: grid; gap: 2px; margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--sb-border); }
+.assisted .line { flex-wrap: nowrap; }
+.assisted .line > span { flex: 1 1 0; min-width: 0; }
+.assisted .raw { font-family: var(--monoFontFamily, monospace); font-size: 0.95em; overflow-wrap: anywhere; }
 .refused .raw { font-family: var(--monoFontFamily, monospace); font-size: 0.95em; overflow-wrap: anywhere; }
 `;
 

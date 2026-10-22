@@ -9,6 +9,7 @@
 //   concatenated in part order, budgets summed. Parts are told `{ fights }` (statics, kinds whose
 //   grammar is a function, and `view.fights` / `ctx.fights`): whether a module runs fights, learnt
 //   before each reply (fightRunner), so Story Director alone asks for no encounters (WAVE rule 11);
+//   the parts' `context.parts` (static or tail text under a feature) are passed on as the module's;
 // - hooks: every part's function of a name, called in part order;
 // - settings: each part's keys are namespaced under its part id (`tracker.dormantReplies`; a part's
 //   `section(el, api)` function, the arc's planner prompt editor, is the module's custom panel), a
@@ -321,6 +322,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const schema = {};
     const statics = [];
     const tails = [];
+    // Context parts under a feature (`context.parts: [{ feature, static?, tail? }]`, MODULES §F100): Story
+    // Block adds their static and tail only while the feature is on.
+    const contextParts = [];
     const sections = [];
     let budget = 0;
 
@@ -357,6 +361,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         }
         if (typeof part.context?.static === 'function') statics.push(part.context.static);
         if (typeof part.context?.tail === 'function') tails.push([ns, part.context.tail]);
+        for (const extra of Array.isArray(part.context?.parts) ? part.context.parts : []) contextParts.push({ ...extra });
         if (Number.isInteger(part.context?.budget) && part.context.budget > 0) budget += part.context.budget;
         for (const [name, fn] of Object.entries(part.hooks ?? {})) {
             if (typeof fn !== 'function') continue;
@@ -419,6 +424,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 return { lines, optional };
             },
             budget: budget || 1,
+            ...(contextParts.length ? { parts: contextParts } : {}),
         },
         hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => {
             const merged = mergeHook(name, entries, shared);

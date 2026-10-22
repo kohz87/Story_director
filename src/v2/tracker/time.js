@@ -32,6 +32,10 @@ export function settingsDefaults() {
         dormantDays: DEFAULTS.dormantDays,
         dueSoonDays: DEFAULTS.dueSoonDays,
         maxJump: MAX_JUMP_DAYS,
+        // The Director note's Elsewhere line (scene.js DEFAULT_ELSEWHERE) and NPC initiative's cooldown
+        // (initiative.js DEFAULT_COOLDOWN).
+        elsewhere: 2,
+        initiativeCooldown: 2,
     };
 }
 

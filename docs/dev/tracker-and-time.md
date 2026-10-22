@@ -54,9 +54,24 @@ this repo's README "The change lines", "The note".
 - **Reward coins:** without Coins, a reward in a coin word that is not the chat's own is amount null with a
   `problem` (`parse.js foreignWord`), never that many of the chat's money; a second amount after the first too.
 - While away recap (F21) after a big time jump; due-now items enter the tail where the scene allows.
+- **Scene filter** (`tracker/scene.js`, used by `note.js directorTail`): the kind lines keep what fits the scene
+  (place or region, people present by Story Block's and NSD's lists and NSD names/aliases, due within
+  `dueSoonDays`, beats whose `after:` is over or whose `reach:` names the scene, ready quests, shown clocks,
+  what the reader names); the rest only as one *Elsewhere* line of at most `tracker.elsewhere` (2) names of
+  PC-known threads (quest, hook, event, never `track.arc`), added only while the budget has room. No scene
+  known: everything, as before. Derived, nothing stored.
+- **NPC initiative** (`tracker/initiative.js`, feature `story-director.initiative`): beforeGenerate commits
+  `director.initiative { at }` (cause `system`) when someone present or nearby has an open thread naming them,
+  or someone still cools down; the step draws with `ctx.rng()` (weights: urgency 4/3/2 × NSD trust 25–200 %,
+  else 100 %), cooldown `tracker.initiativeCooldown` (≥ 2), and writes the slot `director.initiative` whole
+  (`{ at, round, key, name, recent }`). The tail shows the pick while it is this reply's (`at`, as the
+  chronicle's world pick), else picks from a hash of the head's rev (a host with no hooks). Its static line is
+  a `context.parts` entry under the feature.
 
 ## Key files and functions
 
+- `src/v2/tracker/scene.js` (`sceneOf`, `splitByScene`, `knownToUser`, `elsewhereCap`), `initiative.js`
+  (`initiativeCandidates`, `nextPick`, `weightedPick`, `initiativeCommand`, `initiativeHook`, `initiativeTail`).
 - `src/v2/tracker/index.js` (part, kinds), `capture.js` (`applyThreadLine`, `applyTimeLine`,
   `NEW_THREADS_PER_REPLY`, `MAX_OPEN_THREADS`), `domain.js` (`initialDirector`, `validateDirector`, queries,
   `PROBLEM_LIMIT`), `time.js` (`timeAfter`, `maxJumpMinutes`, `calendarOf`, `MAX_JUMP_DAYS`), `note.js`
@@ -66,6 +81,7 @@ this repo's README "The change lines", "The note".
 
 ## Tests that guard it
 
+- `tests/v2/tracker/scene-tail.test.js`, `initiative.test.js`, `tests/v2/integration/initiative.test.js`.
 - `tests/v2/tracker/`, `tests/v2/quests/`, `tests/v2/time/`, `tests/v2/integration/` (`alone.test.js`:
   without RPG Battle).
 - Break findings: `tests/v2/break/a1-time-jump-continue`, `c1-time-after-middle-delete`, `c2-time-jump-per-reply`,

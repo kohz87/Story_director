@@ -7,13 +7,18 @@
 // arriving, the relevant threads one line per kind, what not to reveal, corrections for the
 // last reply's lines, and the quest checks (a quest that reads finished, one the reader's message
 // gives up, takes on or turns down). Built by v1's noteParts within this part's budget.
+// What can happen now comes first (scene.js): the kind lines list only the threads that fit the
+// scene, then one Initiative line (initiative.js, feature `story-director.initiative`), then, while
+// the budget has room, at most `tracker.elsewhere` (2) other threads {{user}} knows of, by name only.
 
-import { CHANGE_INSTRUCTION, PACING, noteParts, tailNote } from '../../note.js';
+import { CHANGE_INSTRUCTION, PACING, noteHeader, noteParts, tailNote } from '../../note.js';
 import { classify, estimateTokens } from '../../relevance.js';
 import { givenUpIn, offersChosenIn, untrackedCorrections } from '../../tracker.js';
 import { orderedThreads, toTracker } from './convert.js';
 import { problemList } from './domain.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
+import { elsewhereCap, elsewhereItem, elsewhereLine, knownToUser, sceneOf, splitByScene } from './scene.js';
+import { initiativeTail } from './initiative.js';
 
 export const TAIL_BUDGET = 500;
 /**
@@ -131,6 +136,18 @@ export function tailThreads(director, { said = '', place = '' } = {}) {
     return { ...director, threads: Object.fromEntries(Object.entries(threads).filter(([, thread]) => keep(thread))) };
 }
 
+// The note's labels up to its kind lines: the Initiative and Elsewhere lines go right after them.
+const SCENE_LABELS = new Set(['Header', 'No weekdays', 'While away', 'Due now', 'Arriving', 'Off-screen', 'World', 'Hooks', 'Quests', 'Clocks', 'Beats']);
+
+function insertAfterKinds(parts, extra) {
+    if (!extra.length) return parts;
+    let at = 0;
+    parts.forEach((entry, index) => { if (SCENE_LABELS.has(entry.label)) at = index + 1; });
+    return [...parts.slice(0, at), ...extra, ...parts.slice(at)];
+}
+
+const joined = parts => parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
+
 /** `context.tail(view)` → `{ lines, optional }` (SPEC §5). */
 export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const state = view?.state;
@@ -154,11 +171,18 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     });
     // Highest priority first: the rest would only be cut again by the budget.
     if (selection.relevant.length > TAIL_THREADS) selection.relevant = selection.relevant.slice(0, TAIL_THREADS);
+    const ordered = orderedThreads(director);
+    const threadOf = new Map(tracker.records.map((record, index) => [record, ordered[index]]));
+    // What can happen now first: the kind lines keep the threads that fit the scene (scene.js).
+    const query = typeof view.query === 'function' ? view.query : null;
+    const scene = sceneOf(query, state);
+    const split = splitByScene(selection.relevant, { scene, calendar, now, dueSoonDays: settings.dueSoonDays, threads: threadOf, records: tracker.records });
+    selection.relevant = split.here;
     // What the While away recap (the time part's `time.recap`) tells is not repeated under Due now or
     // Arriving (v1 note.js: the recapped items leave those lines).
     const recapped = recappedIds(view);
     if (recapped.size) {
-        const ids = new Map(orderedThreads(director).map((thread, index) => [tracker.records[index], thread.id]));
+        const ids = new Map(ordered.map((thread, index) => [tracker.records[index], thread.id]));
         selection.due = selection.due.filter(record => !recapped.has(ids.get(record)));
         selection.arriving = selection.arriving.filter(record => !recapped.has(ids.get(record)));
     }
@@ -166,16 +190,31 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const corrections = untrackedCorrections(problemList(director)
         .filter(problem => problem.turn === message)
         .map(problem => ({ ...problem, message: problem.turn })), { message });
-    const parts = noteParts(selection, {
+    // Who takes the initiative in this reply (initiative.js): its line is kept, so its room comes first.
+    const initiative = initiativeTail(view, { scene });
+    const initiativeCost = initiative ? estimateTokens(`\n${initiative}`) : 0;
+    const instruction = staticText({ fights });
+    const total = budget + estimateTokens(instruction);
+    let parts = noteParts(selection, {
         calendar,
         // v1's budget counts the instruction too; here it is in the static part.
-        budgetTokens: budget + estimateTokens(staticText({ fights })),
+        budgetTokens: total - initiativeCost,
         corrections,
-        instruction: staticText({ fights }),
+        instruction,
         givenUp: givenUpIn(tracker, said),
         taking: offersChosenIn(tracker, said, 'accept'),
         declining: offersChosenIn(tracker, said, 'refuse'),
     });
-    const text = v2Lines(tailNote(parts));
+    // The rest {{user}} knows of, by name, at most `elsewhere` of them, while the budget has room.
+    const others = split.elsewhere.filter(entry => knownToUser(entry.record)).slice(0, elsewhereCap(settings)).map(entry => elsewhereItem(entry.record));
+    const room = total - initiativeCost - estimateTokens(joined(parts));
+    while (others.length && estimateTokens(`\n${elsewhereLine(others)}`) > room) others.pop();
+    const extra = [
+        initiative ? { label: 'Initiative', text: initiative, join: '\n' } : null,
+        others.length ? { label: 'Elsewhere', text: elsewhereLine(others), join: '\n' } : null,
+    ].filter(Boolean);
+    // A note with nothing else in it still says when and where it is.
+    if (extra.length && !parts.some(entry => entry.label === 'Header')) parts = [{ label: 'Header', text: noteHeader(selection, calendar), join: '\n' }, ...parts];
+    const text = v2Lines(tailNote(insertAfterKinds(parts, extra)));
     return { lines: text ? text.split('\n') : [], optional: [] };
 }

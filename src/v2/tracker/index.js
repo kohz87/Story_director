@@ -13,6 +13,8 @@ import { initialDirector, queries, validateDirector } from './domain.js';
 import { GRAMMAR, GRAMMAR_ALONE, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
 import { SETTLE, afterCaptureHook, settleCommand, settleHook } from './quest-lines.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
+import { DEFAULT_COOLDOWN, FEATURE as INITIATIVE_FEATURE, INITIATIVE, INITIATIVE_STATIC, MAX_COOLDOWN, initiativeCommand, initiativeHook } from './initiative.js';
+import { DEFAULT_ELSEWHERE, MAX_ELSEWHERE } from './scene.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
 // A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set.
@@ -23,7 +25,7 @@ const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
 kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
 
 function beforeGenerate(view) {
-    const outs = [seedHook(view), settleHook(view)].filter(Boolean);
+    const outs = [seedHook(view), settleHook(view), initiativeHook(view)].filter(Boolean);
     if (!outs.length) return undefined;
     return { lines: [], commands: outs.flatMap(out => out.commands ?? []) };
 }
@@ -34,13 +36,22 @@ export const part = {
         // (`was`), so a reply deleted in the middle takes its own move back and later moves add theirs.
         director: { initial: initialDirector, validate: validateDirector, counters: ['time/minutes'] },
     },
-    commands: { [SEED]: seedCommand, [SETTLE]: settleCommand },
+    // NPC initiative (initiative.js): a seeded pick by code before each reply, its line in the tail and,
+    // while the feature is on, one static line (a context part under the feature, MODULES §F100).
+    features: [{
+        id: INITIATIVE_FEATURE,
+        label: 'NPC initiative',
+        describe: 'Before each reply, code picks at most one person present or nearby with an open thread to take the first step (approach, interrupt or ask); the Director note names them in one line.',
+        default: true,
+    }],
+    commands: { [SEED]: seedCommand, [SETTLE]: settleCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
     queries,
     kinds,
     context: {
         static: env => staticText(env),
         tail: view => directorTail(view),
         budget: TAIL_BUDGET,
+        parts: [{ feature: INITIATIVE_FEATURE, static: () => INITIATIVE_STATIC }],
     },
     // Right after a reply's last story line (Story Block's afterCapture, MODULES §F121): the turn-ins the
     // reply left waiting, settled on the scene it ended up in, in that reply. Before each reply: the clock
@@ -71,6 +82,10 @@ export const part = {
             dueSoonDays: { type: 'int', label: 'Due soon within days', min: 0, max: 365 },
             // One time line moves the clock forward at most this far; a longer jump is held to it, with a Problem.
             maxJump: { type: 'int', label: 'Longest time jump (story days)', min: 1, max: 3650 },
+            // The Director note: threads that do not fit the scene, named by one line at most this many (0: none).
+            elsewhere: { type: 'int', label: 'Threads elsewhere named in the note', min: 0, max: MAX_ELSEWHERE },
+            // NPC initiative: replies before the same person may take the initiative again (2: never two running).
+            initiativeCooldown: { type: 'int', label: 'NPC initiative: replies before the same person again', min: DEFAULT_COOLDOWN, max: MAX_COOLDOWN, feature: INITIATIVE_FEATURE },
         },
     },
     tabs: [],

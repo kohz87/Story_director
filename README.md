@@ -947,6 +947,39 @@ that day's); the next day or another region brings the rule's weather back. The 
 every chat with **Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press
 Reveal**.
 
+### The note in v2: what can happen now
+
+The Director note shows the story first what could happen in this scene. Its kind lines (Off-screen, World,
+Hooks, Quests, Clocks, Beats) keep the open threads that fit the scene:
+
+- tied to the place or its region (the thread's `place:`, `now:` or `leg:` names it), or to someone present
+  (Story Block's present list and NPC State Delta's, with each person's dossier name and aliases when NSD is
+  there; the thread's name, giver, people, `now:` or summary names them);
+- due within **Due soon** days by the story clock (what is due now is on *Due now*, as always);
+- a beat whose reach is met: one waiting on another beat (`after:`) that is still open is left out until that
+  beat is over; one whose `reach:` names the place or someone present fits;
+- a quest that is ready to turn in or waits for its pay (it keeps its line wherever you are), a clock showing
+  signs, and anything your message names.
+
+The rest is one line, while the note's budget has room: *Elsewhere, not in this scene: Herb run (hook) · Far
+Bounty (quest)*, at most **Threads elsewhere named in the note** of them (`tracker.elsewhere`, 2; 0 for none),
+and only threads your character knows of (quests taken on, hooks, events the story wrote, as on the World
+screen): never an agenda, beat, clock or secret, nor anything the arc planner made. With no scene known (no
+place and nobody present) every thread is told, as before. The same state always gives the same note.
+
+**NPC initiative** (feature *NPC initiative*, `story-director.initiative`, on). Before each reply code picks at
+most one person present, or nearby (an NPC State Delta dossier whose location is the scene's place or region),
+with an open thread naming them (its name, giver or people), and the note says so in one line: *Initiative:
+Elula may approach {{user}} about Wolf Contract.* (*may interrupt about …* when that thread is due now). The pick
+is weighted by the thread's urgency (due now, ready to turn in or due soon, else open) and, with NPC State
+Delta, by the person's trust with your character; without it everyone weighs the same. Nobody is picked two
+replies running (**NPC initiative: replies before the same person again**, `tracker.initiativeCooldown`, 2). The
+pick is a system step before the reply (`director.initiative`) drawn with that step's seed, so a swipe,
+regenerate, Continue or Re-read of the reply shows the same person; no model call. The line names the thread
+only when your character knows of it (an agenda's or a planned thread's never). While the feature is on, the
+fixed part has one more line asking the story to let that person take the first step where the scene allows,
+never deciding what your character does; off, there is no line, no pick and no fixed line.
+
 ## Capture (for models that skip the change lines)
 
 Some models forget the `<Director>` block, or garble it. **Capture** hands that job to a second
