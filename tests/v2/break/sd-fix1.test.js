@@ -99,27 +99,63 @@ test('a long name is cut to 120 characters at a space, with a Problem; the same 
     assert.equal(Object.keys(state.domains.director.threads).length, 1);
 });
 
-test('the tail lists only the most relevant threads, and stays cheap with 600', () => {
-    // One thread read from a line, copied 600 times under other names (building them line by line is slow).
+// The tail with many threads: one thread read from a line, copied `count` times under other names
+// (building them line by line is slow).
+function manyThreads(count) {
     const state = structuredClone(reply(makeState(), '+ hook Rumour — talk of the harbour').state);
     const director = state.domains.director;
     const [model] = Object.values(director.threads);
     director.threads = {};
     director.keys = {};
-    for (let n = 0; n < 600; n += 1) {
+    for (let n = 0; n < count; n += 1) {
         const id = `th_${String(n).padStart(8, '0')}`;
         director.threads[id] = { ...structuredClone(model), id, key: `Rumour ${n}`, track: { ...model.track, order: n } };
         director.keys[`rumour ${n}`] = id;
     }
-    const view = { state, settings: () => ({ dormantReplies: 500 }), query: () => null, chat: { lastUser: '' } };
+    return { state, settings: () => ({ dormantReplies: 500 }), query: () => null, chat: { lastUser: '' } };
+}
+
+// Runs fn() counting its work: every key Object.keys/entries/values hands out and every such call (the
+// note walks the threads, the key index and its fields that way). The globals are put back however fn ends.
+function counted(fn) {
+    const work = { keys: 0, calls: 0, out: undefined };
+    const original = { keys: Object.keys, entries: Object.entries, values: Object.values };
+    const tally = list => { work.keys += list.length; work.calls += 1; return list; };
+    Object.keys = value => tally(original.keys(value));
+    Object.entries = value => tally(original.entries(value));
+    Object.values = value => tally(original.values(value));
+    try {
+        work.out = fn();
+    } finally {
+        Object.assign(Object, original);
+    }
+    return work;
+}
+
+// Before the fix this took about 0.5 s: the key index was searched once per thread, and the note was built
+// again for every thread dropped to fit the budget. The bounds are counted work, not wall-clock time, so a
+// loaded machine cannot fail them (as RB #105 and SB #132 did): 600 threads walk about 2,700 keys in about
+// 660 calls (a search of the index per thread would be 360,000 keys), and twice the threads at most about
+// twice the work. Backstop: the fastest of three tails is under the old 150 ms bound.
+test('the tail lists only the most relevant threads, and stays cheap with 600 (counted work)', () => {
+    const view = manyThreads(600);
     directorTail(view);
-    const start = process.hrtime.bigint();
-    const tail = directorTail(view);
-    const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    assert.ok(tail.lines.length > 0);
-    // Before the fix this took about 0.5 s: the key index was searched once per thread, and the note
-    // was built again for every thread dropped to fit the budget.
-    assert.ok(ms < 150, `the tail took ${ms} ms`);
+    const work = counted(() => directorTail(view));
+    assert.ok(work.out.lines.length > 0);
+    assert.ok(work.keys < 20_000, `the tail walked ${work.keys} keys`);
+    assert.ok(work.calls < 3_000, `the tail made ${work.calls} key walks`);
+    const double = manyThreads(1200);
+    directorTail(double);
+    const more = counted(() => directorTail(double));
+    assert.ok(more.keys < 2.5 * work.keys, `1,200 threads walked ${more.keys} keys, 600 walked ${work.keys}: not linear`);
+    assert.ok(more.calls < 2.5 * work.calls, `1,200 threads made ${more.calls} key walks, 600 made ${work.calls}`);
+    const times = [];
+    for (let i = 0; i < 3; i += 1) {
+        const started = process.hrtime.bigint();
+        directorTail(view);
+        times.push(Number(process.hrtime.bigint() - started) / 1e6);
+    }
+    assert.ok(Math.min(...times) < 150, `the fastest tail took ${Math.min(...times)} ms`);
 });
 
 // ---- B-b4-10 / B-b3-18: the rank every quest is held to -----------------------------------------------

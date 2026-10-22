@@ -10,7 +10,8 @@
 //   they show the pack's calendar, and switching to Custom starts from it (a field the reader edits is
 //   theirs from then on);
 // * while Calendar is pack the fields are read-only (Story Block's settings `readOnly`): they show the
-//   pack's calendar and cannot be edited; switching to Custom makes them editable, pre-filled with it;
+//   pack's calendar (`shows`, even over a calendar the reader stored under Custom, which is kept) and
+//   cannot be edited; switching to Custom makes them editable, pre-filled with it or the reader's own;
 // * the Calendar choice's help says where the calendar comes from ("From the pack: Ersveil: Bluewatch
 //   Starter, CY, 12 months: switch to Custom to edit"), and the fields' help that they are only used
 //   with Custom.
@@ -108,6 +109,10 @@ export function liveCalendarSettings(defaults, schema, live) {
         // Read-only while Calendar is pack (Story Block's `readOnly`, SPEC §6): the pack's calendar shown,
         // not editable; Custom makes them editable, starting from what they showed.
         entry.readOnly = calendarReadOnly;
+        // While read-only the row shows the calendar in use (the pack's, else Gregorian), not a calendar the
+        // reader stored under Custom before; that one is kept and is back when they switch to Custom again
+        // (Story Block's `shows`, display only; an older Story Block shows the stored value).
+        entry.shows = values => (calendarReadOnly(values) ? structuredClone(shown()[field]) : undefined);
         const base = typeof entry.help === 'string' ? entry.help : '';
         Object.defineProperty(entry, 'help', {
             enumerable: true,
