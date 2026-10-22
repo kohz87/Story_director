@@ -15,10 +15,12 @@
 //   reads a reply's lines in order, and the story often writes `- quest … — turned in` before the
 //   `~ place` and `+ present` lines that bring the party to the giver. A turn-in refused only by the
 //   place waits in the reply's bookkeeping (`turn.now.pending`, thread ids) and is checked again at each
-//   later Director line of the same reply (paid as soon as the place rule holds) and, last, before the
-//   next reply is written (the `quest.settle` step, on the scene after all the reply's lines and the
-//   reader's actions after it): paid then, or refused with the reason. A turn-in the place rule allows
-//   when its line is read is paid at once, as before.
+//   later Director line of the same reply (paid as soon as the place rule holds) and, last, right after
+//   the reply's last story line (the `quest.settle` step of Story Block's afterCapture hook, MODULES §F121,
+//   on the scene after all the reply's lines, in that reply): paid then, or refused with the reason. On an
+//   older Story Block, which never calls afterCapture, the same step runs before the next reply is written
+//   (beforeGenerate, on the scene after the reply's lines and the reader's actions after it). A turn-in the
+//   place rule allows when its line is read is paid at once, as before.
 //
 // The quests part's rules are reached only through its queries and commands (`quest.details`,
 // `quest.progress`, `quest.finish`); without that part a line is read as before.
@@ -204,10 +206,11 @@ export function withSettled(settled, result) {
 }
 
 /**
- * `quest.settle({ id })`: the step before the next reply (the tracker's beforeGenerate) checks one turn-in
- * the reply left waiting, on the scene the reply ended up in: paid, or refused with the reason (a narrated
- * receipt either way). Kept on that reply, so a swipe or delete of it takes it back; `replan`: a Re-read
- * of the reply runs it again on the new lines. Story and system steps only.
+ * `quest.settle({ id })`: the step right after the reply's last story line (the tracker's afterCapture),
+ * or before the next reply on an older Story Block (its beforeGenerate), checks one turn-in the reply left
+ * waiting, on the scene the reply ended up in: paid, or refused with the reason (a narrated receipt either
+ * way). Kept on that reply, so a swipe or delete of it takes it back; a Re-read of the reply runs it again
+ * on the new lines (afterCapture, or `replan`). Story and system steps only.
  */
 export function settleCommand(ctx, payload = {}) {
     if (ctx.cause === 'ui') ctx.fail('REFUSED', 'A turn-in is checked by the story, not by a click.');
@@ -219,7 +222,12 @@ export function settleCommand(ctx, payload = {}) {
     return { ...settled, replan: true };
 }
 
-/** `beforeGenerate(view)`: `{ commands: [quest.settle] }`, one per turn-in the last reply left waiting. */
+/**
+ * `afterCapture(view)` and `beforeGenerate(view)`: `{ commands: [quest.settle] }`, one per turn-in the reply
+ * left waiting. Story Block's afterCapture settles them in that reply; on a Story Block without it, nothing
+ * is settled until the step before the next reply, which then finds them still waiting (the fallback). With
+ * afterCapture nothing is left waiting for beforeGenerate, so it asks for nothing.
+ */
 export function settleHook(view) {
     const waiting = replyTurn(view?.state?.domains?.director).pending;
     if (!waiting.length) return undefined;

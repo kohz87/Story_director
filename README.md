@@ -28,8 +28,11 @@
 > writes is held to the party's own, and one reply pays at most that rank's top in money the story
 > wrote, its own coin lines and quest rewards together, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The place is checked where the reply ends up: a reply
 > that writes the turn-in before the `~ place` / `+ present` lines that bring the party to the giver is paid
-> at its next Director line (often its `! time`), else just before the next reply is written (until then
-> the quest says "Turned in by the story — checked where this reply ends up"). Terms and the row's reward name the money as the wallet
+> at its next Director line (often its `! time`), else right after the reply's last line, in that reply
+> (Story Block's `afterCapture` step); a reply that ends away from the giver and from a settlement is refused
+> then, with the reason. On an older Story Block without that step it is checked just before the next reply
+> is written (until then the quest says "Turned in by the story — checked where this reply ends up, before
+> the next reply"). Terms and the row's reward name the money as the wallet
 > does (the chat's coins, mixed and largest first). The Quests screen has no buttons: each row says
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves") and opens its details
 > (goal, progress note, terms, dates, history). An older chat's offers still load; they are shown nowhere

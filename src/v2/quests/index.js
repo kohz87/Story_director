@@ -517,7 +517,8 @@ const lowerFirst = value => value.replace(/^./, c => c.toLowerCase());
 function statusOf(thread, target, progress, finish, waiting = false) {
     if (isOver(thread)) return { state: 'over', text: '' };
     if (!thread.taken) return { state: 'untaken', text: 'Not taken on' };
-    // The story turned it in; code checks it where the reply ends up (tracker/quest-lines.js).
+    // The story turned it in; code checks it where the reply ends up (tracker/quest-lines.js). Shown only
+    // on a Story Block without afterCapture (MODULES §F121), where that check waits for the next reply.
     if (waiting) return { state: 'ready', text: 'Turned in by the story — checked where this reply ends up, before the next reply' };
     const label = target ? countText(target, progress) : 'goal met';
     if (progress.met) {

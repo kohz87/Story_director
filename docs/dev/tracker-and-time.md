@@ -24,8 +24,10 @@ this repo's README "The change lines", "The note".
 - **Turn-ins are checked where the reply ends up:** lines run in reply order, and the story often writes
   `- quest … — turned in` before the `~ place` / `+ present` lines. A turn-in the place rule alone refuses
   waits (`turn.now.pending`, `quest-lines.js storyTurnIn`); a later Director line of the same reply pays it
-  once the place holds (`settleTurnIns`, merged into that line's receipt as `settled`), and the step before
-  the next reply (`quest.settle`, a beforeGenerate command, `replan`) pays or refuses it on the final scene.
+  once the place holds (`settleTurnIns`, merged into that line's receipt as `settled`), and Story Block's
+  `afterCapture` step right after the reply's last line (`quest.settle`, cause `system`, kept on that reply)
+  pays or refuses it on the final scene, in that reply. The beforeGenerate `quest.settle` (`replan`) is the
+  fallback for an older Story Block without `afterCapture`; with it, nothing is left waiting for it.
 - **Quests:** a job accepted is `taken`; goals counted by code where it can (foes beaten from RPG Battle's
   `combat.foesBeaten` when present), `met:` when the story says a goal code cannot count is met; rewards priced
   by code (coin forms through Story Block's currency), story-written pay within the per-reply story budget.
