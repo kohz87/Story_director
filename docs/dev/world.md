@@ -10,8 +10,8 @@ of `src/v2/world/index.js` and `known.js` (the exact PC-known rules), Story Bloc
 - **Nothing is stored.** Every answer is worked out on read from the state and other parts' and modules'
   queries, so a swipe, a middle delete or a reload shows what a rebuild shows. Keep it that way: no new
   domain fields for World.
-- **PC-known only:** Here (the map place, else Story Block's `scene.place`, and the people the scene lists as
-  present), known news and events (chronicle world events, the Director's `event` threads), factions, and
+- **PC-known only:** Here (the map place, else Story Block's `scene.place`, the weather from `scene.weather` (the
+  Scene tab's, which World replaces) and the people the scene lists as present), known news and events (chronicle world events, the Director's `event` threads), factions, and
   Upcoming (accepted quests' `due:`, open events' and hooks' `on:` dates, pack holidays) within
   `world.upcomingDays` (default 30) story days.
 - Never shown: agendas, beats, clocks, secrets (behind the scenes, Reveal), and anything the arc planner made

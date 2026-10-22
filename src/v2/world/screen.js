@@ -9,7 +9,8 @@
 //
 // Here covers what Story Block's Scene tab shows, so Story Block hides Scene by default while World is there
 // (MODULES §F119): the place with its kind and region and "moved here this reply" (Story Block's
-// `scene.moved`), the story time in the header while the clock is set, and the people: NPC State Delta's own
+// `scene.moved`), the weather (`scene.weather`: the Scene tab's, which would otherwise be lost with it), the
+// story time in the header while the clock is set, and the people: NPC State Delta's own
 // present-cast cards (portraits, now lines, meters) when it is there, else names; each with their thought
 // from the newest reply's Inner chatter.
 //
@@ -67,6 +68,7 @@ const NOW = `
     <h4 class="sd-h">Here</h4>
     <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="sd-tag wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="sd-tag wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
+    <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
   </section>
@@ -134,7 +136,8 @@ const CSS = `${BASE_CSS}
 .wv-when i { color: var(--sd-accent); }
 .wv-now { display: grid; gap: 14px; min-width: 0; }
 .wv-place { margin: 0 0 6px; overflow-wrap: anywhere; }
-.wv-place i { color: var(--sd-accent); }
+.wv-place i, .wv-weather i { color: var(--sd-accent); }
+.wv-weather { margin: 0 0 6px; overflow-wrap: anywhere; }
 .wv-list { gap: 6px; }
 .wv-item { padding: 6px 10px; border-left: 3px solid var(--sd-accent); border-radius: 4px; background: var(--sd-surface); overflow-wrap: anywhere; min-width: 0; }
 .wv-item[data-kind="holiday"] { border-left-color: var(--sd-good); }
