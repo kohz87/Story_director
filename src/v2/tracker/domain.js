@@ -6,7 +6,7 @@
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
 //   (a quest thread may also carry `ready: { rev }`, F83, and an older chat's offer `shown: { turn }`, F88)
-//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, words?, paid, pending?, refused?, intent? }] },
+//   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, words?, paid, pending?, refused?, intent?, met? }] },
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
 // }
@@ -22,7 +22,8 @@
 // may still pay (`refused`: [{ id, problem: the refusal's problem key, ready: whether it set `ready` }]),
 // the quests turned in on the story's word when the reader allows more than one a reply (`words`, ids),
 // and the quests a line of the reply spoke of as turned in without closing them (`intent`, ids), which the
-// afterCapture step may turn in from where things stand (quests/index.js quest.autoTurnIns).
+// afterCapture step may turn in from where things stand (quests/index.js quest.autoTurnIns), and the quests
+// the story said were met in this reply (`met`, ids: a delivery goal met at the giver is handed in there).
 // Later replies never write inside what an earlier reply wrote (B-b1r2-12): `turn.now` is a slot
 // (../slot.js), written whole at a path that is always there; a problem is added under its own key (the
 // receipt's rev and its number in that receipt) and never changed, and the oldest past PROBLEM_ROOM are
@@ -75,6 +76,8 @@ export function replyTurn(director) {
         // The first story's-word turn-in (`vouched`) and the others the reader's limit let through (`words`).
         words: [...new Set([now?.vouched, ...(Array.isArray(now?.words) ? now.words : [])].filter(id => typeof id === 'string' && id))],
         intent: Array.isArray(now?.intent) ? now.intent.filter(id => typeof id === 'string' && id) : [],
+        // The quests the story said were met in this reply (`met: yes` that set `ready`).
+        met: Array.isArray(now?.met) ? now.met.filter(id => typeof id === 'string' && id) : [],
     };
 }
 

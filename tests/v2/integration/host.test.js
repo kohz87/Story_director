@@ -30,7 +30,7 @@ async function ok(promise) {
 const OFFER = [
     '~ place Bluewatch | kind: settlement',
     '+ present Fenna',
-    '+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 cellar rats | reward: 2 silver each',
+    '+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 cellar rats | reward: 2 gold each',
 ];
 
 test('a reply\'s + quest is active at once; fights, Finish pays integers once and claims the fights', async () => {
@@ -45,7 +45,7 @@ test('a reply\'s + quest is active at once; fights, Finish pays integers once an
     assert.equal(rats.status, 'active');
     assert.ok(rats.taken.rev > 0, 'taken on at its reply');
     assert.deepEqual(rats.target, { noun: 'cellar rats', count: 3, kind: 'foes' });
-    assert.deepEqual(rats.reward, { amount: 2, each: true, unit: '', text: '2 silver each' });
+    assert.deepEqual(rats.reward, { amount: 2, each: true, unit: '', text: '2 gold each' });
     assert.equal(host.sdk.query('scene.place').kind, 'settlement');
     assert.equal(host.sdk.query('quest.progress', { key: 'Granary Rats' }).have, 0);
     // No accept step: taking it on again is refused.

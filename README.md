@@ -36,13 +36,19 @@
 > where Elula is)", at most two quests). A ready quest is also turned in when the reply ends where it can be
 > and shows it was, even without a turn-in line read as one: a quest line in turn-in words ("~ quest … —
 > Elula pays you"), or, with the giver there, the story's own `+ coin` equal to the reward or the reward
-> item handed over. The goal must be met by code or by the story's `met: yes`, never on the turn-in's word
+> item handed over, or, for a delivery goal ("bring / deliver / take / return … to …"), the story's `met: yes`
+> in this reply with the thing delivered in sight (held by the party, given this reply, or a progress note that
+> says it was brought or delivered): handing it over is the turn-in. The goal must be met by code or by the story's `met: yes`, never on the turn-in's word
 > alone. The story's own coin in the same reply (the reward's amount, or any amount while the giver is
 > there) counts as the reward and is never paid on top of it; written after the turn-in, it is taken back. Quests → **Story's-word turn-ins per reply** (1 to 5, default 1) says how many quests code
 > cannot count one reply may turn in. On an older Story Block without that step it is checked just before the next reply
 > is written (until then the quest says "Turned in by the story — checked where this reply ends up, before
 > the next reply"). Terms and the row's reward name the money as the wallet
-> does (the chat's coins, mixed and largest first). The Quests screen has no buttons: each row says
+> does (the chat's coins, mixed and largest first). A reward in a coin the chat does not know ("40 silver"
+> where money is pennies and no Coins are set) is never paid as that many of the chat's money: the row and
+> the terms keep the story's words, code pays none of it, and a Problem names the chat's money (set the coins
+> under Story Block's Settings → Coins to have it converted). Two amounts in one reward ("8 pennies per tail +
+> 3 silver") are not paid by code either. The Quests screen has no buttons: each row says
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves") and opens its details
 > (goal, progress note, terms, dates, history). An older chat's offers still load; they are shown nowhere
 > (the Director tab tags them "offered") and become the quest when the story writes `+ quest` for one.
@@ -924,8 +930,20 @@ The Director tab shows quests, hooks and world events openly. Agendas, planned b
 them is put on the page until you reveal it. The choice is per chat and remembered in this browser (a
 swipe or a reload does not hide it again); **Hide** hides it again. The status card under each reply never
 names what comes next (a spoiler there): it shows the time, the place with its map coordinates when the
-atlas knows them ("Guild Office · 59, 110"), the weather when the story set one (Story Block's
-`scene.weather`, from a `~ weather <text>` line), the current goal and its progress. The story's prompt gets all of it either way. Turn hiding off for
+atlas knows them ("Guild Office · 59, 110"), the weather (Story Block's `scene.weather`), the current goal
+and its progress.
+
+**Weather by rule** (feature *Weather from the calendar*, `story-director.weather`, on). The model writes a
+`~ weather` line only when the weather changes, so code picks each story day's weather: right after a reply's
+last line, when the story day or the region changed, it sets Story Block's scene weather as a system step kept
+on that reply (`scene.weather`). The season comes from the calendar (a pack's `weather.seasons` by month, else
+the year split as on Earth's northern half: winter around the year's turn); the region is the scene's, else the
+one the map knows for the place. The text comes from the enabled pack's `weather.tables` (the season's and
+region's, else the season's, else the region's, else one for any; Story Block PACKS.md "Weather"), else a
+temperate table. The pick is seeded by the story day and the region (a hash, never random), so a swipe, Re-read,
+rebuild or reload gives the same weather. Without a story clock there is no day or season: a mild table, picked
+by region. A `~ weather` line the story writes wins for the rest of that day and place (the step marks it as
+that day's); the next day or another region brings the rule's weather back. The tail's Place line carries it. The story's prompt gets all of it either way. Turn hiding off for
 every chat with **Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press
 Reveal**.
 

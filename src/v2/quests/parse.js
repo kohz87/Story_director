@@ -123,10 +123,12 @@ export function parseTarget(fields = {}, summary = '') {
     return null;
 }
 
-// The coin words code reads as money. A chat has one currency (MODULES §F1). Without coins the word
-// only says that a number is money: the number is a whole amount of the chat's currency, whatever word
-// the story wrote ("8 silver" pays 8 of it, as v1's numbers were kept as they are). With Story Block's
-// coins (MODULES §F108) a coin word is priced from the chat's coins only (coinValueIn).
+// The coin words code reads as money. A chat has one currency (MODULES §F1). Without coins a number in the
+// chat's own currency word (its name, plural, short form, a bare "coin") is a whole amount of it; any other
+// coin word ("40 silver" where money is pennies) names a coin the chat does not know, and is never read as
+// that many of its money (Story Block MODULES §F122, money.js foreignCoin): code does not pay it, the story's
+// words are kept and the reader is told. Only a caller that gives no currency reads the number alone, as
+// before. With Story Block's coins (MODULES §F108) a coin word is priced from the chat's coins only (coinValueIn).
 const COIN_WORDS = Object.freeze(['copper', 'silver', 'gold', 'platinum', 'electrum', 'cp', 'sp', 'gp', 'pp', 'ep',
     'coin', 'coins', 'crown', 'crowns', 'mark', 'marks', 'penny', 'pennies', 'pence', 'shilling', 'shillings',
     'ducat', 'ducats', 'florin', 'florins', 'sovereign', 'sovereigns', 'denar', 'denars', 'gil']);
@@ -208,6 +210,8 @@ function amountOf(written, currency) {
     if (!parts.length || parts.some(part => part.count === null)) return { amount: null, problem: '' };
     const coins = coinsIn(currency);
     if (!coins.length) {
+        const foreign = parts.map(part => foreignWord(part.word, currency)).find(Boolean);
+        if (foreign) return { amount: null, problem: `"${foreign}" is not this chat's money, which counts in ${moneyWords(currency)}; name the coins under Story Block's Settings → Coins to have it paid` };
         if (parts.length === 1) return { amount: parts[0].count };
         return { amount: null, problem: `"${written}" holds more than one amount; write one amount of ${currencyName(currency)}` };
     }
@@ -222,6 +226,25 @@ function amountOf(written, currency) {
     }
     return Number.isSafeInteger(amount) ? { amount } : { amount: null, problem: `"${written}" is too large an amount` };
 }
+
+// "gp" is gold pieces in a gold chat (and so on): the metal's own short form (money.js PIECES).
+const PIECES = Object.freeze({ gold: 'gp', silver: 'sp', copper: 'cp', platinum: 'pp', electrum: 'ep' });
+
+/*
+ * A chat without coins: the coin word `word` when it is not the chat's own money (its name, plural, name +
+ * "s", short form, the metal's "gp", a bare "coin"), else ''. '' when no currency is given (the number alone).
+ */
+function foreignWord(word, currency) {
+    if (!currency || typeof currency !== 'object') return '';
+    const want = clean(word).toLowerCase().split(' ').filter(part => part && !COIN_FILLER.has(part)).join(' ');
+    if (!want) return '';
+    const name = clean(currencyName(currency)).toLowerCase();
+    const own = [name, `${name}s`, clean(currency.plural).toLowerCase(), clean(currency.short).toLowerCase(), PIECES[name] ?? ''].filter(Boolean);
+    return own.includes(want) ? '' : want;
+}
+
+// The chat's money in words for a refusal: "pennies", "gold".
+const moneyWords = currency => clean(currency?.plural) || currencyName(currency);
 
 // The smallest coin's plural (the one worth 1), else the currency's own name.
 function smallestOf(currency) {
@@ -259,6 +282,11 @@ export function parseReward(fields = {}, summary = '', { currency = null } = {})
         const loose = !match[4] && Boolean(match[3]);
         const text2 = label || match[0].replace(/^[^\p{L}\d]/u, '').trim();
         if (read.amount === null) return { amount: null, each: false, unit: '', text: text2, per: '', problem: `${read.problem}.` };
+        // Another amount after the one read ("8 pennies per tail + 3 silver"): code would pay only the first,
+        // so it pays neither and keeps the story's words.
+        const rest = text === label ? text.replace(match[0], ' ') : '';
+        const more = rest ? [...rest.matchAll(partPattern(currency))].map(found => clean(found[0])) : [];
+        if (more.length) return { amount: null, each: false, unit: '', text: text2, per: '', problem: `"${label}" holds more than one amount (${more.join(', ')} after the first).` };
         return { amount: read.amount, each, unit: '', text: text2, per, loose };
     }
     return label ? { amount: null, each: false, unit: '', text: label, per: '' } : null;

@@ -34,7 +34,10 @@ this repo's README "The change lines", "The note".
   it was (`turn.now.intent` from `~`/`!` quest lines in `TURN_IN_WORDS`, the story's coin equal to the reward, the
   reward item given; `quest.autoTurnIns`, `quest.settle { id, auto: true }`), and takes back a `+ coin` that
   repeats a reward already paid (`quest.repeatedCoin`, `{ repeated: true }`). The story's own coin this reply is
-  counted as a turn-in's reward (claim `storycoin:<sid>`). `quests.wordTurnIns` (1–5) is the story's-word
+  counted as a turn-in's reward (claim `storycoin:<sid>`). A delivery goal ("bring / deliver / take / return
+  … to …", `deliveredThing`) the story said was met in this reply (`turn.now.met`, from `met: yes` that set
+  `ready`) is handed in the same way when the thing delivered is held, given this reply, or said brought or
+  delivered in the progress note. `quests.wordTurnIns` (1–5) is the story's-word
   turn-ins per reply (`turn.now.words` past 1).
 - **Quests:** a job accepted is `taken`; goals counted by code where it can (foes beaten from RPG Battle's
   `combat.foesBeaten` when present), `met:` when the story says a goal code cannot count is met; rewards priced
@@ -43,6 +46,13 @@ this repo's README "The change lines", "The note".
 - **Time settle** (`time/settle.js`): beats slip after two story days, unaccepted offers lapse, accepted quests
   go overdue then fail after the same grace; each closing is claimed (`lapse:<thread id>`) and its writes are
   `ctx.ifThere` the thread, so deleting the reply that made the thread passes over the closing on replay.
+- **Weather by rule** (`time/weather.js`, feature `story-director.weather`, Story Block MODULES §F122): the
+  time part's afterCapture asks for Story Block's `scene.weather { text, key }` when the key (`day <n>|<region>`)
+  differs from the scene weather's; the season from `director.calendar` (a pack's `weather.seasons` first), the
+  table from `packs.weather` else `TEMPERATE`, the pick `hashOf(key) % length`. A story `~ weather` (no key) is
+  only marked with the day's key (`scene.weather { key }`), so it stands for the rest of that day and place.
+- **Reward coins:** without Coins, a reward in a coin word that is not the chat's own is amount null with a
+  `problem` (`parse.js foreignWord`), never that many of the chat's money; a second amount after the first too.
 - While away recap (F21) after a big time jump; due-now items enter the tail where the scene allows.
 
 ## Key files and functions

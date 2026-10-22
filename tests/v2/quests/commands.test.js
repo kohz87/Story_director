@@ -7,8 +7,8 @@ import { fakeCommands, fakeQueries, makeHost, makeState, quest, xpCommand } from
 
 const { 'quest.take': take, 'quest.abandon': abandon, 'quest.finish': finish } = part.commands;
 
-const wolvesOffer = () => quest('th_wolves01', 'EastBluffWolves', { goal: 'Clear at least 3 wolves from East Bluff', reward: '1 silver each wolf', giver: 'Captain Orsa' }, { offer: true });
-const herbs = () => quest('th_herbs001', 'Herb Run', { goal: 'Bring 5 moonleaf to Fenna', reward: '10 copper', giver: 'Fenna' }, { offer: true });
+const wolvesOffer = () => quest('th_wolves01', 'EastBluffWolves', { goal: 'Clear at least 3 wolves from East Bluff', reward: '1 gold each wolf', giver: 'Captain Orsa' }, { offer: true });
+const herbs = () => quest('th_herbs001', 'Herb Run', { goal: 'Bring 5 moonleaf to Fenna', reward: '10 gold', giver: 'Fenna' }, { offer: true });
 const settlement = { place: { name: 'Bluewatch Village', kind: 'settlement' } };
 const fight = (rev, foes, won = true) => ({ rev, foes, won });
 
@@ -29,7 +29,7 @@ test('take on an offer: taken at this receipt rev, target and reward settled by 
     assert.deepEqual(thread.taken, { rev: 11 });
     assert.equal(thread.rev, 11);
     assert.deepEqual(thread.target, { noun: 'wolves', count: 3, kind: 'foes' });
-    assert.deepEqual(thread.reward, { amount: 1, each: true, unit: '', text: '1 silver each wolf' });
+    assert.deepEqual(thread.reward, { amount: 1, each: true, unit: '', text: '1 gold each wolf' });
     // The test's PC has no level (no RPG Battle): the lowest rank, and it says so (WAVE rule 11).
     assert.equal(result.receipt.summary, 'Astra takes on EastBluffWolves: beat 3 wolves; 1 gold per wolf; no character level is known, so it pays as F-rank, the lowest.');
     assert.equal(result.receipt.narrate, true);
@@ -128,7 +128,7 @@ test('finish grants XP through party.grantXp when RPG Battle has it', () => {
 });
 
 test('finish, fixed reward: paid once whatever the count', () => {
-    const host = makeHost(makeState({ threads: [quest('th_rats0001', 'Granary Rats', { goal: 'Kill 6 cellar rats', reward: '5 silver' }, { taken: { rev: 2 } })], scene: settlement }));
+    const host = makeHost(makeState({ threads: [quest('th_rats0001', 'Granary Rats', { goal: 'Kill 6 cellar rats', reward: '5 gold' }, { taken: { rev: 2 } })], scene: settlement }));
     host.state.domains.combat.beaten = [fight(3, [{ name: 'Cellar Rat Swarm', count: 9 }])];
     const result = host.run(finish, { id: 'th_rats0001' });
     assert.equal(result.ok, true, result.message);
@@ -138,7 +138,7 @@ test('finish, fixed reward: paid once whatever the count', () => {
 
 test('finish, items: hands over exactly the target count across stacks, pays per unit', () => {
     const host = makeHost(makeState({
-        threads: [quest('th_tails001', 'Tail Bounty', { goal: 'Collect 5 wolf tails', reward: '2 copper per tail', giver: 'Fenna' }, { taken: { rev: 2 } })],
+        threads: [quest('th_tails001', 'Tail Bounty', { goal: 'Collect 5 wolf tails', reward: '2 gold per tail', giver: 'Fenna' }, { taken: { rev: 2 } })],
         scene: { place: { kind: 'wild' }, present: ['Fenna the miller'] },
         defs: [{ id: 'story/wolf-tail', name: 'Wolf Tail' }, { id: 'story/wolfhound-collar', name: 'Wolfhound Collar' }],
         stacks: [
@@ -217,7 +217,7 @@ test('a second finish after a turn-in is refused and pays nothing more', () => {
 
 test('a refused sub-command (fewer items than counted) rejects the whole turn-in', () => {
     const host = makeHost(makeState({
-        threads: [quest('th_herbs001', 'Herb Run', { goal: 'Bring 5 moonleaf', reward: '10 copper' }, { taken: { rev: 2 } })],
+        threads: [quest('th_herbs001', 'Herb Run', { goal: 'Bring 5 moonleaf', reward: '10 gold' }, { taken: { rev: 2 } })],
         scene: settlement, defs: [{ id: 'story/moonleaf', name: 'Moonleaf' }], stacks: [{ id: 'it_aaaaaaa1', def: 'story/moonleaf', qty: 5 }],
     }));
     const commands = { ...fakeCommands, 'inventory.consume': () => ({ ok: false, code: 'NOT_ENOUGH', message: 'There is no Moonleaf left.' }) };

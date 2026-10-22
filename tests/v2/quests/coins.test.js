@@ -9,12 +9,17 @@ import { coinWorth, parseReward } from '../../../src/v2/quests/parse.js';
 const COPPER = { name: 'copper', coins: [{ name: 'copper', plural: 'copper', value: 1 }, { name: 'silver', plural: 'silver', value: 10 }, { name: 'gold', plural: 'gold', value: 100 }] };
 const reply = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
-test('a reward in a coin is counted in the smallest one; no coins: the number, as before', () => {
+test('a reward in a coin is counted in the smallest one; no coins: the chat\'s own word, never another coin', () => {
     assert.equal(parseReward({ reward: '5 silver' }, '', { currency: COPPER }).amount, 50);
     assert.equal(parseReward({ reward: '2 gold coins' }, '', { currency: COPPER }).amount, 200);
     assert.equal(parseReward({ reward: '50 copper' }, '', { currency: COPPER }).amount, 50);
     assert.equal(parseReward({ reward: '1 silver each wolf' }, '', { currency: COPPER }).amount, 10);
-    assert.equal(parseReward({ reward: '5 silver' }, '', { currency: { name: 'gold' } }).amount, 5);
+    // No coins (Story Block MODULES §F122): a coin the chat does not know is never read as its money.
+    const unknown = parseReward({ reward: '5 silver' }, '', { currency: { name: 'gold' } });
+    assert.equal(unknown.amount, null);
+    assert.match(unknown.problem, /"silver" is not this chat's money, which counts in gold/);
+    assert.equal(parseReward({ reward: '5 gold' }, '', { currency: { name: 'gold' } }).amount, 5);
+    assert.equal(parseReward({ reward: '5 silver' }).amount, 5, 'a caller that gives no currency reads the number alone');
     assert.equal(coinWorth('silver', COPPER), 10);
     assert.equal(coinWorth('rope', COPPER), 1);
 });

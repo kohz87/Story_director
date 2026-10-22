@@ -21,6 +21,7 @@ import { DEFAULTS, calendarOf, timeSettings } from './records.js';
 import { needsSettle, recapStale, settle, settleSummary } from './settle.js';
 import { slotValue } from '../slot.js';
 import { ADVANCE, advanceCommand } from './advance.js';
+import { WEATHER_FEATURE, weatherHook } from './weather.js';
 
 export const SETTLE = 'time.settle';
 
@@ -206,7 +207,10 @@ export const part = {
         tail: view => timeTail(view),
         budget: RECAP_BUDGET,
     },
-    hooks: { beforeGenerate },
+    // Right after a reply's last story line (Story Block's afterCapture): the day's weather by rule (weather.js).
+    hooks: { beforeGenerate, afterCapture: Object.assign(view => weatherHook(view), { feature: WEATHER_FEATURE }) },
+    // MODULES §F122: the weather from the calendar's season and the region, seeded per story day and region.
+    features: [{ id: WEATHER_FEATURE, label: 'Weather from the calendar', describe: 'Each story day gets its weather from the season and the region (a pack may give its own table), so the Status card and the Scene always have one. A ~ weather line the story writes wins for the rest of that day and place.', default: true }],
     settings: {
         section: 'Time',
         defaults: { ...DEFAULTS },
