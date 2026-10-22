@@ -8,6 +8,7 @@
 
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { findIn, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
+import { dayFacts, dayOf, digestOut, orderedDays, walkDays } from './days.js';
 
 const isInt = value => Number.isSafeInteger(value);
 const toolsQuery = tools => (typeof tools?.query === 'function' ? (name, args) => tools.query(name, args) : typeof tools === 'function' ? tools : null);
@@ -122,6 +123,70 @@ export function chronicleBoard(state, _args, tools) {
     };
 }
 
+const substituteOf = tools => (typeof tools?.substitute === 'function' ? value => {
+    try {
+        const out = tools.substitute(value);
+        return typeof out === 'string' ? out : String(value ?? '');
+    } catch {
+        return String(value ?? '');
+    }
+} : value => String(value ?? ''));
+
+const dayArg = value => (value === null || value === undefined || value === '' ? null : Number.isSafeInteger(Number(value)) ? Number(value) : NaN);
+
+/**
+ * The day digests kept, oldest first, as `chronicle.days` gives them; `from` and `to` (story day
+ * numbers, `time.now`'s `day`, both inclusive) keep a range. Null for an argument that is not a day.
+ */
+export function daysQuery(state, { from = null, to = null } = {}, tools) {
+    const low = dayArg(from);
+    const high = dayArg(to);
+    if (Number.isNaN(low) || Number.isNaN(high)) return null;
+    const currency = ask(toolsQuery(tools), 'inventory.currency', {});
+    const substitute = substituteOf(tools);
+    return orderedDays(state?.domains?.chronicle)
+        .filter(digest => (low === null || digest.day >= low) && (high === null || digest.day <= high))
+        .map(digest => digestOut(digest, { currency, substitute }));
+}
+
+/** `chronicle.dayBoard`: the Days screen's list, newest first, each with the text the search box looks in. */
+export function dayBoard(state, _args, tools) {
+    const env = setup(state, tools);
+    const days = (daysQuery(state, {}, tools) ?? []).reverse().map(digest => {
+        const quests = digest.quests;
+        const facts = [
+            digest.places.length ? `Went to: ${digest.places.join(', ')}` : '',
+            quests.taken.length ? `Took on: ${quests.taken.join(', ')}` : '',
+            quests.done.length ? `Finished: ${quests.done.join(', ')}` : '',
+            quests.failed.length ? `Failed: ${quests.failed.join(', ')}` : '',
+            quests.dropped.length ? `Gave up: ${quests.dropped.join(', ')}` : '',
+            digest.fightText ? `Fights: ${digest.fightText}` : '',
+            digest.moneyText ? `Money: ${digest.moneyText}` : '',
+        ].filter(Boolean);
+        const search = [digest.date, digest.line, ...digest.happened, ...digest.places, ...Object.values(quests).flat(), ...digest.npcs, ...digest.world].join(' \u2022 ');
+        return { ...digest, facts, hasFacts: facts.length > 0, hasHappened: digest.happened.length > 0, hasNpcs: digest.npcs.length > 0, hasWorld: digest.world.length > 0, search };
+    });
+    const now = env.now;
+    return { days, hasDays: days.length > 0, count: days.length, today: Number.isSafeInteger(now) ? dateText(env.calendar, now) : '' };
+}
+
+/**
+ * `chronicle.dayFacts { before }`: what the stored receipts say about each story day before day
+ * `before` (all days when it is not given), worked out now and saved nowhere: `{ days: [{ day, facts,
+ * revs }], settle: { from, to } | null }`. The digest command writes its digests from it.
+ */
+export function dayFactsQuery(state, { before = null } = {}, tools) {
+    let entries = [];
+    try { entries = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { entries = []; }
+    const walk = walkDays(entries);
+    const limit = Number.isSafeInteger(before) ? before : null;
+    const days = [...walk.days.keys()].filter(day => limit === null || day < limit).sort((a, b) => a - b).map(day => {
+        const receipts = walk.days.get(day);
+        return { day, facts: dayFacts(receipts, { revDay: walk.revs, state, day }), revs: receipts.map(receipt => receipt.rev).filter(Number.isSafeInteger) };
+    }).filter(entry => entry.facts.count > 0);
+    return { days, settle: walk.settle ? { ...walk.settle } : null, today: Number.isSafeInteger(walk.minutes) ? dayOf(walk.minutes) : null };
+}
+
 export const queries = {
     /**
      * The world events, open first (newest news first), then resolved: `[{ id, name, summary, state,
@@ -152,4 +217,14 @@ export const queries = {
         return found ? factionOut(found, env) : null;
     },
     'chronicle.board': chronicleBoard,
+    /** The day digests kept, oldest first (`daysQuery`): other modules' and the fold history's. */
+    'chronicle.days': daysQuery,
+    /** One day's digest by its day number, or null. */
+    'chronicle.day': (state, { day = null } = {}, tools) => {
+        const wanted = dayArg(day);
+        if (wanted === null || Number.isNaN(wanted)) return null;
+        return daysQuery(state, { from: wanted, to: wanted }, tools)?.[0] ?? null;
+    },
+    'chronicle.dayBoard': dayBoard,
+    'chronicle.dayFacts': dayFactsQuery,
 };

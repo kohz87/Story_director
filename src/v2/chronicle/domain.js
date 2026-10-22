@@ -7,6 +7,8 @@
 //   seen:     [{ [ev_id]: round }],             // the round an open event was last in the tail
 //   round:    int,                              // tail picks made so far (chronicle.surface)
 //   surfaced: null | [{ at, round, ids }],      // the pick for the reply being written
+//   days:     { [day]: [Digest] },              // the day digests (days.js), each day a slot
+//   written:  null | [{ through, days, at, skip }], // where the digests were last written (days.js)
 // }
 // An event is a lasting situation of the wider world (a war, a plague, a calamity) the story
 // keeps moving: `state` is looming, ongoing or resolved. `since` and `updated` are story minutes
@@ -20,6 +22,7 @@
 // gone (its reply deleted) is passed over.
 
 import { slotValue, toSlot } from '../slot.js';
+import { validateDays } from './days.js';
 
 export const EVENT_ID = /^ev_[0-9a-z]{8}$/;
 export const FACTION_ID = /^fa_[0-9a-z]{8}$/;
@@ -40,7 +43,7 @@ export const MAX_AKA = 6;
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 export function initialChronicle() {
-    return { events: {}, factions: {}, seen: toSlot({}), round: 0, surfaced: null };
+    return { events: {}, factions: {}, seen: toSlot({}), round: 0, surfaced: null, days: {}, written: null };
 }
 
 /** The round each event was last in the tail (`seen`; an older state kept the map bare). */
@@ -237,8 +240,10 @@ export function validateChronicle(slice) {
             errors.push('chronicle.surfaced must be null or { at, round, ids }.');
         }
     }
+    // A chronicle from before the day digest has no `days` or `written`.
+    errors.push(...validateDays(slice));
     for (const key of Object.keys(slice)) {
-        if (!['events', 'factions', 'seen', 'round', 'surfaced'].includes(key)) errors.push(`chronicle has an unknown field "${key}".`);
+        if (!['events', 'factions', 'seen', 'round', 'surfaced', 'days', 'written'].includes(key)) errors.push(`chronicle has an unknown field "${key}".`);
     }
     return errors;
 }

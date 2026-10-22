@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 
 import { CHRONICLE_ID, chronicleScreen } from '../../../src/v2/chronicle/screen.js';
 import { part } from '../../../src/v2/chronicle/index.js';
+import { daysScreen } from '../../../src/v2/chronicle/days-screen.js';
 import { validateScreen } from '../../vendor/story-block/src/v2/view/screens.js';
 import { compileTemplate, renderTemplate } from '../../vendor/story-block/src/v2/view/template/index.js';
 import { conditionEvaluator } from '../../vendor/story-block/src/v2/view/bind.js';
@@ -52,7 +53,7 @@ function draw(state, { command: run = null } = {}) {
 }
 
 test('the Chronicle screen is a valid definition for the tab and the full screen, bound to the part\'s query', () => {
-    assert.deepEqual(part.screens, [chronicleScreen]);
+    assert.deepEqual(part.screens, [chronicleScreen, daysScreen]);
     assert.equal(CHRONICLE_ID, 'story-director/chronicle');
     assert.deepEqual([...chronicleScreen.mounts], ['tab', 'screen']);
     assert.deepEqual(validateScreen(chronicleScreen), []);
