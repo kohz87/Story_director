@@ -53,7 +53,8 @@ export const CORE_KINDS = Object.freeze({
 export const CORE_FEATURES = Object.freeze([
     Object.freeze({ id: CORE_FEATURE.hud, label: STRINGS.features.hud, describe: STRINGS.features.hudDescribe, default: true }),
     Object.freeze({ id: CORE_FEATURE.cards, label: STRINGS.features.cards, describe: STRINGS.features.cardsDescribe, default: true }),
-    Object.freeze({ id: CORE_FEATURE.preroll, label: FEATURE_TEXT.classifier.label, describe: FEATURE_TEXT.classifier.describe, default: false }),
+    // The pre-roll only works with a module that keeps `? check` lines.
+    Object.freeze({ id: CORE_FEATURE.preroll, label: FEATURE_TEXT.classifier.label, describe: FEATURE_TEXT.classifier.describe, default: false, needs: Object.freeze({ kinds: Object.freeze(['check']), why: FEATURE_TEXT.classifier.needs }) }),
     Object.freeze({ id: CORE_FEATURE.extractor, label: FEATURE_TEXT.extractor.label, describe: FEATURE_TEXT.extractor.describe, default: false }),
     // The state inspector is for testers and pack authors (off); save points are for every reader (on).
     Object.freeze({ id: CORE_FEATURE.inspector, label: STRINGS.features.inspector, describe: STRINGS.features.inspectorDescribe, default: false }),
@@ -71,7 +72,7 @@ export const CORE_SETTINGS = Object.freeze({
         currencyShort: Object.freeze({ type: 'text', label: 'Currency, short form (blank: its first letter)', max: 6 }),
         storyCoinPerReply: Object.freeze({
             type: 'int', min: 0, max: 1000000000, label: 'Money one reply may give',
-            help: 'The most + coin lines of one reply may pay, in whole coins. 0: the top quest reward for the player character\'s rank (or 1000 per level, times the money scale).',
+            help: 'The most + coin lines of one reply may pay, in whole coins. 0: worked out from your installed modules (a quest rank\'s top reward, or 1000 per character level, times the money scale; 1000 times the scale when neither is installed).',
         }),
         // A number from 0.001 to 1000, kept as text so it can hold a fraction (MODULES §F104).
         economyScale: Object.freeze({

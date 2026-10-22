@@ -455,6 +455,8 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '' 
     // A feature turned on or off: its screens, tabs, widgets and cards come and go; nothing else changes.
     offs.push(events.on('feature', () => {
         syncScreens();
+        // A dialog open on a screen that is gone now closes: its controls belong to a part turned off.
+        mounts.dialog?.closeWhere?.(screenId => !screens.resolve(screenId));
         refresh();
         mounts.card?.refreshAll?.({ force: true });
     }));

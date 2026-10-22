@@ -19,7 +19,28 @@
 // * `covers` (with a checkpoint) = the `sid`s of the records from the checkpoint before it up to this one,
 //   so the store can tell a checkpoint made over a reply since deleted (store.js chain).
 // * An op on a count a domain keeps (`counters`) carries `was`, the number it replaced (ops.js).
-// The record is written to `message.extra` and copied to `swipe_info[swipe_id].extra`, as v1 did.
+// The record is written to `message.extra`. Its copy in `swipe_info[swipe_id].extra` (as v1 kept one on
+// every message) is kept only where SillyTavern can read it back (`keepsCopy`): see below.
+//
+// Keeping each record once (docs/v2/PERFORMANCE.md). SillyTavern 1.19 sets `extra` from `swipe_info` in
+// one function only, `syncSwipeToMes`, and calls it
+// * when a message is swiped (script.js `swipe` → `loadFromSwipeId`): only the last message can be
+//   swiped by the reader, and before it moves away from the shown swipe it copies `extra` into that
+//   swipe's `swipe_info` itself (`syncMesToSwipe`), except when the shown swipe is being deleted (then
+//   it moves to another swipe's own copy) or a failed swipe is turned back (to the swipe it just copied);
+// * when a branch is made from a swipe picked in the swipe list (bookmarks.js `getBranchChatSnapshot`):
+//   the picker opens on any message with more than one swipe, and it does NOT copy the shown swipe first,
+//   so the branch takes the shown swipe's `extra` from its `swipe_info` copy.
+// Nothing else reads it (deleting a message, editing, Continue, loading a chat read `extra` itself). So
+// the shown swipe's copy is kept on the last carrier and on any carrier with more than one swipe, and
+// dropped on the others. When a deletion makes an earlier carrier the last one, the store copies its
+// record into its shown swipe again (`restoreCopy`, on rebuild). Other swipes' copies, SillyTavern's own
+// (each holding that swipe's own record), are never touched.
+// * Receipts RECEIPT_KEEP or more carriers back lose their `data` (`trimReceipts`). That is a contract
+//   (SPEC §2.2): receipt data older than 200 carriers may be dropped, and modules must not rely on it;
+//   what a module needs later it keeps in its own state. Story Block itself never reads it then (claims
+//   live in meta.claims, Re-read uses `line` and `seed`, narration `summary` and `narrate`). Every other
+//   field stays.
 
 import { randomId } from '../id.js';
 
@@ -163,18 +184,18 @@ export function readRecord(message) {
 // index is seen as a copy. A trusted record whose mark has moved on (the reply was edited, or continued)
 // gets the swipe's mark as it is now, so the next change to the other part still finds it. True when it
 // wrote.
-export function restamp(message) {
+export function restamp(message, { mirror = true } = {}) {
     const record = readRecord(message);
     if (!record) return false;
     const shifted = record.swipe !== undefined && record.swipe !== swipeOf(message);
     if (!shifted && !(record.swipe !== undefined && markStale(record, message))) return false;
-    writeRecord(message, record);
+    writeRecord(message, record, { mirror });
     return true;
 }
 
 // Writes the record for the shown swipe and keeps swipe_info in step (`mirror: false` leaves the
-// swipe_info copy for later: the store writes a reply's lines one by one and copies once at the end).
-// Touches nothing else in the message.
+// swipe_info copy for later: the store writes a reply's lines one by one and copies once at the end, and
+// drops it where it is not kept). Touches nothing else in the message.
 export function writeRecord(message, record, { mirror = true } = {}) {
     const swipe = swipeOf(message);
     const mark = swipeMark(message);
@@ -183,13 +204,81 @@ export function writeRecord(message, record, { mirror = true } = {}) {
     else delete stored.mark;
     if (!isObject(message.extra)) message.extra = {};
     message.extra[KEY] = stored;
-    if (!mirror) return stored;
-    const info = Array.isArray(message.swipe_info) ? message.swipe_info[swipe] : null;
-    if (isObject(info)) {
-        if (!isObject(info.extra)) info.extra = {};
-        if (info.extra !== message.extra) info.extra[KEY] = structuredClone(stored);
-    }
+    if (mirror) mirrorCopy(message);
     return stored;
+}
+
+/**
+ * Does this carrier keep its shown swipe's record in `swipe_info` too? Yes when it is the last carrier
+ * (`last`: the one the reader can swipe), or when it has more than one swipe (a branch can be made from
+ * one of them, see the top of this file).
+ */
+export function keepsCopy(message, last) {
+    return !!last || (Array.isArray(message?.swipes) && message.swipes.length > 1);
+}
+
+/** Copies the record in `message.extra` into the shown swipe's `swipe_info` (when it has one). */
+export function mirrorCopy(message) {
+    const record = message?.extra?.[KEY];
+    const info = Array.isArray(message?.swipe_info) ? message.swipe_info[swipeOf(message)] : null;
+    if (!isObject(record) || !isObject(info)) return false;
+    if (!isObject(info.extra)) info.extra = {};
+    if (info.extra !== message.extra) info.extra[KEY] = structuredClone(record);
+    return true;
+}
+
+/**
+ * The copy a rebuild gives the last carrier back (an earlier one became the last). Only for a message at
+ * rest: its shown swipe's text is the one shown, and that swipe's `swipe_info` holds no other record.
+ * SillyTavern's deleteSwipe tells of a deleted swipe (MESSAGE_SWIPE_DELETED) before it shows the next
+ * one: then `extra` is still the deleted swipe's and the slot under `swipe_id` is the next swipe's own,
+ * which must not be written over. True when it copied.
+ */
+export function restoreCopy(message) {
+    const record = message?.extra?.[KEY];
+    const swipe = swipeOf(message);
+    const info = Array.isArray(message?.swipe_info) ? message.swipe_info[swipe] : null;
+    if (!isObject(record) || !isObject(info) || info.extra === message.extra) return false;
+    if (Array.isArray(message.swipes) && message.swipes[swipe] !== message.mes) return false;
+    const there = isObject(info.extra) ? info.extra[KEY] : undefined;
+    if (there !== undefined && !(isObject(there) && there.sid === record.sid)) return false;
+    return mirrorCopy(message);
+}
+
+/**
+ * Drops the shown swipe's copy of the record in `message.extra` from `swipe_info` (only a copy of that
+ * same record, by `sid`; a copy of anything else is left alone). True when it dropped one.
+ */
+export function dropCopy(message) {
+    const own = message?.extra?.[KEY];
+    const info = Array.isArray(message?.swipe_info) ? message.swipe_info[swipeOf(message)] : null;
+    const copy = isObject(info?.extra) && info.extra !== message.extra ? info.extra[KEY] : undefined;
+    if (!isObject(own) || !isObject(copy) || copy.sid !== own.sid) return false;
+    delete info.extra[KEY];
+    return true;
+}
+
+/** How many carriers back (the head is 0) a record's receipts keep their `data`. */
+export const RECEIPT_KEEP = 200;
+
+/**
+ * Drops `data` from the receipts of the record shown on `message` (and from its kept copy), keeping
+ * every other field. Nothing else in the record changes (no new mark or swipe stamp). True when it did.
+ */
+export function trimReceipts(message) {
+    const record = readRecord(message);
+    if (!record || !record.receipts.some(receipt => isObject(receipt) && Object.hasOwn(receipt, 'data'))) return false;
+    const receipts = record.receipts.map(receipt => {
+        if (!isObject(receipt) || !Object.hasOwn(receipt, 'data')) return receipt;
+        const { data, ...rest } = receipt;
+        void data;
+        return rest;
+    });
+    const info = Array.isArray(message.swipe_info) ? message.swipe_info[swipeOf(message)] : null;
+    const copied = isObject(info?.extra) && info.extra !== message.extra && isObject(info.extra[KEY]) && info.extra[KEY].sid === record.sid;
+    message.extra[KEY] = { ...record, receipts };
+    if (copied) info.extra[KEY] = structuredClone(message.extra[KEY]);
+    return true;
 }
 
 /**

@@ -6,7 +6,9 @@
 //   host's own fold (the tail budget). `openSettingsOverlay` puts it in a full-screen dialog.
 //   Features (MODULES §F100): each module's fold opens with a "Features" subsection, a switch per
 //   feature with its label and description, and one "Features" fold lists every module's; a feature
-//   that changes the static prompt part says so (PROMPT_HINT). The choices are the reader's
+//   that changes the static prompt part says so (PROMPT_HINT). A settings field (`{ …, feature }`) or
+//   custom panel (a function with `feature`) of a feature that is off is not drawn; a switch redraws. A
+//   feature whose `needs` no installed module meets is drawn off and disabled, with its reason. The choices are the reader's
 //   (createFeatureStore, extension_settings.storySuite.features), not the chat's.
 // - the tab host: a tab bar with every module tab, each rendered from the head state's view.
 //
@@ -15,7 +17,7 @@
 
 import { FIELD_TYPES, normalizeField } from './registry.js';
 import { HOST_SETTINGS_SCHEMA } from './sdk.js';
-import { PROMPT_HINT } from './features.js';
+import { PROMPT_HINT, featureOf } from './features.js';
 import { compatReport, renderCompat } from './compat.js';
 import { scrollCue } from './view/scroll-cue.js';
 import { cutAt } from '../text.js';
@@ -197,8 +199,12 @@ function fold(doc, key, title, hint = '') {
 }
 
 // One feature's row: its switch, label, description and (when it changes the static prompt) the hint.
-function featureRow(doc, feature, onChange) {
-    const id = `story_suite_feature_${feature.id}`.replace(/[^\w-]/g, '_');
+// A feature is drawn twice, so each switch's id is its place (`overview` or `module`) plus the feature id
+// encoded whole (encodeURIComponent never makes two ids one, as flattening "a.b_c" and "a.b.c" would);
+// its row labels that switch.
+export const featureInputId = (place, id) => `story_suite_feature_${place}_${encodeURIComponent(String(id))}`;
+function featureRow(doc, feature, onChange, place) {
+    const id = featureInputId(place, feature.id);
     const row = el(doc, 'label', 'story-suite-row story-suite-feature');
     row.dataset.feature = feature.id;
     row.setAttribute('for', id);
@@ -206,13 +212,21 @@ function featureRow(doc, feature, onChange) {
     text.appendChild(el(doc, 'b', '', feature.label));
     if (feature.describe) text.appendChild(el(doc, 'small', '', feature.describe));
     if (feature.prompt) text.appendChild(el(doc, 'small', 'story-suite-feature-hint', PROMPT_HINT));
+    // A feature whose `needs` no module meets: shown off, not switchable, with the reason.
+    const unavailable = feature.available === false;
+    if (unavailable) {
+        row.classList.add('story-suite-feature-unavailable');
+        text.appendChild(el(doc, 'small', 'story-suite-feature-why', feature.why));
+    }
     row.appendChild(text);
     const input = el(doc, 'input');
     input.type = 'checkbox';
     input.id = id;
     input.setAttribute('role', 'switch');
-    input.checked = feature.on === true;
+    input.checked = feature.on === true && !unavailable;
+    input.disabled = unavailable;
     input.setAttribute('aria-checked', String(input.checked));
+    if (unavailable) input.setAttribute('aria-disabled', 'true');
     input.addEventListener('change', () => onChange(Boolean(input.checked)));
     row.appendChild(input);
     return row;
@@ -226,23 +240,24 @@ function featureRow(doc, feature, onChange) {
  */
 export function renderSettingsHost(root, { registry, settings, doc = globalThis.document, sdk = null, features = null }) {
     const featureList = () => (features && typeof features.list === 'function' ? features.list() : []);
-    // A switch changed: stored, then every row of that feature (its module's and the overview's) shows it.
-    function setFeature(id, on) {
-        const stored = features.set(id, on);
-        const now = typeof stored === 'boolean' ? stored : features.on(id);
-        for (const node of root.querySelectorAll('.story-suite-feature')) {
-            if (node.dataset.feature !== id) continue;
-            const input = node.querySelector('input');
-            if (!input) continue;
-            input.checked = now;
-            input.setAttribute('aria-checked', String(now));
-        }
+    // A settings field or panel under a feature that is off is not drawn (its stored value is kept).
+    const hiddenByFeature = item => {
+        const id = featureOf(item);
+        return id !== null && typeof registry.featureOn === 'function' && !registry.featureOn(id);
+    };
+    // A switch changed: stored, then everything is drawn again (the fields of that feature come or go, both
+    // rows of it show the choice), open folds stay open and the switch keeps the focus.
+    function setFeature(id, on, inputId) {
+        features.set(id, on);
+        refresh();
+        const again = root.querySelectorAll('.story-suite-feature input').find(input => input.id === inputId);
+        again?.focus?.();
     }
     function featureBlock(list, help) {
         const block = el(doc, 'div', 'story-suite-subsection story-suite-features');
         block.appendChild(el(doc, 'h4', '', FEATURE_TEXT.title));
         if (help) block.appendChild(el(doc, 'p', 'story-suite-muted', help));
-        for (const feature of list) block.appendChild(featureRow(doc, feature, on => setFeature(feature.id, on)));
+        for (const feature of list) block.appendChild(featureRow(doc, feature, on => setFeature(feature.id, on, featureInputId('module', feature.id)), 'module'));
         return block;
     }
     function featuresFold(list) {
@@ -257,7 +272,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
             const group = el(doc, 'div', 'story-suite-subsection story-suite-feature-group');
             group.dataset.module = moduleId;
             group.appendChild(el(doc, 'h4', '', own[0].moduleName));
-            for (const feature of own) group.appendChild(featureRow(doc, feature, on => setFeature(feature.id, on)));
+            for (const feature of own) group.appendChild(featureRow(doc, feature, on => setFeature(feature.id, on, featureInputId('overview', feature.id)), 'overview'));
             body.appendChild(group);
         }
         return details;
@@ -267,10 +282,11 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
         if (own.length) body.appendChild(featureBlock(own, FEATURE_TEXT.moduleHint));
         const values = settings(def.moduleId);
         for (const [key, field] of Object.entries(def.schema)) {
+            if (hiddenByFeature(field)) continue;
             const value = Object.hasOwn(values, key) ? values[key] : emptyValue(field);
             body.appendChild(fieldRow(doc, key, field, value, next => settings.set(def.moduleId, key, next), `story_suite_${def.moduleId}`));
         }
-        if (def.section) {
+        if (def.section && !hiddenByFeature(def.section)) {
             const section = el(doc, 'div', 'story-suite-section');
             section.dataset.module = def.moduleId;
             const api = Object.freeze({

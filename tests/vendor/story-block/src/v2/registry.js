@@ -16,7 +16,7 @@
 // `featureValue(id)` gives the reader's stored choice (true, false or undefined for the default).
 
 import { compareVersions, formatVersion, parseRange, parseVersion, satisfies } from './packs/version.js';
-import { affectsStatic, featureOf, featureProblems, featureWarnings } from './features.js';
+import { NEEDS_HINT, affectsStatic, featureOf, featureProblems, featureWarnings } from './features.js';
 
 // Commands the registry makes itself, so the command bus can run them like any other:
 // `capture.<kind>` runs the owner's capture.apply on a change line (turn.js), and
@@ -388,6 +388,8 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         if (!owner) return null;
         const def = defs.get(owner);
         const feature = def.features.find(item => item.id === id);
+        const needs = needsOf(feature);
+        const available = availableFor(needs);
         return Object.freeze({
             id: feature.id,
             moduleId: def.id,
@@ -396,12 +398,28 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
             describe: typeof feature.describe === 'string' ? feature.describe.trim() : '',
             default: feature.default !== false,
             prompt: affectsStatic(def, feature.id),
+            needs,
+            available,
+            why: available ? '' : needs.why,
         });
     }
-    // On: the reader's choice when there is one, else the feature's default; an id no module declares is off.
+    // `needs` in full: { kinds, commands, queries, why } (lists of names; why: the overlay's reason).
+    function needsOf(feature) {
+        const given = isObject(feature.needs) ? feature.needs : {};
+        const list = key => (Array.isArray(given[key]) ? given[key].map(String) : []);
+        const why = typeof given.why === 'string' && given.why.trim() ? given.why.trim() : NEEDS_HINT;
+        return Object.freeze({ kinds: Object.freeze(list('kinds')), commands: Object.freeze(list('commands')), queries: Object.freeze(list('queries')), why });
+    }
+    // Available: every kind, command and query it needs is registered (by any module, whatever its
+    // features say: a feature never waits on another's switch).
+    const availableFor = needs => needs.kinds.every(kind => canonical.has(kind.toLowerCase()))
+        && needs.commands.every(type => owners.command.has(type))
+        && needs.queries.every(name => owners.query.has(name));
+    // On: the reader's choice when there is one, else the feature's default; an id no module declares, or
+    // a feature whose `needs` no module meets, is off.
     function featureOn(id) {
         const decl = featureDecl(id);
-        if (!decl) return false;
+        if (!decl || !decl.available) return false;
         let value;
         try { value = featureValue(decl.id); } catch { value = undefined; }
         return typeof value === 'boolean' ? value : decl.default;
@@ -616,7 +634,11 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         },
         /** The names of the widgets whose feature is off. */
         widgetsOff: () => sorted().flatMap(def => Object.keys(def.widgets ?? {}).sort().filter(name => off(def.widgets[name]))),
-        /** Every declared feature: [{ id, moduleId, moduleName, label, describe, default, prompt }], module-id order. */
+        /**
+         * Every declared feature: [{ id, moduleId, moduleName, label, describe, default, prompt, needs,
+         * available, why }], module-id order. `available` is false while what it `needs` is not registered
+         * (it is then off, whatever the reader chose); `why` says so for the overlay.
+         */
         features: () => sorted().flatMap(def => (def.features ?? []).map(feature => featureDecl(feature.id))),
         /** One declared feature, or null. */
         feature: featureDecl,
