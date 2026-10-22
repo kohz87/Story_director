@@ -141,7 +141,8 @@ function pcLevel(query) {
  */
 function termsFor(query, inventory, thread, currency) {
     const target = thread.target ?? withKind(inventory, parseTarget(thread.fields, thread.summary));
-    const own = thread.reward ?? settleReward(parseReward(thread.fields, thread.summary, { currency }), target);
+    const read = thread.reward ? null : parseReward(thread.fields, thread.summary, { currency });
+    const own = thread.reward ?? settleReward(read, target);
     const pack = packQuestOf(query, thread);
     const fromPack = packReward(pack, target, currency);
     const differs = fromPack && JSON.stringify(fromPack) !== JSON.stringify(own);
@@ -152,7 +153,10 @@ function termsFor(query, inventory, thread, currency) {
     // Story Director stands alone (WAVE rule 11): with no character level known (no RPG Battle), a
     // quest the pack does not rank pays as the lowest rank, and the terms say so.
     const levelNote = level === null && rank.rank && rank.by === 'difficulty' ? noLevelText(rank.rank) : '';
-    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote, levelNote, budget: replyBudget(ladder, level) };
+    // B-a1-16: a coin amount code refused ("2 platinum" where the chat has no platinum) pays nothing
+    // code counts; the story settles it, and the reader is told why.
+    const rewardNote = !fromPack && typeof read?.problem === 'string' ? read.problem.replace(/\.$/, '') : '';
+    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote, levelNote, rewardNote, budget: replyBudget(ladder, level) };
 }
 
 /*
@@ -217,11 +221,14 @@ function spendBudget(spend, pay) {
  * A written rank held to the party's (questRank): a Problem on the Director tab, once per quest (a
  * Problem already on the list for it is not repeated), kept as the tracker part keeps its own.
  */
-function rankProblem(ctx, director, thread, note) {
+function rankProblem(ctx, director, thread, note, kind = 'rank-held') {
     if (!note) return;
-    if (problemList(director).some(problem => problem?.kind === 'rank-held' && problem.key === thread.key)) return;
-    addProblem(director, ctx, { kind: 'rank-held', severity: 'info', key: thread.key, text: `${thread.key}: ${note}.` });
+    if (problemList(director).some(problem => problem?.kind === kind && problem.key === thread.key)) return;
+    addProblem(director, ctx, { kind, severity: 'info', key: thread.key, text: `${thread.key}: ${note}.` });
 }
+
+/** A reward in coins code would not read (termsFor's rewardNote): a Problem once per quest, as rankProblem. */
+const rewardProblem = (ctx, director, thread, note) => rankProblem(ctx, director, thread, note ? `the reward is not counted, ${note}` : '', 'reward-coin');
 
 function termsOf(ctx, thread, currency = currencyOf(ctx.query)) {
     return termsFor(ctx.query, readOr(ctx, 'inventory'), thread, currency);
@@ -293,7 +300,7 @@ function take(ctx, payload) {
     const rev = receiptRev(ctx);
     const wasOffer = Boolean(thread.offer);
     const currency = currencyOf(ctx.query);
-    const { target, reward, rank, rankBy, rankNote, levelNote } = termsOf(ctx, thread, currency);
+    const { target, reward, rank, rankBy, rankNote, levelNote, rewardNote } = termsOf(ctx, thread, currency);
     thread.offer = false;
     thread.taken = stampOf(director, rev);
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
@@ -302,6 +309,7 @@ function take(ctx, payload) {
     const who = whoName(ctx.query);
     const terms = [termsText(thread.target, reward, currency, rank, { by: rankBy }), rankNote || levelNote].filter(Boolean).join('; ');
     rankProblem(ctx, director, thread, rankNote);
+    rewardProblem(ctx, director, thread, rewardNote);
     // The story's own `+ quest` already told it: the quest is only adopted for counting. An older chat's
     // offer taken on by a template's or pack's button is news for the next reply.
     return {
