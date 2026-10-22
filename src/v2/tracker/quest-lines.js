@@ -200,6 +200,8 @@ export const lineWords = line => [line?.text, ...Object.values(line?.labels ?? {
 
 /** The step that checks the reply's waiting turn-ins before the next reply (the quests' cue). */
 export const SETTLE = 'quest.settle';
+// The quests part's step that pays a reward owed (quests/index.js); here only to credit the story's coin.
+const PAY_OWED = 'quest.payOwed';
 
 const isWaitingQuest = thread => isOpenQuest(thread) && Boolean(thread.taken);
 
@@ -322,6 +324,10 @@ export function afterCaptureHook(view) {
     // stack, so the repeat is taken back (quest.repeatedCoin). Not asked when a step above will pay: that
     // one counts the coin as its reward instead.
     if (!commands.length && Number(tryQuery(view?.query, 'quest.repeatedCoin', {})?.amount) > 0) commands.push({ type: SETTLE, payload: { repeated: true } });
+    // The story's own coin this reply, written for a reward the chat cannot count yet that this reply's turn-in
+    // left owed (quest.owedCredits): it counts toward that reward, so the reward is not paid on top of it later.
+    const credits = tryQuery(view?.query, 'quest.owedCredits', {});
+    for (const id of Array.isArray(credits) ? credits : []) if (typeof id === 'string' && id) commands.push({ type: PAY_OWED, payload: { id, credit: true } });
     return commands.length ? { lines: [], commands } : undefined;
 }
 

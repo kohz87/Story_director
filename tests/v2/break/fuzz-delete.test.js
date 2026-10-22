@@ -22,6 +22,8 @@ import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
 const SEEDS = [1, 2, 3];
 const REPLIES = 20;
 const DELETE_AT = [10, 16, 20];
+// The reply after which the reader adds "copper bit" and "gold" under Settings → Coins: rewards owed then count.
+const COINS_AT = 7;
 
 // mulberry32: the fuzz's only randomness.
 function prng(seed) {
@@ -96,7 +98,10 @@ function replyLines(r, n) {
             // Often only mentioned first (a hook with its giver and pay), then accepted in the same reply:
             // the + quest makes the hook the quest, active and taken on at once.
             if (r.chance(0.4)) lines.push(`+ hook ${key} — a job on offer | giver: Fenna | reward: ${r.int(1, 30)} gold`);
-            lines.push(`+ quest ${key} — a job | giver: Fenna | goal: Find the ${key} | reward: ${r.int(1, 30)} gold${r.chance(0.7) ? ` | due: June ${r.int(3, 7)}, 1200` : ''}`);
+            // Now and then in a coin word the chat cannot count until the Coins are set (COINS_AT): the turn-in
+            // leaves it owed (quest.payOwed pays it once the coins count it, in a later reply).
+            const pay = r.chance(0.35) ? `${r.int(1, 30)} copper bits` : `${r.int(1, 30)} gold`;
+            lines.push(`+ quest ${key} — a job | giver: Fenna | goal: Find the ${key} | reward: ${pay}${r.chance(0.7) ? ` | due: June ${r.int(3, 7)}, 1200` : ''}`);
             quests.push(key);
         } else if (roll < 0.62) {
             const from = r.chance(0.5) ? r.pick(BASE_PLACES) : name();
@@ -189,6 +194,7 @@ for (const seed of SEEDS) {
                 const lines = replyLines(r, n);
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
                 times.set(host.ctx.chat.at(-1), timeOf(lines));
+                if (n === COINS_AT) host.settings.set('story-block', 'coins', [{ name: 'copper bit', plural: 'copper bits', value: 1 }, { name: 'gold', value: 100 }]);
                 assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `seed ${seed}, reply ${n}: the clock (live)`);
                 // The reader's arc commands (own random stream, so the story's lines stay as they were): an
                 // accepted plan of its own names now and then, and sometimes End arc.
@@ -213,10 +219,16 @@ for (const seed of SEEDS) {
                 const lapsed = new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle').flatMap(entry => entry.receipt.data?.lapsed ?? []).map(entry => entry.key));
                 const lapsedHere = users.filter(i => [...lapsed].some(key => chat[i + 1]?.mes?.includes?.(`+ quest ${key} `)));
                 const user = lapsedHere.length && r.chance(0.6) ? r.pick(lapsedHere) : picked.length && r.chance(0.5) ? r.pick(picked) : r.pick(users);
+                // A reward owed that was paid since (thread.owed.paid): deleting the reply that closed the quest takes the
+                // payment's block with it (it depends on the debt), which Story Block reports as skipped, so it is
+                // not "a later block no longer applies" for any other reason.
+                const closedHere = Object.values(host.head().domains.director.threads).filter(thread => thread.owed?.paid && String(chat[user + 1]?.mes).includes(`- quest ${thread.key} `));
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
-                assert.deepEqual(host.store.problems().map(problem => problem.why ?? problem.message), [], `${where}: a later block no longer applies`);
+                const skipped = host.store.problems().map(problem => problem.why ?? problem.message);
+                if (closedHere.length) assert.ok(skipped.length <= closedHere.length * 2 + 1, `${where}: only the payments of the deleted turn-in are skipped (${skipped.join(' / ')})`);
+                else assert.deepEqual(skipped, [], `${where}: a later block no longer applies`);
                 const live = JSON.stringify(host.head());
                 host.store.rebuild();
                 assert.equal(JSON.stringify(host.head()), live, `${where}: rebuild != live`);

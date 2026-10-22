@@ -101,8 +101,8 @@ test('static text is byte-identical whatever the state', () => {
 test('the part has the MODULES §A shape and no domain of its own', () => {
     assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
     assert.deepEqual(part.domains, {});
-    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish']);
-    assert.deepEqual(Object.keys(part.queries), ['quest.progress', 'quest.autoTurnIns', 'quest.repeatedCoin', 'quest.details', 'quest.ranks', 'quest.followsLadder']);
+    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish', 'quest.payOwed']);
+    assert.deepEqual(Object.keys(part.queries), ['quest.progress', 'quest.autoTurnIns', 'quest.repeatedCoin', 'quest.owed', 'quest.owedCredits', 'quest.details', 'quest.ranks', 'quest.followsLadder']);
     // The Quests board is the screens part's screen now.
     assert.deepEqual(part.tabs, []);
 });

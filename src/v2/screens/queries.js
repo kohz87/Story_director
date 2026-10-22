@@ -228,7 +228,7 @@ function plainStatus(thread, progress) {
 
 /**
  * What a quest's details pop-up shows (F84), from the quests part's `quest.details`: `{ goal, note, giver,
- * due, rank, terms, held, taken, ended, history: [{ rev, text }], hasHistory }` with the dates written on
+ * due, rank, terms, held, owed, taken, ended, history: [{ rev, text }], hasHistory }` with the dates written on
  * the chat's calendar ('' when the story time was not set). Without `quest.details`, read from the thread.
  */
 function detailsOf(thread, given, calendar) {
@@ -243,6 +243,8 @@ function detailsOf(thread, given, calendar) {
         rank: text(details.rank?.title),
         terms: text(terms.text) || rewardOf(thread),
         held: text(terms.held),
+        // A reward owed ("Reward owed: 30 copper bits (add copper bits in Settings → Coins)"), else ''.
+        owed: text(details.owed?.text),
         taken: thread.taken ? dateText(thread.taken.at, calendar) || 'yes' : '',
         ended: thread.ended ? dateText(thread.ended.at, calendar) || 'yes' : '',
         history,
