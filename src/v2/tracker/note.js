@@ -37,13 +37,25 @@ const V1_LINES = CHANGE_INSTRUCTION.split('\n');
 const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:'));
 const WRITE_ONLY_LINE = V1_LINES.find(line => line.startsWith('Write only changes'));
 
-/** The Director's part of the static prompt: no names, counts, times or dice. */
-export const STATIC_TEXT = [
-    'Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).',
-    FIELDS_LINE,
-    WRITE_ONLY_LINE,
-    PACING,
-].join('\n');
+// Story Director alone (WAVE rule 11, B-rxui-7): with no module that runs fights, the fields name no
+// encounter. A written `encounter:` is still kept on its thread as plain data; it is just not told.
+const FIELDS_ALONE = FIELDS_LINE.replace(', encounter;', ';');
+
+/**
+ * The Director's part of the static prompt: no names, counts, times or dice. The same bytes for one
+ * set of modules: `fights` (a module runs fights) adds the encounter field.
+ */
+export function staticText({ fights = true } = {}) {
+    return [
+        'Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).',
+        fights ? FIELDS_LINE : FIELDS_ALONE,
+        WRITE_ONLY_LINE,
+        PACING,
+    ].join('\n');
+}
+
+/** The static part with a fight runner there (RPG Battle), as before. */
+export const STATIC_TEXT = staticText();
 
 /** Each Director kind's one line for the change-line instruction (SPEC §4.4). */
 export const GRAMMAR = Object.freeze({
@@ -56,6 +68,19 @@ export const GRAMMAR = Object.freeze({
     secret: '+ secret Name — what must not be revealed yet',
     time: '~ time <date, clock time> (the scene\'s time) · ! time +2h (time passes)',
 });
+
+// The grammar lines Story Director alone writes (no fight runner): a beat is a turn of the story only.
+export const GRAMMAR_ALONE = Object.freeze({
+    beat: GRAMMAR.beat.replace(' | encounter: the foes, for a fight', ''),
+});
+
+/** A kind's grammar line for the module set: `fights: false` takes GRAMMAR_ALONE's where it has one. */
+export const grammarOf = (kind, { fights = true } = {}) => (fights ? GRAMMAR[kind] : GRAMMAR_ALONE[kind] ?? GRAMMAR[kind]);
+
+/** A v1 tracker with no record's `encounter` told (no fight runner): the field stays on the thread. */
+export function withoutEncounters(tracker) {
+    return { ...tracker, records: tracker.records.map(record => (record.fields?.encounter ? { ...record, fields: { ...record.fields, encounter: '' } } : record)) };
+}
 
 // v1's quest checks name a record bare ("- Key — outcome"); every v2 line names its kind.
 function v2Lines(text) {
@@ -116,7 +141,8 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const director = withoutHeld(tailThreads(stored, { said, place: String(state?.domains?.scene?.place?.name ?? '') }));
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
     const calendar = calendarOf(settings, packCalendarOf(view.query));
-    const tracker = toTracker(director);
+    const fights = view?.fights !== false;
+    const tracker = fights ? toTracker(director) : withoutEncounters(toTracker(director));
     const now = director.time?.minutes ?? null;
     const message = director.turn?.n ?? 0;
     const selection = classify(tracker, {
@@ -144,9 +170,9 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const parts = noteParts(selection, {
         calendar,
         // v1's budget counts the instruction too; here it is in the static part.
-        budgetTokens: budget + estimateTokens(STATIC_TEXT),
+        budgetTokens: budget + estimateTokens(staticText({ fights })),
         corrections,
-        instruction: STATIC_TEXT,
+        instruction: staticText({ fights }),
         givenUp: givenUpIn(tracker, said),
         taking: offersChosenIn(tracker, said, 'accept'),
         declining: offersChosenIn(tracker, said, 'refuse'),

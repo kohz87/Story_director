@@ -10,11 +10,15 @@
 import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
 import { initialDirector, queries, validateDirector } from './domain.js';
-import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, directorTail } from './note.js';
+import { GRAMMAR, GRAMMAR_ALONE, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
-const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, { grammar: GRAMMAR[kind], apply: applyThreadLine }]));
+// A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set.
+const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
+    grammar: Object.hasOwn(GRAMMAR_ALONE, kind) ? env => grammarOf(kind, env) : GRAMMAR[kind],
+    apply: applyThreadLine,
+}]));
 kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
 
 export const part = {
@@ -25,7 +29,7 @@ export const part = {
     queries,
     kinds,
     context: {
-        static: () => STATIC_TEXT,
+        static: env => staticText(env),
         tail: view => directorTail(view),
         budget: TAIL_BUDGET,
     },

@@ -81,7 +81,7 @@ function settleCommand(ctx, payload = {}) {
     const settings = timeSettings(ctx.settings);
     const calendar = calendarOf(settings);
     const rev = receiptRev(ctx, given);
-    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), met: targetMet(ctx.query) });
+    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), met: targetMet(ctx.query), fights: ctx.fights !== false });
     const told = settleSummary(done.closed, { calendar, now: done.now });
     return {
         summary: told || `Story time settled at ${calendar.format(done.now, { era: false })}.`,

@@ -36,6 +36,26 @@ function fightsSince(query, sinceRev) {
     });
 }
 
+/**
+ * Whether a module counts fights (RPG Battle's `combat.foesBeaten` answers a list). Story Director
+ * stands alone (WAVE rule 11): without it, a kill goal cannot be counted and the story vouches for it.
+ */
+export function fightsCounted(query) {
+    return Array.isArray(tryQuery(query, 'combat.foesBeaten', {}, null));
+}
+
+/**
+ * The target code counts, or null: an item target always (the inventory is Story Block's), a kill
+ * target only while a module counts fights. A quest without one is met on the story's word (F83, F94).
+ */
+export function countedTarget(target, query) {
+    if (!target) return null;
+    return target.kind === 'items' || fightsCounted(query) ? target : null;
+}
+
+/** Why a kill goal is the story's to judge: no module counts fights. */
+export const NO_FIGHTS = 'No fights are counted (RPG Battle is not running): the story says when it is done (met: yes).';
+
 /** The claim key that keeps one fight from paying two kill quests (MODULES §F7). */
 export const beatenClaim = rev => `beaten:${rev}`;
 
@@ -109,7 +129,12 @@ export function progressOf(thread, query, { free = () => true, closing = false }
     }
     if (!thread.taken) return { have: 0, need, met: false, source: 'fights', noun, reason: 'Fights count from when it is taken on.', fights: [] };
     const fights = fightsSince(query, thread.taken.rev);
-    if (!fights) return { have: 0, need, met: false, source: 'fights', noun, reason: 'No battle record (RPG Battle is not running).', fights: [] };
+    if (!fights) {
+        // Nobody counts fights: a kill goal is the story's word, as a goal code cannot count (F83, F94).
+        const ready = Boolean(thread?.ready);
+        const met = ready || closing;
+        return { have: met ? need : 0, need, met, ready, source: 'story', noun, reason: met ? '' : NO_FIGHTS, fights: [] };
+    }
     let have = 0;
     const counted = [];
     for (const fight of fights) {

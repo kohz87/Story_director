@@ -92,15 +92,17 @@ export function scaledReward(reward, scale) {
 /**
  * `quest.ranks` → `[{ id, title, levels: [lo, hi] | null, reward: [lo, hi] }]`, lowest first: the first
  * enabled pack's `ranks` content (as written), else RPG Battle's `party.ranks` with rewards by place, else
- * DEFAULT_RANKS with their rewards times the pack's money scale (moneyScale, F104). Plain copies.
+ * DEFAULT_RANKS. Rewards Story Director sets itself (by place, for RPG Battle's ladder and its own) are
+ * times the pack's money scale (moneyScale, F104); a pack's own ladder keeps its rewards as written.
+ * Plain copies.
  */
 export function ranksOf(query) {
     const packs = ladderFrom(firstPack(tryQuery(query, 'packs.content', { kind: 'ranks' }, null)));
     if (packs) return packs;
     const party = ladderFrom(tryQuery(query, 'party.ranks', {}, null), { withRewards: false });
-    if (party) return party;
     const scale = moneyScale(query);
-    return DEFAULT_RANKS.map(rank => ({ ...rank, levels: [...rank.levels], reward: scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) }));
+    const scaled = rank => ({ ...rank, levels: rank.levels ? [...rank.levels] : null, reward: scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) });
+    return (party ?? DEFAULT_RANKS).map(scaled);
 }
 
 // "D", "d-rank", "Rank D", "D rank", "Soul Class II" read the same way: lower case, the word rank set aside.

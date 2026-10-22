@@ -16,7 +16,7 @@ test('progress for foes counts only fights after taken.rev, whole words', () => 
         fight(9, [{ name: 'Wolf', count: 5 }]), fight(10, [{ name: 'Wolf', count: 5 }]),
         fight(11, [{ name: 'Dire Wolf', count: 2 }, { name: 'Wolfhound Handler', count: 3 }]),
     ] });
-    const want = { have: 2, need: 3, met: false, ready: false, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.', finish: { ok: false, reason: 'Need 1 more wolf.' } };
+    const want = { have: 2, need: 3, met: false, ready: false, countable: true, source: 'fights', noun: 'wolves', label: 'Wolves 2/3', reason: 'Need 1 more wolf.', finish: { ok: false, reason: 'Need 1 more wolf.' } };
     // Through the documented state layouts (no query handed to the query) …
     assert.deepEqual(progress(state, { id: 'th_wolves01' }), want);
     // … and through the host's queries when it passes them.
@@ -24,7 +24,8 @@ test('progress for foes counts only fights after taken.rev, whole words', () => 
     const query = (name, args) => { seen.push([name, args]); return fakeQueries[name](state, args); };
     assert.deepEqual(progress(state, { id: 'th_wolves01' }, { query }), want);
     // The scene has no kind, so the place rule asks the atlas for it (atlas.here).
-    assert.deepEqual(seen, [['combat.foesBeaten', { sinceRev: 10 }], ['atlas.here', {}]]);
+    // Whether fights are counted at all (Story Director alone counts none), then the fights since taken.
+    assert.deepEqual(seen, [['combat.foesBeaten', {}], ['combat.foesBeaten', { sinceRev: 10 }], ['atlas.here', {}]]);
     state.domains.combat.beaten.push(fight(12, [{ name: 'Wolves', count: 6 }]));
     assert.deepEqual(progress(state, { key: 'EastBluffWolves' }), { ...want, have: 8, met: true, label: 'Wolves 8/3', reason: '', finish: { ok: false, reason: 'Turn it in at a settlement or where Orsa is.' } });
 });
@@ -44,10 +45,10 @@ test('progress for items reads the inventory; no target and unknown quests', () 
         defs: [{ id: 'story/moonleaf', name: 'Moonleaf' }, { id: 'story/moon', name: 'Moon Charm' }],
         stacks: [{ id: 'it_aaaaaaa1', def: 'story/moonleaf', qty: 2 }, { id: 'it_bbbbbbb2', def: 'story/moonleaf', qty: 1 }, { id: 'it_ccccccc3', def: 'story/moon', qty: 9 }],
     });
-    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, ready: false, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'Take it on first.' } });
+    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, ready: false, countable: true, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'Take it on first.' } });
     // A goal code cannot count (F83): not met until the story says so.
     const waiting = 'The story has not said its goal is met yet.';
-    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, ready: false, source: null, noun: '', label: '', reason: waiting, finish: { ok: false, reason: waiting } });
+    assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, ready: false, countable: false, source: null, noun: '', label: '', reason: waiting, finish: { ok: false, reason: waiting } });
     assert.equal(progress(state, { id: 'th_nope0001' }), null);
 });
 

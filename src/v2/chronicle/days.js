@@ -57,8 +57,13 @@ export const MAX_NAME = 80;
 // another module's command has no receipt of its own; the time part's settle before the next reply
 // sets the clock right again.
 const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'director.advance']);
-// Receipts that are bookkeeping only: never a fact of the day.
-const QUIET_TYPES = new Set([DIGEST, 'chronicle.surface', 'director.seed']);
+// Receipts that are bookkeeping only: never a fact of the day. Besides these, every receipt Story Block
+// or a module committed on its own (cause `system`) that the story was not told (RX-cap-5: RPG Battle's
+// `checks.prepare` dice for the next reply, a module set up): per-reply bookkeeping, not what happened.
+// Making a character is the start of the story, not a day's event.
+const QUIET_TYPES = new Set([DIGEST, 'chronicle.surface', 'director.seed', 'checks.prepare', 'party.create']);
+const quiet = receipt => QUIET_TYPES.has(receipt.type) || String(receipt.type).startsWith('creation.')
+    || (receipt.cause === 'system' && receipt.narrate !== true);
 const SETTLE = 'time.settle';
 // Receipts a section of the digest already tells (places, money, world), or the reader's own edits and
 // a fight's blow-by-blow: never repeated under "happened".
@@ -240,7 +245,7 @@ export function dayFacts(receipts, { revDay = new Map(), state = null, day = nul
     let count = 0;
     for (const receipt of receipts) {
         // Bookkeeping and the clock's own receipts are no fact of the day (a day only slept through has none).
-        if (QUIET_TYPES.has(receipt.type) || clockSet(receipt)) continue;
+        if (quiet(receipt) || clockSet(receipt)) continue;
         count += 1;
         const data = isRecord(receipt.data) ? receipt.data : {};
         const said = cut(receipt.summary, MAX_ITEM);

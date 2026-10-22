@@ -53,7 +53,7 @@ test('a reply\'s + quest is an offer; Take on, fights, Finish pays integers once
     assert.equal((await host.sdk.command('quest.finish', { key: 'Granary Rats' })).code, 'NOT_ENOUGH');
     const first = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 2 }] }));
     const second = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat Swarm', count: 1 }, { name: 'Bandit', count: 1 }] }));
-    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }), { have: 3, need: 3, met: true, ready: false, source: 'fights', noun: 'cellar rats', label: 'Cellar rats 3/3', reason: '', finish: { ok: true, reason: '' } });
+    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }), { have: 3, need: 3, met: true, ready: false, countable: true, source: 'fights', noun: 'cellar rats', label: 'Cellar rats 3/3', reason: '', finish: { ok: true, reason: '' } });
 
     const finish = await ok(host.sdk.command('quest.finish', { key: 'Granary Rats' }));
     assert.equal(finish.receipt.summary, 'Astra turns in Granary Rats: 3 cellar rats beaten (target 3), 6 gold paid.');
