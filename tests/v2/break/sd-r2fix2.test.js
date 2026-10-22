@@ -211,13 +211,13 @@ test('a zero-width or bidi mark makes no new thread, place or world event', asyn
 
 // ---- B-b7r2-1 ------------------------------------------------------------------------------------------
 
-test('the module needs Story Block 2.0.0-alpha.2 or later', async t => {
+test('the module needs Story Block 2.0.0-beta.1 or later', async t => {
     const def = createModule();
-    assert.deepEqual(def.requires, { storyBlock: '>=2.0.0-alpha.2' });
-    assert.equal(STORY_BLOCK_RANGE, '>=2.0.0-alpha.2');
+    assert.deepEqual(def.requires, { storyBlock: '>=2.0.0-beta.1' });
+    assert.equal(STORY_BLOCK_RANGE, '>=2.0.0-beta.1');
     // Story Block 2.0.0-alpha.2 orders pre-releases (Story Block before it compared without the tag, so
-    // it read this as ">=2.0.0" and still loaded the module).
-    for (const [version, ok] of [['2.0.0-alpha.2', true], ['2.0.0-alpha.10', true], ['2.0.0', true], ['2.0.0-alpha.1', false], ['1.9.0', false]]) {
+    // it read this as ">=2.0.0" and still loaded the module). Every alpha is below the beta.
+    for (const [version, ok] of [['2.0.0-beta.1', true], ['2.0.0-beta.2', true], ['2.0.0-rc.1', true], ['2.0.0', true], ['2.0.0-alpha.10', false], ['2.0.0-alpha.2', false], ['2.0.0-alpha.1', false], ['1.9.0', false]]) {
         assert.equal(satisfies(version, def.requires.storyBlock), ok, version);
     }
     const host = await fresh(t);
