@@ -8,7 +8,11 @@
 // commits `time.settle` as a `system` receipt on the reply where the time passed, so swiping or
 // deleting that reply takes it all back. Its summary tells the next reply what slipped, in v1's
 // words; the recap goes in this part's tail, for that reply only.
+//
+// Queries: `time.now` (the clock for other modules: minutes, the calendar text, the story day and its
+// date), `time.overdue` and `time.recap`.
 
+import { makeCalendar } from '../../calendar.js';
 import { estimateTokens } from '../../relevance.js';
 import { RECAP_BUDGET } from './recap.js';
 import { DEFAULTS, calendarOf, timeSettings } from './records.js';
@@ -123,7 +127,42 @@ const stillActive = (director, ids) => (Array.isArray(ids) ? ids : [])
     .filter(thread => thread && thread.status === 'active')
     .map(thread => ({ id: thread.id, key: thread.key, kind: thread.kind, due: String(thread.fields?.due ?? thread.fields?.on ?? '') }));
 
+// The chat's calendar for a query: the tracker's `director.calendar` (the reader's, else the enabled
+// pack's, else Gregorian), else this part's own settings as module.js hands them over.
+function queryCalendar(tools) {
+    try {
+        const config = typeof tools?.query === 'function' ? tools.query('director.calendar', {}) : null;
+        if (config && typeof config === 'object') return makeCalendar(config);
+    } catch {
+        // No tracker part: this part's settings.
+    }
+    return calendarOf(timeSettings(tools?.settings));
+}
+
+/**
+ * `time.now`: the story clock for other modules (RPG Battle's timed effects, the day digest):
+ * `{ minutes, text, day, date }`: whole story minutes, that time on the chat's calendar
+ * ("June 3, 1200, 08:00 am"), the story day (minutes / 1440, floored) and its date ("June 3, 1200").
+ * While the story has not set the time: `{ minutes: null, text: '', day: null, date: '' }`.
+ */
+export function nowQuery(state, _args, tools) {
+    const minutes = state?.domains?.director?.time?.minutes;
+    if (!isInt(minutes)) return { minutes: null, text: '', day: null, date: '' };
+    let text = '';
+    let date = '';
+    try {
+        const calendar = queryCalendar(tools);
+        text = calendar.format(minutes);
+        date = calendar.format(minutes, { time: false });
+    } catch {
+        text = '';
+        date = '';
+    }
+    return { minutes, text, day: Math.floor(minutes / 1440), date };
+}
+
 export const queries = {
+    'time.now': nowQuery,
     /**
      * Where threads stood when the story time was last settled: `{ minutes, lapsed, overdue,
      * pay, due }`, each a list of `{ id, key, kind, due }` (lapsed: closed in that jump, with

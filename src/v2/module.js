@@ -22,7 +22,9 @@
 //   the reader's map settings as `map` when the caller gives none;
 // - tabs: the parts' tabs in part order (none now: the screens show quests, threads and the map);
 // - screens: every part's `screens`, in part order; widgets: every part's `widgets`. A screen id
-//   or widget name in two parts throws.
+//   or widget name in two parts throws;
+// - features (MODULES §F100): every part's `features`, in part order (an id in two parts throws); a
+//   command's or query's `feature` tag is kept on its wrapper. Kinds, screens and context keep theirs.
 // Parts never import each other; they talk through commands and queries (ctx.call, ctx.query).
 
 import { part as tracker } from './tracker/index.js';
@@ -210,6 +212,10 @@ function own(table, name, ns, what) {
 
 const linesOf = value => (Array.isArray(value) ? value.filter(line => typeof line === 'string') : []);
 
+// A wrapped handler or query keeps the part's `feature` tag (MODULES §F100: a function with a `feature`
+// property), so Story Block can leave it out while the reader has that feature off.
+const withFeature = (fn, from) => (typeof from?.feature === 'string' ? Object.assign(fn, { feature: from.feature }) : fn);
+
 // Several parts' functions under one hook name, called in part order. beforeGenerate answers
 // (string[] | { lines, commands }) are joined; canGenerate gives the first refusal; any other
 // hook gives the last answer that is not undefined.
@@ -246,7 +252,8 @@ function mergeHook(name, entries, shared) {
  * for queries whose host tools lack them; by default Story Block's live sdk.
  */
 export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
-    const owners = { domain: {}, command: {}, query: {}, kind: {}, tab: {}, screen: {}, widget: {} };
+    const owners = { domain: {}, command: {}, query: {}, kind: {}, tab: {}, screen: {}, widget: {}, feature: {} };
+    const features = [];
     const screenList = [];
     const widgets = {};
     const readsByPart = {};
@@ -271,14 +278,18 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         }
         for (const [type, handler] of Object.entries(part.commands ?? {})) {
             own(owners.command, type, ns, 'the command');
-            commands[type] = (ctx, payload) => handler(partCtx(ns, ctx, shared), payload);
+            commands[type] = withFeature((ctx, payload) => handler(partCtx(ns, ctx, shared), payload), handler);
         }
         for (const [name, query] of Object.entries(part.queries ?? {})) {
             own(owners.query, name, ns, 'the query');
-            queries[name] = (state, args, tools) => {
+            queries[name] = withFeature((state, args, tools) => {
                 const own = partTools(ns, tools, shared, host);
                 return query(state, withSettingArgs(name, args, own), own);
-            };
+            }, query);
+        }
+        for (const feature of part.features ?? []) {
+            own(owners.feature, feature?.id, ns, 'the feature');
+            features.push({ ...feature });
         }
         for (const [kind, spec] of Object.entries(part.kinds ?? {})) {
             own(owners.kind, kind, ns, 'the change-line kind');
@@ -344,6 +355,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         screens: screenList,
     };
     if (Object.keys(widgets).length) def.widgets = widgets;
+    if (features.length) def.features = features;
     if (Object.keys(kinds).length) {
         def.capture = {
             kinds,

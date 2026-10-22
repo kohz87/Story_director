@@ -10,6 +10,7 @@ import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, TAIL_HEADER, chronicleTail } from '.
 import { SURFACE, TAIL_EVENTS, beforeGenerate, hashUnit, nearness, pickEvents, pickFresh, tailPick } from '../../../src/v2/chronicle/pick.js';
 import { agoText } from '../../../src/v2/chronicle/queries.js';
 import { part } from '../../../src/v2/chronicle/index.js';
+import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { clockAt, command, eventNamed, lines, makeState, replay, runCommand, sceneAt, viewOf } from './helpers/fake-ctx.js';
 import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
 
@@ -35,7 +36,7 @@ test('the static part is the same bytes whatever the state; it names no event, c
     assert.match(GRAMMAR.world, /^\+ world Name — /);
     assert.match(GRAMMAR.faction, /^\+ faction Name — /);
     assert.deepEqual(Object.keys(part.kinds).sort(), ['faction', 'world']);
-    assert.equal(part.context.budget, TAIL_BUDGET);
+    assert.equal(part.context.budget, TAIL_BUDGET + DIGEST_TAIL_BUDGET);
 });
 
 test('no open event, no tail; three or fewer open: all of them, with their place and the last news', () => {

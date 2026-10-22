@@ -113,7 +113,7 @@ export function storeSaving({ ctx, live = () => ctx, fetch = null, onSaveError =
             if (!entries.length) return;
             if (!change?.place) throw new Error('this page cannot write to that chat\'s file');
             const [header, ...messages] = await file.read(change.place);
-            if (!header || !messages.length) throw new Error('its chat file could not be read');
+            if (!header || !messages.length) throw new Error('its chat file is no longer on the server (deleted, or renamed elsewhere)');
             for (const { message, index } of entries) {
                 if (!carryRecord(message, messages[index])) throw new Error(`its chat file no longer holds message ${index} as it was`);
             }

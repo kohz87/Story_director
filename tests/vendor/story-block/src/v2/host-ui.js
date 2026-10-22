@@ -12,6 +12,7 @@
 import { FIELD_TYPES, normalizeField } from './registry.js';
 import { HOST_SETTINGS_SCHEMA } from './sdk.js';
 import { scrollCue } from './view/scroll-cue.js';
+import { cutAt } from '../text.js';
 
 export const OPEN_CLASS = 'story-suite-open';
 export const HOST_FOLD = 'story-suite';
@@ -102,7 +103,7 @@ function control(doc, field, value, onChange, id) {
     if (max !== null) input.maxLength = max;
     input.value = String(value ?? '');
     input.addEventListener('change', () => {
-        if (max !== null && input.value.length > max) input.value = input.value.slice(0, max);
+        if (max !== null && input.value.length > max) input.value = cutAt(input.value, max);
         onChange(input.value);
     });
     return input;

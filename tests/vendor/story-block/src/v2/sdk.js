@@ -4,6 +4,7 @@
 // module's initial state. No SillyTavern import (turn.js wires SillyTavern).
 
 import { INIT_PREFIX, normalizeField } from './registry.js';
+import { cutAt } from '../text.js';
 
 // sdk.check comes from check.js (SB-commands); the sdk still loads without it.
 const checkModule = await import('./check.js').catch(() => null);
@@ -23,10 +24,16 @@ export const HOST_SETTINGS_SCHEMA = Object.freeze({
     }),
 });
 
+// A text field with no `max` of its own is held to this many characters; a list to this many rows.
+export const SETTING_TEXT_MAX = 200;
+export const SETTING_LIST_ROWS = 100;
+
 /**
- * A value as `field` (a settings schema entry) allows it: text is text, cut at `max` characters; a
- * whole number is kept inside min/max (null when it is not one); a choice must be one of its options
- * (null when not). Other types pass unchanged.
+ * A value as `field` (a settings schema entry) allows it: text is text, cut at `max` characters
+ * (SETTING_TEXT_MAX when the field sets none), never inside a character; a whole number is kept inside
+ * min/max (null when it is not one); a choice must be one of its options (null when not); a list is at
+ * most SETTING_LIST_ROWS rows of records, each holding its `of` fields as they allow them (other keys
+ * dropped). Other types pass unchanged.
  */
 export function settingValue(field, value) {
     if (!field) return value;
@@ -34,7 +41,14 @@ export function settingValue(field, value) {
     if (f.type === 'text') {
         if (value === undefined || value === null) return '';
         const text = typeof value === 'string' ? value : String(value);
-        return Number.isInteger(f.max) && f.max >= 0 && text.length > f.max ? text.slice(0, f.max) : text;
+        const max = Number.isInteger(f.max) && f.max >= 0 ? f.max : SETTING_TEXT_MAX;
+        return text.length > max ? cutAt(text, max) : text;
+    }
+    if (f.type === 'list') {
+        if (!Array.isArray(value)) return [];
+        const of = isObject(f.of) ? Object.entries(f.of) : [];
+        return value.slice(0, SETTING_LIST_ROWS).filter(isObject)
+            .map(row => Object.fromEntries(of.map(([key, sub]) => [key, settingValue(sub, row[key])])));
     }
     if (f.type === 'int') {
         const n = typeof value === 'number' ? value : Number(String(value ?? '').trim());

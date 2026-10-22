@@ -15,7 +15,7 @@ const faction = (n, over = {}) => ({ id: `fa_${String(n).padStart(8, '0')}`, nam
 const withEvents = list => ({ ...initialChronicle(), events: Object.fromEntries(list.map(entry => [entry.id, entry])) });
 
 test('the initial chronicle is valid and empty', () => {
-    assert.deepEqual(initialChronicle(), { events: {}, factions: {}, seen: [{}], round: 0, surfaced: null });
+    assert.deepEqual(initialChronicle(), { events: {}, factions: {}, seen: [{}], round: 0, surfaced: null, days: {}, written: null });
     assert.deepEqual(validateChronicle(initialChronicle()), []);
 });
 
