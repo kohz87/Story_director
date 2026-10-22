@@ -24,8 +24,13 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     assert.equal(typeof empty, 'string');
     assert.equal(part.context.static(), empty);
     assert.ok(busy.domains.director.threads, 'a full tracker exists');
-    // static() takes no state: the same function, the same bytes, before and after the story moved.
-    assert.equal(part.context.static.length, 0);
+    // static() takes no state, only the module set ({ fights }): the same bytes before and after the story moved.
+    assert.equal(part.context.static.length, 1);
+    assert.equal(part.context.static({ fights: true }), empty);
+    const alone = part.context.static({ fights: false });
+    assert.equal(part.context.static({ fights: false }), alone);
+    assert.doesNotMatch(alone, /encounter/);
+    assert.equal(alone, empty.replace(', encounter;', ';'));
     assert.equal(empty, STATIC_TEXT);
     for (const word of ['Geva', 'Wolf', 'March', 'Bluewatch', '2026']) assert.ok(!empty.includes(word), word);
     // v1's own rules, word for word.
@@ -36,11 +41,17 @@ test('the static part is byte-identical whatever the tracker holds, and names no
 test('each kind has one grammar line for the change instruction', () => {
     assert.deepEqual(Object.keys(part.kinds), ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'time']);
     for (const [kind, entry] of Object.entries(part.kinds)) {
-        assert.equal(typeof entry.grammar, 'string', kind);
-        assert.ok(!entry.grammar.includes('\n'), kind);
-        assert.ok(entry.grammar.includes(` ${kind} `), kind);
+        // The beat's grammar depends on the module set (a fight runner or none, WAVE rule 11).
+        for (const fights of [true, false]) {
+            const grammar = typeof entry.grammar === 'function' ? entry.grammar({ fights }) : entry.grammar;
+            assert.equal(typeof grammar, 'string', kind);
+            assert.ok(!grammar.includes('\n'), kind);
+            assert.ok(grammar.includes(` ${kind} `), kind);
+        }
         assert.equal(typeof entry.apply, 'function', kind);
     }
+    assert.match(part.kinds.beat.grammar({ fights: true }), /encounter: the foes, for a fight/);
+    assert.doesNotMatch(part.kinds.beat.grammar({ fights: false }), /encounter|fight|foe/);
 });
 
 test('nothing tracked: no tail', () => {

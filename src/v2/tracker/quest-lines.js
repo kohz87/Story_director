@@ -143,7 +143,9 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw }) {
     // One reply turns in one quest on the story's word alone (B-b3-r2-5), and pays at most its budget in
     // rewards the story wrote (RX-E-1): another the story closes in the same reply stays open, marked
     // ready (as `met: yes` would) when code cannot count its goal, for a later reply to turn in.
-    if ((check.finish.word || (check.finish.budget && !thread.target)) && !thread.ready) {
+    // `countable` (quest.progress): whether code counts its target; a kill goal with no fights module is the story's word.
+    const vouched = check.countable === undefined ? !thread.target : !check.countable;
+    if ((check.finish.word || (check.finish.budget && vouched)) && !thread.ready) {
         const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
         thread.ready = { rev };
         thread.rev = rev;

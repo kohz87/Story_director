@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part } from '../../../src/v2/quests/index.js';
+import { NO_FIGHTS } from '../../../src/v2/quests/progress.js';
 import { fakeCommands, fakeQueries, makeHost, makeState, quest, xpCommand } from './helpers/fake-ctx.js';
 
 const { 'quest.take': take, 'quest.decline': decline, 'quest.abandon': abandon, 'quest.finish': finish } = part.commands;
@@ -29,7 +30,8 @@ test('take on an offer: taken at this receipt rev, target and reward settled by 
     assert.equal(thread.rev, 11);
     assert.deepEqual(thread.target, { noun: 'wolves', count: 3, kind: 'foes' });
     assert.deepEqual(thread.reward, { amount: 1, each: true, unit: '', text: '1 silver each wolf' });
-    assert.equal(result.receipt.summary, 'Astra takes on EastBluffWolves: beat 3 wolves; 1 gold per wolf.');
+    // The test's PC has no level (no RPG Battle): the lowest rank, and it says so (WAVE rule 11).
+    assert.equal(result.receipt.summary, 'Astra takes on EastBluffWolves: beat 3 wolves; 1 gold per wolf; no character level is known, so it pays as F-rank, the lowest.');
     assert.equal(result.receipt.narrate, true);
 });
 
@@ -238,13 +240,18 @@ test('a refused sub-command (fewer items than counted) rejects the whole turn-in
     assert.deepEqual(strict.state, before);
 });
 
-test('without RPG Battle a foes quest cannot be finished, and says why', () => {
+test('without RPG Battle a kill goal is the story\'s word: a click waits for met: yes, the story\'s turn-in pays', () => {
     const host = takenWolves([]);
     const queries = { 'inventory.items': fakeQueries['inventory.items'] };
     const bare = makeHost(host.state, { queries });
-    const result = bare.run(finish, { id: 'th_wolves01' });
-    assert.equal(result.code, 'NOT_ENOUGH');
-    assert.match(result.message, /No battle record/);
+    const click = bare.run(finish, { id: 'th_wolves01' });
+    assert.equal(click.code, 'REFUSED');
+    assert.match(click.message, /has not said its goal is met/);
+    const progress = part.queries['quest.progress'](host.state, { id: 'th_wolves01' }, { query: (name, args) => (queries[name] ? queries[name](host.state, args) : null) });
+    assert.deepEqual([progress.countable, progress.met, progress.source, progress.reason], [false, false, 'story', NO_FIGHTS]);
+    const byStory = makeHost(host.state, { queries, cause: 'story' }).run(finish, { id: 'th_wolves01', by: 'story' });
+    assert.equal(byStory.ok, true, byStory.message);
+    assert.match(byStory.receipt.summary, /on the story's word \(no fights are counted\), 3 gold paid/);
 });
 
 test('the transaction refuses drafts of domains the module does not own', () => {

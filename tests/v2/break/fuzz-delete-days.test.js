@@ -1,6 +1,6 @@
 // The delete fuzz with day crossings (the day digest, feature story-director.digest): replies that move
-// the clock by hours or days, with money, places, items and world lines, and middle exchanges deleted
-// along the way. After each delete every stored block must still apply, a rebuild must give the live
+// the clock by hours or days (time lines and crafting's director.advance), with money, places, items
+// and world lines, and middle exchanges deleted along the way. After each delete every stored block must still apply, a rebuild must give the live
 // state and every validator must pass; after the next reply every day the digests had is there again
 // and none is for today or later; the caps hold throughout; a fresh load gives the live state.
 import test from 'node:test';
@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeCraft } from '../time/helpers/fake-craft.js';
 import { DIGEST, dayOf, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 
 // Seeds 11–12 keep few days (older ones go short, which a later digest rewrites); 13–14 keep them
@@ -61,6 +62,9 @@ function replyLines(r, n) {
     if (r.chance(0.4)) lines.push(`~ place ${r.pick(PLACES)}`);
     if (r.chance(0.3)) lines.push(`+ item Trinket ${n}`);
     if (r.chance(0.2)) lines.push(`+ world Trouble ${n} — afoot | state: ${r.pick(['looming', 'ongoing'])}`);
+    // Crafting moves the clock through director.advance (sometimes twice for one cause: held to once).
+    if (r.chance(0.3)) lines.push(`! craft Tool ${n} | hours: ${r.int(1, 30)}`);
+    if (r.chance(0.1)) lines.push(`! craft Spare ${n} | hours: ${r.int(1, 5)}`);
     const step = r();
     if (step < 0.45) lines.push(`! time +${r.int(2, 30)}h`);
     else if (step < 0.6) lines.push(`! time +${r.int(1, 3)}d`);
@@ -91,7 +95,7 @@ for (const seed of SEEDS) {
         const caps = whole ? { FULL: 60, KEEP: 60 } : { FULL: 3, KEEP: 5 };
         const settings = settingsOf(caps);
         let gone = 0;
-        const host = await createHost({ modules: [fakeRpgBattle(), createModule()], settings });
+        const host = await createHost({ modules: [fakeRpgBattle(), createModule(), fakeCraft()], settings });
         try {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5']));
             for (let n = 1; n <= REPLIES; n += 1) {
@@ -134,7 +138,7 @@ for (const seed of SEEDS) {
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === DIGEST), `seed ${seed}: days were written`);
             assert.ok(host.sdk.query('chronicle.days').length > 0);
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
-            const again = await createHost({ modules: [fakeRpgBattle(), createModule()], settings });
+            const again = await createHost({ modules: [fakeRpgBattle(), createModule(), fakeCraft()], settings });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
                 assert.deepEqual(again.store.problems(), [], `seed ${seed}: a fresh load skips nothing`);

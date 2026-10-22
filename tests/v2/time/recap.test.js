@@ -208,3 +208,12 @@ test('v1 parity: the recap is v1\'s While away for a twelve-hour jump, in v2\'s 
     const short = buildRecap(director(chat.head()), { calendar, from: at('Goldwane 14, 06:00 am'), to: at('Goldwane 14, 01:00 pm'), minMinutes: 6 * 60 });
     assert.equal(short.lines[0], `[While away] Goldwane 14, 06:00 am → Goldwane 14, 01:00 pm: Ambush at the weir (Goldwane 14, 09:00 am) (fought off-screen: 3 bandit). ${AWAY_CUE} ${AWAY_RECORD_V2}`);
 });
+
+test('alone (no fight runner): no record tells its encounter; the thread keeps it', async () => {
+    const { trackerOf } = await import('../../../src/v2/time/records.js');
+    const thread = { id: 'th_beat0001', key: 'Ambush', kind: 'beat', status: 'active', summary: 'bandits', fields: { on: 'June 3, 1200, 09:00 am', encounter: '3 Bandit' }, track: { order: 1 } };
+    const director = Object.freeze({ threads: Object.freeze({ th_beat0001: Object.freeze({ ...thread, fields: Object.freeze({ ...thread.fields }) }) }), time: { minutes: 0 } });
+    assert.equal(trackerOf(director).tracker.records[0].fields.encounter, '3 Bandit');
+    assert.equal(trackerOf(director, { fights: false }).tracker.records[0].fields.encounter, '');
+    assert.equal(director.threads.th_beat0001.fields.encounter, '3 Bandit');
+});

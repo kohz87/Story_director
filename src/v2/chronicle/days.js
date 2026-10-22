@@ -15,8 +15,8 @@
 // own summary, a name the state keeps, or a calendar date.
 //
 // Which day a receipt belongs to: receipts are walked in chat order and the clock is followed through
-// the receipts that set it (the tracker's `time` line, the pack's start, the time part's settle, each
-// with `data.minutes`). A receipt belongs to the day the clock was on when it was committed; before the
+// the receipts that set it (the tracker's `time` line, the pack's start, the time part's settle and
+// `director.advance`, each with `data.minutes`). A receipt belongs to the day the clock was on when it was committed; before the
 // clock was first set, to the first day it was set to.
 //
 // chronicle.days    = { [day]: [Digest] }   each day a slot (../slot.js), written whole
@@ -53,10 +53,17 @@ export const MAX_LINE = 200;
 export const MAX_DATE = 80;
 export const MAX_NAME = 80;
 
-// Receipts that set the clock (module story-director, `data.minutes`).
-const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle']);
-// Receipts that are bookkeeping only: never a fact of the day.
-const QUIET_TYPES = new Set([DIGEST, 'chronicle.surface', 'director.seed']);
+// Receipts that set the clock (module story-director, `data.minutes`). `director.advance` called by
+// another module's command has no receipt of its own; the time part's settle before the next reply
+// sets the clock right again.
+const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'director.advance']);
+// Receipts that are bookkeeping only: never a fact of the day. Besides these, every receipt Story Block
+// or a module committed on its own (cause `system`) that the story was not told (RX-cap-5: RPG Battle's
+// `checks.prepare` dice for the next reply, a module set up): per-reply bookkeeping, not what happened.
+// Making a character is the start of the story, not a day's event.
+const QUIET_TYPES = new Set([DIGEST, 'chronicle.surface', 'director.seed', 'checks.prepare', 'party.create']);
+const quiet = receipt => QUIET_TYPES.has(receipt.type) || String(receipt.type).startsWith('creation.')
+    || (receipt.cause === 'system' && receipt.narrate !== true);
 const SETTLE = 'time.settle';
 // Receipts a section of the digest already tells (places, money, world), or the reader's own edits and
 // a fight's blow-by-blow: never repeated under "happened".
@@ -238,7 +245,7 @@ export function dayFacts(receipts, { revDay = new Map(), state = null, day = nul
     let count = 0;
     for (const receipt of receipts) {
         // Bookkeeping and the clock's own receipts are no fact of the day (a day only slept through has none).
-        if (QUIET_TYPES.has(receipt.type) || clockSet(receipt)) continue;
+        if (quiet(receipt) || clockSet(receipt)) continue;
         count += 1;
         const data = isRecord(receipt.data) ? receipt.data : {};
         const said = cut(receipt.summary, MAX_ITEM);

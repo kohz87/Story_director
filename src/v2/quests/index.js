@@ -15,7 +15,7 @@
 
 import { lineKey, questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
-import { NOT_MET_YET, beatenClaim, finishRule, isHeld, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
+import { NOT_MET_YET, beatenClaim, countedTarget, finishRule, isHeld, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { heldText, questRank, rankHeldText, ranksOf, replyBudget, rewardHold } from './ranks.js';
 // The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
 import { addProblem, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
@@ -120,6 +120,9 @@ function packReward(pack, target, currency) {
     return reward && reward.amount !== null ? reward : null;
 }
 
+/** "no character level is known, so it pays as F-rank, the lowest". */
+export const noLevelText = rank => `no character level is known, so it pays as ${rank.title}, the lowest`;
+
 /** The player character's level (`party.pc`, else `party.actor`), or null. */
 function pcLevel(query) {
     const pc = tryQuery(query, 'party.pc', {}, null);
@@ -143,7 +146,10 @@ function termsFor(query, inventory, thread, currency) {
     const ladder = ranksOf(query);
     const rank = questRank(thread, ladder, { pack, level, difficulty: questDifficulty(thread.fields?.difficulty) });
     const rankNote = rank.said ? rankHeldText(rank.said, rank.rank, level) : '';
-    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote, budget: replyBudget(ladder, level) };
+    // Story Director stands alone (WAVE rule 11): with no character level known (no RPG Battle), a
+    // quest the pack does not rank pays as the lowest rank, and the terms say so.
+    const levelNote = level === null && rank.rank && rank.by === 'difficulty' ? noLevelText(rank.rank) : '';
+    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote, levelNote, budget: replyBudget(ladder, level) };
 }
 
 /*
@@ -264,7 +270,7 @@ function take(ctx, payload) {
     const rev = receiptRev(ctx);
     const wasOffer = Boolean(thread.offer);
     const currency = currencyOf(ctx.query);
-    const { target, reward, rank, rankBy, rankNote } = termsOf(ctx, thread, currency);
+    const { target, reward, rank, rankBy, rankNote, levelNote } = termsOf(ctx, thread, currency);
     thread.offer = false;
     thread.taken = stampOf(director, rev);
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
@@ -273,7 +279,7 @@ function take(ctx, payload) {
     // A held offer (F88) taken on is shown from now.
     if (thread.shown && thread.shown.turn > (director.turn?.n ?? 0)) thread.shown = { turn: director.turn?.n ?? 0 };
     const who = whoName(ctx.query);
-    const terms = [termsText(thread.target, reward, currency, rank, { by: rankBy }), rankNote].filter(Boolean).join('; ');
+    const terms = [termsText(thread.target, reward, currency, rank, { by: rankBy }), rankNote || levelNote].filter(Boolean).join('; ');
     rankProblem(ctx, director, thread, rankNote);
     // A quest the story already accepted is only adopted for counting: nothing new to tell.
     return {
@@ -322,8 +328,10 @@ function finish(ctx, payload) {
     if (!thread.taken) fail(ctx, CODES.invalid, `${thread.key} has not been taken on.`);
     const byStory = payload?.by === 'story' && ctx.cause !== 'ui';
     const currency = currencyOf(ctx.query);
-    const { target, reward, said: written, byPack, rank, rankBy, rankNote, budget } = termsOf(ctx, thread, currency);
-    if (!target && !thread.ready && !byStory) fail(ctx, CODES.invalid, `${thread.key} is not done yet: ${NOT_MET_YET.toLowerCase()}`);
+    const { target, reward, said: written, byPack, rank, rankBy, rankNote, levelNote, budget } = termsOf(ctx, thread, currency);
+    // What code counts: a kill goal with no module counting fights is the story's word (WAVE rule 11).
+    const counted = countedTarget(target, ctx.query);
+    if (!counted && !thread.ready && !byStory) fail(ctx, CODES.invalid, `${thread.key} is not done yet: ${NOT_MET_YET.toLowerCase()}`);
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
     thread.reward = reward;
     const place = placeRule(thread, hereScene(ctx.query, ctx.read('scene')));
@@ -335,14 +343,14 @@ function finish(ctx, payload) {
     const progress = progressOf(thread, ctx.query, { free: fightRev => ctx.claim(beatenClaim(fightRev)), closing: byStory });
     if (!progress.met) fail(ctx, CODES.notMet, `${thread.key} is not done yet (${progressLabel(thread, progress)}). ${progress.reason}`.trim());
     if (!place.ok) fail(ctx, CODES.wrongPlace, `${thread.key} cannot be turned in here. ${place.reason}`);
-    const word = wordRule(director, thread, target);
+    const word = wordRule(director, thread, counted);
     if (word) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${word.reason}`);
     const terms = { reward, byPack, rank, rankBy };
     const owed = payOf(terms, target, progress);
     const over = budgetRule(director, owed, budget, currency);
     if (over) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${over.reason}`);
     const now = replyDraft(director);
-    if (!target && now) now.vouched = thread.id;
+    if (!counted && now) now.vouched = thread.id;
 
     // Fetched items are handed over: exactly the target's count, stack by stack.
     const consumed = [];
@@ -391,13 +399,13 @@ function finish(ctx, payload) {
     thread.rev = rev;
 
     const goal = cut(text(thread.fields?.goal), 80);
-    const counted = !target ? `goal met${goal ? ` (${goal})` : ''}`
+    const done = !counted ? `goal met${goal ? ` (${goal})` : ''}${target ? ' on the story\'s word (no fights are counted)' : ''}`
         : target.kind === 'items'
             ? `${target.count} ${nounFor(target, target.count)} handed over (target ${target.count})`
             : `${progress.have} ${nounFor(target, progress.have)} beaten (target ${target.count})`;
     const currencyWord = currencyName(currency);
     const fromPack = written && Number.isSafeInteger(written.amount) ? ` (the pack's reward for ${thread.key}; the story said ${rewardText(written, target, currency)})` : '';
-    const rankText = rankNote && hold.held ? ` (${rankNote})` : '';
+    const rankText = (rankNote || levelNote) && hold.held ? ` (${rankNote || levelNote})` : '';
     if (rankNote) rankProblem(ctx, director, thread, rankNote);
     const budgetText = paid?.owed ? ` (${money(paid.owed, currency)} was owed; one reply may give no more)` : '';
     const payText = paid ? `${money(paid.amount, currency)} paid${hold.held ? ` (${heldText(rank, money(said, currency), currencyWord)})` : ''}${rankText}${fromPack}${budgetText}`
@@ -405,7 +413,7 @@ function finish(ctx, payload) {
             : reward?.text ? `reward as the story tells it: ${reward.text}`
                 : 'no reward was named';
     return {
-        summary: `${whoName(ctx.query)} turns in ${thread.key}: ${counted}, ${payText}.`,
+        summary: `${whoName(ctx.query)} turns in ${thread.key}: ${done}, ${payText}.`,
         narrate: true,
         data: { quest: thread.id, key: thread.key, have: progress.have, need: progress.need, source: progress.source, units, paid, consumed, xp, fights: progress.fights ?? [], ...(byStory ? { by: 'story' } : {}) },
     };
@@ -427,19 +435,20 @@ function progressQuery(state, args = {}, tools = null) {
     // Through the host's query when it passes one, else the documented layouts read-only.
     const query = queryOf(state, tools);
     const target = thread.target ?? withKind(state?.domains?.inventory, parseTarget(thread.fields, thread.summary));
+    const counted = countedTarget(target, query);
     const view = { ...thread, target };
     const progress = progressOf(view, query, { free: unclaimedIn(state), closing: args?.closing === true });
     const { have, need, met, source, noun, reason } = progress;
     const rule = finishRule(view, progress, hereScene(query, state?.domains?.scene));
     const director = state?.domains?.director;
-    let finish = rule.ok ? wordRule(director, thread, target) ?? rule : rule;
+    let finish = rule.ok ? wordRule(director, thread, counted) ?? rule : rule;
     if (finish.ok && progress.met) {
         const currency = currencyOf(query);
         const terms = termsFor(query, state?.domains?.inventory, thread, currency);
         finish = budgetRule(director, payOf(terms, target, progress), terms.budget, currency) ?? finish;
     }
     return {
-        have, need, met, ready: !target && Boolean(thread.ready), source, noun, label: progressLabel(view, { have, need }), reason, finish,
+        have, need, met, ready: !counted && Boolean(thread.ready), countable: Boolean(counted), source, noun, label: progressLabel(view, { have, need }), reason, finish,
         ...(args?.closing === true ? { refusal: storyRefusal(view, progress, finish) } : {}),
     };
 }
@@ -454,7 +463,6 @@ function storyRefusal(thread, progress, finish) {
     if (!thread.taken) return 'it was never taken on';
     const target = thread.target;
     if (!progress.met && target) {
-        if (/^No battle record/.test(progress.reason)) return 'no fights can be counted (RPG Battle is not running)';
         if (/inventory is not available/.test(progress.reason)) return 'the inventory is not available';
         return `only ${progress.have} of ${progress.need} ${nounFor(target, progress.need)} ${progress.have === 1 ? 'is' : 'are'} ${target.kind === 'items' ? 'held' : 'beaten'}`;
     }
@@ -525,11 +533,12 @@ function detailsQuery(state, args = {}, tools = null) {
     if (!thread) return null;
     const query = queryOf(state, tools);
     const currency = currencyOf(query);
-    const { target, reward, rank, rankBy } = termsFor(query, state?.domains?.inventory, thread, currency);
+    const { target, reward, rank, rankBy, levelNote } = termsFor(query, state?.domains?.inventory, thread, currency);
+    const counted = countedTarget(target, query);
     const view = { ...thread, target };
     const progress = progressOf(view, query, { free: unclaimedIn(state) });
     const rule = finishRule(view, progress, hereScene(query, state?.domains?.scene));
-    const finish = rule.ok ? wordRule(director, thread, target) ?? rule : rule;
+    const finish = rule.ok ? wordRule(director, thread, counted) ?? rule : rule;
     const total = promised(reward, target);
     const hold = rewardHold(total, rank, rankBy);
     const fields = thread.fields ?? {};
@@ -538,7 +547,7 @@ function detailsQuery(state, args = {}, tools = null) {
         key: text(thread.key),
         goal: text(fields.goal) || text(thread.summary),
         hasGoal: hasGoal(thread),
-        countable: Boolean(target),
+        countable: Boolean(counted),
         note: cut(text(fields.progress) || text(fields.step), NOTE_CHARS),
         giver: text(fields.giver),
         due: text(fields.due),
@@ -548,11 +557,12 @@ function detailsQuery(state, args = {}, tools = null) {
             reward: rewardText(reward, target, currency),
             held: hold.held ? heldText(rank, money(total, currency), currencyName(currency)) : '',
             text: termsText(target, reward, currency, rank, { by: rankBy }),
+            level: levelNote,
         },
-        ready: !target && Boolean(thread.ready),
+        ready: !counted && Boolean(thread.ready),
         taken: thread.taken ? { ...thread.taken } : null,
         ended: thread.ended ? { ...thread.ended } : null,
-        status: statusOf(thread, target, progress, finish, director),
+        status: statusOf(thread, counted, progress, finish, director),
         history: historyOf(tools, thread.id),
     };
 }
@@ -595,7 +605,7 @@ export function questTail(view) {
     const judged = [];
     for (const thread of active) {
         if (!thread.taken) continue;
-        const target = thread.target;
+        const target = countedTarget(thread.target, query);
         if (!target && !thread.ready) {
             if (hasGoal(thread)) judged.push(thread);
             continue;

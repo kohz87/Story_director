@@ -47,12 +47,13 @@ function awayText({ calendar, from, to, due, arriving, more = 0 }) {
 
 /**
  * The While away recap for a jump of the story clock from `from` to `to` on `director` (its
- * active threads): `{ lines, threads }` (the thread ids it tells), or null when the jump is
+ * active threads): `{ lines, threads }` (the thread ids it tells; `fights: false`: no "fought
+ * off-screen", as no module runs fights), or null when the jump is
  * shorter than `minMinutes` or nothing came due or arrived in it (v1 awayIn).
  */
-export function buildRecap(director, { calendar, from, to, minMinutes, budget = RECAP_BUDGET }) {
+export function buildRecap(director, { calendar, from, to, minMinutes, budget = RECAP_BUDGET, fights = true }) {
     if (!calendar || !Number.isSafeInteger(from) || !Number.isSafeInteger(to)) return null;
-    const { tracker, threadOf } = trackerOf(director, { calendar, now: to });
+    const { tracker, threadOf } = trackerOf(director, { calendar, now: to, fights });
     const selection = classify(tracker, { calendar, now: to, message: tracker.message });
     const away = awayIn(selection, { calendar, from, to, minMinutes });
     if (!away) return null;

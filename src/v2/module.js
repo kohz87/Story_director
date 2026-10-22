@@ -5,8 +5,10 @@
 // - domains, commands, queries: the parts' own, each name owned by one part (a clash throws);
 // - capture: every part's kinds with their one-line grammar; `apply` dispatches by `line.kind`
 //   to the part that owns the kind;
-// - context: statics joined in part order (the same bytes every reply), tails concatenated in
-//   part order, budgets summed;
+// - context: statics joined in part order (the same bytes every reply for one set of modules), tails
+//   concatenated in part order, budgets summed. Parts are told `{ fights }` (statics, kinds whose
+//   grammar is a function, and `view.fights` / `ctx.fights`): whether a module runs fights, learnt
+//   before each reply (fightRunner), so Story Director alone asks for no encounters (WAVE rule 11);
 // - hooks: every part's function of a name, called in part order;
 // - settings: each part's keys are namespaced under its part id (`tracker.dormantReplies`), a
 //   `group` field is flattened into dotted keys (`tracker.calendar.months`) because the Story
@@ -154,9 +156,11 @@ function settingsFor(ns, base, { defaults = {}, reads = [], query = null } = {})
     };
 }
 
-// The handler ctx a part sees: the host's, with settings() reading the part's own.
+// The handler ctx a part sees: the host's, with settings() reading the part's own, and `fights`
+// (whether a module runs fights, see fightRunner).
 function partCtx(ns, ctx, shared) {
-    return Object.freeze({ ...ctx, settings: settingsFor(ns, id => ctx.settings(id), { ...shared(ns), query: ctx.query }) });
+    const own = shared(ns);
+    return Object.freeze({ ...ctx, fights: own.env.fights, settings: settingsFor(ns, id => ctx.settings(id), { ...own, query: ctx.query }) });
 }
 
 // The view a part's tail, tab or hook sees: the host's, with settings() reading the part's own.
@@ -165,7 +169,34 @@ function partView(ns, view, shared) {
     const base = typeof view.settings === 'function'
         ? id => view.settings(id)
         : id => (id === undefined || id === null || id === MODULE_ID ? view.settings : {});
-    return Object.freeze({ ...view, settings: settingsFor(ns, base, { ...shared(ns), query: view.query }) });
+    const own = shared(ns);
+    return Object.freeze({ ...view, fights: own.env.fights, settings: settingsFor(ns, base, { ...own, query: view.query }) });
+}
+
+// ---- stand-alone (WAVE rule 11) ----------------------------------------------------------------
+
+// Queries only a fight runner answers (RPG Battle's combat part, MODULES §B3).
+const FIGHT_QUERIES = ['combat.foesBeaten', 'combat.session', 'combat.offers'];
+const UNANSWERED = /no module answers|no query called|there is no query/i;
+
+/**
+ * Whether another module runs fights: one registers a `combat.*` command (Story Block's live
+ * `sdk.modules()`), else answers a `combat.*` query through the view (`view.query`). Null when
+ * neither can be asked. Story Director stands alone (WAVE rule 11): without a fight runner its prompt
+ * asks for no encounters and tells no beat as a fight.
+ */
+export function fightRunner(view = null) {
+    const modules = tryLive(() => liveSdk()?.modules?.(), null);
+    if (Array.isArray(modules)) return modules.some(entry => entry?.id !== MODULE_ID && (entry?.commands ?? []).some(type => String(type).startsWith('combat.')));
+    if (typeof view?.query !== 'function') return null;
+    return FIGHT_QUERIES.some(name => {
+        try {
+            view.query(name, {});
+            return true;
+        } catch (error) {
+            return !UNANSWERED.test(String(error?.message ?? error));
+        }
+    });
 }
 
 // The tools a part's query sees: the host's (`query`, `receipts`, …) plus settings() and substitute().
@@ -257,7 +288,15 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const screenList = [];
     const widgets = {};
     const readsByPart = {};
-    const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [] });
+    // What the parts are told of the module set: `fights`, whether a fight runner is there (true until
+    // it is known; worked out before each reply's prompt, so the static part is the same bytes for
+    // one set of modules).
+    const env = { fights: true };
+    const learn = view => {
+        const found = fightRunner(view);
+        if (typeof found === 'boolean') env.fights = found;
+    };
+    const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [], env });
     const domains = {};
     const commands = {};
     const queries = {};
@@ -293,7 +332,12 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         }
         for (const [kind, spec] of Object.entries(part.kinds ?? {})) {
             own(owners.kind, kind, ns, 'the change-line kind');
-            kinds[kind] = { grammar: spec.grammar, ...(spec.aliases ? { aliases: spec.aliases } : {}) };
+            // A part's grammar may depend on the module set (`spec.grammar(env)`): read when the prompt is built.
+            const grammar = spec.grammar;
+            kinds[kind] = {
+                get grammar() { return typeof grammar === 'function' ? grammar({ fights: env.fights }) : grammar; },
+                ...(spec.aliases ? { aliases: spec.aliases } : {}),
+            };
             appliers[kind] = (ctx, line) => spec.apply(partCtx(ns, ctx, shared), line);
             for (const alias of spec.aliases ?? []) appliers[alias] = appliers[kind];
         }
@@ -336,8 +380,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         queries,
         context: {
             // The same bytes every reply: each part's static is fixed text.
-            static: () => statics.map(fn => String(fn() ?? '').trim()).filter(Boolean).join('\n'),
+            static: () => statics.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n'),
             tail(view) {
+                learn(view);
                 const lines = [];
                 const optional = [];
                 for (const [ns, tail] of tails) {
@@ -349,7 +394,11 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             },
             budget: budget || 1,
         },
-        hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => [name, mergeHook(name, entries, shared)])),
+        hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => {
+            const merged = mergeHook(name, entries, shared);
+            // Before each reply: what the module set is, before the prompt is assembled.
+            return [name, name === 'beforeGenerate' ? (view, ...rest) => { learn(view); return merged(view, ...rest); } : merged];
+        })),
         settings: { defaults, schema },
         tabs,
         screens: screenList,

@@ -197,3 +197,19 @@ test('the validator: days kept under their own day, every field checked, both fi
     for (let day = 0; day <= KEEP_MAX * 2; day += 1) tooMany[day] = [briefOf({ ...good, day })];
     assert.match(validateDays({ days: tooMany }).join(' '), /at most 730 days/);
 });
+
+test('RX-cap-5: per-reply bookkeeping (system receipts the story was not told, dice, a character made) is no fact of the day', () => {
+    const list = [
+        clock(D * DAY + 8 * 60),
+        r('checks.prepare', { module: 'rpg-battle', cause: 'system', summary: 'Dice for the next reply: Roll 1 = 20 · Roll 2 = 17.' }),
+        r('party.create', { module: 'rpg-battle', cause: 'ui', narrate: true, summary: 'Ren is ready.' }),
+        r('creation.finish', { module: 'rpg-battle', cause: 'ui', summary: 'Ren steps out.' }),
+        r('module.set.up', { module: 'other', cause: 'system', summary: 'Other module set up.' }),
+    ];
+    const quietDay = factsOf(list);
+    assert.equal(quietDay.count, 0, 'a day of bookkeeping only has no digest');
+    assert.deepEqual(quietDay.happened, []);
+    // A system receipt the story is told (time closing a quest) is a fact.
+    const told = factsOf([...list, r('time.settle-told', { cause: 'system', narrate: true, summary: 'Slipped: Ambush — it happened off-screen.' })]);
+    assert.deepEqual([told.count, told.happened], [1, ['Slipped: Ambush — it happened off-screen.']]);
+});

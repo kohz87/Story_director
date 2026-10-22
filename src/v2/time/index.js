@@ -9,6 +9,8 @@
 // deleting that reply takes it all back. Its summary tells the next reply what slipped, in v1's
 // words; the recap goes in this part's tail, for that reply only.
 //
+// Commands: `time.settle` (the hook's) and `director.advance` (another module's rule moving the clock
+// on: crafting takes time; advance.js).
 // Queries: `time.now` (the clock for other modules: minutes, the calendar text, the story day and its
 // date), `time.overdue` and `time.recap`.
 
@@ -18,6 +20,7 @@ import { RECAP_BUDGET } from './recap.js';
 import { DEFAULTS, calendarOf, timeSettings } from './records.js';
 import { needsSettle, recapStale, settle, settleSummary } from './settle.js';
 import { slotValue } from '../slot.js';
+import { ADVANCE, advanceCommand } from './advance.js';
 
 export const SETTLE = 'time.settle';
 
@@ -78,7 +81,7 @@ function settleCommand(ctx, payload = {}) {
     const settings = timeSettings(ctx.settings);
     const calendar = calendarOf(settings);
     const rev = receiptRev(ctx, given);
-    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), met: targetMet(ctx.query) });
+    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), met: targetMet(ctx.query), fights: ctx.fights !== false });
     const told = settleSummary(done.closed, { calendar, now: done.now });
     return {
         summary: told || `Story time settled at ${calendar.format(done.now, { era: false })}.`,
@@ -191,7 +194,7 @@ export const queries = {
 
 export const part = {
     domains: {},
-    commands: { [SETTLE]: settleCommand },
+    commands: { [SETTLE]: settleCommand, [ADVANCE]: advanceCommand },
     queries,
     kinds: {},
     context: {

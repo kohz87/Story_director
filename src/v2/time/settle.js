@@ -137,7 +137,7 @@ function closedEntry(thread, reason) {
  * the check. `claim(key)` takes a claim (false when it is already taken). Returns
  * `{ closed, standing, recap, from, now }`.
  */
-export function settle(director, { calendar, settings, rev, at = null, claim, met = () => false }) {
+export function settle(director, { calendar, settings, rev, at = null, claim, met = () => false, fights = true }) {
     const now = director.time.minutes;
     const before = slotValue(director.checked);
     const from = isInt(before?.minutes) ? before.minutes : null;
@@ -161,7 +161,7 @@ export function settle(director, { calendar, settings, rev, at = null, claim, me
     if (from !== now) recap = null;
     else if (recapStale(recap, { at, rev })) recap = null;
     if (from !== null && from !== now) {
-        const built = buildRecap(director, { calendar, from, to: now, minMinutes: settings.recapHours * 60 });
+        const built = buildRecap(director, { calendar, from, to: now, minMinutes: settings.recapHours * 60, fights });
         if (built) recap = { fromMinutes: from, toMinutes: now, lines: built.lines, threads: built.threads, rev, at };
     }
     // Both are slots (../slot.js): written whole, so a later settle never depends on an earlier one.

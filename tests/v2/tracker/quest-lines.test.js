@@ -84,10 +84,15 @@ test('F83: met: on what is not a taken quest code cannot count changes nothing a
     const offered = reply(ringOffer, '~ quest Lost Ring | met: yes', { said: 'Hm.', ...options }).state;
     assert.equal(thread(offered, 'Lost Ring').ready, undefined);
     assert.match(lastProblems(offered).at(-1).text, /not taken on yet/);
-    const wolves = story([{ lines: '+ quest Wolves — on the ridge | giver: Orsa | goal: Kill 3 wolves', said: 'I\'ll take it.', ...options }]);
+    // With a battle record (RPG Battle), a kill goal is counted by code.
+    const wolves = withFights(story([{ lines: '+ quest Wolves — on the ridge | giver: Orsa | goal: Kill 3 wolves', said: 'I\'ll take it.', ...options }]), []);
     const counted = reply(wolves, '~ quest Wolves | met: yes', { said: 'Hm.', ...options }).state;
     assert.equal(thread(counted, 'Wolves').ready, undefined);
     assert.match(lastProblems(counted).at(-1).text, /counted by code/);
+    // Without one (Story Director alone, WAVE rule 11), the story vouches for it: met: yes marks it ready.
+    const alone = story([{ lines: '+ quest Wolves — on the ridge | giver: Orsa | goal: Kill 3 wolves', said: 'I\'ll take it.', ...options }]);
+    const vouched = reply(alone, '~ quest Wolves | met: yes', { said: 'Hm.', ...options }).state;
+    assert.ok(thread(vouched, 'Wolves').ready, 'ready on the story\'s word');
     const unknown = reply(wolves, '~ quest Nobody Knows | met: yes', { said: 'Hm.', ...options }).state;
     assert.equal(thread(unknown, 'Nobody Knows'), null, 'no thread made from a met: line');
     assert.deepEqual(kinds(unknown), ['met']);
@@ -199,9 +204,10 @@ test('F94: a check that fails keeps the quest open, unpaid, with a Problem and a
     const wild = reply(away, '- quest Wolf Cull — done', { said: 'Done.', ...options }).state;
     assert.equal(lastProblems(wild)[0].text, 'The story says Wolf Cull was turned in, but it can only be turned in at a settlement or where Orsa is; it stays open.');
     assert.equal(thread(wild, 'Wolf Cull').status, 'active');
-    // No battle record at all.
-    const none = reply(Object.freeze({ ...wolfCull(options), domains: Object.freeze({ ...wolfCull(options).domains, combat: undefined }) }), '- quest Wolf Cull — done', { said: 'Done.', ...options }).state;
-    assert.match(lastProblems(none)[0].text, /no fights can be counted \(RPG Battle is not running\)/);
+    // No battle record at all (Story Director alone): the kill goal is the story's word, and it is paid.
+    const none = reply(Object.freeze({ ...wolfCull(options), domains: Object.freeze({ ...wolfCull(options).domains, combat: undefined }) }), '- quest Wolf Cull — done', { said: 'Done.', ...options });
+    assert.match(none.results[0].summary, /^The party turns in Wolf Cull: goal met .*on the story's word \(no fights are counted\), \d+ gold paid\.$/);
+    assert.equal(thread(none.state, 'Wolf Cull').status, 'resolved');
 });
 
 test('F94: a quest code cannot count is taken on the story\'s word at turn-in, met: yes or not', () => {

@@ -120,14 +120,16 @@ export function recordOf(thread, { calendar = null } = {}) {
 /**
  * The v1 tracker the domain reads as, and which thread each record is:
  * `{ tracker: { version, records, message, time }, threadOf: Map(record → thread) }`.
- * `only`: which threads to read (default: the active ones).
+ * `only`: which threads to read (default: the active ones). `fights: false` (no module runs fights,
+ * WAVE rule 11): no record tells its `encounter` (it stays on the thread).
  */
-export function trackerOf(director, { calendar = null, now = null, only = thread => thread.status === 'active' } = {}) {
+export function trackerOf(director, { calendar = null, now = null, only = thread => thread.status === 'active', fights = true } = {}) {
     const threadOf = new Map();
     const records = [];
     for (const thread of orderedThreads(director)) {
         if (!only(thread)) continue;
         const record = recordOf(thread, { calendar });
+        if (!fights && record.fields.encounter) record.fields = { ...record.fields, encounter: '' };
         threadOf.set(record, thread);
         records.push(record);
     }

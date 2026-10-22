@@ -61,7 +61,7 @@ test('F86: without pack ranks, RPG Battle\'s party.ranks with rewards by place; 
         throw new Error('unknown');
     };
     const ladder = ranksOf(query);
-    assert.deepEqual(calls, ['packs.content', 'party.ranks']);
+    assert.deepEqual(calls, ['packs.content', 'party.ranks', 'inventory.economy']);
     assert.deepEqual(ladder, [
         { id: 'soul-1', title: 'Soul Class I', levels: [1, 10], reward: [10, 50] },
         { id: 'soul-2', title: 'Soul Class II', levels: [11, 20], reward: [50, 230] },
@@ -225,12 +225,19 @@ test('F104: quest.ranks multiplies the built-in rewards by inventory.economy\'s 
     assert.deepEqual(at(10).map(rank => [rank.id, rank.levels]), DEFAULT_RANKS.map(rank => [rank.id, [...rank.levels]]));
 });
 
-test('F104: a pack\'s ladder (and RPG Battle\'s tiers) are kept exactly as written, whatever the scale', () => {
+test('F104: a pack\'s ladder is kept exactly as written, whatever the scale', () => {
     const economy = { scale: 10 };
     const pack = ranksOf(name => (name === 'packs.content' ? ERSVEIL : name === 'inventory.economy' ? economy : null));
     assert.deepEqual(pack.map(rank => rank.reward), [[50, 400], [800, 3000], rewardByPlace(2)]);
-    const rb = ranksOf(name => (name === 'party.ranks' ? SOUL : name === 'inventory.economy' ? economy : []));
-    assert.deepEqual(rb.map(rank => rank.reward), [[10, 50], [50, 230], [230, 1000]]);
+});
+
+test('F104: RPG Battle\'s tiers get Story Director\'s rewards by place, times the money scale too', () => {
+    const rb = scale => ranksOf(name => (name === 'party.ranks' ? SOUL : name === 'inventory.economy' ? { scale } : []));
+    assert.deepEqual(rb(1).map(rank => rank.reward), [[10, 50], [50, 230], [230, 1000]]);
+    assert.deepEqual(rb(10).map(rank => rank.reward), [[100, 500], [500, 2300], [2300, 10000]]);
+    assert.deepEqual(rb(0.1).map(rank => rank.reward), [[1, 5], [5, 23], [23, 100]]);
+    // RPG Battle's ids, titles and levels stay as it gave them.
+    assert.deepEqual(rb(10).map(rank => [rank.id, rank.title, rank.levels]), rb(1).map(rank => [rank.id, rank.title, rank.levels]));
 });
 
 test('F104: the scaled range is the one a reward is held to', () => {
