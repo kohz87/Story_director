@@ -2,14 +2,15 @@
 // the clock by hours or days (time lines and crafting's director.advance), with money, places, items
 // and world lines, and middle exchanges deleted along the way. After each delete every stored block must still apply, a rebuild must give the live
 // state and every validator must pass; after the next reply every day the digests had is there again
-// and none is for today or later; the caps hold throughout; a fresh load gives the live state.
+// and none is for today or later; the caps hold throughout; a fresh load gives the live state. Some
+// deletes are inside a day that already has its digest: the digest follows the facts left.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
 import { fakeCraft } from '../time/helpers/fake-craft.js';
-import { DIGEST, dayOf, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
+import { DIGEST, dayOf, entriesByDay, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 
 // Seeds 11–12 keep few days (older ones go short, which a later digest rewrites); 13–14 keep them
 // whole, so a delete leaves a gap a later digest lists.
@@ -84,6 +85,26 @@ function capsHold(host, where, { FULL, KEEP }) {
     assert.ok(days.filter(day => !day.brief).length <= FULL, `${where}: too many whole days`);
 }
 
+// A whole digest made from its day's entries follows them: each of its sources is a kept entry of
+// that day, and its count is theirs (a reply of the day deleted after it was written is not in it).
+function digestsFollow(host, where) {
+    const chronicle = host.head().domains.chronicle;
+    const byDay = entriesByDay(chronicle);
+    for (const digest of orderedDays(chronicle)) {
+        if (digest.brief || !digest.src) continue;
+        const kept = new Map((byDay.get(digest.day) ?? []).map(item => [item.rev, item.entry]));
+        assert.ok(digest.src.every(rev => kept.has(rev)), `${where}: day ${digest.day} lists a source that is gone`);
+        assert.equal(digest.count, digest.src.reduce((sum, rev) => sum + kept.get(rev).count, 0), `${where}: day ${digest.day} does not follow its facts`);
+    }
+}
+
+// The exchanges whose reply holds a note of a day that already has its digest (a middle delete inside it).
+function insideDigested(host, users) {
+    const sources = new Set(orderedDays(host.head().domains.chronicle).flatMap(digest => digest.src ?? []));
+    const notes = host.sdk.receipts().filter(entry => entry.receipt.type === 'chronicle.note' && sources.has(entry.receipt.rev)).map(entry => entry.index);
+    return users.filter(i => notes.includes(i + 1));
+}
+
 const settingsOf = ({ FULL, KEEP }) => ({ modules: { 'story-director': { 'chronicle.digestDays': FULL, 'chronicle.digestKeep': KEEP } } });
 
 for (const seed of SEEDS) {
@@ -95,6 +116,7 @@ for (const seed of SEEDS) {
         const caps = whole ? { FULL: 60, KEEP: 60 } : { FULL: 3, KEEP: 5 };
         const settings = settingsOf(caps);
         let gone = 0;
+        let insideDeletes = 0;
         const host = await createHost({ modules: [fakeRpgBattle(), createModule(), fakeCraft()], settings });
         try {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5']));
@@ -118,7 +140,11 @@ for (const seed of SEEDS) {
                 // digest still lists the day, which must be written again.
                 const carriers = host.sdk.receipts().filter(entry => entry.receipt.type === DIGEST).map(entry => entry.index);
                 const carrying = users.filter(i => carriers.includes(i + 1) && carriers.at(-1) !== i + 1);
-                const user = carrying.length && r.chance(0.7) ? r.pick(carrying) : r.pick(users);
+                // Or one inside a day that already has its digest: the digest follows what is left.
+                const inside = insideDigested(host, users);
+                const pick = r();
+                const user = inside.length && pick < 0.4 ? r.pick(inside) : carrying.length && pick < 0.8 ? r.pick(carrying) : r.pick(users);
+                if (inside.includes(user)) insideDeletes += 1;
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
@@ -128,11 +154,14 @@ for (const seed of SEEDS) {
                 assert.equal(JSON.stringify(host.head()), live, `${where}: rebuild != live`);
                 assert.deepEqual(validatorErrors(host), [], where);
                 capsHold(host, where, caps);
+                digestsFollow(host, where);
                 const after = writtenOf(host.head().domains.chronicle);
                 const have = new Set(orderedDays(host.head().domains.chronicle).map(day => day.day));
                 if (after) gone += after.days.filter(day => !have.has(day)).length;
             }
             if (whole) assert.ok(gone > 0, `seed ${seed}: no delete took a written day away`);
+            digestsFollow(host, `seed ${seed}: the head`);
+            t.diagnostic(`seed ${seed}: ${insideDeletes} deletes inside a digested day`);
             await host.send('And then?', said('Quiet.', ['! time +1d']));
             await host.send('Rest.', 'Quiet.');
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === DIGEST), `seed ${seed}: days were written`);

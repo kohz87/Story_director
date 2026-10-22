@@ -144,7 +144,7 @@ export function daysQuery(state, { from = null, to = null } = {}, tools) {
     if (Number.isNaN(low) || Number.isNaN(high)) return null;
     const currency = ask(toolsQuery(tools), 'inventory.currency', {});
     const substitute = substituteOf(tools);
-    return orderedDays(state?.domains?.chronicle)
+    return orderedDays(state?.domains?.chronicle, { state, currency })
         .filter(digest => (low === null || digest.day >= low) && (high === null || digest.day <= high))
         .map(digest => digestOut(digest, { currency, substitute }));
 }

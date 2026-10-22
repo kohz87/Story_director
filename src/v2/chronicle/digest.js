@@ -8,11 +8,12 @@
 //   the reply they are a receipt of: a swipe or a delete of it takes exactly its facts away.
 // * `chronicle.digest`, when the clock's day has moved past `chronicle.written` (or a day written then
 //   is gone, because the reply that wrote it was deleted): writes a digest for each finished day since
-//   the last write (and each one gone missing) from that day's entries, removes the entries it used,
-//   applies the caps and records where it got to. A chat from before the entries (no `noted`) has its
+//   the last write (and each one gone missing) from that day's entries, applies the caps and records
+//   where it got to. A whole day's entries stay (up to FOLLOW_MAX): its digest follows them when one of
+//   its replies is deleted later (days.daysOf); a short day's go. A chat from before the entries (no `noted`) has its
 //   older days read from the receipts as before. Replay applies the receipts' ops; it never runs these.
 
-import { DIGEST, DIGEST_FEATURE, FOLD_AT, QUEST_LOG_KEPT, QUEST_LOG_TEXT, cut, capDays, dayOf, daysOf, digestSettings, entriesByDay, factsOf, foldEntries, makeDigest, notedOf, orderedDays, rangeDays, writtenOf } from './days.js';
+import { DIGEST, DIGEST_FEATURE, FOLD_AT, FOLLOW_MAX, QUEST_LOG_KEPT, QUEST_LOG_TEXT, cut, capDays, dayOf, daysOf, digestSettings, entriesByDay, factsOf, foldEntries, makeDigest, notedOf, orderedDays, rangeDays, writtenOf } from './days.js';
 import { calendarFrom } from './queries.js';
 import { toSlot } from '../slot.js';
 
@@ -162,7 +163,7 @@ export function digestCommand(ctx, payload = {}) {
     const state = { domains: { director } };
     const plan = [];
     for (const [day, list] of byDay) {
-        if (wanted(day)) plan.push({ day, facts: factsOf(list.map(item => item.entry), { state, day, dayOfRev }) });
+        if (wanted(day)) plan.push({ day, facts: factsOf(list.map(item => item.entry), { state, day, dayOfRev }), src: list.map(item => item.rev) });
     }
     const older = day => !noted || (isInt(noted.from) && day < noted.from);
     if (!noted || (isInt(noted.from) && (from === null || from < noted.from || missing.some(older)))) {
@@ -182,23 +183,20 @@ export function digestCommand(ctx, payload = {}) {
         found.add(entry.day);
         let date = '';
         try { date = calendar.format(entry.day * 1440, { time: false }); } catch { date = ''; }
-        chronicle.days[String(entry.day)] = toSlot(makeDigest(entry.day, entry.facts, { date, currency, made: rev, revs: entry.revs ?? entry.facts.revs ?? [] }));
+        chronicle.days[String(entry.day)] = toSlot(makeDigest(entry.day, entry.facts, { date, currency, made: rev, revs: entry.revs ?? entry.facts.revs ?? [], src: entry.src ?? null }));
         written.push(date || `day ${entry.day}`);
-    }
-    // The entries of every finished day go once it is written (or could not be: a day before the last
-    // write, which the clock went back to, keeps its digest as it was).
-    if (chronicle.dayFacts && typeof chronicle.dayFacts === 'object') {
-        for (const [day, list] of byDay) if (day < today) for (const item of list) delete chronicle.dayFacts[item.key];
     }
     // A day to write that no receipt is left for (the only reply of that day was deleted): it goes.
     for (const key of Object.keys(chronicle.days)) {
         const day = Number(key);
         if (wanted(day) && !found.has(day)) delete chronicle.days[key];
     }
-    for (const [key, change] of Object.entries(capDays(daysOf(chronicle), settings))) {
+    const live = { state, currency };
+    for (const [key, change] of Object.entries(capDays(daysOf(chronicle, live), settings))) {
         if (change === null) delete chronicle.days[key];
         else chronicle.days[key] = toSlot(change);
     }
+    keepFollowed(chronicle, byDay, today, live);
     // A time skip: this run follows the day turning (not a rewrite after a delete), and the clock's last
     // jump, as the time part settled it just now, was at least the While away threshold.
     const turned = !before || today > before.through;
@@ -210,6 +208,33 @@ export function digestCommand(ctx, payload = {}) {
         narrate: false,
         data: { days: [...found].sort((a, b) => a - b), through: today, skip },
     };
+}
+
+/**
+ * The entries of the finished days after a digest: a whole digest made from its day's entries keeps
+ * those it was made from (its `src`), newest days first while FOLLOW_MAX holds, so it follows them
+ * (days.daysOf); every other entry of a finished day goes by key (a short day, a day read from the
+ * receipts, one the clock went back to after it was written). A whole digest past FOLLOW_MAX stays
+ * as the facts stand now, its `src` cleared (written whole, like a short one).
+ */
+function keepFollowed(chronicle, byDay, today, live) {
+    if (!chronicle.dayFacts || typeof chronicle.dayFacts !== 'object') return;
+    const keep = new Set();
+    let held = 0;
+    const followed = daysOf(chronicle, live);
+    for (const digest of Object.values(followed).sort((a, b) => b.day - a.day)) {
+        if (digest.brief || !Array.isArray(digest.src) || !(digest.day < today)) continue;
+        const src = new Set(digest.src);
+        const list = (byDay.get(digest.day) ?? []).filter(item => src.has(item.rev));
+        if (held + list.length <= FOLLOW_MAX) {
+            held += list.length;
+            for (const item of list) keep.add(item.key);
+            continue;
+        }
+        const { src: _src, ...frozen } = digest;
+        chronicle.days[String(digest.day)] = toSlot(frozen);
+    }
+    for (const [day, list] of byDay) if (day < today) for (const item of list) if (!keep.has(item.key)) delete chronicle.dayFacts[item.key];
 }
 
 /** The hook's part: `[{ type: chronicle.digest, payload: { at } }]` when digests are due, else []. */
@@ -258,7 +283,9 @@ export function digestTailLine(view) {
     const fresh = written && isInt(written.at) && isInt(at) && at >= written.at && at < written.at + 2;
     if (!(fresh && written.skip) && !recapLive(view)) return '';
     const today = dayOf(minutes);
-    const last = orderedDays(chronicle).filter(digest => digest.day < today).at(-1);
+    // The digests as their days' facts stand now (a reply of the last day deleted since: its facts gone).
+    const query = typeof view.query === 'function' ? (name, args) => view.query(name, args) : null;
+    const last = orderedDays(chronicle, { state: view.state, currency: ask(query, 'inventory.currency', {}) }).filter(digest => digest.day < today).at(-1);
     if (!last?.line) return '';
     return `${last.day === today - 1 ? YESTERDAY_TAG : LAST_DAY_TAG} ${last.line}`;
 }

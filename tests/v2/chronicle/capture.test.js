@@ -225,7 +225,7 @@ test('chronicle.remove takes an event (and its seen mark) or a faction out; an u
     let state = makeState();
     state = lines(state, '+ world Border War — raids\n+ faction Ashen Court').state;
     const war = eventNamed(state, 'Border War');
-    state = { ...state, domains: { ...state.domains, chronicle: { ...state.domains.chronicle, seen: { [war.id]: 1 }, round: 1 } } };
+    state = { ...state, domains: { ...state.domains, chronicle: { ...state.domains.chronicle, seenAt: { [war.id]: 1 }, round: 1 } } };
     let run = command(state, 'chronicle.remove', { id: war.id });
     assert.equal(run.result.summary, 'Border War is out of the chronicle.');
     assert.deepEqual([run.state.domains.chronicle.events, seenOf(run.state.domains.chronicle)], [{}, {}]);

@@ -15,7 +15,7 @@ const faction = (n, over = {}) => ({ id: `fa_${String(n).padStart(8, '0')}`, nam
 const withEvents = list => ({ ...initialChronicle(), events: Object.fromEntries(list.map(entry => [entry.id, entry])) });
 
 test('the initial chronicle is valid and empty', () => {
-    assert.deepEqual(initialChronicle(), { events: {}, factions: {}, seen: [{}], round: 0, surfaced: null, days: {}, written: null, dayFacts: {}, noted: null, questLog: {} });
+    assert.deepEqual(initialChronicle(), { events: {}, factions: {}, seen: [{}], seenAt: {}, round: 0, surfaced: null, days: {}, written: null, dayFacts: {}, noted: null, questLog: {} });
     assert.deepEqual(validateChronicle(initialChronicle()), []);
 });
 
@@ -25,6 +25,8 @@ test('a well-formed chronicle passes; each broken field is named', () => {
     good.round = 1;
     good.surfaced = { at: 4, round: 1, ids: [event(1).id] };
     assert.deepEqual(validateChronicle(good), []);
+    // A round past `round` (a pick before it was deleted, round being a counter) is read as just shown.
+    assert.deepEqual(validateChronicle({ ...withEvents([event(1)]), seen: { ev_00000001: 3 }, seenAt: { ev_00000001: 5 } }), []);
 
     const cases = [
         [{ ...good, events: { ev_bad: event(1, { id: 'ev_bad' }) } }, /bad id/],
@@ -38,7 +40,9 @@ test('a well-formed chronicle passes; each broken field is named', () => {
         [{ ...initialChronicle(), factions: { fa_00000001: faction(1, { stance: 5 }) } }, /stance must be text/],
         [{ ...initialChronicle(), seen: [{ x: 0 }] }, /seen\["x"\] is for no event/],
         [{ ...initialChronicle(), seen: [{}, {}] }, /seen is not an object/],
-        [{ ...withEvents([event(1)]), seen: { ev_00000001: 3 } }, /must be a round so far/],
+        [{ ...initialChronicle(), seenAt: { x: 0 } }, /seenAt\["x"\] is for no event/],
+        [{ ...initialChronicle(), seenAt: { ev_00000001: -1 } }, /seenAt\["ev_00000001"\] must be a round/],
+        [{ ...initialChronicle(), seenAt: [] }, /seenAt is not an object/],
         [{ ...initialChronicle(), surfaced: { at: 1, round: 0, ids: ['x'] } }, /surfaced must be null or/],
         [{ ...initialChronicle(), round: -1 }, /round must be a whole number/],
         [{ ...initialChronicle(), notes: [] }, /unknown field "notes"/],

@@ -132,6 +132,8 @@ export const STRINGS = deepFreeze({
         any: 'Any',
         equippedOnly: 'Equipped only',
         equippedTitle: 'Equipped',
+        key: 'Key',
+        keyTitle: 'A key item: yours to use, but it can\'t be sold',
         equip: 'Equip',
         equipTitle: 'Equip {name}',
         unequip: 'Unequip',
@@ -153,6 +155,11 @@ export const STRINGS = deepFreeze({
         giveTitle: 'Hand {name} to someone else in the party',
         giveTo: 'Give to {name}',
         condTitle: 'Condition',
+        lootTitle: 'To pick up',
+        lootWhere: 'Loot',
+        lootPick: 'Tick what to take, then Take selected.',
+        lootTake: 'Take selected',
+        lootTakeTitle: 'Put the things you ticked in the party\'s bag',
     },
 
     // `story-block/scene`.
@@ -213,6 +220,13 @@ export const STRINGS = deepFreeze({
         saved: 'Saved "{name}".',
         failed: 'The save point was not made: {reason}',
         returnFailed: 'Could not return there: {reason}',
+    },
+    // Home's line while no pack is installed (screens/packs-hint.js).
+    packsHint: {
+        title: 'Packs',
+        none: 'No pack installed. A pack adds a ready-made setting: items, shops, places, quests and a start.',
+        import: 'Import a pack',
+        importTitle: 'Open the Story Suite settings at Packs',
     },
     home: {
         title: 'Home',

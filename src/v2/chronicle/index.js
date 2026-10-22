@@ -59,8 +59,9 @@ export function tail(view) {
 export const part = {
     features,
     domains: {
-        // `dayFacts` is per-reply bookkeeping (SPEC §2.2 scratch): an entry whose holder a deleted reply made is replayed all the same.
-        chronicle: { initial: initialChronicle, validate: validateChronicle, scratch: ['dayFacts', 'questLog'] },
+        // `dayFacts` and `seenAt` are per-reply bookkeeping (SPEC §2.2 scratch): an entry whose holder a deleted reply made is replayed all the same.
+        // `round` counts the picks: a deleted pick takes its +1 away, later picks add theirs (counters, `was`).
+        chronicle: { initial: initialChronicle, validate: validateChronicle, scratch: ['dayFacts', 'questLog', 'seenAt'], counters: ['round'] },
     },
     commands: {
         'chronicle.edit': edit,
