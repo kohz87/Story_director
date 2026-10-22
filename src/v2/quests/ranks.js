@@ -1,6 +1,7 @@
 // Story Director v2, quests part: the rank ladder (F86) and rewards held inside a rank's range (F87).
-// Pure. The suite keeps one ladder: the enabled packs' `ranks` content when they have one (complete,
-// rewards included), else RPG Battle's level tiers (`party.ranks`, rewards added here by place on the
+// Pure. The suite keeps one ladder: the reader's (Story Block's Rank ladder setting, which answers the
+// packs' `ranks` content with `reader: true` records), else the enabled packs' `ranks` content when they
+// have one (complete, rewards included), else RPG Battle's level tiers (`party.ranks`, rewards added here by place on the
 // ladder), else the built-in F to S ladder. A quest's `rank:` (or `difficulty:` when it names a rank)
 // is matched against whichever ladder is in use. A quest from a pack takes the pack's rank. A quest with
 // no rank gets one from its difficulty (defaultRank, B-b4-10 / B-b3-18), so every reward is held inside
@@ -97,12 +98,32 @@ export function scaledReward(reward, scale) {
  * Plain copies.
  */
 export function ranksOf(query) {
-    const packs = ladderFrom(firstPack(tryQuery(query, 'packs.content', { kind: 'ranks' }, null)));
+    const records = firstPack(tryQuery(query, 'packs.content', { kind: 'ranks' }, null));
+    // The reader's own ladder (Story Block's Rank ladder setting, MODULES §F105: records with `reader:
+    // true`): RPG Battle's `party.ranks` when it is there (it bands the same ranks by its levels and keeps
+    // the same rewards), else the reader's ranks as they are, each with the pack's reward Story Block kept
+    // at its place, else one by place times the money scale.
+    if (records?.length && records.every(record => record.reader === true)) return readerLadder(records, query);
+    const packs = ladderFrom(records);
     if (packs) return packs;
     const party = ladderFrom(tryQuery(query, 'party.ranks', {}, null), { withRewards: false });
     const scale = moneyScale(query);
     const scaled = rank => ({ ...rank, levels: rank.levels ? [...rank.levels] : null, reward: scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) });
     return (party ?? DEFAULT_RANKS).map(scaled);
+}
+
+/** The reader's ladder (see ranksOf): RPG Battle's banding of it when that answers with the same ranks, else its own. */
+function readerLadder(records, query) {
+    const own = ladderFrom(records, { withRewards: true });
+    if (!own) return DEFAULT_RANKS.map(rank => ({ ...rank, levels: [...rank.levels], reward: [...rank.reward] }));
+    const party = ladderFrom(tryQuery(query, 'party.ranks', {}, null), { withRewards: true });
+    const same = party && party.length === own.length && party.every((rank, index) => rank.id.toLowerCase() === own[index].id.toLowerCase());
+    if (same) return party;
+    const scale = moneyScale(query);
+    return own.map((rank, index) => {
+        const kept = Array.isArray(records[index]?.reward);
+        return { ...rank, levels: rank.levels ? [...rank.levels] : null, reward: kept || scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) };
+    });
 }
 
 // "D", "d-rank", "Rank D", "D rank", "Soul Class II" read the same way: lower case, the word rank set aside.

@@ -149,8 +149,14 @@ function defErrors(key, def) {
     if (!isPlainObject(def.effect)) errors.push(`${label} has an effect that is not a record.`);
     if (!Array.isArray(def.tags) || def.tags.some(tag => typeof tag !== 'string')) errors.push(`${label} has tags that are not a list of words.`);
     if (typeof def.note !== 'string') errors.push(`${label} has a note that is not text.`);
+    if (def.carry !== undefined && !(isCount(def.carry, 1) && def.carry <= CARRY_MAX)) errors.push(`${label} adds a carry capacity of ${def.carry}; it is a whole number from 1 to ${CARRY_MAX}.`);
     return errors;
 }
+
+// The carry capacity a def may add (PACKS.md "Carry capacity"): only a pack's item has one, so the story's
+// words never make or raise it (WAVE rule 1); a carry module (RPG Battle's items.carry) reads it.
+export const CARRY_MAX = 1000;
+const packCarry = (id, value) => (typeof id === 'string' && id.startsWith('pack.') && isCount(value, 1) && value <= CARRY_MAX ? value : null);
 
 /** §2.5 validator for the inventory slice: [] when fine, else plain sentences. */
 export function validateInventory(slice) {
@@ -346,13 +352,22 @@ const freeId = (inv, base) => {
 // that the hooks may not change; the ID is never theirs to change, and equipment never stacks.
 // A hook that throws leaves the def as it was before that hook and goes to the Problems list: one
 // module's bug never stops the item being gained.
+// The money scale the item.define hooks price a new thing with (MODULES §F104): the reader's, else the pack's, else 1.
+function hookScale(env) {
+    try {
+        return economyOf(env.settings?.(), typeof env.economy === 'function' ? env.economy() : null).scale;
+    } catch {
+        return 1;
+    }
+}
+
 function addDef(inv, def, env, about, keep = {}) {
     const id = def.id;
     const hooks = env.hookEntries?.('item.define') ?? env.hooks('item.define').map(fn => ({ moduleId: null, fn }));
     for (const { moduleId, fn } of hooks) {
         const before = clone(def);
         try {
-            const out = fn(def, { note: about.note ?? '', owner: about.owner ?? 'party' });
+            const out = fn(def, { note: about.note ?? '', owner: about.owner ?? 'party', scale: hookScale(env) });
             if (isPlainObject(out) && out !== def) Object.assign(def, out);
         } catch (error) {
             for (const key of Object.keys(def)) delete def[key];
@@ -361,6 +376,10 @@ function addDef(inv, def, env, about, keep = {}) {
         }
     }
     Object.assign(def, keep, { id });
+    // A carry capacity only a pack's def keeps (whatever a hook wrote): the story never sets one.
+    const carry = packCarry(id, def.carry);
+    if (carry === null) delete def.carry;
+    else def.carry = carry;
     if (def.kind === 'equipment') def.stack = false;   // MODULES.md F6
     inv.defs[id] = clone(def);
     inv.aliases[aliasKey(def.name)] ??= id;
@@ -392,6 +411,8 @@ function packDef(ctx, inv, name, env) {
         const def = known ?? defaultDef(found.id, cleanName(found.name));
         if (!known) {
             for (const field of Object.keys(def)) if (field !== 'id' && found[field] !== undefined && found[field] !== null) def[field] = clone(found[field]);
+            const carry = packCarry(def.id, found.carry);
+            if (carry !== null) def.carry = carry;
             if (def.kind === 'equipment') def.stack = false;   // MODULES.md F6
             inv.defs[def.id] = def;
             inv.aliases[aliasKey(def.name)] ??= def.id;
@@ -419,6 +440,8 @@ function defineGiven(ctx, inv, given, env, about) {
     for (const field of Object.keys(def)) if (field !== 'id' && field !== 'name' && given[field] !== undefined) def[field] = clone(given[field]);
     const keep = {};
     for (const field of ['rarity', 'value']) if (given[field] !== undefined) keep[field] = given[field];
+    // A pack item's carry capacity comes with it (a pack shop's stock bought through a module).
+    if (packCarry(id, given.carry) !== null) keep.carry = given.carry;
     return { def: addDef(inv, def, env, about, keep), created: true };
 }
 
@@ -1574,7 +1597,17 @@ const ownerRank = owner => (owner === 'party' ? 0 : 1);
 const kindRank = kind => (KIND_ORDER.includes(kind) ? KIND_ORDER.indexOf(kind) : KIND_ORDER.length);
 
 /** Stacks joined with their defs, the party's first, then by kind, name and ID. */
-export function listItems(inventory, owner = null) {
+/** The carry capacity each stack adds, by stack id, as the carry module reports it (`items.carry` → `bonuses`), or null. */
+export function carryBonuses(tools) {
+    let view = null;
+    try { view = typeof tools?.query === 'function' ? tools.query('items.carry', {}) : null; } catch { view = null; }
+    if (!isPlainObject(view) || !Array.isArray(view.bonuses)) return null;
+    const out = {};
+    for (const entry of view.bonuses) if (typeof entry?.stack === 'string' && isCount(entry.carry, 1)) out[entry.stack] = Math.min(CARRY_MAX, entry.carry);
+    return out;
+}
+
+export function listItems(inventory, owner = null, carry = null) {
     const defs = inventory?.defs ?? {};
     return Object.values(inventory?.stacks ?? {})
         .filter(stack => defs[stack.def] && (owner === null || stack.owner === owner))
@@ -1585,12 +1618,16 @@ export function listItems(inventory, owner = null) {
                 slot: def.slot, qty: stack.qty, owner: stack.owner, equipped: stack.equipped, note: stack.note, from: stack.from,
                 ...(condOf(stack, inventory) < COND_MAX ? { cond: condOf(stack, inventory) } : {}),
                 ...(stack.key === true ? { key: true } : {}),
+                ...(carryOfStack(stack, def, carry) ? { carry: carryOfStack(stack, def, carry) } : {}),
             };
         })
         .sort((a, b) => ownerRank(a.owner) - ownerRank(b.owner) || (a.owner < b.owner ? -1 : a.owner > b.owner ? 1 : 0)
             || kindRank(a.kind) - kindRank(b.kind) || a.name.localeCompare(b.name, 'en', { numeric: true })
             || (a.stack < b.stack ? -1 : a.stack > b.stack ? 1 : 0));
 }
+
+// What a stack adds to carrying: the carry module's word for it when one answers, else its pack def's `carry`.
+const carryOfStack = (stack, def, carry) => (carry ? carry[stack.id] ?? null : packCarry(def.id, def.carry));
 
 // A query's own way to ask other queries (tools.query over the same state); throws when there is none.
 const asker = tools => (name, args) => {
@@ -1691,7 +1728,9 @@ export const createInventoryQueries = env => ({
     },
     // { name, plural, short }: the chat's one currency (MODULES.md F1); name singular ("mark").
     'inventory.currency': () => currencyOf(env.settings()),
-    'inventory.items': (state, args = {}) => listItems(state?.domains?.inventory, args?.owner ?? null),
+    // Each row's `carry` (the capacity the thing adds, PACKS.md "Carry capacity") is the carry module's
+    // (`items.carry` → bonuses by stack: a pack's `carry` or the reader's own) when one answers, else the def's.
+    'inventory.items': (state, args = {}, tools) => listItems(state?.domains?.inventory, args?.owner ?? null, carryBonuses(tools)),
     // { budget, paid, left, vouched }: the story money (`+ coin` lines and modules' `wallet.receive { story:
     // true }`) the current reply may give, has given and has left (RX-E-2); `vouched` is the part of
     // `paid` that modules' vouched payouts gave (quest rewards), so a module can tell a reply whose
