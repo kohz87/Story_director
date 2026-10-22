@@ -259,16 +259,17 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.equal(mine.version, '2.0.0-alpha.1');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
     assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'faction', 'hook', 'landmark', 'quest', 'route', 'secret', 'time', 'world']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.take', 'time.settle']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.take', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
         'story-director/map', 'story-director/chronicle', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
     ]);
     const defs = host.registry.settingsDefs().find(entry => entry.moduleId === MODULE_ID);
     assert.deepEqual(Object.keys(defs.schema).sort(), [
+        'arc.autoAccept', 'arc.genre', 'arc.keepNote', 'arc.lowThreads', 'arc.maxTokens', 'arc.note', 'arc.profile', 'arc.recent', 'arc.stallDays', 'arc.trigger',
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail',
-        'quests.followLadder', 'time.lapses', 'time.recapHours',
+        'quests.followLadder', 'screens.hideBehind', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays', 'tracker.maxJump',
     ]);

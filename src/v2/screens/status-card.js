@@ -68,7 +68,8 @@ export const statusCardScreen = Object.freeze({
     defaultOn: true,
     data: {
         time: { query: 'director.time' },
-        next: { query: 'director.next' },
+        // `shown`: while behind the scenes is hidden, the card names no agenda, beat or clock (reveal.js).
+        next: { query: 'director.next', args: { shown: true } },
         goal: { query: 'director.goal' },
         progress: { query: 'quest.progress', args: { id: '$goal.id' } },
     },

@@ -1,13 +1,18 @@
 // Story Director v2, part screens: `story-director/director` (SPEC §13.1), the Director tab and
 // game-view screen: the story time on the chat's calendar (`director.time`) and the place in its header,
-// then every tracked thread grouped by kind (open ones first, closed ones folded under
-// them), then the problems the last replies' Director lines had, newest first. Secrets show by name
-// only. Read-only: the threads come from `director.threads` (bindings per kind: all, open, closed), the
+// the arc panel (widget `story-director.arc`, arc/widget.js), then the threads the reader may see
+// (quests, hooks, world events) grouped by kind (open ones first, closed ones folded under them), then
+// behind the scenes (widget `story-director.behind`: agendas, beats, clocks and secrets, hidden behind
+// Reveal per chat, reveal.js), then the problems the last replies' Director lines had about the rest,
+// newest first. Secrets show by name only. Read-only: the threads come from `director.threads` (bindings per kind: all, open, closed), the
 // problems from `director.problems` (their `{{user}}` written out; one about an offer or a missing goal
 // only while that is still so). An older chat's offer, which the Quests tab no longer shows, is tagged
 // "offered" here.
 
 import { BASE_CSS } from './style.js';
+import { BEHIND } from './reveal.js';
+import { BEHIND_WIDGET } from './behind.js';
+import { ARC_WIDGET } from '../arc/widget.js';
 
 export const DIRECTOR_ID = 'story-director/director';
 
@@ -16,6 +21,9 @@ export const KIND_GROUPS = Object.freeze([
     ['quest', 'Quests'], ['hook', 'Hooks'], ['agenda', 'Off-screen'], ['event', 'World'],
     ['clock', 'Clocks'], ['beat', 'Beats'], ['secret', 'Secrets'],
 ]);
+
+/** The kinds the template itself draws: what the reader may see (the rest is behind the scenes, behind.js). */
+export const OPEN_KIND_GROUPS = Object.freeze(KIND_GROUPS.filter(([kind]) => !BEHIND.has(kind)));
 
 // What a thread line shows: its key, then what the story last said of it. Secrets: the name only.
 function threadItem(list, kind) {
@@ -65,8 +73,10 @@ const TEMPLATE = `
     <i class="fa-solid fa-clock" aria-hidden="true"></i> <span class="sd-when">{{ q.time.text }}</span>
     <span class="sd-where" data-if="state.scene.place.name">· {{ state.scene.place.name }}</span>
   </header>
+  <ss-widget class="sd-wide" name="${ARC_WIDGET}" data-props='{"bind":"q.arc"}'></ss-widget>
   <p class="sd-empty" data-if="!len(q.all)">Nothing tracked yet.</p>
-${KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
+${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
+  <ss-widget class="sd-wide" name="${BEHIND_WIDGET}" data-props='{"bind":"q.behind"}' data-if="q.behind.total"></ss-widget>
   <section class="sd-kind sd-problems-box" data-kind="problems" data-if="len(q.problems)">
     <h4 class="sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
     <ol class="sd-list sd-problems">
@@ -93,14 +103,42 @@ const CSS = `${BASE_CSS}
 /* Problems are stored oldest first; the newest is shown on top. */
 .sd-problems { display: flex; flex-direction: column-reverse; max-height: 18em; overflow-y: auto; gap: 4px; }
 .sd-problem { padding: 4px 0; border-bottom: 1px solid var(--sd-border); font-size: 0.9em; overflow-wrap: anywhere; }
+/* The arc panel and behind the scenes (widgets drawn into this screen, so this sheet styles them too). */
+.sd-arc { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--sd-border); border-radius: var(--sd-radius);
+  background: var(--sd-surface); min-width: 0; }
+.sd-arc .sd-h { margin: 0; }
+.sd-arc-desc, .sd-arc-head, .sd-arc-note, .sd-arc-needs { margin: 0; overflow-wrap: anywhere; }
+.sd-arc-note, .sd-arc-needs, .sd-arc-none { font-size: 0.9em; opacity: 0.85; }
+.sd-arc-text { width: 100%; min-height: 9em; font-family: inherit; font-size: 0.9em; resize: vertical; box-sizing: border-box; }
+.sd-arc-findings { gap: 2px; font-size: 0.85em; opacity: 0.85; }
+.sd-arc-finding.sd-warn { color: var(--sd-warn); }
+/* Buttons keep their icon and label on one line (SillyTavern's menu_button is a flex box, which drops the space). */
+.sd-arc .sd-btn, .sd-behind .sd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.sd-behind { display: grid; gap: 14px; min-width: 0; }
+.sd-lock { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 10px;
+  border: 1px dashed var(--sd-border); border-radius: var(--sd-radius); }
+.sd-lock-icon { margin-top: 3px; color: var(--sd-accent); }
+.sd-lock-text { display: grid; gap: 2px; min-width: 0; }
+.sd-lock .sd-actions { grid-column: 1 / -1; }
+.sd-unlocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.9em; opacity: 0.85; }
+.sd-unlocked .sd-btn { flex: 0 0 auto; }
 @media (min-width: 720px) {
   .sd-director { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
-  .sd-empty, .sd-clock { grid-column: 1 / -1; }
+  .sd-empty, .sd-clock, .sd-wide { grid-column: 1 / -1; }
+  .sd-behind { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
+  .sd-unlocked, .sd-lock, .sd-behind .sd-problems-box { grid-column: 1 / -1; }
 }
 `;
 
-const data = { time: { query: 'director.time' }, all: { query: 'director.threads' }, problems: { query: 'director.problems' } };
-for (const [kind] of KIND_GROUPS) {
+const data = {
+    time: { query: 'director.time' },
+    all: { query: 'director.threads' },
+    // The problems about what the reader may see; those behind the scenes are in `behind`.
+    problems: { query: 'director.problems', args: { behind: false } },
+    arc: { query: 'director.arc' },
+    behind: { query: 'director.behind' },
+};
+for (const [kind] of OPEN_KIND_GROUPS) {
     data[kind] = { query: 'director.threads', args: { kind } };
     data[`${kind}_open`] = { query: 'director.threads', args: { kind, status: 'active' } };
     data[`${kind}_closed`] = { query: 'director.threads', args: { kind, status: 'resolved' } };

@@ -7,7 +7,8 @@
 // The first reply's threads are made with every field later lines change: a later reply that changes
 // a field only a deleted reply had added is Story Block's to replay (its `replace` finds no key).
 // The first reply also opens six world events; later replies resolve or move them, and a delete is
-// often of a reply holding a world pick (final soak: a later world line was lost with it).
+// often of a reply holding a world pick (final soak: a later world line was lost with it). Between replies the
+// reader sometimes accepts an arc plan (director.arc.accept, its own names) or ends the arc.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
@@ -134,6 +135,7 @@ for (const seed of SEEDS) {
         t.mock.method(console, 'warn', () => {});
         const restore = seedCrypto(seed);
         const r = prng(seed);
+        const ra = prng(seed ^ 0xA5C);
         const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
         try {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
@@ -142,6 +144,15 @@ for (const seed of SEEDS) {
             for (let n = 1; n <= REPLIES; n += 1) {
                 const lines = replyLines(r, n);
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
+                // The reader's arc commands (own random stream, so the story's lines stay as they were): an
+                // accepted plan of its own names now and then, and sometimes End arc.
+                if (ra.chance(0.3)) {
+                    const plan = [`ARC: Arc${n} — the tide turns`, `BEAT: Beat${n}a — a bell | place: the quay`, `BEAT: Beat${n}b — a storm | after: Beat${n}a`, `AGENDA: Agent${n} — schemes | now: the docks`, `SECRET: Secret${n} — hidden`].join('\n');
+                    const accepted = await host.sdk.command('director.arc.accept', { plan });
+                    assert.ok(accepted.ok, accepted.message);
+                } else if (ra.chance(0.15) && host.sdk.query('director.arc')?.current?.active) {
+                    assert.ok((await host.sdk.command('director.arc.end', {})).ok);
+                }
                 if (!DELETE_AT.includes(n)) continue;
                 // A middle exchange in the first half (so many replies come after it): never the first.
                 const chat = host.ctx.chat;
