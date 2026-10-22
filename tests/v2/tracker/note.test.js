@@ -72,9 +72,10 @@ test('the tail: header with time and place, due now, kind lines, secrets by name
     assert.deepEqual(lines, [
         '[Story Director · Tuesday, March 3, 2026, 08:00 pm · Bluewatch]',
         'Due now: Senior Listener Geva — files the warrant (March 3, 06:00 pm)',
-        'Hooks: Herb run — moonleaf for the healer',
         'Quests: Wolf Hunt — Kill ridge wolves · for Danique · 4 silver · by March 5, 11:59 pm',
         'Clocks: Flood — the levee breaks (March 9) · shown: sign',
+        // Not tied to Bluewatch, nobody present, not due soon: named elsewhere only (scene.js).
+        'Elsewhere, not in this scene: Herb run (hook)',
         'Do not reveal: The Heir',
     ]);
     // The reader's message: a job given up, an offer taken on or turned down.

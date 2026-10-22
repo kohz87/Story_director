@@ -20,6 +20,8 @@ of `src/v2/world/index.js` and `known.js` (the exact PC-known rules), Story Bloc
   Off, none of it is drawn or asked.
 - Works with any set of modules: without NSD the people are plain names; without a pack no holidays; without
   the clock nothing has a date; without the day digest the Journal says it is off.
+- The Director note's *Elsewhere* line and *Initiative* line (tracker/scene.js, initiative.js) follow the same
+  PC-known rule: only quests, hooks and events the story wrote are named; nothing behind the scenes or planned.
 - NSD asks `director.world.here` to know who is present (its scan reads the present list); the people widget
   shows NSD's present-cast cards and latest chatter when NSD is there.
 - Queries: `director.world` (Now), `director.world.here`, `director.journal` (each story day from the digest,

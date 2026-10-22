@@ -9,6 +9,7 @@
 //   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, words?, paid, pending?, refused?, intent?, met? }] },
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
+//   initiative: null | [{ at, round, key, name, recent: [{ key, round }] }], // NPC initiative's last pick (initiative.js)
 // }
 // `turn` is this part's own: v1's rules count replies (`n`; a record changed in the last three
 // replies is relevant; a `- hook` beside the `+ quest` of the same reply is not an ending), and
@@ -34,6 +35,7 @@ import { lineKey } from '../../changes.js';
 import { slotIn, slotValue, toSlot } from '../slot.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
+import { initiativeErrors } from './initiative.js';
 
 export const PROBLEM_LIMIT = 50;
 /** How many problems are kept; the newest PROBLEM_LIMIT are shown. */
@@ -54,6 +56,8 @@ export function initialDirector() {
         // The time part's last settle and its While away recap (slots, time/settle.js).
         checked: null,
         recap: null,
+        // NPC initiative's last pick (a slot, initiative.js); an older chat has none (read as null).
+        initiative: null,
     };
 }
 
@@ -226,6 +230,7 @@ export function validateDirector(slice) {
         || (now && (!Array.isArray(now.quests) || !(now.from === null || isInt(now.from)) || !(now.lone === null || isRecord(now.lone))))) {
         errors.push('director.turn is malformed.');
     }
+    errors.push(...initiativeErrors(slice));
     return errors;
 }
 

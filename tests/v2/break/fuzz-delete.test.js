@@ -7,7 +7,8 @@
 // The first reply's threads are made with every field later lines change: a later reply that changes
 // a field only a deleted reply had added is Story Block's to replay (its `replace` finds no key).
 // The first reply also opens six world events; later replies resolve or move them, and a delete is
-// often of a reply holding a world pick (final soak: a later world line was lost with it).
+// often of a reply holding a world pick (final soak: a later world line was lost with it) or an NPC
+// initiative pick (director.initiative, a slot written whole before the reply).
 // Smallfix: quests carry a deadline (`due:`) and some replies jump days, so time.settle lapses threads a
 // later delete takes away (its closing is passed over, ctx.ifThere); and after each delete the clock must
 // be what the replies left say: `~ time <date>` exact (a set, ctx.absolute), moves added on top. Between replies the
@@ -202,9 +203,12 @@ for (const seed of SEEDS) {
                 // A middle exchange in the first half (so many replies come after it): never the first.
                 const chat = host.ctx.chat;
                 const users = chat.map((message, i) => (message.is_user ? i : -1)).filter(i => i > 2 && i < chat.length / 2);
-                // Often one whose reply holds a world pick (chronicle.surface) with replies after it.
+                // Often one whose reply holds a world pick (chronicle.surface) or an NPC initiative pick
+                // (director.initiative: Fenna gives jobs and is now and then present) with replies after it.
                 const picks = host.sdk.receipts().filter(entry => entry.receipt.type === 'chronicle.surface').map(entry => entry.index);
-                const picked = users.filter(i => picks.includes(i + 1));
+                // The initiative step is kept on the reader's message before the reply it is for.
+                const initiative = host.sdk.receipts().filter(entry => entry.receipt.type === 'director.initiative').map(entry => entry.index);
+                const picked = users.filter(i => picks.includes(i + 1) || initiative.includes(i));
                 // Or one whose reply made a quest a later settle lapsed (its closing is then passed over).
                 const lapsed = new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle').flatMap(entry => entry.receipt.data?.lapsed ?? []).map(entry => entry.key));
                 const lapsedHere = users.filter(i => [...lapsed].some(key => chat[i + 1]?.mes?.includes?.(`+ quest ${key} `)));

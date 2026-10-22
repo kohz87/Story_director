@@ -10,10 +10,12 @@ import { makeState, readLine, runCommand, story } from './helpers/fake-ctx.js';
 const validate = director => part.domains.director.validate(director, {});
 
 test('the part has the shape MODULES §A names', () => {
-    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
+    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'features', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
+    assert.deepEqual(part.features.map(feature => [feature.id, feature.default]), [['story-director.initiative', true]]);
     assert.deepEqual(Object.keys(part.domains), ['director']);
     assert.deepEqual(Object.keys(part.queries), ['director.time', 'director.calendar', 'director.retriable', 'director.threads', 'director.thread']);
-    assert.deepEqual(Object.keys(part.commands), ['director.seed', 'quest.settle']);
+    assert.deepEqual(Object.keys(part.commands), ['director.seed', 'quest.settle', 'director.initiative']);
+    assert.equal(part.commands['director.initiative'].feature, 'story-director.initiative');
     assert.deepEqual(Object.keys(part.hooks), ['beforeGenerate', 'afterCapture']);
     // The Director screen is the screens part's `story-director/director`.
     assert.deepEqual(part.tabs, []);
@@ -23,7 +25,7 @@ test('the part has the shape MODULES §A names', () => {
 
 test('initial: an empty director, plain JSON, valid; each call a fresh copy', () => {
     const director = part.domains.director.initial();
-    assert.deepEqual(director, { time: { minutes: null }, threads: {}, keys: {}, problems: {}, turn: { n: 0, now: null }, checked: null, recap: null });
+    assert.deepEqual(director, { time: { minutes: null }, threads: {}, keys: {}, problems: {}, turn: { n: 0, now: null }, checked: null, recap: null, initiative: null });
     assert.deepEqual(JSON.parse(JSON.stringify(director)), director);
     assert.deepEqual(validate(director), []);
     director.threads.x = 1;

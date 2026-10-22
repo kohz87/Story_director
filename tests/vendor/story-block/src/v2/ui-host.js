@@ -302,7 +302,14 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '' 
     }
     // A card's scope also gets `refused`: that reply's change lines the code did not apply.
     const drawScreen = renderer.render;
-    renderer.render = (el, screen, scope) => drawScreen(el, screen, scope?.mount === 'card' ? { ...scope, refused: notes.refusedAt(scope.index) } : scope);
+    // …and `assisted`: the lines the Assist safety net applied on it (its receipts marked `assist`).
+    const assistedAt = index => {
+        try {
+            return (readRecord(ctx.chat?.[index])?.receipts ?? []).filter(receipt => receipt?.assist === 'now' || receipt?.assist === 'late')
+                .map(receipt => ({ line: String(receipt.assistLine ?? receipt.summary ?? ''), late: receipt.assist === 'late' }));
+        } catch { return []; }
+    };
+    renderer.render = (el, screen, scope) => drawScreen(el, screen, scope?.mount === 'card' ? { ...scope, refused: notes.refusedAt(scope.index), assisted: assistedAt(scope.index) } : scope);
     const mounts = createMounts({
         screens,
         render: renderer.render,
@@ -452,6 +459,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '' 
             promptParts,
             problems: () => runtime.turn?.problems?.() ?? [],
             save: () => ({ failing: store.failing?.(), dirty: store.dirty?.(), suspect: typeof store.suspect === 'function' ? store.suspect() : undefined }),
+            calls: () => runtime.callQueue?.stats?.() ?? null,
             caught: caughtSoFar,
             chat: () => liveCtx()?.chat ?? [],
             chatOpen: () => Boolean(liveCtx()?.getCurrentChatId?.() ?? liveCtx()?.chatId),
