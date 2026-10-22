@@ -9,6 +9,8 @@
 // deleting that reply takes it all back. Its summary tells the next reply what slipped, in v1's
 // words; the recap goes in this part's tail, for that reply only.
 //
+// Commands: `time.settle` (the hook's) and `director.advance` (another module's rule moving the clock
+// on: crafting takes time; advance.js).
 // Queries: `time.now` (the clock for other modules: minutes, the calendar text, the story day and its
 // date), `time.overdue` and `time.recap`.
 
@@ -18,6 +20,7 @@ import { RECAP_BUDGET } from './recap.js';
 import { DEFAULTS, calendarOf, timeSettings } from './records.js';
 import { needsSettle, recapStale, settle, settleSummary } from './settle.js';
 import { slotValue } from '../slot.js';
+import { ADVANCE, advanceCommand } from './advance.js';
 
 export const SETTLE = 'time.settle';
 
@@ -191,7 +194,7 @@ export const queries = {
 
 export const part = {
     domains: {},
-    commands: { [SETTLE]: settleCommand },
+    commands: { [SETTLE]: settleCommand, [ADVANCE]: advanceCommand },
     queries,
     kinds: {},
     context: {

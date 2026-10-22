@@ -27,9 +27,9 @@ function begun(lines, { start = 'Goldwane 12, 08:00 pm', said = null, ...options
     return chat;
 }
 
-test('the part has no domain, one command, its queries, a hook, a tail and the Time settings', () => {
+test('the part has no domain, two commands, its queries, a hook, a tail and the Time settings', () => {
     assert.deepEqual(Object.keys(part.domains), []);
-    assert.deepEqual(Object.keys(part.commands), ['time.settle']);
+    assert.deepEqual(Object.keys(part.commands), ['time.settle', 'director.advance']);
     assert.deepEqual(Object.keys(part.queries), ['time.now', 'time.overdue', 'time.recap']);
     assert.deepEqual(Object.keys(part.kinds), []);
     assert.equal(typeof part.hooks.beforeGenerate, 'function');

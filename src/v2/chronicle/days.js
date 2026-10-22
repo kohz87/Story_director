@@ -15,8 +15,8 @@
 // own summary, a name the state keeps, or a calendar date.
 //
 // Which day a receipt belongs to: receipts are walked in chat order and the clock is followed through
-// the receipts that set it (the tracker's `time` line, the pack's start, the time part's settle, each
-// with `data.minutes`). A receipt belongs to the day the clock was on when it was committed; before the
+// the receipts that set it (the tracker's `time` line, the pack's start, the time part's settle and
+// `director.advance`, each with `data.minutes`). A receipt belongs to the day the clock was on when it was committed; before the
 // clock was first set, to the first day it was set to.
 //
 // chronicle.days    = { [day]: [Digest] }   each day a slot (../slot.js), written whole
@@ -53,8 +53,10 @@ export const MAX_LINE = 200;
 export const MAX_DATE = 80;
 export const MAX_NAME = 80;
 
-// Receipts that set the clock (module story-director, `data.minutes`).
-const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle']);
+// Receipts that set the clock (module story-director, `data.minutes`). `director.advance` called by
+// another module's command has no receipt of its own; the time part's settle before the next reply
+// sets the clock right again.
+const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'director.advance']);
 // Receipts that are bookkeeping only: never a fact of the day.
 const QUIET_TYPES = new Set([DIGEST, 'chronicle.surface', 'director.seed']);
 const SETTLE = 'time.settle';
