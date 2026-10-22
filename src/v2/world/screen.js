@@ -7,6 +7,12 @@
 // Now shows until Journal is picked. Read-only: nothing here is a story action (F95), and the only
 // buttons are the people's dossier links (widget `story-director.people`, people.js).
 //
+// Here covers what Story Block's Scene tab shows, so Story Block hides Scene by default while World is there
+// (MODULES §F119): the place with its kind and region and "moved here this reply" (Story Block's
+// `scene.moved`), the story time in the header while the clock is set, and the people: NPC State Delta's own
+// present-cast cards (portraits, now lines, meters) when it is there, else names; each with their thought
+// from the newest reply's Inner chatter.
+//
 // `story-director/days` (the old Days screen's id) is kept as a dialog of the Journal alone, so an older
 // layout or a reader's own copy that names it still finds a screen; it is no tab and no game-view screen.
 
@@ -59,7 +65,7 @@ const JOURNAL = `
 const NOW = `
   <section class="sd-kind wv-here" data-kind="here" aria-label="Here">
     <h4 class="sd-h">Here</h4>
-    <p class="wv-place" data-if="q.world.here.place"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small></p>
+    <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="sd-tag wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="sd-tag wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
@@ -135,6 +141,14 @@ const CSS = `${BASE_CSS}
 .wv-item.wv-overdue { border-left-color: var(--sd-warn); }
 .wv-item[data-state="resolved"] { opacity: 0.75; border-left-color: var(--sd-border); }
 .wv-item .sd-tag { margin-left: 4px; }
+.wv-place.wv-moved { padding-left: 6px; border-left: 3px solid var(--sd-accent); }
+.wv-kind { text-transform: capitalize; }
+.wv-cast { display: block; min-width: 0; margin: 0 0 6px; }
+.wv-cast[hidden], .wv-people[hidden] { display: none; }
+.wv-thought { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0 0; font-size: 0.85em; font-style: italic; opacity: 0.9;
+  overflow-wrap: anywhere; white-space: normal; text-align: left; }
+.wv-thought i { color: var(--sd-accent); margin-top: 2px; }
+.wv-person { display: grid; gap: 2px; max-width: 100%; }
 .wv-people { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .wv-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 36px; padding: 2px 12px; border: 1px solid var(--sd-border);
   border-radius: 999px; background: var(--sd-surface); overflow-wrap: anywhere; }

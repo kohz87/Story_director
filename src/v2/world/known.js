@@ -25,6 +25,8 @@ import { BEHIND } from '../screens/reveal.js';
 export const FEATURE = 'story-director.world';
 export const DEFAULT_UPCOMING_DAYS = 30;
 export const MAX_UPCOMING_DAYS = 365;
+// Story Block's cap on chatter lines a reply (MODULES §F115), read no further.
+const MAX_THOUGHTS = 3;
 /** How many of each list the Now view shows. */
 export const NEWS_SHOWN = 20;
 export const FACTIONS_SHOWN = 20;
@@ -156,10 +158,15 @@ function stanceOf(entry) {
 }
 
 /**
- * `director.world.here` → `{ place: { name, region, kind } | null, present: [name], people: [{ name, stance,
- * dossier }], nsd }`. `present` is Story Block's scene list (NPC State Delta reads it to know who is here);
- * `people` adds, when NPC State Delta answers (`npc.known`), each one's stance and whether they have a
- * dossier. Without it the names stand alone (`nsd: false`, no stance).
+ * `director.world.here` → `{ place: { name, region, kind } | null, moved, present: [name], people: [{ name,
+ * stance, dossier, key, thought }], chatter: [{ key, name, text }], nsd, hasPeople }`. `present` is Story
+ * Block's scene list (NPC State Delta reads it to know who is here); `people` adds, when NPC State Delta
+ * answers (`npc.known`), each one's stance and whether they have a dossier. Without it the names stand
+ * alone (`nsd: false`, no stance). `moved`: the newest reply moved the scene here (Story Block's
+ * `scene.moved`). `chatter`: the newest reply's Inner chatter (Story Block's `chatter.head`; empty while it
+ * is off), one thought per thinker (their last line), each under `key`: the dossier's name when NPC State
+ * Delta knows the name or alias (`npc.dossier`, as the chatter strip links a dossier), else the name, folded
+ * (lineKey); a person's `thought` is the one under their key (MODULES §F119).
  */
 export function hereView(state, _args, tools) {
     const query = queryOf(tools);
@@ -167,6 +174,7 @@ export function hereView(state, _args, tools) {
     const scenePlace = tryQuery(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
     const name = text(atlas?.name) || text(scenePlace?.name);
     const place = name ? { name: cut(name, 80), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
+    const moved = Boolean(place) && tryQuery(query, 'scene.moved', {}, false) === true;
     const listed = tryQuery(query, 'scene.present', {}, null) ?? state?.domains?.scene?.present ?? [];
     const present = [];
     const seen = new Set();
@@ -179,12 +187,32 @@ export function hereView(state, _args, tools) {
     }
     const known = tryQuery(query, 'npc.known', {}, null);
     const nsd = Array.isArray(known);
+    // One dossier lookup per name: the dossier (or null) and the key the name goes by.
+    const dossiers = new Map();
+    const dossierOf = who => {
+        if (!nsd) return null;
+        if (!dossiers.has(who)) dossiers.set(who, tryQuery(query, 'npc.dossier', { name: who }, null));
+        return dossiers.get(who);
+    };
+    const keyOf = who => lineKey(text(dossierOf(who)?.name) || who);
+    const thoughts = new Map();
+    const lines = tryQuery(query, 'chatter.head', {}, null);
+    for (const item of Array.isArray(lines) ? lines.slice(0, MAX_THOUGHTS) : []) {
+        const who = cut(item?.name, 40);
+        const thought = cut(item?.text, 140);
+        const key = who ? keyOf(who) : '';
+        if (!key || !thought) continue;
+        thoughts.delete(key);
+        thoughts.set(key, { key, name: who, text: thought });
+    }
     const people = present.map(who => {
-        if (!nsd) return { name: who, stance: '', dossier: false };
-        const dossier = Boolean(tryQuery(query, 'npc.dossier', { name: who }, null));
-        return { name: who, stance: dossier ? stanceOf(tryQuery(query, 'npc.meters', { name: who }, null)) : '', dossier };
+        const key = keyOf(who);
+        const thought = thoughts.get(key)?.text ?? '';
+        if (!nsd) return { name: who, stance: '', dossier: false, key, thought };
+        const dossier = Boolean(dossierOf(who));
+        return { name: who, stance: dossier ? stanceOf(tryQuery(query, 'npc.meters', { name: who }, null)) : '', dossier, key, thought };
     });
-    return { place, present, people, nsd, hasPeople: people.length > 0 };
+    return { place, moved, present, people, chatter: [...thoughts.values()], nsd, hasPeople: people.length > 0 };
 }
 
 // ---- news, events and factions ------------------------------------------------------------------

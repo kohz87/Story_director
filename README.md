@@ -820,9 +820,20 @@ are kept under "Do not reveal". The planning prompt is editable (with reset); it
 The **World** tab (and game-view screen) shows only what your character knows, in two views; the
 **Director** tab stays the game master's view, with what is behind the scenes behind **Reveal**.
 
-- **Now.** *Here*: the place (the map's, else Story Block's scene) and the people the scene lists as
-  present (`+ present`). With NPC State Delta each is a chip with their stance (their stage-ladder rank,
-  disposition or meter stage) that opens their dossier; without it, the plain names. *Upcoming*: what you
+- **Now.** *Here*: the place (the map's, else Story Block's scene) with its kind and region, marked
+  *moved here this reply* when the newest reply moved it (Story Block's `scene.moved`), and the people
+  the scene lists as present (`+ present`). With NPC State Delta installed and on, the people are its own
+  present-cast cards (portrait, now lines, chatter bubbles, meters; Delta's markup, drawn by Delta through
+  its page API `globalThis.NPCStateDeltaCast`), each opening its dossier; anyone the scene lists who has no
+  card yet is a chip below them. Without it (or while it is off or loading), a chip per person, with their
+  stance (stage-ladder rank, disposition or meter stage) and a dossier link when NPC State Delta's queries
+  know them. With Story Block's **Inner chatter** on, each person's thought from the newest reply
+  (`chatter.head`) is inside their card or under their chip, matched by name or a dossier's alias as the
+  chatter strip under the reply matches it. Here follows NPC State Delta's changes (a scan that ends after
+  the reply, a dossier added) through its `onChange`, and Story Block redraws the screen on a new reply,
+  swipe, delete or chat change, so no tab switch is needed; each redraw is one query and the few cards.
+  Story Block hides its Scene tab by default while World is there (Here shows the same: place, kind,
+  region, story time, people); Settings → Story Suite → Tabs shows it again. *Upcoming*: what you
   know is coming within the next 30 story days (setting **World: Upcoming looks this many story days
   ahead**): your quests' due dates (an overdue one first), the dates of world events and leads the story
   told you, and the pack calendar's holidays (`packs.calendar().holidays`, `[{ name, month, day }]`, only
