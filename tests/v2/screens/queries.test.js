@@ -88,7 +88,9 @@ test('quest.board: active quests with progress and Finish, finished latest first
     assert.equal(hunt.note, 'Hunt along the ridge', 'the progress note (F85)');
     assert.equal(hunt.meter, true);
     assert.deepEqual(hunt.finish, { show: true, blocked: false, reason: '', title: 'Turn in East Bluff Wolves' });
-    assert.equal(hunt.reward, '1 coin each wolf');
+    // The row's reward is the one the terms count, in the chat's money words, so the two agree.
+    assert.equal(hunt.reward, '1 gold per wolf');
+    assert.match(hunt.details.terms, /1 gold per wolf/);
     assert.equal(hides.progress.label, 'Wolf pelt 2/5');
     assert.deepEqual(hides.finish, { show: true, blocked: true, reason: hides.progress.reason, title: hides.progress.reason });
     assert.match(hides.finish.reason, /Need 3 more/);

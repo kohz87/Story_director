@@ -7,6 +7,7 @@
 // no rank gets one from its difficulty (defaultRank, B-b4-10 / B-b3-18), so every reward is held inside
 // some rank's range. A rank the story writes is held to the party's own (questRank, RX-E-1).
 
+import { currencyName, money } from './parse.js';
 import { tryQuery } from './progress.js';
 
 const clean = value => String(value ?? '').normalize('NFKC').replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim();
@@ -242,7 +243,9 @@ export function replyBudget(ladder, level = null) {
 
 /** "220–1000 gold". */
 export function rangeText(rank, currency) {
-    return `${rank.reward[0]}–${rank.reward[1]} ${currency}`;
+    // With coins, each end as Story Block writes an amount ("10 copper bits–1 silver mark"), as the wallet does.
+    if (Array.isArray(currency?.coins) && currency.coins.length) return `${money(rank.reward[0], currency)}–${money(rank.reward[1], currency)}`;
+    return `${rank.reward[0]}–${rank.reward[1]} ${typeof currency === 'string' ? currency : currencyName(currency)}`;
 }
 
 /**

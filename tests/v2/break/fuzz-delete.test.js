@@ -77,6 +77,7 @@ const word = r => {
 // One reply's lines: new things under names of its own, then changes to its own or the first reply's.
 function replyLines(r, n) {
     const own = [];
+    const quests = [];
     const lines = [];
     // One made-up word per name, all of one length: no name reads as near another (v1's near keys
     // match shared words and a word inside another), so a line never reaches another reply's thread.
@@ -95,6 +96,7 @@ function replyLines(r, n) {
             // the + quest makes the hook the quest, active and taken on at once.
             if (r.chance(0.4)) lines.push(`+ hook ${key} — a job on offer | giver: Fenna | reward: ${r.int(1, 30)} gold`);
             lines.push(`+ quest ${key} — a job | giver: Fenna | goal: Find the ${key} | reward: ${r.int(1, 30)} gold${r.chance(0.7) ? ` | due: June ${r.int(3, 7)}, 1200` : ''}`);
+            quests.push(key);
         } else if (roll < 0.62) {
             const from = r.chance(0.5) ? r.pick(BASE_PLACES) : name();
             lines.push(r.chance(0.5) ? `+ route ${from} — ${name()} | hours: ${r.int(1, 9)} | kind: ${r.pick(['road', 'trail'])}` : `+ landmark ${name()} | region: Vale | kind: ${r.pick(['town', 'ruin'])}`);
@@ -113,6 +115,15 @@ function replyLines(r, n) {
         } else {
             lines.push(`~ hook ${r.pick(BASE)} | now: ${name()}`);
         }
+    }
+    // A quest turned in on the story's word, the giver arriving after the turn-in line (or not at all): it
+    // waits for where the reply ends up, and is paid or refused by a later Director line or the step
+    // before the next reply (quest.settle).
+    if (quests.length && r.chance(0.4)) {
+        const key = r.pick(quests);
+        lines.push(`~ quest ${key} | met: yes`, `- quest ${key} — turned in`);
+        if (r.chance(0.6)) lines.push(r.chance(0.5) ? '+ present Fenna' : `~ place ${r.pick(BASE_PLACES)} | kind: town`);
+        if (r.chance(0.5)) lines.push(`! time +${r.int(1, 3)}h`);
     }
     for (const key of own) {
         if (r.chance(0.3)) lines.push(`~ hook ${key} | now: nearby`);

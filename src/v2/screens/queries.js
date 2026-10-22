@@ -281,7 +281,9 @@ export function questBoard(state, args, tools, { settings = null } = {}) {
             note: details.note,
             step: details.note,
             giver: details.giver,
-            reward: rewardOf(thread),
+            // The reward as the terms count it, in the chat's money words (quest.details), so the row and the
+            // terms agree; the story's own words when code does not count it.
+            reward: text(given?.terms?.reward) || rewardOf(thread),
             due: details.due,
             taken: Boolean(thread.taken),
             ready: Boolean(progress?.met && thread.taken),
@@ -414,6 +416,32 @@ export function behindView(state, args, tools) {
 }
 
 /** The part's queries; `settings` is the module's settings (a function or an object). */
+const COORD_LIMIT = 1e7;
+const WEATHER_CHARS = 80;
+
+// A map coordinate as the card writes it: whole map units, '' when not a usable number.
+const coordText = value => (Number.isFinite(value) && Math.abs(value) < COORD_LIMIT ? String(Math.round(value)) : '');
+
+/**
+ * `director.status` → what the reply's Status card adds to Story Block's scene, all of it {{user}}'s own
+ * (world/known.js: where they are, and the weather they stand in): `{ coords, weather }`.
+ * `coords`: the scene's place on the map ("59, 110", map units: the atlas's or the pack's map data),
+ * '' when the atlas does not know the place or has no position for it. `weather`: Story Block's
+ * `scene.weather` (`{ text } | null`, the story's `~ weather <text>` line), '' when there is none or that
+ * query is not there. Read on the state it is given, so each reply's card shows its own.
+ */
+export function statusExtras(_state, _args, tools) {
+    const query = queryFrom(tools);
+    const here = ask(query, 'atlas.here', {}, null);
+    const place = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
+    const [x, y] = [coordText(place?.x), coordText(place?.y)];
+    const weather = ask(query, 'scene.weather', {}, null);
+    return {
+        coords: x && y ? `${x}, ${y}` : '',
+        weather: isRecord(weather) ? cut(text(weather.text), WEATHER_CHARS) : '',
+    };
+}
+
 export function screenQueries({ settings = null } = {}) {
     return {
         'director.behind': (state, args, tools) => behindView(state, args, tools),
@@ -421,5 +449,6 @@ export function screenQueries({ settings = null } = {}) {
         'director.next': (state, args, tools) => nextDue(state, args, tools, { settings }),
         'quest.board': (state, args, tools) => questBoard(state, args, tools, { settings }),
         'director.problems': (state, args, tools) => problemsList(state, args, tools),
+        'director.status': (state, args, tools) => statusExtras(state, args, tools),
     };
 }

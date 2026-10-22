@@ -254,7 +254,9 @@ function moneyOf(receipt) {
     }
     // A quest turned in (the quests part's own receipt, or the tracker's story turn-in carrying it).
     out.in += amount(data.paid?.amount);
-    out.in += amount(data.turnIn?.paid?.amount);
+    // A Director line that also paid turn-ins its reply left waiting carries each under `settled`.
+    if (Array.isArray(data.settled)) for (const item of data.settled) out.in += amount(item?.turnIn?.paid?.amount);
+    else out.in += amount(data.turnIn?.paid?.amount);
     // RPG Battle: a fight's loot, a sale, a purchase, a commission's fee.
     if (receipt.module === 'rpg-battle') {
         out.in += amount(data.loot?.money);

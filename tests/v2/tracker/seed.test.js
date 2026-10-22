@@ -52,7 +52,8 @@ test('startMinutes: the pack\'s start on the chat\'s calendar, null when it is n
 test('the hook asks for director.seed while the clock is unset and a pack gives a start; never twice', () => {
     const fresh = makeState();
     assert.deepEqual(seedHook(viewOf(fresh)), { lines: [], commands: [{ type: SEED, payload: {} }] });
-    assert.equal(part.hooks.beforeGenerate, seedHook);
+    // The part's hook asks for it too (with the turn-ins a reply left waiting, quest-lines.js settleHook).
+    assert.deepEqual(part.hooks.beforeGenerate(viewOf(fresh)), { lines: [], commands: [{ type: SEED, payload: {} }] });
     assert.equal(seedHook(viewOf(fresh, { queries: {} })), undefined, 'no packs part');
     assert.equal(seedHook(viewOf(fresh, { queries: packs({ ...ERSVEIL, start: null }) })), undefined, 'a pack without a start');
     assert.equal(seedHook(viewOf(fresh, { settings: OWN, queries: packs({ ...ERSVEIL, start: { ...ERSVEIL.start, month: 'Rainmoot' } }) })), undefined, 'not a date on the reader\'s calendar');

@@ -12,7 +12,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID, HUD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -72,7 +72,9 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     const { problems, time, arc, behind, ...threads } = director;
     assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });
     assert.deepEqual([arc, behind], [{ query: 'director.arc' }, { query: 'director.behind' }]);
-    assert.deepEqual(byId[STATUS_CARD_ID].data.next, { query: 'director.next', args: { shown: true } });
+    // The reply's card shows no next beat (a spoiler); it adds the map coordinates and the weather.
+    assert.equal(byId[STATUS_CARD_ID].data.next, undefined);
+    assert.deepEqual(byId[STATUS_CARD_ID].data.status, { query: 'director.status' });
     assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
     assert.ok(Object.values(threads).every(binding => binding.query === 'director.threads'));
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
@@ -84,7 +86,7 @@ test('the status card\'s progress follows its goal binding ($goal.id), and is em
     const { run } = makeRunner();
     const card = byId[STATUS_CARD_ID];
     const data = resolveData(card.data, (name, args) => run(headState(), name, args));
-    assert.deepEqual(data.order, ['time', 'next', 'goal', 'progress']);
+    assert.deepEqual(data.order, ['time', 'status', 'goal', 'progress']);
     assert.equal(data.q.goal.id, 'th_wolves01');
     assert.equal(data.q.progress.label, 'Wolves 8/3');
     const none = resolveData(card.data, (name, args) => run(headState({ threads: [] }), name, args));

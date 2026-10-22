@@ -11,9 +11,19 @@
 //   narrated receipt that tells the next reply why.
 //   One reply turns in at most one quest on the story's word alone (B-b3-r2-5): the others stay
 //   open and ready, with that Problem.
+// * The place rule is checked where the reply ends up, not where its turn-in line is read: Story Block
+//   reads a reply's lines in order, and the story often writes `- quest … — turned in` before the
+//   `~ place` and `+ present` lines that bring the party to the giver. A turn-in refused only by the
+//   place waits in the reply's bookkeeping (`turn.now.pending`, thread ids) and is checked again at each
+//   later Director line of the same reply (paid as soon as the place rule holds) and, last, before the
+//   next reply is written (the `quest.settle` step, on the scene after all the reply's lines and the
+//   reader's actions after it): paid then, or refused with the reason. A turn-in the place rule allows
+//   when its line is read is paid at once, as before.
 //
 // The quests part's rules are reached only through its queries and commands (`quest.details`,
 // `quest.progress`, `quest.finish`); without that part a line is read as before.
+
+import { addProblem as addDirectorProblem, replyDraft, replyTurn } from './domain.js';
 
 export const NOTE_CHARS = 160;
 const YES = /^(?:yes|y|true|met|done|complete|completed|reached|achieved)\b/i;
@@ -111,9 +121,18 @@ export function applyMet(ctx, thread, met, metText, rev) {
  * pass, else a Problem and a narrated receipt. Null when the quests part does not answer (the line is
  * then read as before).
  */
-export function storyTurnIn(ctx, director, thread, { addProblem, raw }) {
+export function storyTurnIn(ctx, director, thread, { addProblem, raw, defer = true }) {
     const check = tryQuery(ctx?.query, 'quest.progress', { id: thread.id, closing: true });
     if (!check || !check.finish) return null;
+    // Refused by the place alone: it waits for the scene the reply ends up in (settleTurnIns).
+    if (!check.finish.ok && check.place === true && defer) {
+        const now = replyDraft(director);
+        if (now) {
+            if (!Array.isArray(now.pending)) now.pending = [];
+            if (!now.pending.includes(thread.id)) now.pending.push(thread.id);
+            return { summary: `Director: ${raw} (checked where the reply ends up)`, narrate: false, data: { thread: thread.id, quest: thread.id, problems: [], waiting: true } };
+        }
+    }
     if (check.finish.ok) {
         const out = ctx.call('quest.finish', { id: thread.id, by: 'story' }) ?? {};
         const closed = director.threads[thread.id];
@@ -134,4 +153,75 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw }) {
     const message = `The story says ${thread.key} was turned in, but ${why}; it stays open.`;
     addProblem(director, ctx, { kind: 'turn-in', severity: 'warn', key: thread.key, op: '-', text: message });
     return { summary: message, narrate: true, data: { thread: thread.id, quest: thread.id, problems: ['turn-in'], refused: true } };
+}
+
+/** The step that checks the reply's waiting turn-ins before the next reply (the quests' cue). */
+export const SETTLE = 'quest.settle';
+
+const isWaitingQuest = thread => isOpenQuest(thread) && Boolean(thread.taken);
+
+/**
+ * The reply's turn-ins that wait for its scene (storyTurnIn), checked on the scene as it stands now:
+ * `[result]`, one per quest that was settled. `final: false` (a later Director line of the same reply)
+ * pays the ones the place rule now allows and leaves the others waiting; `final: true` (the step before
+ * the next reply) pays them or refuses them with the reason. A quest no longer open stops waiting.
+ * `only`: one quest id (the step settles one quest per receipt).
+ */
+export function settleTurnIns(ctx, director, { addProblem, final = false, only = null } = {}) {
+    const waiting = replyTurn(director).pending.filter(id => only === null || id === only);
+    if (!waiting.length) return [];
+    const now = replyDraft(director);
+    if (now) now.pending = replyTurn(director).pending.filter(id => !waiting.includes(id));
+    const out = [];
+    for (const id of waiting) {
+        const thread = director.threads?.[id];
+        if (!isWaitingQuest(thread)) continue;
+        const result = storyTurnIn(ctx, director, thread, { addProblem, raw: `- quest ${thread.key} — turned in`, defer: !final });
+        if (result && !result.data?.waiting) out.push(result);
+    }
+    return out;
+}
+
+/**
+ * A Director line's result with the turn-ins settled before it (settleTurnIns): their summaries first,
+ * told to the next reply, and their data under `settled` (the first one's as `quest` and `turnIn`, for
+ * the quest's history and the day's money).
+ */
+export function withSettled(settled, result) {
+    if (!settled.length) return result;
+    const first = settled.find(item => item.data?.turnIn) ?? settled[0];
+    return {
+        ...result,
+        summary: [...settled.map(item => text(item.summary)), text(result?.summary)].filter(Boolean).join(' '),
+        narrate: true,
+        data: {
+            ...(result?.data ?? {}),
+            ...(result?.data?.quest ? {} : { quest: first.data?.quest ?? null }),
+            ...(first.data?.turnIn ? { turnIn: first.data.turnIn } : {}),
+            settled: settled.map(item => item.data),
+        },
+    };
+}
+
+/**
+ * `quest.settle({ id })`: the step before the next reply (the tracker's beforeGenerate) checks one turn-in
+ * the reply left waiting, on the scene the reply ended up in: paid, or refused with the reason (a narrated
+ * receipt either way). Kept on that reply, so a swipe or delete of it takes it back; `replan`: a Re-read
+ * of the reply runs it again on the new lines. Story and system steps only.
+ */
+export function settleCommand(ctx, payload = {}) {
+    if (ctx.cause === 'ui') ctx.fail('REFUSED', 'A turn-in is checked by the story, not by a click.');
+    const director = ctx.draft('director');
+    const id = text(payload?.id);
+    if (!id || !replyTurn(director).pending.includes(id)) ctx.fail('REFUSED', 'No turn-in waits for that quest.');
+    const [settled] = settleTurnIns(ctx, director, { addProblem: addDirectorProblem, final: true, only: id });
+    if (!settled) return { summary: 'Director: a turn-in that waited is no longer open.', narrate: false, data: { quest: id }, replan: true };
+    return { ...settled, replan: true };
+}
+
+/** `beforeGenerate(view)`: `{ commands: [quest.settle] }`, one per turn-in the last reply left waiting. */
+export function settleHook(view) {
+    const waiting = replyTurn(view?.state?.domains?.director).pending;
+    if (!waiting.length) return undefined;
+    return { lines: [], commands: waiting.map(id => ({ type: SETTLE, payload: { id } })) };
 }
