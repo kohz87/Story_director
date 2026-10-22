@@ -7,7 +7,15 @@ import assert from 'node:assert/strict';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { resolveData, runtime, skipReason } from './helpers/runtime.js';
 import { at, calendar, earlierState, headState, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
-import { DIRECTOR_ID, HUD_ID, QUESTS_ID, STATUS_CARD_ID, part, screens } from '../../../src/v2/screens/index.js';
+import { DIRECTOR_ID, HUD_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, part, screens } from '../../../src/v2/screens/index.js';
+import { createArcWidget } from '../../../src/v2/arc/widget.js';
+
+// The module's own widgets on the Director screen, with a planner that is not there and a reveal choice
+// the test sets (shown unless a test hides it).
+let shown = true;
+const stillReveal = { guard: () => true, revealed: () => shown, set: on => { shown = on; }, hidden: () => !shown, subscribe: () => () => {} };
+const noPlanner = { status: () => ({ available: true, busy: false, draft: null, error: '', hidden: !shown, arc: null }), subscribe: () => () => {}, plan() {}, end() {} };
+const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }) });
 
 const skip = runtime ? false : skipReason;
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
@@ -29,7 +37,7 @@ function draw(id, state, { command = null, changes = [], mount = byId[id].mounts
     const results = [];
     const view = runtime.renderTemplate(el, compiled, { state, q: data.q, changes, settings: {}, mount, screenId: id, api: {} }, {
         evaluate: runtime.evaluate,
-        widgets: runtime.widgets,
+        widgets: moduleWidgets(),
         formatters,
         command,
         onWarn: message => warnings.push(message),
@@ -153,7 +161,8 @@ test('director: the header shows the story time on the chat\'s calendar and the 
 test('director: threads by kind, open first and closed folded, secrets by name, problems newest first', { skip }, () => {
     const { el } = draw(DIRECTOR_ID, headState());
     const kinds = el.querySelectorAll('section.sd-kind').map(node => node.getAttribute('data-kind'));
-    assert.deepEqual(kinds, ['quest', 'agenda', 'event', 'clock', 'secret', 'problems']);
+    // The arc panel, what the reader may see, then behind the scenes (revealed here), then the problems.
+    assert.deepEqual(kinds, ['arc', 'quest', 'event', 'agenda', 'clock', 'secret', 'problems']);
     const quests = el.querySelector('section[data-kind="quest"]');
     const open = quests.querySelectorAll(':scope > ul > li').map(node => squash(node.querySelector('.sd-key').textContent));
     assert.deepEqual(open, ['East Bluff Wolves', 'Tanner Pelts', 'Granary Rats']);
@@ -170,7 +179,8 @@ test('director: threads by kind, open first and closed folded, secrets by name, 
     assert.match(problems[1], /The story time is not set yet/);
     assert.equal(el.querySelector('.sd-empty'), null);
     const { el: none } = draw(DIRECTOR_ID, makeState());
-    assert.equal(squash(none.textContent), 'Nothing tracked yet.');
+    assert.match(squash(none.textContent), /No arc planned yet\. Plan arc Nothing tracked yet\.$/);
+    assert.equal(none.querySelector('.sd-behind'), null, 'nothing behind the scenes: no Reveal panel');
 });
 
 test('hud: date and time and the place on one line, from the head', { skip }, () => {
@@ -190,7 +200,8 @@ test('status card: time, place, next due, goal and step, progress, with what thi
     assert.deepEqual(rows.slice(0, 4), [
         ['Time', 'June 11, 2025, 09:00 am'],
         ['Place', 'Bluewatch Village · Eastmarch'],
-        ['Next', 'Bandit Raid — June 12, 2025, 8:00 pm'],
+        // Behind the scenes hidden (the default): the card names no clock, agenda or beat (reveal.js).
+        ['Next', 'Harvest Fair — June 14, 2025'],
         ['Goal', 'East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'],
     ]);
     assert.equal(rows[4][0], 'Progress');
@@ -253,7 +264,8 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
 
     assert.match(text(3), /June 11, 2025, 09:00 am/);
     assert.match(text(3), /Bluewatch Village/);
-    assert.match(text(3), /Bandit Raid/);
+    assert.match(text(3), /Harvest Fair/);
+    assert.doesNotMatch(text(3), /Bandit Raid/, 'a clock is behind the scenes');
     assert.match(text(3), /Wolves 8\/3/);
     assert.equal(body(3).querySelector('.sd-place').classList.contains('sd-new'), false);
     assert.equal(body(1).getAttribute('data-ss-screen'), STATUS_CARD_ID);

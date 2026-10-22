@@ -18,6 +18,7 @@
 import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
 import { problemList } from '../tracker/domain.js';
+import { BEHIND, BEHIND_KINDS } from './reveal.js';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -125,7 +126,10 @@ function reached(parsed, now, calendar) {
  */
 export function nextDue(state, args, tools, { settings = null } = {}) {
     const query = queryFrom(tools);
-    const threads = threadsOf(state, query, { status: 'active' }).filter(thread => isOpen(thread) && thread.kind !== 'secret');
+    // `shown: true` (the card under each reply): while behind the scenes is hidden, only what the reader
+    // may see (quests, hooks, world events) is named there.
+    const hide = args?.shown === true && hidingBehind(tools);
+    const threads = threadsOf(state, query, { status: 'active' }).filter(thread => isOpen(thread) && thread.kind !== 'secret' && !(hide && BEHIND.has(thread.kind)));
     if (!threads.length) return null;
     const calendar = calendarFrom(settings, query);
     const minutes = state?.domains?.director?.time?.minutes;
@@ -350,17 +354,69 @@ export function problemsList(state, args, tools) {
     const problems = problemList(director);
     const substitute = typeof tools?.substitute === 'function' ? tools.substitute : null;
     const query = queryFrom(tools);
+    // `behind: true` / `false`: only those about a thread behind the scenes, or only the others.
+    const behind = typeof args?.behind === 'boolean' ? args.behind : null;
     // The newest PROBLEM_SHOWN: the tracker keeps more than that (domain.js PROBLEM_ROOM).
-    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director, query)).map(problem => ({
+    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director, query))
+        .filter(problem => behind === null || isBehindProblem(problem, director) === behind).map(problem => ({
         rev: problem.rev ?? null,
         kind: text(problem.kind),
         text: readerWords(problem.text, substitute),
     }));
 }
 
+// ---------------------------------------------------------------------------------------------------
+// Behind the scenes (reveal.js)
+
+/** Whether the reader hides behind the scenes (the part's `hideBehind` setting; on unless set off). */
+export function hidingBehind(tools) {
+    try {
+        return typeof tools?.settings === 'function' ? tools.settings()?.hideBehind !== false : true;
+    } catch {
+        return true;
+    }
+}
+
+/** Whether a Director problem is about a thread behind the scenes (its key names an agenda, beat, clock or secret). */
+export function isBehindProblem(problem, director) {
+    const key = lineKey(String(problem?.key ?? ''));
+    const keys = isRecord(director?.keys) ? director.keys : {};
+    if (!key || !Object.hasOwn(keys, key)) return false;
+    const threads = isRecord(director?.threads) ? director.threads : {};
+    const id = keys[key];
+    return Object.hasOwn(threads, id) && BEHIND.has(threads[id]?.kind);
+}
+
+// A thread as the behind-the-scenes list shows it; a secret by its name alone.
+function behindThread(thread) {
+    if (thread.kind === 'secret') return { id: thread.id, key: text(thread.key), summary: '', fields: {}, ended: null };
+    const fields = {};
+    for (const name of ['now', 'then', 'on', 'due', 'place', 'reach', 'shown']) if (text(thread.fields?.[name])) fields[name] = text(thread.fields[name]);
+    return { id: thread.id, key: text(thread.key), summary: text(thread.summary), fields, ended: thread.ended ? { outcome: text(thread.ended.outcome) } : null };
+}
+
+/**
+ * `director.behind` → `{ kinds: [{ kind, title, open, closed }], problems, open, total }`: the threads behind
+ * the scenes (agendas, clocks, beats, secrets: open ones and the closed ones), the problems about them, and
+ * how many there are, for the Reveal panel (widget `story-director.behind`).
+ */
+export function behindView(state, args, tools) {
+    const query = queryFrom(tools);
+    const kinds = BEHIND_KINDS.map(([kind, title]) => ({
+        kind,
+        title,
+        open: threadsOf(state, query, { kind, status: 'active' }).filter(isRecord).map(behindThread),
+        closed: threadsOf(state, query, { kind, status: 'resolved' }).filter(isRecord).map(behindThread),
+    })).filter(group => group.open.length || group.closed.length);
+    const open = kinds.reduce((sum, group) => sum + group.open.length, 0);
+    const total = kinds.reduce((sum, group) => sum + group.open.length + group.closed.length, 0);
+    return { kinds, problems: problemsList(state, { behind: true }, tools), open, total };
+}
+
 /** The part's queries; `settings` is the module's settings (a function or an object). */
 export function screenQueries({ settings = null } = {}) {
     return {
+        'director.behind': (state, args, tools) => behindView(state, args, tools),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'director.next': (state, args, tools) => nextDue(state, args, tools, { settings }),
         'quest.board': (state, args, tools) => questBoard(state, args, tools, { settings }),

@@ -10,7 +10,8 @@
 //   grammar is a function, and `view.fights` / `ctx.fights`): whether a module runs fights, learnt
 //   before each reply (fightRunner), so Story Director alone asks for no encounters (WAVE rule 11);
 // - hooks: every part's function of a name, called in part order;
-// - settings: each part's keys are namespaced under its part id (`tracker.dormantReplies`), a
+// - settings: each part's keys are namespaced under its part id (`tracker.dormantReplies`; a part's
+//   `section(el, api)` function, the arc's planner prompt editor, is the module's custom panel), a
 //   `group` field is flattened into dotted keys (`tracker.calendar.months`) because the Story
 //   Suite overlay shows flat fields. A part reads its own settings back as it wrote them: the
 //   ctx, view and api handed to it have `settings()` → that part's values, un-namespaced. A part's
@@ -34,6 +35,7 @@ import { part as quests } from './quests/index.js';
 import { part as time } from './time/index.js';
 import { part as atlas } from './atlas/index.js';
 import { part as chronicle } from './chronicle/index.js';
+import { part as arc } from './arc/index.js';
 import { part as screens } from './screens/index.js';
 import { calendarConfig, packCalendarOf } from './tracker/time.js';
 
@@ -44,8 +46,8 @@ export const VERSION = '2.0.0-alpha.1';
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 export const STORY_BLOCK_RANGE = '>=2.0.0-alpha.2';
 
-/** The parts in their fixed order: [id, part]. The order is the static prompt's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['screens', screens]]);
+/** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
+export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['arc', arc], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {
@@ -279,6 +281,14 @@ function mergeHook(name, entries, shared) {
     };
 }
 
+// The settings panel's own part (`settings.section(el, api)`): a part's function, keeping its `feature`
+// tag (one part has one now); several are drawn one after another, untagged.
+function sectionOf(list) {
+    if (!list.length) return null;
+    if (list.length === 1) return list[0];
+    return (el, api) => { for (const fn of list) fn(el, api); };
+}
+
 /**
  * The module definition for `sdk.registerModule` (SPEC §6) from `parts` ([id, part], in order;
  * default: tracker, quests, time, atlas, chronicle, screens). `host` (tests): `{ settings(id), substitute(text) }`
@@ -310,6 +320,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const schema = {};
     const statics = [];
     const tails = [];
+    const sections = [];
     let budget = 0;
 
     for (const [ns, part] of parts) {
@@ -355,6 +366,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             Object.assign(defaults, named.defaults);
             Object.assign(schema, named.schema);
             readsByPart[ns] = readsOf(part.settings);
+            if (typeof part.settings.section === 'function') sections.push(part.settings.section);
         }
         for (const tab of part.tabs ?? []) {
             own(owners.tab, tab.id, ns, 'the tab');
@@ -410,7 +422,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             // Before each reply: what the module set is, before the prompt is assembled.
             return [name, name === 'beforeGenerate' ? (view, ...rest) => { learn(view); return merged(view, ...rest); } : merged];
         })),
-        settings: { defaults, schema },
+        settings: { defaults, schema, ...(sectionOf(sections) ? { section: sectionOf(sections) } : {}) },
         tabs,
         screens: screenList,
     };

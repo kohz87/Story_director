@@ -29,6 +29,12 @@
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves") and opens its details
 > (goal, progress note, terms, dates, history). An older chat's offers still load; they are shown nowhere
 > (the Director tab tags them "offered") and become the quest when the story writes `+ quest` for one.
+> **Arc planning** (feature `story-director.arc`, on; needs Story Block 2.0.0-beta.1 or newer for its model
+> call, else the Director tab says so and shows no buttons): **Plan arc** asks a planner model, on its own
+> connection profile, for the next arc; the plan waits for your review (**Accept**, **Discard**, **Plan
+> again**) and, accepted, becomes the Director's own beats, agendas, hooks, clocks and secrets. See
+> [Arc planning in v2](#arc-planning-in-v2). **Behind the scenes** (agendas, planned beats, clocks, secrets)
+> is hidden on the Director tab until you press **Reveal** (per chat, remembered); the story is told all of it.
 > The v1 text below on offers, Take on and Turn down describes v1 only. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
 > branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
 > is not loaded. Progress for the whole suite:
@@ -805,6 +811,56 @@ From then on the arc's name heads the note's Beats line with its next beats, and
 are kept under "Do not reveal". The planning prompt is editable (with reset); its macros are
 `{{recent}}`, `{{tracker}}`, `{{now}}`, `{{place}}`, `{{nearby}}`, `{{note}}`, `{{genre}}`,
 `{{previous_arc}}`, `{{user}}` and `{{char}}`.
+
+### Arc planning in v2
+
+The v1 rules above hold, in v2's shape (Story Block v2, the Director tab):
+
+- **Plan arc** and **End arc** are on the Director tab's Arc panel. They, and Accept, Discard and Plan
+  again, are your controls for planning, not story actions. The planner is one call through Story
+  Block's model call (`sdk.callModel`), on **Arc planning: Planner connection** (a Connection Manager
+  profile, or Same as chat); it never posts to the chat. While it runs the panel says "Planning the next
+  arc…" with **Cancel**.
+- **Read strictly, numbers by code.** Only the plan's labelled lines are read (ARC, BEAT, AGENDA, HOOK,
+  CLOCK, SECRET; ENCOUNTER is a beat with foes), each kind only with its own parts. A plan keeps at most 6
+  beats, 6 agendas, 3 hooks, 2 clocks, 4 secrets and 16 items in all, and at most 2 fights; names and texts
+  are cut and cleaned of markup. Relative dates ("in 2 days", "tomorrow at dusk") are written on your
+  calendar by code; a date that is past or unreadable is left out. Rewards, XP, ranks and amounts are never
+  part of a plan. Without a module that runs fights (Story Director alone: a dating sim, a mystery) the
+  planner is asked for no fights and a planned fight stays a beat without foes. The review lists what code
+  left out or changed.
+- **Review.** The plan waits on the panel as text you may edit; Accept reads your text again the same
+  strict way. With behind the scenes hidden it says only "A new arc plan is waiting" with **Accept without
+  reading**, **Review** (reveals) and **Discard**. *Use a plan without review* skips this. The waiting plan
+  is yours, kept per chat in this browser: a swipe does not throw it away.
+- **Accepted** (commands `director.arc.accept`, then `director.arc.update` for each item naming a thread
+  already tracked): an arc record and the plan's threads, each tagged with the arc, made by the tracker's
+  own rules, on the latest reply like any action of yours. Swiping or deleting that reply takes the plan
+  back; deleting a reply in the middle takes back only what it made (a change to a thread it made goes with
+  it, the rest of the plan stays). The tail carries "Arc: Name — what it is about" while it runs; the fixed
+  prompt is unchanged.
+- **By itself** (*When to plan: By itself*): after a reply, when the story tracks something and has no arc,
+  when every beat of the arc played out (the arc is ended first), when no beat is due within *Stalled after
+  story days* (7), or when open threads run low (*Running low below*, 3; after 5 replies since the last ask).
+  Never while a plan waits.
+- **Settings** (Story Director → Arc planning): planner connection, when to plan, use without review, genre
+  and tone, Director's note (used for one arc: once an arc planned with it is accepted it is left out until
+  you change it, unless *Keep the note for every plan*), messages the planner reads (40), longest plan
+  (tokens), stall days, running low. The planner prompt is under **More**, with **Reset**; its macros are
+  `{{genre}}`, `{{now}}`, `{{place}}`, `{{note}}`, `{{previous_arc}}`, `{{tracker}}`, `{{recent}}`,
+  `{{fights}}`, `{{user}}` and `{{char}}`.
+- Turn the feature **Arc planning** off (Features) and nothing of it is drawn, asked or sent; arcs already
+  accepted stay, and their threads stay the Director's.
+
+### Behind the scenes in v2
+
+The Director tab shows quests, hooks and world events openly. Agendas, planned beats, clocks and secrets
+(and the problems about them) are behind a **Reveal** panel that shows only how many there are; nothing of
+them is put on the page until you reveal it. The choice is per chat and remembered in this browser (a
+swipe or a reload does not hide it again); **Hide** hides it again. The status card under each reply then
+names no agenda, beat or clock as *Next*. The story's prompt gets all of it either way. Turn hiding off for
+every chat with **Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press
+Reveal**.
 
 ## Capture (for models that skip the change lines)
 

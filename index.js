@@ -10,6 +10,7 @@
 // which v2 reuses, but is not loaded.
 
 import { MODULE_ID, MODULE_NAME, VERSION, storyDirectorModule } from './src/v2/module.js';
+import { arcController } from './src/v2/arc/index.js';
 
 export const NEEDS_HOST = 'Story Director 2 needs Story Block v2: install or update Story Block, then reload.';
 const NOTICE_ID = 'story_director_needs_host';
@@ -61,6 +62,8 @@ export async function start({ root = globalThis, doc = globalThis.document, wait
         console.error(`[${MODULE_NAME}] could not register with Story Block:`, error);
         return { registered: false, reason: error?.message ?? String(error) };
     }
+    // Arc planning by itself (setting arc.trigger: auto) looks after every reply.
+    try { sdk.on?.('turn', turn => { void arcController().onTurn(turn).catch(error => console.warn(`[${MODULE_NAME}] arc planning:`, error?.message ?? error)); }); } catch { /* an older host */ }
     console.info(`[${MODULE_NAME}] v${VERSION} registered with Story Block v2.`);
     return { registered: true, sdk };
 }

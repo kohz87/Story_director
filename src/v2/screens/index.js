@@ -8,7 +8,10 @@
 // `quest.progress`, `quest.details`) and to four view queries this part adds (queries.js: `director.goal`,
 // `director.next`, `quest.board`, `director.problems`), which work out what a template cannot
 // (sorting, dates, each quest's status line and details, `{{user}}` in problem texts) from those same
-// queries. No screen draws a command button (F95): quests follow the reader's words and the story. No commands, domains or change-line kinds of its own. The status card is
+// queries. No screen draws a command button (F95): quests follow the reader's words and the story. No commands, domains or change-line kinds of its own.
+// Behind the scenes (agendas, beats, clocks, secrets) is hidden on the Director screen until the reader
+// presses Reveal, per chat (reveal.js, widget `story-director.behind`; setting `hideBehind`, on). HIDE_SETTING
+// is its namespaced key. The status card is
 // on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
 import { directorScreen } from './director.js';
@@ -16,11 +19,14 @@ import { hudScreen } from './hud.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
+import { BEHIND_WIDGET, behindWidget } from './behind.js';
 
 export { DIRECTOR_ID, KIND_GROUPS } from './director.js';
 export { HUD_ID } from './hud.js';
 export { QUESTS_ID } from './quests.js';
 export { STATUS_CARD_ID } from './status-card.js';
+export { BEHIND_WIDGET, behindWidget, createBehindWidget } from './behind.js';
+export { BEHIND, BEHIND_KINDS, HIDE_SETTING, browserStore, createReveal, reveal } from './reveal.js';
 export { calendarSetting, currentGoal, finishState, nextDue, problemsList, questBoard, readerWords, screenQueries } from './queries.js';
 
 export const MODULE_ID = 'story-director';
@@ -50,6 +56,14 @@ export function createScreensPart({ settings = hostSettings } = {}) {
         hooks: {},
         tabs: [],
         screens: [...screens],
+        widgets: { [BEHIND_WIDGET]: behindWidget },
+        settings: {
+            defaults: { hideBehind: true },
+            schema: {
+                // Per chat, Reveal shows them (remembered in this browser); this hides nothing from the story.
+                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press Reveal' },
+            },
+        },
     };
 }
 

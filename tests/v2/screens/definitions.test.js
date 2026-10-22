@@ -12,7 +12,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID, HUD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.goal', 'director.next', 'director.problems', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -66,9 +66,13 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.equal(byId[STATUS_CARD_ID].data.time.query, 'director.time');
     const director = byId[DIRECTOR_ID].data;
     assert.deepEqual(director.quest_open, { query: 'director.threads', args: { kind: 'quest', status: 'active' } });
-    assert.deepEqual(director.secret_closed, { query: 'director.threads', args: { kind: 'secret', status: 'resolved' } });
-    const { problems, time, ...threads } = director;
-    assert.deepEqual(problems, { query: 'director.problems' });
+    assert.deepEqual(director.event_closed, { query: 'director.threads', args: { kind: 'event', status: 'resolved' } });
+    // Behind the scenes is the Reveal panel's (director.behind), and so are its problems.
+    assert.equal(director.secret_closed, undefined);
+    const { problems, time, arc, behind, ...threads } = director;
+    assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });
+    assert.deepEqual([arc, behind], [{ query: 'director.arc' }, { query: 'director.behind' }]);
+    assert.deepEqual(byId[STATUS_CARD_ID].data.next, { query: 'director.next', args: { shown: true } });
     assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
     assert.ok(Object.values(threads).every(binding => binding.query === 'director.threads'));
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
