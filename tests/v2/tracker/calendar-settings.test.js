@@ -7,7 +7,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { CALENDAR_KEYS, fieldHelp, gregorianFields, packCalendarFields, presetHelp } from '../../../src/v2/tracker/calendar-settings.js';
+import { CALENDAR_KEYS, calendarReadOnly, fieldHelp, gregorianFields, packCalendarFields, presetHelp } from '../../../src/v2/tracker/calendar-settings.js';
+import { installFakeDom } from '../../ui-fake-dom.js';
+import { renderSettingsHost } from '../../vendor/story-block/src/v2/host-ui.js';
 
 const ERSVEIL = readFileSync(new URL('../../fixtures/ersveil-bluewatch.pack.json', import.meta.url), 'utf8');
 
@@ -62,4 +64,50 @@ test('with the Ersveil pack: the fields show its calendar; Custom starts from it
     host.settings.set('story-director', CALENDAR_KEYS.era, 'AR');
     assert.equal(host.sdk.query('director.calendar').era, 'AR');
     assert.deepEqual(host.sdk.settings('story-director')[CALENDAR_KEYS.months], pack.months, 'the rest still the pack\'s');
+});
+
+// Read-only while Calendar is pack (Story Block's settings `readOnly`): shown, help and all, but not
+// editable; switching to Custom makes them editable and pre-filled with the pack's calendar.
+test('while Calendar is pack the calendar fields are read-only; Custom makes them editable, pre-filled', async t => {
+    assert.equal(calendarReadOnly({}), true, 'pack is the default');
+    assert.equal(calendarReadOnly({ [CALENDAR_KEYS.preset]: 'pack' }), true);
+    assert.equal(calendarReadOnly({ [CALENDAR_KEYS.preset]: 'custom' }), false);
+    assert.equal(calendarReadOnly({ [CALENDAR_KEYS.preset]: 'gregorian' }), false);
+    const doc = installFakeDom();
+    const { host } = await director(t);
+    assert.equal((await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' })).ok, true);
+    await Promise.resolve();
+    const pack = JSON.parse(ERSVEIL).calendar;
+    const root = doc.createElement('div');
+    doc.body.appendChild(root);
+    t.after(() => root.remove());
+    renderSettingsHost(root, { registry: host.registry, settings: host.settings, doc });
+    const row = key => root.querySelector(`.story-suite-row[data-field="${key}"]`);
+    const controls = key => row(key).querySelectorAll('input, select, textarea, button');
+    const fields = [CALENDAR_KEYS.era, CALENDAR_KEYS.months, CALENDAR_KEYS.leapYears, CALENDAR_KEYS.week];
+    for (const key of fields) {
+        assert.equal(row(key).dataset.readonly, 'true', key);
+        assert.ok(controls(key).length && controls(key).every(node => node.disabled === true), key);
+        assert.match(row(key).textContent, /switch to Custom to edit/, `${key}: its help says why`);
+    }
+    assert.equal(row(CALENDAR_KEYS.era).querySelector('input').value, pack.era, 'the pack\'s calendar is shown');
+    assert.notEqual(row(CALENDAR_KEYS.preset).querySelector('select').disabled, true);
+    // Typing into a read-only field stores nothing.
+    const era = row(CALENDAR_KEYS.era).querySelector('input');
+    era.value = 'XX';
+    era.dispatch('change');
+    assert.equal(Object.hasOwn(host.settings.stored('story-director'), CALENDAR_KEYS.era), false);
+    // Custom: editable, pre-filled with the pack's calendar.
+    const select = row(CALENDAR_KEYS.preset).querySelector('select');
+    select.value = 'custom';
+    select.dispatch('change');
+    for (const key of fields) {
+        assert.notEqual(row(key).dataset.readonly, 'true', key);
+        assert.ok(controls(key).every(node => node.disabled !== true), key);
+    }
+    assert.equal(row(CALENDAR_KEYS.era).querySelector('input').value, pack.era);
+    const input = row(CALENDAR_KEYS.era).querySelector('input');
+    input.value = 'AR';
+    input.dispatch('change');
+    assert.equal(host.sdk.query('director.calendar').era, 'AR');
 });

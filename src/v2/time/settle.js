@@ -13,7 +13,9 @@
 //
 // Each closing is claimed (`lapse:<thread id>`), so a thread is closed by time once on a line
 // of history; the claim lives in the same receipt, so swiping or deleting the reply it was
-// written to takes both back.
+// written to takes both back. Its writes in the thread are marked (ctx.ifThere): deleting the reply
+// that made the thread passes over the closing on replay, and the rest of the settle (the check, the
+// recap, the other closings) still applies.
 //
 // Two fields of the `director` domain belong to this part (a MODULES §C1 addition):
 //   checked: null | { minutes, rev, lapsed: [id], overdue: [id], pay: [id], due: [id] }
@@ -134,10 +136,11 @@ function closedEntry(thread, reason) {
 /**
  * Settles the story clock on `director` (a draft): closes what time ran past (each under its
  * claim), marks what is overdue and due, makes or clears the While away recap, and records
- * the check. `claim(key)` takes a claim (false when it is already taken). Returns
+ * the check. `claim(key)` takes a claim (false when it is already taken); `within(id)` is told each
+ * thread it closes (the command marks its writes there, ctx.ifThere). Returns
  * `{ closed, standing, recap, from, now }`.
  */
-export function settle(director, { calendar, settings, rev, at = null, claim, met = () => false, fights = true }) {
+export function settle(director, { calendar, settings, rev, at = null, claim, within = () => {}, met = () => false, fights = true }) {
     const now = director.time.minutes;
     const before = slotValue(director.checked);
     const from = isInt(before?.minutes) ? before.minutes : null;
@@ -147,6 +150,7 @@ export function settle(director, { calendar, settings, rev, at = null, claim, me
         const thread = director.threads[id];
         if (!thread || thread.status !== 'active') continue;
         if (!claim(claimKey(id))) continue;
+        within(id);
         closed.push(closedEntry(thread, reason));
         thread.status = 'resolved';
         thread.offer = false;

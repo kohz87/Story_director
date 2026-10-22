@@ -157,7 +157,8 @@ export function timeAfter(line, minutes, calendar, { maxJump = MAX_JUMP_DAYS * D
     // No date written (only "evening", "08:00 am"): the reference's day, or the next one.
     const bare = calendar.parse(words, { reference: null }) === null;
     if (known && bare && abs < minutes) abs += DAY_MINUTES;
-    return known ? held(minutes, abs, maxJump, shown, from) : { minutes: abs };
+    // `set`: a date sets the clock (stored as a set, not a move: applyTimeLine).
+    return { ...(known ? held(minutes, abs, maxJump, shown, from) : { minutes: abs }), set: true };
 }
 
 // A move past `maxJump` minutes from the reply's start (`from`, else `minutes`) is held there:
