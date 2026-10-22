@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0-beta.1 (`v2` branch)
+
+Story Suite v2, first beta. What's new, known issues and every module's version: [Story Block docs/v2/RELEASES.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md). Player guide: [Story Block docs/v2/GUIDE.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md).
+
+- Version 2.0.0-beta.1. Needs Story Block `>=2.0.0-beta.1` (`requires`; arc planning's model call needs it too). Update Story Block first: an older Story Block 2 refuses the module with a red notice ("… needs Story Block ≥ 2.0.0-beta.1; this is 2.0.0-alpha.2. Update Story Block to use it.").
+- In this beta, from Story Director: quests straight to active on the story's `+ quest` (no offers); arc planning back (Plan arc, review, End arc, by itself) and behind the scenes hidden until Reveal; the day digest and the Days screen; quest ranks held to the party's and story rewards inside one reply's budget, following the reader's rank ladder and coins; story time kept as a count with a most-per-reply jump; calendar months as text, and the pack's calendar shown in its settings; Story Director alone (no RPG Battle). Each with its details below.
+- Story Block testkit re-synced to the beta host (Story Block 2.0.0-beta.1).
+
 ## 2.0.0-alpha.1 (in progress, `v2` branch)
 
 Story Suite v2. Story Director v2 module: tracker, quests, time, atlas, chronicle and screens parts merged into one module. Status: https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md
