@@ -23,7 +23,7 @@
 // * Internal commands (registry.isInternal: capture.*, module.init.*, events.fire) are refused with
 //   REFUSED when the cause is 'ui', whether named at the top or through ctx.call.
 
-import { apply, checkOps, clone, counterInside, deepFreeze, diff, escapeKey, isCounterPath, isJson, valueAt } from './ops.js';
+import { apply, checkOps, clone, counterInside, deepFreeze, diff, escapeKey, frozenCopy, isCounterPath, isDeepFrozen, isJson, valueAt } from './ops.js';
 import { isSeed, rng as makeRng, roll as rollDice, seed as freshSeed } from './rng.js';
 
 export const MAX_DEPTH = 8;
@@ -119,29 +119,33 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
         return tx.meta;
     }
 
+    // Reads hand out frozen values without copying the state: the head is deep-frozen (transact), and a
+    // drafted domain is read as frozenCopy gives it, the head's own branches wherever the draft has not
+    // changed them (B-b1r2-4: a copy of the whole slice per read made each line cost the state's size).
     function readOf(tx, domain) {
-        if (tx.drafts.has(domain)) return deepFreeze(clone(tx.drafts.get(domain)));
+        if (tx.drafts.has(domain)) return frozenCopy(tx.drafts.get(domain), tx.head.domains?.[domain]);
         if (!isRecord(tx.head.domains) || !Object.hasOwn(tx.head.domains, domain)) return null;
-        if (!tx.frozen.has(domain)) tx.frozen.set(domain, deepFreeze(clone(tx.head.domains[domain])));
-        return tx.frozen.get(domain);
+        return tx.head.domains[domain];
     }
 
-    // The state as this transaction has it so far: the head with every draft (and claim) laid over it.
+    // The state as this transaction has it so far, frozen: the head with every draft (and claim) laid
+    // over it; the head itself while nothing is drafted.
     function currentState(tx) {
+        if (!tx.drafts.size && !tx.meta && isRecord(tx.head.domains)) return tx.head;
         const domains = { ...(tx.head.domains ?? {}) };
-        for (const [name, draft] of tx.drafts) domains[name] = clone(draft);
-        return deepFreeze({ ...tx.head, meta: tx.meta ? clone(tx.meta) : tx.head.meta, domains });
+        for (const [name, draft] of tx.drafts) domains[name] = frozenCopy(draft, tx.head.domains?.[name]);
+        const meta = tx.meta ? frozenCopy(tx.meta, tx.head.meta) : tx.head.meta;
+        return Object.freeze({ ...tx.head, meta, domains: Object.freeze(domains) });
     }
 
     // A query's third argument (MODULES §F3): other queries over the same transaction state, and the
     // stored receipts in chat order.
-    function queryTools(tx) {
-        const state = currentState(tx);
+    function queryTools(tx, state = currentState(tx)) {
         const tools = Object.freeze({
             query(name, args) {
                 const fn = findQuery(name);
                 if (!fn) fail('NOT_FOUND', `There is no query called "${name}".`);
-                return deepFreeze(clone(fn(state, deepFreeze(clone(args)), tools)));
+                return frozenCopy(fn(state, deepFreeze(clone(args)), tools));
             },
             receipts: () => store.receipts?.() ?? [],
         });
@@ -233,7 +237,8 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
                 open();
                 const fn = findQuery(name);
                 if (!fn) fail('NOT_FOUND', `There is no query called "${name}".`);
-                return deepFreeze(clone(fn(currentState(tx), deepFreeze(clone(args)), queryTools(tx))));
+                const state = currentState(tx);
+                return frozenCopy(fn(state, deepFreeze(clone(args)), queryTools(tx, state)));
             },
             settings(id = moduleId) {
                 return deepFreeze(clone(settings(id) ?? {}));
@@ -243,7 +248,8 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
             time() {
                 open();
                 const fn = findQuery('director.time');
-                const value = fn ? fn(currentState(tx), deepFreeze({}), queryTools(tx)) : readOf(tx, 'director')?.time;
+                const state = fn ? currentState(tx) : null;
+                const value = fn ? fn(state, deepFreeze({}), queryTools(tx, state)) : readOf(tx, 'director')?.time;
                 const minutes = isRecord(value) ? value.minutes : value;
                 return Number.isInteger(minutes) ? minutes : null;
             },
@@ -316,11 +322,14 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
                 : resolve(type);
             if (cause === 'ui' && internal(type)) fail('REFUSED', internalMessage(type));
             if (typeof target.handler !== 'function' || !target.moduleId) fail('UNKNOWN_COMMAND', `There is no capture handler for "${type}".`);
+            // Reads share the head's branches (readOf), so it must be frozen all the way down; a state
+            // that is not (a caller's own object) is copied first rather than frozen in place.
+            if (!isDeepFrozen(head)) head = deepFreeze(clone(head));
             const headRev = Number.isInteger(head.meta?.rev) ? head.meta.rev : 0;
             tx = {
                 head, cause, receiptId, random: makeRng(seedValue), idRandom: makeRng((seedValue ^ ID_STREAM) >>> 0),
                 rev: headRev + 1, carrier: carrierOf(carrier), chat: chatOf(chat),
-                drafts: new Map(), frozen: new Map(), meta: null, failure: null, closed: false,
+                drafts: new Map(), meta: null, failure: null, closed: false,
             };
             const out = invoke(tx, type, target, payload, 0);
             if (tx.failure) throw tx.failure;

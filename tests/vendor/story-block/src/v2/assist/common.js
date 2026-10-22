@@ -2,6 +2,8 @@
 // model call, a short stable hash for keys, and the small run log `assist.status` reports. Pure: no
 // DOM, no SillyTavern, no clock in state (the log counts runs, it does not time them).
 
+import { cutAt } from '../../text.js';
+
 // The settings live in Story Block's own module settings (the parts' defaults share one bucket, so
 // each key carries the part's name). Both helpers are off until the reader turns them on.
 export const SETTING = Object.freeze({
@@ -62,7 +64,7 @@ export function hashText(text) {
 export function clip(text, limit) {
     const source = String(text ?? '').trim();
     if (source.length <= limit) return source;
-    const cut = source.slice(0, limit - 1);
+    const cut = cutAt(source, limit - 1);
     const space = cut.lastIndexOf(' ');
     return `${(space > limit * 0.8 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
