@@ -366,8 +366,9 @@ function threadLine(ctx, given) {
         // F82: a quest the story starts with no goal is kept and flagged once.
         if (op.op === '+' && current.status === 'active' && !(named?.kind === 'quest') && !questHasGoal(ctx, current)) addProblem(director, ctx, noGoalProblem(current));
         if (met !== null) {
-            const { problem } = applyMet(ctx, current, met, metText, revOf(ctx));
+            const { problem, changed } = applyMet(ctx, current, met, metText, revOf(ctx));
             if (problem) addProblem(director, ctx, problem);
+            noteMet(director, current, met, changed);
         }
     }
     // The story's `+ quest` (or a line that made a quest of a hook) is {{user}} accepting it: taken on
@@ -405,9 +406,19 @@ function metOnly(ctx, director, line, met, metText, raw) {
         addProblem(director, ctx, { kind: 'met', severity: 'warn', key: String(line.name ?? ''), op: '~', text: `"${String(line.name ?? '').trim()}" is not a tracked quest; met: changed nothing.` });
         return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['met'] } };
     }
-    const { problem } = applyMet(ctx, thread, met, metText, revOf(ctx));
+    const { problem, changed } = applyMet(ctx, thread, met, metText, revOf(ctx));
     if (problem) addProblem(director, ctx, problem);
+    noteMet(director, thread, met, changed);
     return { summary: `Director: ${raw}`, narrate: false, data: { thread: thread.id, problems: problem ? [problem.kind] : [] } };
+}
+
+// A quest the story says is met in this reply (F83 `met: yes` that set `ready`): kept in the reply's `met`
+// (thread ids), which the afterCapture step reads for a delivery goal handed over at the giver
+// (quests/index.js quest.autoTurnIns).
+function noteMet(director, thread, met, changed) {
+    if (met !== true || !changed || !thread?.id) return;
+    const now = replyDraft(director);
+    if (now && !(Array.isArray(now.met) && now.met.includes(thread.id))) now.met = [...(Array.isArray(now.met) ? now.met : []), thread.id];
 }
 
 /** `apply(ctx, line)` for `time` lines: `~ time <date, clock time>`, `! time +2h`. */

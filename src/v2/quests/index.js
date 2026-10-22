@@ -158,7 +158,9 @@ function termsFor(query, inventory, thread, currency) {
     const levelNote = level === null && rank.rank && rank.by === 'difficulty' ? noLevelText(rank.rank) : '';
     // B-a1-16: a coin amount code refused ("2 platinum" where the chat has no platinum) pays nothing
     // code counts; the story settles it, and the reader is told why.
-    const rewardNote = !fromPack && typeof read?.problem === 'string' ? read.problem.replace(/\.$/, '') : '';
+    // A reward kept unpaid at take-on (amount null) is read again for the reason, so the terms keep saying why.
+    const why = read ?? (thread.reward?.amount === null && text(thread.reward.text) ? parseReward({ reward: thread.reward.text }, '', { currency }) : null);
+    const rewardNote = !fromPack && typeof why?.problem === 'string' ? why.problem.replace(/\.$/, '') : '';
     return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote, levelNote, rewardNote, budget: replyBudget(ladder, level) };
 }
 
@@ -567,6 +569,42 @@ function itemsGiven(state, sid) {
     return Object.keys(items).map(id => looseName(inventory?.defs?.[id]?.name)).filter(name => name.length >= 3);
 }
 
+// A delivery goal: "bring / deliver / take / return / carry <thing> to <someone or somewhere>" (the goal, else
+// the summary). `thing` is the words between the verb and "to".
+const DELIVERY = /\b(?:bring|deliver|take|return|carry|fetch)\s+(?:back\s+)?(.{1,80}?)\s+(?:back\s+)?to\b/iu;
+// What a progress note says when the thing was handed over ("pelt brought to guild").
+const DELIVERED = /\b(?:brought|delivered|handed(?:\s+(?:over|in))?|returned|carried|gave|given|turned\s+in)\b/iu;
+// Words of a delivered thing that do not name it.
+const THING_FILLER = new Set(['the', 'a', 'an', 'some', 'his', 'her', 'their', 'its', 'my', 'your', 'our', 'back', 'all', 'of']);
+
+/** The head word of what a delivery goal brings ("the pack-leader's pelt" → "pelt"), singular, or ''. */
+export function deliveredThing(thread) {
+    const goal = text(thread?.fields?.goal) || text(thread?.summary);
+    const found = DELIVERY.exec(goal);
+    if (!found) return '';
+    const words = looseName(found[1]).split(' ').filter(word => word.length >= 3 && !THING_FILLER.has(word));
+    return singularWord(words.at(-1) ?? '');
+}
+
+const singularWord = word => (/ies$/.test(word) ? `${word.slice(0, -3)}y` : /(?:ches|shes|xes|ses)$/.test(word) ? word.slice(0, -2) : /[^s]s$/.test(word) ? word.slice(0, -1) : word);
+const namesThing = (name, thing) => Boolean(thing) && looseName(name).split(' ').map(singularWord).includes(thing);
+
+/*
+ * Whether the reply shows the delivery made (autoTurnIns): the thing the goal brings (deliveredThing) is held
+ * by the party or was given this reply (`given`, the reply's items), or the quest's progress note says it was
+ * brought or delivered. A goal that is not a delivery: false.
+ */
+function delivered(state, thread, given) {
+    const thing = deliveredThing(thread);
+    if (!thing) return false;
+    const inventory = state?.domains?.inventory;
+    const held = Object.values(inventory?.stacks ?? {}).filter(stack => stack?.owner === 'party' && (stack.qty ?? 1) > 0)
+        .map(stack => text(inventory?.defs?.[stack.def]?.name));
+    if ([...held, ...given].some(name => namesThing(name, thing))) return true;
+    const note = `${text(thread.fields?.progress)} ${text(thread.fields?.step)}`;
+    return DELIVERED.test(note) && namesThing(note, thing);
+}
+
 /**
  * `quest.autoTurnIns()` → [thread id]: the quests the reply asked about (`tools.reply`, the head reply)
  * turned in from where things stand, with no turn-in line read as one (Story Director's afterCapture step,
@@ -604,6 +642,10 @@ function autoTurnIns(state, _args = {}, tools = null) {
             const reward = looseName(`${text(thread.fields?.reward)} ${text(thread.reward?.text)}`);
             shown = given.some(name => ` ${reward} `.includes(` ${name} `));
         }
+        // A delivery goal the story said was met in this reply, where it can be turned in (the giver here or a
+        // settlement: quest.finish's place rule above), with the thing delivered in sight: handing it over is
+        // the turn-in (beta live test 5: the pelt on Elula's counter, no turn-in line).
+        if (!shown && turn.reply === sid && turn.met.includes(thread.id)) shown = delivered(state, thread, given);
         if (shown) out.push(thread.id);
     }
     return out;
@@ -702,7 +744,7 @@ function detailsQuery(state, args = {}, tools = null) {
     if (!thread) return null;
     const query = queryOf(state, tools);
     const currency = currencyOf(query);
-    const { target, reward, rank, rankBy, levelNote } = termsFor(query, state?.domains?.inventory, thread, currency);
+    const { target, reward, rank, rankBy, levelNote, rewardNote } = termsFor(query, state?.domains?.inventory, thread, currency);
     const counted = countedTarget(target, query);
     const view = { ...thread, target };
     const progress = progressOf(view, query, { free: unclaimedIn(state) });
@@ -725,7 +767,8 @@ function detailsQuery(state, args = {}, tools = null) {
             target: targetText(target),
             reward: rewardText(reward, target, currency),
             held: hold.held ? heldText(rank, money(total, currency), currency) : '',
-            text: termsText(target, reward, currency, rank, { by: rankBy }),
+            // A reward code does not pay (a coin the chat does not know) says so beside the story's words.
+            text: [termsText(target, reward, currency, rank, { by: rankBy }), rewardNote ? `not paid by code: ${rewardNote}` : ''].filter(Boolean).join('; '),
             level: levelNote,
         },
         ready: !counted && Boolean(thread.ready),
