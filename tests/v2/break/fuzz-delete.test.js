@@ -7,7 +7,10 @@
 // The first reply's threads are made with every field later lines change: a later reply that changes
 // a field only a deleted reply had added is Story Block's to replay (its `replace` finds no key).
 // The first reply also opens six world events; later replies resolve or move them, and a delete is
-// often of a reply holding a world pick (final soak: a later world line was lost with it). Between replies the
+// often of a reply holding a world pick (final soak: a later world line was lost with it).
+// Smallfix: quests carry a deadline (`due:`) and some replies jump days, so time.settle lapses threads a
+// later delete takes away (its closing is passed over, ctx.ifThere); and after each delete the clock must
+// be what the replies left say: `~ time <date>` exact (a set, ctx.absolute), moves added on top. Between replies the
 // reader sometimes accepts an arc plan (director.arc.accept, its own names) or ends the arc.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -85,14 +88,14 @@ function replyLines(r, n) {
             const key = name();
             own.push(key);
             lines.push(`+ ${r.pick(THREAD_KINDS)} ${key} — something${r.chance(0.3) ? ` | giver: ${r.pick(['Fenna', 'Brom'])}` : ''}`);
-        } else if (roll < 0.45) {
+        } else if (roll < 0.5) {
             const key = name();
             own.push(key);
             // Often only mentioned first (a hook with its giver and pay), then accepted in the same reply:
             // the + quest makes the hook the quest, active and taken on at once.
             if (r.chance(0.4)) lines.push(`+ hook ${key} — a job on offer | giver: Fenna | reward: ${r.int(1, 30)} gold`);
-            lines.push(`+ quest ${key} — a job | giver: Fenna | goal: Find the ${key} | reward: ${r.int(1, 30)} gold`);
-        } else if (roll < 0.6) {
+            lines.push(`+ quest ${key} — a job | giver: Fenna | goal: Find the ${key} | reward: ${r.int(1, 30)} gold${r.chance(0.7) ? ` | due: June ${r.int(3, 7)}, 1200` : ''}`);
+        } else if (roll < 0.62) {
             const from = r.chance(0.5) ? r.pick(BASE_PLACES) : name();
             lines.push(r.chance(0.5) ? `+ route ${from} — ${name()} | hours: ${r.int(1, 9)} | kind: ${r.pick(['road', 'trail'])}` : `+ landmark ${name()} | region: Vale | kind: ${r.pick(['town', 'ruin'])}`);
         } else if (roll < 0.72) {
@@ -103,9 +106,9 @@ function replyLines(r, n) {
             // A world line on one of the first reply's events: resolved or moved on (it writes the pick's
             // rounds by key only, so a deleted pick before it never makes it fail).
             lines.push(r.chance(0.5) ? `- world ${r.pick(BASE_WORLD)} — it ends` : `~ world ${r.pick(BASE_WORLD)} | state: ${r.pick(['looming', 'ongoing'])}`);
-        } else if (roll < 0.8) {
-            lines.push(r.chance(0.7) ? `! time +${r.int(1, 30)}h` : '~ time June 9, 1200, 10:00 am');
-        } else if (roll < 0.9) {
+        } else if (roll < 0.84) {
+            lines.push(r.chance(0.6) ? `! time +${r.int(1, 30)}h` : r.chance(0.5) ? `! time +${r.int(2, 4)}d` : SET_LINE);
+        } else if (roll < 0.92) {
             lines.push(r.pick([`? hook ${name()} — who`, '+ hook', `? hook ${r.pick(FUNNY)} — odd`, `~ quest ${name()} | met: yes`]));
         } else {
             lines.push(`~ hook ${r.pick(BASE)} | now: ${name()}`);
@@ -119,6 +122,29 @@ function replyLines(r, n) {
 }
 
 const said = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
+
+// The clock the replies left say, without replaying anything: the first reply sets June 3, 08:00 am
+// (`start`), `SET_LINE` sets June 9, 10:00 am, each move adds on top, held to the longest jump (30 days)
+// from where its reply began, as applyTimeLine does.
+const SET_LINE = '~ time June 9, 1200, 10:00 am';
+const SET_AFTER = (6 * 24 + 2) * 60;
+const MAX_JUMP = 30 * 24 * 60;
+const timeOf = lines => lines.map(line => {
+    if (line === SET_LINE) return { set: true };
+    const move = /^! time \+(\d+)([hd])$/.exec(line);
+    return move ? { move: Number(move[1]) * (move[2] === 'd' ? 1440 : 60) } : null;
+}).filter(Boolean);
+function expectedClock(chat, times, start) {
+    let clock = start;
+    for (const message of chat) {
+        const from = clock;
+        for (const step of times.get(message) ?? []) {
+            if (step.set) clock = start + SET_AFTER;
+            else clock = Math.min(clock + step.move, Math.max(clock, from + MAX_JUMP));
+        }
+    }
+    return clock;
+}
 
 function validatorErrors(host) {
     const state = host.head();
@@ -141,9 +167,14 @@ for (const seed of SEEDS) {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
                 ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
                 ...BASE_WORLD.map(key => `+ world ${key} — afoot | state: ongoing`)]));
+            const start = host.head().domains.director.time.minutes;
+            const times = new Map();
+            const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
                 const lines = replyLines(r, n);
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
+                times.set(host.ctx.chat.at(-1), timeOf(lines));
+                assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `seed ${seed}, reply ${n}: the clock (live)`);
                 // The reader's arc commands (own random stream, so the story's lines stay as they were): an
                 // accepted plan of its own names now and then, and sometimes End arc.
                 if (ra.chance(0.3)) {
@@ -160,7 +191,10 @@ for (const seed of SEEDS) {
                 // Often one whose reply holds a world pick (chronicle.surface) with replies after it.
                 const picks = host.sdk.receipts().filter(entry => entry.receipt.type === 'chronicle.surface').map(entry => entry.index);
                 const picked = users.filter(i => picks.includes(i + 1));
-                const user = picked.length && r.chance(0.5) ? r.pick(picked) : r.pick(users);
+                // Or one whose reply made a quest a later settle lapsed (its closing is then passed over).
+                const lapsed = new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle').flatMap(entry => entry.receipt.data?.lapsed ?? []).map(entry => entry.key));
+                const lapsedHere = users.filter(i => [...lapsed].some(key => chat[i + 1]?.mes?.includes?.(`+ quest ${key} `)));
+                const user = lapsedHere.length && r.chance(0.6) ? r.pick(lapsedHere) : picked.length && r.chance(0.5) ? r.pick(picked) : r.pick(users);
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
@@ -169,6 +203,7 @@ for (const seed of SEEDS) {
                 host.store.rebuild();
                 assert.equal(JSON.stringify(host.head()), live, `${where}: rebuild != live`);
                 assert.deepEqual(validatorErrors(host), [], where);
+                assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `${where}: the clock`);
             }
             await host.send('And then?', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);

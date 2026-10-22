@@ -385,6 +385,10 @@ export function applyTimeLine(ctx, line) {
     }
     const before = director.time.minutes;
     if (next.minutes !== before) director.time.minutes = next.minutes;
+    // A date sets the clock: stored as a set (Story Block's ctx.absolute, SPEC §2.2), so it stays exact
+    // when an earlier reply that moved the clock is deleted, and later moves add on top. An older Story
+    // Block without it stores the set as a move.
+    if (next.set && typeof ctx.absolute === 'function') ctx.absolute('director', '/time/minutes');
     return {
         summary: `Story time: ${calendar.format(next.minutes)}.`,
         narrate: false,

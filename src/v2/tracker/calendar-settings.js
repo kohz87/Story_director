@@ -9,6 +9,8 @@
 //   (its era and months, no leap years, no weekdays) when a pack has one, else Gregorian. So with `pack`
 //   they show the pack's calendar, and switching to Custom starts from it (a field the reader edits is
 //   theirs from then on);
+// * while Calendar is pack the fields are read-only (Story Block's settings `readOnly`): they show the
+//   pack's calendar and cannot be edited; switching to Custom makes them editable, pre-filled with it;
 // * the Calendar choice's help says where the calendar comes from ("From the pack: Ersveil: Bluewatch
 //   Starter, CY, 12 months: switch to Custom to edit"), and the fields' help that they are only used
 //   with Custom.
@@ -72,8 +74,12 @@ export function fieldHelp(preset, calendar) {
     return packCalendarFields(calendar) && preset !== 'gregorian' ? 'The pack\'s, while Calendar is pack: switch to Custom to edit.' : 'Used only when Calendar is Custom.';
 }
 
+/** A calendar field's `readOnly`: true while the stored Calendar choice is pack (the default). */
+export const calendarReadOnly = values => (values?.[CALENDAR_KEYS.preset] ?? 'pack') === 'pack';
+
 /**
- * Lays the live view over the module's `defaults` and `schema` (getters, see above). `live()` → {
+ * Lays the live view over the module's `defaults` and `schema` (getters, see above), and makes the
+ * calendar fields read-only while Calendar is pack (calendarReadOnly). `live()` → {
  * calendar (packs.calendar's answer or null), list (packs.list or null), preset (the stored preset or
  * undefined) }, read each time a getter is; `live.calendar()` (optional) the pack calendar alone, for the
  * defaults (which every settings read evaluates).
@@ -99,6 +105,9 @@ export function liveCalendarSettings(defaults, schema, live) {
         Object.defineProperty(defaults, key, { enumerable: true, configurable: true, get: () => structuredClone(shown()[field]) });
         const entry = schema[key];
         if (!entry) continue;
+        // Read-only while Calendar is pack (Story Block's `readOnly`, SPEC §6): the pack's calendar shown,
+        // not editable; Custom makes them editable, starting from what they showed.
+        entry.readOnly = calendarReadOnly;
         const base = typeof entry.help === 'string' ? entry.help : '';
         Object.defineProperty(entry, 'help', {
             enumerable: true,

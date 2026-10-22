@@ -81,7 +81,10 @@ function settleCommand(ctx, payload = {}) {
     const settings = timeSettings(ctx.settings);
     const calendar = calendarOf(settings);
     const rev = receiptRev(ctx, given);
-    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), met: targetMet(ctx.query), fights: ctx.fights !== false });
+    // Each thread it closes is marked (Story Block's ctx.ifThere, SPEC §2.2 rule d): when the reply that
+    // made the thread is deleted, replay passes over that closing and keeps the rest of the settle.
+    const within = id => { if (typeof ctx.ifThere === 'function') ctx.ifThere('director', `/threads/${id}`); };
+    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), within, met: targetMet(ctx.query), fights: ctx.fights !== false });
     const told = settleSummary(done.closed, { calendar, now: done.now });
     return {
         summary: told || `Story time settled at ${calendar.format(done.now, { era: false })}.`,
