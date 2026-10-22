@@ -4,6 +4,7 @@
 
 Story Suite v2. Story Director v2 module: tracker, quests, time, atlas, chronicle and screens parts merged into one module. Status: https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md
 
+- **Months typed as text.** The calendar's **Months** setting asks Story Block for its text form (`form: 'lines'`): a box with one month a line, `Frostmoon: 30`, so a calendar of 13 months (or 5) is just typed. A month of 0, negative or no days is refused with the line named, and the months stay as they were. A Story Block without the text form ignores `form` and shows the rows as before. Weekdays stay one comma-separated field.
 - **A Story Block v2 module.** `index.js` waits for `globalThis.StoryBlock.ready` and registers module `story-director` (`src/v2/module.js`, the tracker and quests parts merged); without Story Block v2 it shows one line in the drawer. The v1 glue moved to `index.v1.js` and is not loaded. The manifest declares `"dependencies": ["third-party/Story_block"]` and no generate interceptor.
 - **Quest rewards in the one currency.** `quest.finish` pays `wallet.receive { owner, amount }` with a whole number; coin words in the story are only read as "this is money", and summaries name the chat's currency from `inventory.currency`.
 - **One fight pays one kill quest.** A turn-in claims each fight it counted (`beaten:<rev>`); another kill quest no longer counts those fights. Item quests count the inventory and stay independent.
