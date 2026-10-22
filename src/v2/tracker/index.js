@@ -47,7 +47,9 @@ export const part = {
                     // `pack`: the enabled pack's calendar when one has it, else Gregorian.
                     preset: { type: 'choice', label: 'Calendar', options: [...PRESET_CHOICES] },
                     era: { type: 'text', label: 'Era (written before the year)' },
-                    months: { type: 'list', label: 'Months', of: { name: { type: 'text', label: 'Name' }, days: { type: 'int', label: 'Days', min: 1, max: 400 } } },
+                    // `form: 'lines'`: Story Block shows the months as text, one "Name: Days" a line (any number
+                    // of months); an older Story Block ignores it and shows rows.
+                    months: { type: 'list', label: 'Months', form: 'lines', of: { name: { type: 'text', label: 'Name' }, days: { type: 'int', label: 'Days', min: 1, max: 400 } } },
                     leapYears: { type: 'bool', label: 'Leap years' },
                     week: { type: 'text', label: 'Weekdays (comma separated; empty for none)' },
                 },
