@@ -89,6 +89,9 @@ export function daysText(days) {
     return days > 0 ? `in ${days} days` : `${-days} days ago`;
 }
 
+/** "today", "yesterday", "3 days ago" (whole story days back). */
+export const agoText = days => (days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`);
+
 // ---- what stays hidden --------------------------------------------------------------------------
 
 const threadsOf = state => (isRecord(state?.domains?.director?.threads) ? Object.values(state.domains.director.threads).filter(isRecord) : []);
@@ -209,8 +212,9 @@ export function knownNews(state, tools, { hidden = hiddenNames(state), calendar 
         const open = thread.status === 'active' && !thread.ended;
         out.push({
             id: thread.id, kind: 'event', name: cut(thread.key, 80), summary: cut(thread.summary, SUMMARY_POINTS),
-            state: open ? 'ongoing' : 'resolved', open, when: calendar ? dateText(calendar, at) : '',
-            ago: isInt(now) && isInt(at) && now >= at ? daysText(Math.floor(now / DAY) - Math.floor(at / DAY)) : '',
+            // A dated happening has no looming/ongoing of its own: only "resolved" once the story closed it.
+            state: open ? '' : 'resolved', open, when: calendar ? dateText(calendar, at) : '',
+            ago: isInt(now) && isInt(at) && now >= at ? agoText(Math.floor(now / DAY) - Math.floor(at / DAY)) : '',
             place: '', factions: '', at, rev: isInt(thread.rev) ? thread.rev : 0,
         });
     }

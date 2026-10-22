@@ -139,7 +139,8 @@ const CSS = `${BASE_CSS}
 .wv-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 36px; padding: 2px 12px; border: 1px solid var(--sd-border);
   border-radius: 999px; background: var(--sd-surface); overflow-wrap: anywhere; }
 .wv-chip .wv-stance { font-size: 0.8em; opacity: 0.8; }
-.wv-chip.wv-link { cursor: pointer; font: inherit; color: inherit; }
+.wv-chip.wv-link { cursor: pointer; font: inherit; color: inherit; margin: 0; width: auto; flex-direction: row; white-space: nowrap; }
+.wv-chip .wv-name { white-space: normal; }
 .wv-chip.wv-link:hover, .wv-chip.wv-link:focus-visible { border-color: var(--sd-accent); }
 .wv-journal { display: grid; gap: 10px; min-width: 0; }
 .wv-empty { margin: 0; opacity: 0.65; font-style: italic; }

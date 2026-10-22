@@ -31,7 +31,7 @@ function render(el, props, { open = dossierOpener } = {}) {
             const item = make('li', 'wv-person');
             const link = value?.nsd === true && person.dossier === true && opener;
             const chip = link
-                ? make('button', 'menu_button wv-chip wv-link', undefined, { type: 'button', title: `Open ${person.name}'s dossier` })
+                ? make('button', 'wv-chip wv-link', undefined, { type: 'button', title: `Open ${person.name}'s dossier` })
                 : make('span', 'wv-chip');
             if (link) {
                 chip.append(make('i', 'fa-solid fa-address-card', undefined, { 'aria-hidden': 'true' }), ' ');

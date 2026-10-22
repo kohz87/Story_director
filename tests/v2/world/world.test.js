@@ -81,6 +81,7 @@ test('Story Director alone: Here with plain names, known news and factions newes
     assert.deepEqual(world.news.map(item => [item.kind, item.name])[0], ['world', 'Red Plague']);
     assert.deepEqual(world.news.map(item => item.name).slice(1).sort(), ['Far Feast', 'Harvest Fair']);
     assert.equal(world.news[0].summary, 'spreads to the market');
+    assert.equal(world.news.find(item => item.name === 'Harvest Fair').ago, 'yesterday', 'written on June 3; it is June 4');
     assert.deepEqual(world.factions.map(item => [item.name, item.area, item.stance]), [['Guild', 'the docks', 'wary']]);
     // June 4, 09:00: the quest is due in 2 days, the fair in 6; the feast is past the 30 days; no beat, clock or planned hook.
     assert.deepEqual(world.upcoming.map(item => [item.kind, item.name, item.label]), [['quest', 'Rat Cellar', 'in 2 days'], ['event', 'Harvest Fair', 'in 6 days']]);
