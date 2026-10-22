@@ -1,9 +1,9 @@
 // Story Director v2, part screens: `story-director/quests` (SPEC §13.1), the Quests tab and game-view
-// screen. Offers, active quests with their progress as an `ss.meter` ("Wolves 8/3") and the rolling
-// progress note, finished quests folded away. No buttons (F95): taking on, turning down and giving up come
-// from the reader's own words, turning in from the story (code checks and pays); each row says where the
-// quest stands instead ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
-// it"). Every row opens its details (F84: goal, progress note, terms, giver, due, taken and ended dates,
+// screen. Active quests with their progress as an `ss.meter` ("Wolves 8/3") and the rolling progress note,
+// finished quests folded away. There is no Offered list: the story's `+ quest` makes a quest active at
+// once. No buttons (F95): giving up comes from the reader's own words, turning in from the story (code
+// checks and pays); each row says where the quest stands instead ("Ready to turn in — 3/3 wolves", "Not
+// yet: 2/3 wolves"). Every row opens its details (F84: goal, progress note, terms, giver, due, taken and ended dates,
 // history) in a screen-local `<details>` panel: templates have no dialog to open with a quest's data. The
 // commands stay in the SDK for a card's or pack's own buttons. Everything comes from `quest.board`
 // (queries.js), on the head state.
@@ -33,22 +33,6 @@ const details = x => `
 
 const TEMPLATE = `
 <div class="sd-quests">
-  <section class="sd-offers" data-if="q.board.hasOffers" aria-label="Offered">
-    <h4 class="sd-h">Offered <small>{{ len(q.board.offers) }}</small></h4>
-    <ul class="sd-list">
-      <li class="sd-card sd-offer" data-each="q.board.offers as o" data-quest="{{ o.id }}">
-        <span class="sd-key">{{ o.key }}</span>
-        <p class="sd-line" data-if="o.goal">{{ o.goal }}</p>
-        <p class="sd-meta">
-          <span data-if="o.giver">From {{ o.giver }}</span>
-          <span data-if="o.reward">Reward: {{ o.reward }}</span>
-          <span data-if="o.due">Due {{ o.due }}</span>
-        </p>
-        <p class="sd-status" data-state="{{ o.status.state }}" role="note">{{ o.status.text }}</p>${details('o')}
-      </li>
-    </ul>
-  </section>
-
   <section class="sd-active" aria-label="Quests">
     <h4 class="sd-h">Quests <small data-if="q.board.hasActive">{{ len(q.board.active) }}</small></h4>
     <p class="sd-empty" data-if="!q.board.hasActive">No quests taken on.</p>
@@ -110,7 +94,7 @@ const CSS = `${BASE_CSS}
 .sd-done[data-outcome="done"] .sd-tag { border-color: var(--sd-good); }
 .sd-done[data-outcome="failed"] .sd-tag { border-color: var(--sd-warn); }
 @media (min-width: 720px) {
-  .sd-offers .sd-list, .sd-active .sd-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .sd-active .sd-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 }
 `;
 

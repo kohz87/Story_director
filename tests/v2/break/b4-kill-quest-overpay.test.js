@@ -19,7 +19,7 @@ for (const extra of ['', ' | difficulty: easy']) test(`B4-11: a per-unit kill re
             '~ place Bluewatch | kind: settlement', '+ present Fenna',
             '+ quest Lone Wolf — one wolf took a lamb | giver: Fenna | goal: Kill 1 wolf | reward: 50 gold each' + extra,
         ]));
-        assert.equal((await host.sdk.command('quest.take', { key: 'Lone Wolf' })).ok, true);
+        assert.ok(host.sdk.query('director.thread', { key: 'Lone Wolf' }).taken, 'taken on by its + quest');
         for (let n = 0; n < 4; n += 1) assert.equal((await host.sdk.command('combat.win', { foes: [{ name: 'Wolf', count: 3 }] })).ok, true);
         const done = await host.sdk.command('quest.finish', { key: 'Lone Wolf' });
         assert.equal(done.ok, true, done.message);

@@ -1,8 +1,12 @@
-// Story Director v2, part "quests" (MODULES §C2): taking on, turning down, giving up and
-// turning in quests. No domain of its own: it writes only `taken`, `ended`, `target`, `reward`
-// (and `offer`, `status`, `rev`) on the `director` domain's quest threads, which the tracker
-// part creates from the story's change lines (the tracker also keeps `ready`, `shown` and the
-// progress note from those lines).
+// Story Director v2, part "quests" (MODULES §C2): taking on, giving up and turning in quests. No
+// domain of its own: it writes only `taken`, `ended`, `target`, `reward` (and `offer`, `status`,
+// `rev`) on the `director` domain's quest threads, which the tracker part creates from the story's
+// change lines (the tracker also keeps `ready` and the progress note from those lines).
+//
+// There are no offers to accept: the story writes `+ quest` when {{user}} accepts a job, and the
+// tracker takes it on at once (`quest.take`). A job the story only mentions stays in the story. An
+// older chat's offers (`offer: true`) still load; they are shown nowhere and become the quest when
+// the story writes `+ quest` for one.
 //
 // A turn-in is code from start to end: the target is counted from RPG Battle's fights or Story
 // Block's inventory (a goal code cannot count is met when the story says so, F83), the place
@@ -15,7 +19,7 @@
 
 import { lineKey, questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
-import { NOT_MET_YET, beatenClaim, countedTarget, finishRule, isHeld, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
+import { NOT_MET_YET, beatenClaim, countedTarget, finishRule, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { heldText, questRank, rankHeldText, ranksOf, replyBudget, rewardHold } from './ranks.js';
 // The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
 import { addProblem, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
@@ -31,8 +35,6 @@ export const CODES = Object.freeze({ notFound: 'NOT_FOUND', invalid: 'REFUSED', 
 
 /** The progress note's longest length (F85). */
 export const NOTE_CHARS = 160;
-/** The offer cooldown's default, in replies with Director lines (F88). */
-export const OFFER_COOLDOWN = 6;
 
 function fail(ctx, code, message) {
     ctx.fail(code, message);
@@ -297,12 +299,11 @@ function take(ctx, payload) {
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
     thread.reward = reward;
     thread.rev = rev;
-    // A held offer (F88) taken on is shown from now.
-    if (thread.shown && thread.shown.turn > (director.turn?.n ?? 0)) thread.shown = { turn: director.turn?.n ?? 0 };
     const who = whoName(ctx.query);
     const terms = [termsText(thread.target, reward, currency, rank, { by: rankBy }), rankNote || levelNote].filter(Boolean).join('; ');
     rankProblem(ctx, director, thread, rankNote);
-    // A quest the story already accepted is only adopted for counting: nothing new to tell.
+    // The story's own `+ quest` already told it: the quest is only adopted for counting. An older chat's
+    // offer taken on by a template's or pack's button is news for the next reply.
     return {
         summary: wasOffer ? `${who} takes on ${thread.key}${terms ? `: ${terms}` : ''}.` : `${who} keeps count for ${thread.key}${terms ? `: ${terms}` : ''}.`,
         narrate: wasOffer,
@@ -310,25 +311,12 @@ function take(ctx, payload) {
     };
 }
 
-function decline(ctx, payload) {
-    const director = ctx.draft('director');
-    const thread = findQuest(director, payload);
-    if (!thread) fail(ctx, CODES.notFound, 'There is no such quest.');
-    if (isOver(thread) || !thread.offer || thread.taken) fail(ctx, CODES.invalid, `${thread.key} is not an open offer.`);
-    const rev = receiptRev(ctx);
-    thread.offer = false;
-    thread.status = 'resolved';
-    thread.ended = { ...stampOf(director, rev), reason: text(payload?.reason) || 'turned down', outcome: 'declined' };
-    thread.rev = rev;
-    return { summary: `${whoName(ctx.query)} turns down ${thread.key}.`, narrate: true, data: { quest: thread.id, key: thread.key } };
-}
-
 function abandon(ctx, payload) {
     const director = ctx.draft('director');
     const thread = findQuest(director, payload);
     if (!thread) fail(ctx, CODES.notFound, 'There is no such quest.');
     if (isOver(thread)) fail(ctx, CODES.invalid, `${thread.key} is already over.`);
-    if (thread.offer && !thread.taken) fail(ctx, CODES.invalid, `${thread.key} is only offered; turn it down instead.`);
+    if (thread.offer && !thread.taken) fail(ctx, CODES.invalid, `${thread.key} was never taken on.`);
     const rev = receiptRev(ctx);
     thread.status = 'resolved';
     thread.ended = { ...stampOf(director, rev), reason: text(payload?.reason) || 'given up', outcome: 'abandoned' };
@@ -509,15 +497,12 @@ function countText(target, progress) {
 const lowerFirst = value => value.replace(/^./, c => c.toLowerCase());
 
 /**
- * Where a quest stands, in words for its row (F95): `{ state, text }`, state one of offered, held,
- * untaken, ready, here (ready, and it can be turned in here), notyet, over.
+ * Where a quest stands, in words for its row (F95): `{ state, text }`, state one of untaken (an older
+ * chat's quest nothing took on), ready, here (ready, and it can be turned in here), notyet, over.
  */
-function statusOf(thread, target, progress, finish, director) {
+function statusOf(thread, target, progress, finish) {
     if (isOver(thread)) return { state: 'over', text: '' };
-    if (thread.offer && !thread.taken) {
-        return isHeld(thread, director) ? { state: 'held', text: 'Held back — shown later' } : { state: 'offered', text: 'Offered — say you take it' };
-    }
-    if (!thread.taken) return { state: 'untaken', text: 'Not taken on yet — say you take it on' };
+    if (!thread.taken) return { state: 'untaken', text: 'Not taken on' };
     const label = target ? countText(target, progress) : 'goal met';
     if (progress.met) {
         return finish.ok ? { state: 'here', text: `Ready to turn in — ${label}` } : { state: 'ready', text: `Ready — ${label}; ${lowerFirst(text(finish.reason))}` };
@@ -597,7 +582,7 @@ function detailsQuery(state, args = {}, tools = null) {
         ready: !counted && Boolean(thread.ready),
         taken: thread.taken ? { ...thread.taken } : null,
         ended: thread.ended ? { ...thread.ended } : null,
-        status: statusOf(thread, counted, progress, finish, director),
+        status: statusOf(thread, counted, progress, finish),
         history: historyOf(tools, thread.id),
     };
 }
@@ -616,8 +601,8 @@ function listText(names) {
 const byRecent = (a, b) => (b.rev ?? 0) - (a.rev ?? 0) || text(a.key).localeCompare(text(b.key)) || (a.id < b.id ? -1 : 1);
 
 /**
- * Tail lines: open offers (not held ones), quests with no goal yet (F82), up to three quests code cannot
- * count with their goal (F83), quests ready to turn in (and, optional, met but elsewhere).
+ * Tail lines: quests with no goal yet (F82), up to three quests code cannot count with their goal (F83),
+ * quests ready to turn in (and, optional, met but elsewhere).
  */
 export function questTail(view) {
     const state = view?.state;
@@ -626,14 +611,8 @@ export function questTail(view) {
     const optional = [];
     if (!director) return { lines, optional };
     const query = typeof view.query === 'function' ? view.query : stateQuery(state);
-    const { offers, active } = questLists(director);
-    if (offers.length) {
-        lines.push(`Quest offers not yet taken ({{user}} takes them on or turns them down in their own words): ${listText(offers.map(thread => {
-            const giver = text(thread.fields?.giver);
-            return giver ? `${thread.key} (from ${giver})` : thread.key;
-        }))}.`);
-    }
-    const goalless = [...offers, ...active].filter(thread => !hasGoal(thread));
+    const { active } = questLists(director);
+    const goalless = active.filter(thread => !hasGoal(thread));
     if (goalless.length) lines.push(`Quests with no goal yet (give each a concrete goal: ~ quest Name | goal: …): ${listText(goalless.map(thread => thread.key))}.`);
     const ready = [];
     const elsewhere = [];
@@ -673,7 +652,6 @@ export const part = {
     domains: {},
     commands: {
         'quest.take': take,
-        'quest.decline': decline,
         'quest.abandon': abandon,
         'quest.finish': finish,
     },
@@ -685,14 +663,6 @@ export const part = {
     kinds: {},
     context: { static: () => QUEST_STATIC, tail: questTail, budget: 250 },
     hooks: {},
-    settings: {
-        section: 'Quests',
-        defaults: { offerCooldown: OFFER_COOLDOWN },
-        schema: {
-            // F88: replies with Director lines between two quest offers; an offer sooner is kept and shown later.
-            offerCooldown: { type: 'int', label: 'Replies between quest offers (0: no limit)', min: 0, max: 100 },
-        },
-    },
     // The Quests board is the screens part's `story-director/quests` screen.
     tabs: [],
 };

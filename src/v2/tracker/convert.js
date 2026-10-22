@@ -1,7 +1,7 @@
 // Story Director v2, tracker part: the `director` domain read as a v1 tracker and back (pure).
 //
 // v1's tracker rules (src/tracker.js) hold years of fixes: closing a quest from its step text,
-// near keys, offers that wait for the reader, giving up, pay waiting. They work on v1 records
+// near keys, giving up, pay waiting. They work on v1 records
 // (`{ key, id: lineKey(key), kind, status, fields, extra, created, … }`) in an array. v2 keeps
 // threads by ID in `director.threads`. These converters let the v1 rules run unchanged on v2
 // state: a v1 record is built from each thread, the rules run, and every record is written
@@ -137,9 +137,10 @@ function compact(object) {
 /**
  * The thread a v1 record is after the rules ran. `before` is the thread as it was (null for a new
  * one); `rev` the revision this change commits as; `order` its place for a new thread;
- * `offered`: the rules just held this record as an offer (a `+ quest` the reader did not take).
+ * No thread becomes an offer: the story's `+ quest` makes a quest at once, and a hook stays a hook. A
+ * thread kept as an offer by an older chat stays one until a line makes it the quest (or closes it).
  */
-export function fromRecord(record, before, { id, rev, order, offered = false }) {
+export function fromRecord(record, before, { id, rev, order }) {
     const track = before?.track ?? {};
     const fields = {};
     for (const name of FIELDS) {
@@ -157,9 +158,9 @@ export function fromRecord(record, before, { id, rev, order, offered = false }) 
     const injected = Boolean(track.typed) && fields.type === 'quest' && !before?.fields?.type;
     if (injected) delete fields.type;
     const own = injected ? { ...record, fields: { ...record.fields, type: '' } } : record;
-    const typed = active && job && (Boolean(track.typed) || offered) && !fields.type && !isOffer(own);
+    const typed = active && job && Boolean(track.typed) && !fields.type && !isOffer(own);
     const probe = typed ? { ...own, fields: { ...own.fields, type: 'quest' } } : own;
-    const offer = !before?.taken && active && job && (isOffer(probe) || offered);
+    const offer = Boolean(before?.offer) && !before.taken && active && job && isOffer(probe);
     // An offer is a quest not yet taken; one closed (declined, lapsed) stays a quest that was offered.
     const wasOffer = Boolean(before?.offer) || (before?.kind === 'quest' && track.was);
     const kind = offer || (!active && job && wasOffer) ? 'quest' : record.kind;

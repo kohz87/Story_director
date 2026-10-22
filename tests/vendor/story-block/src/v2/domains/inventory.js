@@ -1143,8 +1143,12 @@ export function createInventoryCommands(env) {
 // deleted), so it rolls back with the reply and starts again on the next one or another swipe. A reply
 // adds its own entry and drops the others; `perReply` is the domain's `scratch` (ops.js): on replay a
 // drop of an entry already gone (its reply deleted) is passed over, so no reply's gains hang on another's.
-// A click's vouched payout writes the same entry from the click's receipt, on the same carrier: a swipe
-// or delete of the reply takes it back with the reply, and a Continue's lines count on from it.
+// A click's vouched payout (a2-3) adds its own key instead, `storyClicks[<sid>][<receipt id>] = paid`
+// (scratch too, add-only, on the same carrier), and never writes the reply's entry: a swipe or delete of
+// the reply takes it back with the reply, a Continue's lines count on from it, and a Re-read, whose
+// capture runs on the state before the reply, counts it from the reply as it stood (ctx.standing), so
+// the re-read lines and the clicks kept after them share one budget. The reply's money given is its
+// entry's `coin` plus its clicks.
 export const STORY_ITEM_QTY = 20;
 export const STORY_COIN_PER_LEVEL = 1000;
 export const STORY_WORTH_TIMES = 2;
@@ -1241,11 +1245,32 @@ function tallyOf(ctx, inv, vouched = false) {
     return tally;
 }
 
-// This reply's entry, alone: other replies' entries (and an older shape's fields) go.
+// This reply's entry, alone: other replies' entries (and an older shape's fields) go, their clicks too.
 function keepTally(inv, { id, ...tally }) {
     if (!isPlainObject(inv.perReply)) inv.perReply = {};
     for (const key of Object.keys(inv.perReply)) if (key !== id) delete inv.perReply[key];
     inv.perReply[id] = tally;
+    if (isPlainObject(inv.storyClicks)) for (const key of Object.keys(inv.storyClicks)) if (key !== id) delete inv.storyClicks[key];
+}
+
+// What the clicks after reply `id` paid of its budget (storyClicks): from `inv`, or in a Re-read's capture
+// (whose state is the one before the reply) from the reply as it stood (`standing`, ctx.standing).
+function clicksOf(inv, id, standing = null) {
+    const own = isPlainObject(inv?.storyClicks) && Object.hasOwn(inv.storyClicks, id) ? inv.storyClicks[id] : null;
+    const stood = standing?.domains?.inventory?.storyClicks;
+    const log = own ?? (isPlainObject(stood) && Object.hasOwn(stood, id) ? stood[id] : null);
+    return isPlainObject(log) ? Object.values(log).reduce((sum, paid) => sum + tallied(paid), 0) : 0;
+}
+
+// A click's vouched payout: its own key under the reply (add-only), the reply's entry left as it is.
+// Other replies' entries go here too (pruned by key), as keepTally drops them.
+function keepClick(ctx, inv, id, paid) {
+    if (isPlainObject(inv.perReply)) for (const key of Object.keys(inv.perReply)) if (key !== id) delete inv.perReply[key];
+    if (!isPlainObject(inv.storyClicks)) inv.storyClicks = {};
+    for (const key of Object.keys(inv.storyClicks)) if (key !== id) delete inv.storyClicks[key];
+    if (!isPlainObject(inv.storyClicks[id])) inv.storyClicks[id] = {};
+    const key = String(ctx.receiptId ?? 'click');
+    inv.storyClicks[id][key] = tallied(inv.storyClicks[id][key]) + paid;
 }
 
 // `amount` held to what this reply may still give: { amount, problem }.
@@ -1253,14 +1278,20 @@ function storyCoin(ctx, inv, amount, currency, vouched = false) {
     const tally = tallyOf(ctx, inv, vouched);
     if (!tally) return { amount, problem: null };
     const budget = storyCoinBudget(ctx);
-    const left = Math.max(0, budget - tally.coin);
+    // A click (a module's vouched payout outside a capture) is kept as its own key (keepClick).
+    const click = vouched && ctx.cause !== 'story';
+    const left = Math.max(0, budget - tally.coin - clicksOf(inv, tally.id, ctx.standing ?? null));
     // A module's vouched payout is never refused (its caller cannot catch a sub-command's failure): it
     // is paid what is left, which may be nothing, and told so.
     if (!left && !vouched) ctx.fail('REFUSED', `This reply has already given all the money one reply may give (${formatAmount(budget, currency)}); the rest was not paid.`);
     const paid = Math.min(amount, left);
-    tally.coin += paid;
-    if (vouched && paid) tally.vouched = (tally.vouched ?? 0) + paid;
-    keepTally(inv, tally);
+    if (click) {
+        if (paid) keepClick(ctx, inv, tally.id, paid);
+    } else {
+        tally.coin += paid;
+        if (vouched && paid) tally.vouched = (tally.vouched ?? 0) + paid;
+        keepTally(inv, tally);
+    }
     return {
         amount: paid,
         problem: paid < amount ? `${formatAmount(amount, currency)} was written, but one reply may give at most ${formatAmount(budget, currency)}; ${formatAmount(paid, currency)} was paid.` : null,
@@ -1671,8 +1702,9 @@ export const createInventoryQueries = env => ({
     'inventory.storyBudget': (state, args, tools) => {
         const budget = storyCoinBudget({ settings: () => env.settings(), query: (name, more) => tools.query(name, more) });
         const stored = storedTally(state?.domains?.inventory, tools?.reply?.sid);
-        const paid = Math.min(budget, tallied(stored?.coin));
-        return { budget, paid, left: Math.max(0, budget - paid), vouched: Math.min(paid, tallied(stored?.vouched)) };
+        const clicks = tools?.reply?.sid ? clicksOf(state?.domains?.inventory, tools.reply.sid) : 0;
+        const paid = Math.min(budget, tallied(stored?.coin) + clicks);
+        return { budget, paid, left: Math.max(0, budget - paid), vouched: Math.min(paid, tallied(stored?.vouched) + clicks) };
     },
     'inventory.wallet': (state, args = {}) => ({ ...(state?.domains?.inventory?.wallets?.[args?.owner ?? 'party'] ?? {}) }),
     // { status: 'found' | 'ambiguous' | 'none', defs: [def copies], stacks: [items of the found def] }

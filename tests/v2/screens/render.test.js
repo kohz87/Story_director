@@ -55,12 +55,11 @@ test('every screen compiles and renders without a warning, and its CSS scopes cl
     }
 });
 
-test('quests: an offer says how to take it, with no buttons (F95)', { skip }, () => {
+test('quests: no Offered list and no buttons (F95); an older chat\'s offer is not drawn', { skip }, () => {
     const { el } = draw(QUESTS_ID, headState());
-    const offer = el.querySelector('.sd-offer');
-    assert.equal(offer.getAttribute('data-quest'), 'th_rats0001');
-    assert.match(squash(offer.textContent), /Granary Rats kill 6 rats in the granary From Miller Fenna Reward: 5 coin/);
-    assert.equal(squash(offer.querySelector('.sd-status').textContent), 'Offered — say you take it');
+    assert.equal(el.querySelector('.sd-offer'), null);
+    assert.equal(el.querySelector('[data-quest="th_rats0001"]'), null);
+    assert.doesNotMatch(squash(el.textContent), /Offered|say you take/);
     assert.equal(el.querySelectorAll('button').length, 0, 'no buttons anywhere on the board');
 });
 
@@ -84,7 +83,7 @@ test('quests: active progress is an ss.meter ("Wolves 8/3") with the row\'s stat
     assert.equal(squash(hides.querySelector('.sd-status').textContent), 'Not yet: 2/5 wolf pelt');
 });
 
-test('quests: met but away says where to turn it in; untaken says to take it on', { skip }, () => {
+test('quests: met but away says where to turn it in; an untaken quest says so', { skip }, () => {
     const away = makeState({
         threads: [wolves()], beaten: [{ rev: 11, foes: [{ name: 'Wolf', count: 8 }], won: true }], place: { name: 'East Bluff', kind: 'wild' },
     });
@@ -93,7 +92,7 @@ test('quests: met but away says where to turn it in; untaken says to take it on'
     assert.ok(quest.classList.contains('sd-met'));
     assert.equal(quest.classList.contains('sd-ready'), false);
     const untaken = draw(QUESTS_ID, makeState({ threads: [wolves({ taken: null })] })).el.querySelector('.sd-quest');
-    assert.equal(squash(untaken.querySelector('.sd-status').textContent), 'Not taken on yet — say you take it on');
+    assert.equal(squash(untaken.querySelector('.sd-status').textContent), 'Not taken on');
 });
 
 test('quests: each row opens its details (F84): goal, progress, terms, rank, giver, dates and history', { skip }, () => {
@@ -139,16 +138,16 @@ test('quests: rendering again after a turn-in updates the same page', { skip }, 
     assert.match(squash(el.querySelector('details.sd-finished').textContent), /East Bluff Wolves Done — paid 8 coin/);
 });
 
-test('director: the header shows the story time on the chat\'s calendar and the place; held and ready tags', { skip }, () => {
+test('director: the header shows the story time on the chat\'s calendar and the place; offered and ready tags', { skip }, () => {
     const { el } = draw(DIRECTOR_ID, headState());
     assert.equal(squash(el.querySelector('header.sd-clock').textContent), `${calendar.format(at('June 11, 2025, 9:00 am'))} · Bluewatch Village`);
     const { el: unset } = draw(DIRECTOR_ID, makeState({ threads: [wolves()] }));
     assert.equal(unset.querySelector('header.sd-clock'), null, 'no clock line before the story sets the time');
     const held = draw(DIRECTOR_ID, makeState({ threads: [wolves({ ready: { rev: 12 } }), rats({ shown: { turn: 9 } })] })).el;
-    assert.match(squash(held.querySelector('[data-thread="th_rats0001"]').textContent), /offered held/);
+    // An older chat's offer: tagged "offered" here only (the quiet note), never "held".
+    assert.match(squash(held.querySelector('[data-thread="th_rats0001"]').textContent), /offered/);
+    assert.doesNotMatch(squash(held.querySelector('[data-thread="th_rats0001"]').textContent), /held/);
     assert.match(squash(held.querySelector('[data-thread="th_wolves01"]').textContent), /ready/);
-    const shownNow = draw(DIRECTOR_ID, makeState({ threads: [rats({ shown: { turn: 2 } })] })).el;
-    assert.doesNotMatch(squash(shownNow.querySelector('[data-thread="th_rats0001"]').textContent), /held/);
 });
 
 test('director: threads by kind, open first and closed folded, secrets by name, problems newest first', { skip }, () => {

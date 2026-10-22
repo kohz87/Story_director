@@ -1,5 +1,5 @@
 // Tracker part: what quest lines carry besides v1's fields — no goal (F82), `met:` (F83), the progress
-// note (F85), held offers (F88) — and the story's own turn-in, checked and paid by code (F94/F95). The
+// note (F85) — and the story's own turn-in, checked and paid by code (F94/F95). The
 // quests part answers through its queries and `quest.finish`, run in the same fake transaction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -80,7 +80,9 @@ test('F83: met: yes marks a taken quest code cannot count ready (with its rev), 
 
 test('F83: met: on what is not a taken quest code cannot count changes nothing and says why', () => {
     const { options } = withQuests();
-    const ringOffer = story([{ lines: '+ quest Lost Ring — Mara lost it | giver: Mara | goal: Find Mara\'s ring', said: 'Hm.', ...options }]);
+    // An older chat's quest nothing took on (quests are taken on at once now).
+    const ringOffer = structuredClone(story([{ lines: '+ quest Lost Ring — Mara lost it | giver: Mara | goal: Find Mara\'s ring', said: 'Hm.', ...options }]));
+    ringOffer.domains.director.threads[thread(ringOffer, 'Lost Ring').id].taken = null;
     const offered = reply(ringOffer, '~ quest Lost Ring | met: yes', { said: 'Hm.', ...options }).state;
     assert.equal(thread(offered, 'Lost Ring').ready, undefined);
     assert.match(lastProblems(offered).at(-1).text, /not taken on yet/);
@@ -116,39 +118,22 @@ test('F85: progress: is the quest\'s one-line note (v1\'s step), only the latest
     valid(state);
 });
 
-test('F88: an offer within the cooldown of the last one is held (kept, shown later), with no Problem', () => {
+test('F88 is gone: + quest is taken on at once, never an offer, never held; no offer cooldown setting', () => {
     const { options } = withQuests();
     let state = story([{ lines: '+ quest First Job — wolves | giver: Orsa | goal: Kill 2 wolves', said: 'Work?', ...options }]);
-    const first = thread(state, 'First Job');
-    assert.deepEqual([first.offer, first.shown], [true, { turn: 1 }]);
     state = reply(state, '+ quest Second Job — rats | giver: Hobb | goal: Kill 2 rats', { said: 'More work?', ...options }).state;
-    const second = thread(state, 'Second Job');
-    assert.deepEqual([second.offer, second.shown], [true, { turn: 7 }], 'six replies after the first');
-    assert.deepEqual(kinds(state).filter(kind => kind !== 'offered'), [], 'no Problem for holding it');
-    // A third waits behind the second.
-    state = reply(state, '+ quest Third Job — bears | giver: Hobb | goal: Kill 1 bear', { said: 'And?', ...options }).state;
-    assert.deepEqual(thread(state, 'Third Job').shown, { turn: 13 });
+    for (const key of ['First Job', 'Second Job']) {
+        const quest = thread(state, key);
+        assert.deepEqual([quest.offer, quest.shown, Boolean(quest.taken)], [false, undefined, true], key);
+    }
+    assert.deepEqual(kinds(state), []);
     valid(state);
-    // The reader's setting: 0 is no cooldown; another number is that many replies.
-    const off = story([
-        { lines: '+ quest First Job — wolves | giver: Orsa | goal: Kill 2 wolves', said: 'Work?', settings: { offerCooldown: 0 }, ...options },
-        { lines: '+ quest Second Job — rats | giver: Hobb | goal: Kill 2 rats', said: 'More?', settings: { offerCooldown: 0 }, ...options },
-    ]);
-    assert.deepEqual(thread(off, 'Second Job').shown, { turn: 2 });
-    const two = story([
-        { lines: '+ quest First Job — wolves | giver: Orsa | goal: Kill 2 wolves', said: 'Work?', settings: { offerCooldown: 2 }, ...options },
-        { lines: '+ quest Second Job — rats | giver: Hobb | goal: Kill 2 rats', said: 'More?', settings: { offerCooldown: 2 }, ...options },
-    ]);
-    assert.deepEqual(thread(two, 'Second Job').shown, { turn: 3 });
-    // A quest the reader takes on at once is no offer and never held.
-    const taken = reply(state, '+ quest Fourth Job — boars | giver: Hobb | goal: Kill 1 boar', { said: 'I\'ll take it.', ...options }).state;
-    assert.equal(thread(taken, 'Fourth Job').shown, undefined);
-});
-
-test('F88: the quests part\'s offerCooldown setting reaches the tracker through the module (reads)', () => {
-    assert.deepEqual(part.settings.reads, { offerCooldown: 'quests.offerCooldown' });
-    assert.equal(quests.settings.defaults.offerCooldown, 6);
-    assert.deepEqual(quests.settings.schema.offerCooldown, { type: 'int', label: 'Replies between quest offers (0: no limit)', min: 0, max: 100 });
+    // Both are told to the story at once.
+    const note = part.context.tail({ state, settings: {}, chat: { length: 2, lastUser: '' } }).lines.join('\n');
+    assert.match(note, /First Job/);
+    assert.match(note, /Second Job/);
+    assert.equal(part.settings.reads, undefined);
+    assert.equal(quests.settings, undefined);
 });
 
 function wolfCull(options, kind = 'settlement') {
@@ -232,18 +217,6 @@ test('F94: failing, giving up and an untaken quest are read as before; without t
     assert.equal(thread(bare, 'Wolf Cull').status, 'active');
 });
 
-test('F88: a held offer is left out of the Director note until its reply comes', () => {
-    const { options } = withQuests();
-    let state = story([{ lines: '+ quest First Job — wolves | giver: Orsa | goal: Kill 2 wolves', said: 'Work?', ...options }]);
-    state = reply(state, '+ quest Second Job — rats | giver: Hobb | goal: Kill 2 rats', { said: 'More?', ...options }).state;
-    const note = view => part.context.tail({ state: view, settings: {}, chat: { length: 2, lastUser: '' } }).lines.join('\n');
-    assert.match(note(state), /First Job/);
-    assert.doesNotMatch(note(state), /Second Job/);
-    // Its reply comes: told again.
-    const later = Object.freeze({ ...state, domains: Object.freeze({ ...state.domains, director: { ...state.domains.director, turn: { ...state.domains.director.turn, n: 7 } } }) });
-    assert.match(note(later), /Second Job/);
-});
-
 test('F94: swiping or rebuilding the turn-in reply is deterministic: the same lines give the same state', () => {
     const run = () => {
         const { options } = withQuests();
@@ -261,17 +234,4 @@ test('F83/F94: met: yes and the turn-in in one reply; a met line after the close
     const after = reply(state, '~ quest Lost Ring | met: no', { said: 'Hm.', ...options }).state;
     assert.equal(thread(after, 'Lost Ring').status, 'resolved');
     assert.match(lastProblems(after).at(-1).text, /not an open quest/);
-});
-
-test('F88: an offer kept from before offers were marked is never held by a later line', () => {
-    const { options } = withQuests();
-    let state = story([{ lines: '+ quest Old Offer — wolves | giver: Orsa | goal: Kill 2 wolves', said: 'Work?', ...options }]);
-    // As stored by an older version: no `shown`.
-    const director = structuredClone(state.domains.director);
-    delete director.threads[thread(state, 'Old Offer').id].shown;
-    state = Object.freeze({ ...state, domains: Object.freeze({ ...state.domains, director }) });
-    state = reply(state, '+ quest New Offer — rats | giver: Hobb | goal: Kill 2 rats', { said: 'More?', ...options }).state;
-    state = reply(state, '~ quest Old Offer | reward: 5 gold', { said: 'Hm.', ...options }).state;
-    assert.equal(thread(state, 'Old Offer').shown, undefined);
-    assert.equal(thread(state, 'Old Offer').offer, true);
 });

@@ -26,29 +26,30 @@ async function ok(promise) {
     return result;
 }
 
+// The reply where Fenna's job is accepted: `+ quest` makes it active at once.
 const OFFER = [
     '~ place Bluewatch | kind: settlement',
     '+ present Fenna',
     '+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 cellar rats | reward: 2 silver each',
 ];
 
-test('a reply\'s + quest is an offer; Take on, fights, Finish pays integers once and claims the fights', async () => {
+test('a reply\'s + quest is active at once; fights, Finish pays integers once and claims the fights', async () => {
     const host = await newHost();
-    await host.send('Any work in Bluewatch?', reply('Fenna looks up from the sacks. "Rats," she says.', OFFER));
+    await host.send('Hello.', 'You reach Bluewatch.');
+    // A fight before the quest never counts.
+    await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 5 }] }));
+    await host.send('Any work in Bluewatch?', reply('Fenna looks up from the sacks. "Rats," she says, and you agree.', OFFER));
     let rats = quest(host, 'Granary Rats');
     assert.equal(rats.kind, 'quest');
-    assert.equal(rats.offer, true);
-    assert.equal(rats.taken, null);
-    assert.equal(host.sdk.query('scene.place').kind, 'settlement');
-
-    // A fight before taking it on never counts.
-    await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 5 }] }));
-    const take = await ok(host.sdk.command('quest.take', { key: 'Granary Rats' }));
-    rats = quest(host, 'Granary Rats');
-    assert.deepEqual(rats.taken, { rev: take.receipt.rev });
+    assert.equal(rats.offer, false);
+    assert.equal(rats.status, 'active');
+    assert.ok(rats.taken.rev > 0, 'taken on at its reply');
     assert.deepEqual(rats.target, { noun: 'cellar rats', count: 3, kind: 'foes' });
     assert.deepEqual(rats.reward, { amount: 2, each: true, unit: '', text: '2 silver each' });
-    assert.equal(take.receipt.summary, 'Astra takes on Granary Rats: beat 3 cellar rats; 2 gold per cellar rat.');
+    assert.equal(host.sdk.query('scene.place').kind, 'settlement');
+    assert.equal(host.sdk.query('quest.progress', { key: 'Granary Rats' }).have, 0);
+    // No accept step: taking it on again is refused.
+    assert.equal((await host.sdk.command('quest.take', { key: 'Granary Rats' })).code, 'REFUSED');
 
     assert.equal((await host.sdk.command('quest.finish', { key: 'Granary Rats' })).code, 'NOT_ENOUGH');
     const first = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 2 }] }));
@@ -80,7 +81,7 @@ test('one fight pays one kill quest; an item quest counts the inventory on its o
         '+ quest Cellar Cull — the cellar | goal: Kill 2 rats | reward: 3 gold',
         '+ quest Pelt Order — the tanner | goal: Bring 2 rat pelts | reward: 1 gold each',
     ]));
-    for (const key of ['Rat Bounty', 'Cellar Cull', 'Pelt Order']) await ok(host.sdk.command('quest.take', { key }));
+    for (const key of ['Rat Bounty', 'Cellar Cull', 'Pelt Order']) assert.ok(quest(host, key).taken, key);
     const fight = await ok(host.sdk.command('combat.win', { foes: [{ name: 'Rat', count: 2 }] }));
     // The same fight's loot: two pelts, from the story.
     await host.send('I skin them.', reply('Two pelts.', ['+ item Rat Pelt | qty: 2']));
@@ -97,31 +98,35 @@ test('one fight pays one kill quest; an item quest counts the inventory on its o
     host.close();
 });
 
-test('the reader\'s own words take a quest on: kills count from that reply', async () => {
+test('the story\'s + quest takes a quest on whatever the message said; kills count from that reply; + hook makes no quest', async () => {
     const host = await newHost();
-    await host.send('What work is there?', reply('Danique pins a notice.', [
+    await host.send('What work is there?', reply('Danique pins a notice: wolves on the ridge, five gold.', [
         '~ place Ridgefold | kind: settlement',
-        '+ quest Wolf Hunt — wolves on the ridge | giver: Danique | goal: Kill 2 wolves | reward: 5 gold',
+        '+ hook Wolf Hunt — wolves on the ridge | giver: Danique | reward: 5 gold',
     ]));
-    assert.equal(quest(host, 'Wolf Hunt').offer, true);
+    // Only mentioned: an open thread of the story, no quest, no Offered entry, nothing to accept.
+    assert.equal(quest(host, 'Wolf Hunt').kind, 'hook');
+    assert.deepEqual(host.sdk.query('quest.board').active, []);
+    assert.equal(host.sdk.query('quest.board').offers, undefined);
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Wolf', count: 2 }] }));
 
-    await host.send('I\'ll do the wolf hunt.', reply('Danique nods.', ['+ quest Wolf Hunt — wolves on the ridge']));
+    await host.send('Hm, wolves.', reply('You tell Danique you will do it.', ['+ quest Wolf Hunt — wolves on the ridge | goal: Kill 2 wolves']));
     const hunt = quest(host, 'Wolf Hunt');
     const captured = host.store.at(host.store.headIndex());
-    assert.equal(hunt.offer, false);
-    assert.equal(hunt.taken.rev, captured.meta.rev, 'taken at the capture receipt of the reply that read the reader\'s words');
+    assert.deepEqual([hunt.kind, hunt.offer], ['quest', false]);
+    assert.equal(hunt.taken.rev, captured.meta.rev, 'taken at the capture receipt of the reply that wrote + quest');
     assert.deepEqual(hunt.target, { noun: 'wolves', count: 2, kind: 'foes' });
     assert.equal(host.sdk.query('quest.progress', { key: 'Wolf Hunt' }).have, 0, 'the fight before it was taken on does not count');
+    assert.deepEqual(host.sdk.query('quest.board').active.map(entry => entry.key), ['Wolf Hunt']);
 
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Grey Wolf', count: 2 }] }));
     await ok(host.sdk.command('quest.finish', { key: 'Wolf Hunt' }));
     assert.deepEqual(wallet(host), { coin: 5 });
 
-    // Without the reader's words (a reply with no message of theirs taking it) nothing is taken.
+    // The first message of a chat, or one that says nothing of the job: the story's + quest still takes it.
     const other = await newHost();
     await other.send('Hello.', reply('A notice.', ['+ quest Wolf Hunt — wolves | goal: Kill 2 wolves']));
-    assert.equal(quest(other, 'Wolf Hunt').taken, null);
+    assert.ok(quest(other, 'Wolf Hunt').taken);
     host.close();
     other.close();
 });
@@ -158,8 +163,8 @@ test('swipe and delete take a reply\'s quests, takes and payouts back; replay eq
     const host = await newHost();
     await host.send('Any work?', reply('Fenna has a job.', OFFER));
     const offerIndex = host.store.headIndex();
+    const takenAt = quest(host, 'Granary Rats').taken;
     await host.send('Let me think.', 'You think it over.');
-    await ok(host.sdk.command('quest.take', { key: 'Granary Rats' }));
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 3 }] }));
     await ok(host.sdk.command('quest.finish', { key: 'Granary Rats' }));
     assert.deepEqual(wallet(host), { coin: 6 });
@@ -169,28 +174,26 @@ test('swipe and delete take a reply\'s quests, takes and payouts back; replay eq
     host.store.rebuild();
     assert.deepEqual(host.head(), head);
 
-    // The take, the fight and the payout were on the last reply: deleting it takes them back.
+    // The fight and the payout were on the last reply: deleting it takes them back; the quest stays active.
     await host.st.deleteMessage(host.store.headIndex());
     assert.equal(host.store.headIndex(), offerIndex);
     const rats = quest(host, 'Granary Rats');
-    assert.equal(rats.offer, true);
-    assert.equal(rats.taken, null);
+    assert.deepEqual([rats.offer, rats.status, rats.taken], [false, 'active', takenAt]);
     assert.deepEqual(wallet(host), {});
     assert.deepEqual(claims(host), []);
 
-    // A swipe of the offering reply without the offer: no quest; back to the first swipe: the offer.
+    // A swipe of the accepting reply without the + quest: no quest; back to the first swipe: active again.
     await host.st.deleteMessage(host.ctx.chat.length - 1);   // the reader's message after it
     await host.swipe('Fenna shrugs. Nothing today.');
     assert.equal(quest(host, 'Granary Rats'), null);
     await host.st.swipeTo(offerIndex, 0);
-    assert.equal(quest(host, 'Granary Rats').offer, true);
+    assert.deepEqual(quest(host, 'Granary Rats').taken, takenAt);
     host.close();
 });
 
 test('re-narrating a turn-in does not pay twice; the swiped reply is told it again', async () => {
     const host = await newHost();
     await host.send('Any work?', reply('Fenna has a job.', OFFER));
-    await ok(host.sdk.command('quest.take', { key: 'Granary Rats' }));
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 3 }] }));
     await ok(host.sdk.command('quest.finish', { key: 'Granary Rats' }));
     await host.send('I take the coins.', 'Coins.');
@@ -203,7 +206,6 @@ test('re-narrating a turn-in does not pay twice; the swiped reply is told it aga
 test('the static prompt is byte-identical reply after reply, with the Director\'s kinds and rules', async () => {
     const host = await newHost();
     await host.send('Any work?', reply('Fenna has a job.', OFFER));
-    await ok(host.sdk.command('quest.take', { key: 'Granary Rats' }));
     await host.send('Onward.', reply('Hours pass.', ['~ time March 3, 8:00 am', '+ hook River stranger — who pulled Ren out']));
     await host.send('Again.', 'More.');
     const statics = sentValues(host, STATIC_KEY);
@@ -219,6 +221,9 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
     assert.match(text, /Quest rewards: when a quest is turned in/);
     assert.match(text, /~ quest Name \| met: yes/);
     assert.match(text, /A passer-by is only a passer-by/);
+    // No offers to accept: a hook is an open thread, and + quest is written once the reader accepts.
+    assert.match(text, /\+ hook Name — an open thread or lead \(a job only offered stays in the story; \+ quest once You accepts it\)/);
+    assert.doesNotMatch(text, /a job only offered: \+ hook with giver, reward/);
     // Another chat with other state sends the same bytes.
     const other = await newHost();
     await other.send('Hi.', 'Hello.');
@@ -234,11 +239,11 @@ test('refusals through the host save nothing and use REFUSED for rule refusals',
         '+ quest Moor Wolves — wolves | giver: Orsa | goal: Kill 1 wolf | reward: 4 gold',
     ]));
     const before = structuredClone(host.head());
-    assert.equal((await host.sdk.command('quest.abandon', { key: 'Moor Wolves' })).code, 'REFUSED');
-    assert.equal((await host.sdk.command('quest.finish', { key: 'Moor Wolves' })).code, 'REFUSED');
+    assert.equal((await host.sdk.command('quest.take', { key: 'Moor Wolves' })).code, 'REFUSED', 'already taken on by its + quest');
+    assert.equal((await host.sdk.command('quest.finish', { key: 'Moor Wolves' })).code, 'NOT_ENOUGH');
     assert.equal((await host.sdk.command('quest.take', { key: 'Nobody' })).code, 'NOT_FOUND');
+    assert.equal((await host.sdk.command('quest.decline', { key: 'Moor Wolves' })).code, 'UNKNOWN_COMMAND');
     assert.deepEqual(host.head(), before);
-    await ok(host.sdk.command('quest.take', { key: 'Moor Wolves' }));
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Wolf', count: 1 }] }));
     const afterFight = structuredClone(host.head());
     const away = await host.sdk.command('quest.finish', { key: 'Moor Wolves' });
@@ -254,7 +259,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.equal(mine.version, '2.0.0-alpha.1');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
     assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'faction', 'hook', 'landmark', 'quest', 'route', 'secret', 'time', 'world']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.seed', 'quest.abandon', 'quest.decline', 'quest.finish', 'quest.take', 'time.settle']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.take', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
         'story-director/map', 'story-director/chronicle', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
@@ -263,7 +268,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual(Object.keys(defs.schema).sort(), [
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail',
-        'quests.offerCooldown', 'time.lapses', 'time.recapHours',
+        'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays', 'tracker.maxJump',
     ]);

@@ -163,7 +163,7 @@ test('a scene move without | kind: back to a known settlement still lets a quest
     try {
         await host.send('Work?', said('A notice.', ['~ place Bluewatch | kind: settlement', '+ present Fenna',
             '+ quest Lone Wolf — a wolf | giver: Fenna | goal: Kill 1 wolf | reward: 20 gold']));
-        assert.equal((await host.sdk.command('quest.take', { key: 'Lone Wolf' })).ok, true);
+        assert.ok(host.sdk.query('director.thread', { key: 'Lone Wolf' }).taken, 'taken on by its + quest');
         await host.send('Out we go.', said('The ridge.', ['~ place East Ridge | kind: wild']));
         await host.send('Back.', said('Back in town.', ['~ place Bluewatch']));
         // Story Block leaves the scene's kind empty (before 2.0.0-alpha.2) or keeps the ridge's.

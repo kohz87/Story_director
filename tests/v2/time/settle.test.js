@@ -58,8 +58,13 @@ test('the hook settles only when the clock moved (or a deadline waits to lapse)'
     assert.equal(slotValue(director(chat.head()).checked).minutes, at('Goldwane 12, 10:00 pm'));
 });
 
-test('an offer lapses when the clock passes its deadline, told once in v1\'s words', () => {
+test('an older chat\'s offer lapses when the clock passes its deadline, told once in v1\'s words', () => {
     const chat = begun("+ hook Rat Culling — rats in the granary | giver: Danique, the rat-catcher's widow | reward: 5 copper | due: Goldwane 13");
+    // Kept as an offer, as Story Director did before quests went straight to active.
+    const head = structuredClone(chat.head());
+    const id = thread(head, 'Rat Culling').id;
+    head.domains.director.threads[id] = { ...head.domains.director.threads[id], kind: 'quest', offer: true, track: { ...head.domains.director.threads[id].track, was: 'hook' } };
+    chat.setHead(head);
     const offer = thread(chat.head(), 'Rat Culling');
     assert.equal(offer.offer, true);
     chat.answer('! time +1d');

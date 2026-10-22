@@ -1,11 +1,11 @@
-// Quests part: quest.take / decline / abandon / finish against a fake transaction.
+// Quests part: quest.take / abandon / finish against a fake transaction (an older chat's offer for take).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part } from '../../../src/v2/quests/index.js';
 import { NO_FIGHTS } from '../../../src/v2/quests/progress.js';
 import { fakeCommands, fakeQueries, makeHost, makeState, quest, xpCommand } from './helpers/fake-ctx.js';
 
-const { 'quest.take': take, 'quest.decline': decline, 'quest.abandon': abandon, 'quest.finish': finish } = part.commands;
+const { 'quest.take': take, 'quest.abandon': abandon, 'quest.finish': finish } = part.commands;
 
 const wolvesOffer = () => quest('th_wolves01', 'EastBluffWolves', { goal: 'Clear at least 3 wolves from East Bluff', reward: '1 silver each wolf', giver: 'Captain Orsa' }, { offer: true });
 const herbs = () => quest('th_herbs001', 'Herb Run', { goal: 'Bring 5 moonleaf to Fenna', reward: '10 copper', giver: 'Fenna' }, { offer: true });
@@ -71,20 +71,8 @@ test('a quest the story already accepted is adopted for counting, quietly', () =
     assert.match(result.receipt.summary, /keeps count for Wolves/);
 });
 
-test('decline closes an offer as declined; only open offers', () => {
-    const host = makeHost(makeState({ threads: [wolvesOffer(), quest('th_active01', 'Active', {}, { taken: { rev: 2 } })] }));
-    const result = host.run(decline, { id: 'th_wolves01' });
-    assert.equal(result.ok, true);
-    assert.equal(result.receipt.summary, 'Astra turns down EastBluffWolves.');
-    const thread = host.state.domains.director.threads.th_wolves01;
-    assert.equal(thread.status, 'resolved');
-    assert.equal(thread.offer, false);
-    assert.deepEqual(thread.ended, { rev: 11, reason: 'turned down', outcome: 'declined' });
-    const before = structuredClone(host.state);
-    assert.equal(host.run(decline, { id: 'th_wolves01' }).code, 'REFUSED');
-    assert.equal(host.run(decline, { id: 'th_active01' }).code, 'REFUSED');
-    assert.equal(host.run(decline, { id: 'th_missing1' }).code, 'NOT_FOUND');
-    assert.deepEqual(host.state, before);
+test('there is no quest.decline: a quest goes straight to active, so there is nothing to turn down', () => {
+    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish']);
 });
 
 test('abandon gives up a taken quest; not an offer, not twice', () => {

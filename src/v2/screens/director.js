@@ -4,7 +4,8 @@
 // them), then the problems the last replies' Director lines had, newest first. Secrets show by name
 // only. Read-only: the threads come from `director.threads` (bindings per kind: all, open, closed), the
 // problems from `director.problems` (their `{{user}}` written out; one about an offer or a missing goal
-// only while that is still so). An offer held back by the offer cooldown (F88) is tagged "held".
+// only while that is still so). An older chat's offer, which the Quests tab no longer shows, is tagged
+// "offered" here.
 
 import { BASE_CSS } from './style.js';
 
@@ -24,7 +25,6 @@ function threadItem(list, kind) {
     return `<li class="sd-thread" data-each="${list} as t" data-thread="{{ t.id }}">
           <span class="sd-key">{{ t.key }}</span>
           <span class="sd-tag" data-if="t.offer">offered</span>
-          <span class="sd-tag sd-held" data-if="t.offer == true && t.shown != null && t.shown.turn > state.director.turn.n">held</span>
           <span class="sd-tag sd-ready" data-if="t.ready">ready</span>
           <span class="sd-tag sd-outcome" data-if="t.ended">{{ t.ended.outcome }}</span>
           <p class="sd-line" data-if="t.summary">{{ t.summary }}</p>
@@ -82,7 +82,6 @@ const CSS = `${BASE_CSS}
 .sd-director { display: grid; gap: 14px; padding: 4px 0; }
 .sd-clock { margin: 0; font-size: 0.9em; overflow-wrap: anywhere; }
 .sd-clock i { color: var(--sd-accent); margin-right: 2px; }
-.sd-held { border-style: dashed; }
 .sd-threads { gap: 6px; }
 .sd-thread { padding: 6px 10px; border-left: 3px solid var(--sd-accent); border-radius: 4px;
   background: var(--sd-surface); overflow-wrap: anywhere; }

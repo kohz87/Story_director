@@ -198,32 +198,20 @@ export function placeRule(thread, scene) {
 export function finishRule(thread, progress, scene) {
     if (!thread) return { ok: false, reason: 'There is no such quest.' };
     if (thread.ended || thread.status !== 'active') return { ok: false, reason: `${text(thread.key)} is already over.` };
-    if (!thread.taken) return { ok: false, reason: 'Take it on first.' };
+    if (!thread.taken) return { ok: false, reason: 'It was never taken on.' };
     if (!progress?.met) return { ok: false, reason: text(progress?.reason) || 'Not done yet.' };
     return placeRule(thread, scene);
 }
 
 /**
- * Whether an offer is held back (F88): the story offered it within the offer cooldown of the one before,
- * so it waits, kept but not shown, until reply `shown.turn` (the tracker's `director.turn.n`).
- */
-export function isHeld(thread, director) {
-    const turn = Number.isSafeInteger(director?.turn?.n) ? director.turn.n : 0;
-    return Boolean(thread?.offer) && !thread.taken && Number.isSafeInteger(thread.shown?.turn) && thread.shown.turn > turn;
-}
-
-/**
- * Plain lists the Quests board and the tail use: open offers (not the held ones, which are `held`), active
- * quests, finished ones (latest first).
+ * Plain lists the Quests board and the tail use: active quests and finished ones (latest first). An
+ * older chat's offers (`offer: true`, not taken on) are in neither: they are shown nowhere.
  */
 export function questLists(director) {
     const quests = Object.values(director?.threads ?? {}).filter(thread => thread?.kind === 'quest');
     const byKey = (a, b) => text(a.key).localeCompare(text(b.key)) || (a.id < b.id ? -1 : 1);
     const open = thread => thread.status === 'active' && !thread.ended;
-    const offered = thread => open(thread) && thread.offer && !thread.taken;
     return {
-        offers: quests.filter(thread => offered(thread) && !isHeld(thread, director)).sort(byKey),
-        held: quests.filter(thread => offered(thread) && isHeld(thread, director)).sort(byKey),
         active: quests.filter(thread => open(thread) && !(thread.offer && !thread.taken)).sort(byKey),
         finished: quests.filter(thread => !open(thread))
             .sort((a, b) => (b.ended?.rev ?? b.rev ?? 0) - (a.ended?.rev ?? a.rev ?? 0) || byKey(a, b)),

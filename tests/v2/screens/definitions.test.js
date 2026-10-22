@@ -115,7 +115,9 @@ test('no screen draws a command button by default: quests follow the reader\'s w
     for (const screen of screens) assert.doesNotMatch(screen.template, /data-command|data-submit|<button/, `${screen.id} draws no buttons`);
     // Each quest row says where it stands and opens its details (F84) in a screen-local panel.
     const template = byId[QUESTS_ID].template;
-    assert.equal([...template.matchAll(/class="sd-status"/g)].length, 2, 'offers and active quests');
-    assert.equal([...template.matchAll(/<details class="sd-more">/g)].length, 3, 'offers, active and finished rows');
+    assert.equal([...template.matchAll(/class="sd-status"/g)].length, 1, 'active quests');
+    assert.equal([...template.matchAll(/<details class="sd-more">/g)].length, 2, 'active and finished rows');
+    // No Offered list: the story's + quest makes a quest active at once.
+    assert.doesNotMatch(template, /offer/i);
     assert.doesNotMatch(template, /<dialog/i, 'templates have no dialog element');
 });

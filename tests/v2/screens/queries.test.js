@@ -76,14 +76,11 @@ test('director.next reads dates on the reader\'s calendar from the settings', ()
     assert.equal(run(makeState({ threads }), 'director.next'), null, 'Goldwane is no Gregorian month');
 });
 
-test('quest.board: offers, active quests with progress and Finish, finished latest first', () => {
+test('quest.board: active quests with progress and Finish, finished latest first; an older chat\'s offer nowhere', () => {
     const board = run(headState(), 'quest.board');
-    const [offer] = board.offers;
-    assert.deepEqual({ ...offer, details: undefined }, {
-        id: 'th_rats0001', key: 'Granary Rats', goal: 'kill 6 rats in the granary', giver: 'Miller Fenna', reward: '5 coin', due: '',
-        status: { state: 'offered', text: 'Offered — say you take it' }, details: undefined,
-    });
-    assert.equal(board.offers.length, 1);
+    // Granary Rats is an older chat's offer: no Offered list, and no active quest.
+    assert.equal(board.offers, undefined);
+    assert.ok(!JSON.stringify(board).includes('Granary Rats'));
     assert.deepEqual(board.active.map(quest => quest.id), ['th_wolves01', 'th_pelts001']);
     const [hunt, hides] = board.active;
     assert.deepEqual(hunt.progress, { have: 8, need: 3, met: true, ready: false, source: 'fights', label: 'Wolves 8/3', reason: '', finish: { ok: true, reason: '' } });
@@ -98,8 +95,7 @@ test('quest.board: offers, active quests with progress and Finish, finished late
     assert.deepEqual(hides.status, { state: 'notyet', text: 'Not yet: 2/5 wolf pelt' });
     assert.deepEqual(board.finished.map(entry => ({ ...entry, details: undefined })), [{ id: 'th_ring0001', key: 'Lost Ring', outcome: 'done', outcomeText: 'Done', reason: 'returned it', details: undefined }]);
     assert.equal(board.finished[0].details.goal, 'find the ring');
-    assert.equal(board.heldCount, 0);
-    assert.deepEqual([board.hasOffers, board.hasActive, board.hasFinished, board.finishedCount], [true, true, true, 1]);
+    assert.deepEqual([board.hasActive, board.hasFinished, board.finishedCount], [true, true, 1]);
 });
 
 test('quest.board: Finish says why it is off (not taken, not met, wrong place) and is on with the giver present', () => {
@@ -113,8 +109,8 @@ test('quest.board: Finish says why it is off (not taken, not met, wrong place) a
     };
 
     const untaken = makeState({ threads: [wolves({ taken: null })], beaten, ...away });
-    assert.deepEqual(finishOf(untaken), { show: true, blocked: true, reason: 'Take it on first: fights count from then.' });
-    assert.deepEqual(run(untaken, 'quest.board').active[0].status, { state: 'untaken', text: 'Not taken on yet — say you take it on' });
+    assert.deepEqual(finishOf(untaken), { show: true, blocked: true, reason: 'It was never taken on.' });
+    assert.deepEqual(run(untaken, 'quest.board').active[0].status, { state: 'untaken', text: 'Not taken on' });
 
     const short = makeState({ threads: [wolves()], beaten: [{ rev: 11, foes: [{ name: 'Wolf', count: 1 }], won: true }], ...away });
     assert.deepEqual(finishOf(short), { show: true, blocked: true, reason: 'Need 2 more wolves.' });
@@ -159,7 +155,7 @@ test('quest.board keeps at most 20 finished quests, latest first, and counts the
     assert.equal(board.finishedCount, 25);
     assert.equal(board.finished[0].key, 'Job 24');
     assert.deepEqual([...new Set(board.finished.map(item => item.outcomeText))].sort(), ['Failed', 'Turned down']);
-    assert.deepEqual([board.hasOffers, board.hasActive], [false, false]);
+    assert.equal(board.hasActive, false);
 });
 
 test('without tools the queries read the director layout and leave progress out', () => {
@@ -194,23 +190,24 @@ test('director.problems: v1\'s {{user}} through the host\'s substitute, else "yo
     ];
     const state = makeState({ problems });
     const plain = run(state, 'director.problems').map(problem => problem.text);
+    // An older chat's "was offered" is not shown: there is nothing to accept any more.
     assert.deepEqual(plain, [
-        '"Rats" was offered, not taken on: it stays an offer until you accept it.',
         '"Rats" stays open: giving it up or turning it down is your choice, and your message did not make it.',
         '"Rats" was offered and the story says it is done: it is a quest you finished.',
     ]);
     const queries = makeQueries();
     const named = queries['director.problems'](state, {}, { query: () => null, substitute: text => text.replace(/\{\{user\}\}/g, 'Astra') });
-    assert.equal(named[0].text, '"Rats" was offered, not taken on: it stays an offer until Astra accepts it.');
-    assert.deepEqual(named.map(problem => [problem.rev, problem.kind]), [[3, 'offered'], [4, 'not-chosen'], [5, 'done-offer']]);
+    assert.equal(named[0].text, '"Rats" stays open: giving it up or turning it down is Astra\'s choice, and their message did not make it.');
+    assert.deepEqual(named.map(problem => [problem.rev, problem.kind]), [[4, 'not-chosen'], [5, 'done-offer']]);
     // A substitute that leaves the macro, or throws, still reads "you".
-    assert.match(queries['director.problems'](state, {}, { substitute: text => text })[2].text, /a quest you finished/);
-    assert.match(queries['director.problems'](state, {}, { substitute: () => { throw new Error('x'); } })[2].text, /a quest you finished/);
+    assert.match(queries['director.problems'](state, {}, { substitute: text => text })[1].text, /a quest you finished/);
+    assert.match(queries['director.problems'](state, {}, { substitute: () => { throw new Error('x'); } })[1].text, /a quest you finished/);
+    assert.equal(readerWords('until {{user}} accepts it'), 'until you accept it');
     assert.equal(readerWords('Ask {{User}}.'), 'Ask you.');
     assert.deepEqual(run(makeState(), 'director.problems'), []);
 });
 
-test('director.problems: a Problem about an offer or a missing goal goes once that is no longer so', () => {
+test('director.problems: a Problem about a missing goal goes once that is no longer so; one about an offer always', () => {
     const problems = [
         { rev: 3, kind: 'offered', key: 'Granary Rats', text: '"Granary Rats" was offered, not taken on: it stays an offer until {{user}} accepts it.' },
         { rev: 3, kind: 'offered', key: 'East Bluff Wolves', text: '"East Bluff Wolves" was offered, not taken on.' },
@@ -221,17 +218,16 @@ test('director.problems: a Problem about an offer or a missing goal goes once th
     const vague = thread('th_vague001', 'quest', 'Miller Trouble', {}, { summary: 'help the miller', taken: { rev: 2 } });
     const given = thread('th_mill0001', 'quest', 'Old Mill', { goal: 'see what haunts the mill' }, { taken: { rev: 2 } });
     const state = makeState({ threads: [rats(), wolves(), vague, given], problems });
-    assert.deepEqual(run(state, 'director.problems').map(problem => [problem.kind, problem.rev]), [['offered', 3], ['no-goal', 4], ['time', 5]],
-        'the taken wolves and the mill with its goal are left out');
+    assert.deepEqual(run(state, 'director.problems').map(problem => [problem.kind, problem.rev]), [['no-goal', 4], ['time', 5]],
+        'the offers (an older chat\'s) and the mill with its goal are left out');
     // Without the quests part's details, a goal: field decides.
     const { 'quest.details': _details, ...noDetails } = makeQueries();
-    assert.equal(makeRunner(noDetails).run(state, 'director.problems').length, 3);
+    assert.equal(makeRunner(noDetails).run(state, 'director.problems').length, 2);
 });
 
-test('quest.board: an offer held by the cooldown (F88) is left out until its reply comes, and counted', () => {
-    const state = makeState({ threads: [rats({ shown: { turn: 9 } })] });
-    const board = run(state, 'quest.board');
-    assert.deepEqual([board.offers, board.heldCount, board.hasOffers], [[], 1, false]);
-    const later = makeState({ threads: [rats({ shown: { turn: 3 } })] });
-    assert.deepEqual(run(later, 'quest.board').offers.map(offer => offer.id), ['th_rats0001']);
+test('quest.board: an older chat\'s offer, held or not, is on no list', () => {
+    for (const turn of [9, 3]) {
+        const board = run(makeState({ threads: [rats({ shown: { turn } })] }), 'quest.board');
+        assert.deepEqual([board.active, board.finished, board.hasActive, board.hasFinished], [[], [], false, false], String(turn));
+    }
 });

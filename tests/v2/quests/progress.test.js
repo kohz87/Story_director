@@ -45,7 +45,7 @@ test('progress for items reads the inventory; no target and unknown quests', () 
         defs: [{ id: 'story/moonleaf', name: 'Moonleaf' }, { id: 'story/moon', name: 'Moon Charm' }],
         stacks: [{ id: 'it_aaaaaaa1', def: 'story/moonleaf', qty: 2 }, { id: 'it_bbbbbbb2', def: 'story/moonleaf', qty: 1 }, { id: 'it_ccccccc3', def: 'story/moon', qty: 9 }],
     });
-    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, ready: false, countable: true, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'Take it on first.' } });
+    assert.deepEqual(progress(state, { id: 'th_herbs001' }), { have: 3, need: 5, met: false, ready: false, countable: true, source: 'inventory', noun: 'moonleaf', label: 'Moonleaf 3/5', reason: 'Need 2 more moonleaf.', finish: { ok: false, reason: 'It was never taken on.' } });
     // A goal code cannot count (F83): not met until the story says so.
     const waiting = 'The story has not said its goal is met yet.';
     assert.deepEqual(progress(state, { id: 'th_story001' }), { have: 0, need: 0, met: false, ready: false, countable: false, source: null, noun: '', label: '', reason: waiting, finish: { ok: false, reason: waiting } });
@@ -60,7 +60,7 @@ test('a foes quest not taken on here counts nothing yet', () => {
     assert.match(got.reason, /from when it is taken on/);
 });
 
-test('tail: open offers and quests ready to turn in; done-but-elsewhere is optional', () => {
+test('tail: quests ready to turn in (an older chat\'s offer is not told); done-but-elsewhere is optional', () => {
     const state = makeState({
         threads: [
             quest('th_offer001', 'Granary Rats', { goal: 'kill 6 rats', giver: 'Fenna' }, { offer: true }),
@@ -73,7 +73,6 @@ test('tail: open offers and quests ready to turn in; done-but-elsewhere is optio
     });
     const tail = part.context.tail(viewOf(state));
     assert.deepEqual(tail.lines, [
-        'Quest offers not yet taken ({{user}} takes them on or turns them down in their own words): Granary Rats (from Fenna).',
         'Quests ready to turn in here (code checks and pays when the story turns one in): EastBluffWolves (Wolves 8/3).',
     ]);
     assert.deepEqual(tail.optional, ['Quests done but turned in only at a settlement or with their giver: Bear Trouble (Bears 1/1).']);
@@ -81,13 +80,15 @@ test('tail: open offers and quests ready to turn in; done-but-elsewhere is optio
 });
 
 test('tail stays within its budget and is empty without quests', () => {
-    const threads = Array.from({ length: 40 }, (_, i) => quest(`th_offer${String(i).padStart(3, '0')}`, `A rather long offered job number ${i}`, { giver: 'Someone with a long name' }, { offer: true }));
+    const threads = Array.from({ length: 40 }, (_, i) => quest(`th_quest${String(i).padStart(3, '0')}`, `A rather long active job number ${i}`, { giver: 'Someone with a long name' }, { taken: { rev: 2 } }));
     const tail = part.context.tail(viewOf(makeState({ threads })));
-    // The offers, then the same quests asked for a goal (F82).
-    assert.equal(tail.lines.length, 2);
-    assert.match(tail.lines[1], /^Quests with no goal yet .*and 34 more\.$/);
+    // The quests asked for a goal (F82).
+    assert.equal(tail.lines.length, 1);
+    assert.match(tail.lines[0], /^Quests with no goal yet .*and 34 more\.$/);
     assert.ok(tail.lines.join('\n').length <= 1000);
-    assert.match(tail.lines[0], /and 34 more/);
+    // An older chat's offers are told nowhere.
+    const offers = threads.map(thread => ({ ...thread, taken: null, offer: true }));
+    assert.deepEqual(part.context.tail(viewOf(makeState({ threads: offers }))), { lines: [], optional: [] });
     assert.deepEqual(part.context.tail(viewOf(makeState())), { lines: [], optional: [] });
     assert.deepEqual(part.context.tail({ state: { domains: {} } }), { lines: [], optional: [] });
 });
@@ -99,11 +100,10 @@ test('static text is byte-identical whatever the state', () => {
 });
 
 test('the part has the MODULES §A shape and no domain of its own', () => {
-    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
+    assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'tabs']);
     assert.deepEqual(part.domains, {});
-    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.decline', 'quest.abandon', 'quest.finish']);
+    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish']);
     assert.deepEqual(Object.keys(part.queries), ['quest.progress', 'quest.details', 'quest.ranks']);
-    assert.deepEqual(part.settings.defaults, { offerCooldown: 6 });
     // The Quests board is the screens part's screen now.
     assert.deepEqual(part.tabs, []);
 });
@@ -114,7 +114,7 @@ test('quest.progress finish: quest.finish\'s own rule in its order, the place ru
     assert.deepEqual(finishOf(wolves()), { ok: false, reason: 'Turn it in at a settlement or where Orsa is.' });
     assert.deepEqual(finishOf(wolves(), { place: { name: 'Bluewatch', kind: 'settlement' } }), { ok: true, reason: '' });
     assert.deepEqual(finishOf(wolves(), { present: ['Orsa the Hunter'] }), { ok: true, reason: '' });
-    assert.deepEqual(finishOf(wolves({ taken: null }), { place: { kind: 'settlement' } }), { ok: false, reason: 'Take it on first.' });
+    assert.deepEqual(finishOf(wolves({ taken: null }), { place: { kind: 'settlement' } }), { ok: false, reason: 'It was never taken on.' });
     assert.deepEqual(finishOf(wolves({ status: 'resolved', ended: { rev: 12, reason: 'turned in', outcome: 'done' } })), { ok: false, reason: 'EastBluffWolves is already over.' });
     // It agrees with quest.finish: a met quest in a settlement turns in, elsewhere it is refused for the same reason.
     const elsewhere = makeHost(makeState({ threads: [wolves()], beaten: met })).run(part.commands['quest.finish'], { id: 'th_wolves01' });

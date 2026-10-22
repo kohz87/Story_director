@@ -76,8 +76,8 @@ test('a place visit through beforeGenerate, routes captured, Finish by quest.pro
     await host.send('And now?', reply('Still dust.'));
     assert.equal(receipts(host).filter(receipt => receipt.type === 'atlas.visit').length, 1);
 
-    // Finish: off until the target is met, then quest.progress says it can be turned in here.
-    await ok(host.sdk.command('quest.take', { key: 'Granary Rats' }));
+    // Finish: off until the target is met, then quest.progress says it can be turned in here (the + quest
+    // took it on at its reply).
     assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }).finish, { ok: false, reason: 'Need 3 more cellar rats.' });
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 3 }] }));
     const progress = host.sdk.query('quest.progress', { key: 'Granary Rats' });
@@ -90,7 +90,6 @@ test('a place visit through beforeGenerate, routes captured, Finish by quest.pro
 
     // Away from the settlement and the giver, the board and quest.finish agree on why.
     await host.send('Next job.', reply('A second notice.', ['+ quest Weir Eels — the weir | giver: Ola | goal: Kill 2 eels | reward: 1 gold each']));
-    await ok(host.sdk.command('quest.take', { key: 'Weir Eels' }));
     await host.send('We walk to the weir.', reply('Reeds and cold water.', ['~ place Old Weir | kind: wild', '- present Fenna']));
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Eel', count: 2 }] }));
     const eels = host.sdk.query('quest.board').active.find(quest => quest.key === 'Weir Eels');
@@ -194,10 +193,12 @@ test('a custom calendar and a time jump: the deadline lapses and the recap tells
 test('the Director screen\'s problems name the reader, not {{user}}', async () => {
     const host = await newHost({ st: { user: 'Astra' } });
     await host.send('Any work?', reply('Fenna has a job.', ['+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 rats']));
+    // Giving a quest up is the reader's choice: a story line that does it alone is a Problem naming them.
+    await host.send('I look at the sacks.', reply('You seem to give up.', ['- quest Granary Rats — abandoned']));
     const raw = problemList(host.head().domains.director).map(problem => problem.text);
     assert.ok(raw.some(text => text.includes('{{user}}')), 'the stored text keeps v1\'s macro');
     const shown = host.sdk.query('director.problems').map(problem => problem.text);
-    assert.ok(shown.some(text => /until Astra accepts it/.test(text)), shown.join(' | '));
+    assert.ok(shown.some(text => /is Astra's choice/.test(text)), shown.join(' | '));
     assert.ok(shown.every(text => !text.includes('{{user}}')));
     host.close();
 });

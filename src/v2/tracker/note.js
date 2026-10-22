@@ -34,7 +34,9 @@ const ENDED_REPLIES = 5;
 const DATED = ['due', 'on', 'arrive'];
 
 const V1_LINES = CHANGE_INSTRUCTION.split('\n');
-const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:'));
+// v1's Fields line without its offers (one deliberate change, 2.0.0-alpha.1): the story's `+ quest` is the
+// acceptance, so a job only offered is no hook with a giver and reward; it stays in the story.
+const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:')).replace('; a job only offered: + hook with giver, reward', '');
 const WRITE_ONLY_LINE = V1_LINES.find(line => line.startsWith('Write only changes'));
 
 // Story Director alone (WAVE rule 11, B-rxui-7): with no module that runs fights, the fields name no
@@ -61,7 +63,7 @@ export const STATIC_TEXT = staticText();
 export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
-    hook: '+ hook Name — an open thread (a job only offered: | giver: who | reward: what)',
+    hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
     quest: '+ quest Name — a job {{user}} accepted | giver: | goal: what counts as done | reward: | due: | rank: or difficulty: easy|normal|hard|nightmare; ~ quest Name | progress: … | met: yes|no; - quest Name — turned in|failed|abandoned',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
@@ -98,15 +100,6 @@ function recappedIds(view) {
     }
 }
 
-// An offer held back by the offer cooldown (F88) is not told to the story until its reply comes.
-function withoutHeld(director) {
-    const turn = Number.isSafeInteger(director.turn?.n) ? director.turn.n : 0;
-    const held = thread => thread?.kind === 'quest' && thread.offer && !thread.taken && Number.isSafeInteger(thread.shown?.turn) && thread.shown.turn > turn;
-    const threads = director.threads ?? {};
-    if (!Object.values(threads).some(held)) return director;
-    return { ...director, threads: Object.fromEntries(Object.entries(threads).filter(([, thread]) => !held(thread))) };
-}
-
 const lastTurn = thread => Math.max(...['created', 'changed', 'seen', 'closed', 'engaged']
     .map(name => thread.track?.[name]?.turn).filter(Number.isSafeInteger), -Infinity);
 
@@ -138,7 +131,7 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const stored = state?.domains?.director;
     if (!stored) return { lines: [], optional: [] };
     const said = typeof view?.chat?.lastUser === 'string' ? view.chat.lastUser : '';
-    const director = withoutHeld(tailThreads(stored, { said, place: String(state?.domains?.scene?.place?.name ?? '') }));
+    const director = tailThreads(stored, { said, place: String(state?.domains?.scene?.place?.name ?? '') });
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
     const calendar = calendarOf(settings, packCalendarOf(view.query));
     const fights = view?.fights !== false;

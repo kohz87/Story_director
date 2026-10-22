@@ -87,6 +87,9 @@ function replyLines(r, n) {
         } else if (roll < 0.45) {
             const key = name();
             own.push(key);
+            // Often only mentioned first (a hook with its giver and pay), then accepted in the same reply:
+            // the + quest makes the hook the quest, active and taken on at once.
+            if (r.chance(0.4)) lines.push(`+ hook ${key} — a job on offer | giver: Fenna | reward: ${r.int(1, 30)} gold`);
             lines.push(`+ quest ${key} — a job | giver: Fenna | goal: Find the ${key} | reward: ${r.int(1, 30)} gold`);
         } else if (roll < 0.6) {
             const from = r.chance(0.5) ? r.pick(BASE_PLACES) : name();
