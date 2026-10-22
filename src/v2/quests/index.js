@@ -18,13 +18,16 @@
 // the default screens draw no buttons.
 
 import { lineKey, questDifficulty } from '../../changes.js';
-import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
+import { coinPhrase, currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText, unknownCoin } from './parse.js';
 import { NOT_MET_YET, beatenClaim, countedTarget, finishRule, giverHere, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { heldText, questRank, rankHeldText, ranksOf, replyBudget, rewardHold } from './ranks.js';
 // The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
-import { addProblem, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
+import { addProblem, dropProblems, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
 
 export { questLists };
+
+/** The step that pays a reward owed (a system step after each reply's last line, quest-lines.js afterCapture credit). */
+export const PAY_OWED = 'quest.payOwed';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const cut = (value, max) => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
@@ -235,6 +238,14 @@ function rankProblem(ctx, director, thread, note, kind = 'rank-held') {
 /** A reward in coins code would not read (termsFor's rewardNote): a Problem once per quest, as rankProblem. */
 const rewardProblem = (ctx, director, thread, note) => rankProblem(ctx, director, thread, note ? `the reward is not counted, ${note}` : '', 'reward-coin');
 
+/** A reward owed (finish): a Problem once per quest, worded as owed; it goes when the reward is paid (payOwed). */
+function owedProblem(ctx, director, thread, note) {
+    // The Problem the take-on raised for the same words ("not counted") becomes this one, worded as owed.
+    dropProblems(director, problem => problem.kind === 'reward-coin' && problem.key === thread.key);
+    if (problemList(director).some(problem => problem?.kind === 'reward-owed' && problem.key === thread.key)) return;
+    addProblem(director, ctx, { kind: 'reward-owed', severity: 'warn', key: thread.key, text: `${thread.key}: ${note}.` });
+}
+
 function termsOf(ctx, thread, currency = currencyOf(ctx.query)) {
     return termsFor(ctx.query, readOr(ctx, 'inventory'), thread, currency);
 }
@@ -410,6 +421,12 @@ function finish(ctx, payload) {
     // Claimed once a reply: a second turn-in of the same reply finds it counted already.
     const credit = coin > 0 && ctx.claim(`storycoin:${ctx.reply.sid}`) ? coin : 0;
     const owed = { ...full, pay: full.pay - credit };
+    // A reward in a coin word this chat cannot count ("30 copper bits" with no such coin) is not lost: the quest
+    // closes as it is, the reward is OWED (thread.owed) and paid once the chat can count it (quest.payOwed).
+    // The story's own coin this reply, with the giver here, counts toward it as it does toward a counted reward.
+    const coinWord = !byPack && reward && reward.amount === null ? unknownCoin(reward.text, currency) : '';
+    const wordCoin = coinWord && ctx.cause !== 'ui' && giverHere(thread, hereScene(ctx.query, ctx.read('scene'))) ? storyCoinOf(ctx.query, null, ctx.reply?.sid) : 0;
+    const wordCredit = wordCoin > 0 && ctx.claim(`storycoin:${ctx.reply.sid}`) ? wordCoin : 0;
     const spend = spendOf(ctx.query, director, budget);
     const over = budgetRule(spend, owed, currency);
     if (over) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${over.reason}`);
@@ -469,6 +486,11 @@ function finish(ctx, payload) {
     thread.status = 'resolved';
     thread.ended = { ...stampOf(director, rev), reason: 'turned in', outcome: 'done' };
     thread.rev = rev;
+    const phrase = coinWord ? coinPhrase(reward.text, coinWord) : '';
+    if (coinWord) {
+        thread.owed = { text: cut(text(reward.text), OWED_CHARS), rev, units, ...(wordCredit > 0 ? { credit: wordCredit } : {}) };
+        owedProblem(ctx, director, thread, `${thread.owed.text} is owed, not paid by code: "${phrase}" is not a coin this chat counts. Add ${phrase} under Settings → Coins and it is paid with the next reply`);
+    }
 
     const goal = cut(text(thread.fields?.goal), 80);
     const done = !counted ? `goal met${goal ? ` (${goal})` : ''}${target ? ' on the story\'s word (no fights are counted)' : ''}`
@@ -482,12 +504,13 @@ function finish(ctx, payload) {
     const storyText = paid?.story ? ` (${money(paid.story, currency)} of it the story's own coin this reply)` : '';
     const payText = paid ? `${money(paid.amount + (paid.story ?? 0), currency)} paid${storyText}${hold.held ? ` (${heldText(rank, money(said, currency), currency)})` : ''}${rankText}${fromPack}${budgetText}`
         : reward?.amount === 0 ? 'no reward in money'
+            : coinWord ? `${reward.text} is owed: the chat cannot count "${phrase}" yet, so it is paid with a later reply once it can${wordCredit > 0 ? ` (the story's own coin this reply, ${money(wordCredit, currency)}, counts toward it)` : ''}`
             : reward?.text ? `reward as the story tells it: ${reward.text}`
                 : 'no reward was named';
     return {
         summary: `${whoName(ctx.query)} turns in ${thread.key}: ${done}, ${payText}.`,
         narrate: true,
-        data: { quest: thread.id, key: thread.key, have: progress.have, need: progress.need, source: progress.source, units, paid, consumed, xp, fights: progress.fights ?? [], ...(byStory ? { by: 'story' } : {}) },
+        data: { quest: thread.id, key: thread.key, have: progress.have, need: progress.need, source: progress.source, units, paid, consumed, xp, fights: progress.fights ?? [], ...(coinWord ? { owed: { text: thread.owed.text, ...(wordCredit > 0 ? { credit: wordCredit } : {}) } } : {}), ...(byStory ? { by: 'story' } : {}) },
     };
 }
 
@@ -753,6 +776,7 @@ function detailsQuery(state, args = {}, tools = null) {
     const total = promised(reward, target);
     const hold = rewardHold(total, rank, rankBy);
     const fields = thread.fields ?? {};
+    const owedNow = owedView(query, state?.domains?.inventory, thread, currency);
     return {
         id: thread.id,
         key: text(thread.key),
@@ -773,11 +797,170 @@ function detailsQuery(state, args = {}, tools = null) {
         },
         ready: !counted && Boolean(thread.ready),
         waiting: replyTurn(director).pending.includes(thread.id),
+        owed: owedLine(owedNow, currency),
         taken: thread.taken ? { ...thread.taken } : null,
         ended: thread.ended ? { ...thread.ended } : null,
         status: statusOf(thread, counted, progress, finish, replyTurn(director).pending.includes(thread.id)),
         history: historyOf(tools, thread.id),
     };
+}
+
+// ---- rewards owed -------------------------------------------------------------------------------------
+//
+// A quest closed with a reward in a coin word the chat cannot count yet ("30 copper bits" where the money is
+// pennies) keeps `thread.owed = { text, rev, units, credit?, total?, paid? }`, keyed by the quest like the rest
+// of the thread: the story's own words; `credit` the story's own coin that counted toward it; `total` what it
+// came to in the chat's money when the first of it was paid; `paid` what each paying step gave, under the rev
+// of its receipt (add-only: a deleted step takes its own key back, and a step whose predecessor was deleted
+// no longer applies, so a replay never pays what the first payment did not). Nothing is guessed: it is paid
+// only when Story Block's coins (the Coins setting, a pack's) count the word, by the same reading a reward
+// is priced with (parseReward), held to the quest's rank and to the story-money budget of the reply it is
+// paid in (`quest.payOwed`, a system step right after each reply's last story line, kept on that reply; what
+// does not fit stays owed for the next one).
+
+const OWED_CHARS = 120;     // the story's reward words kept
+const OWED_STEPS = 3;       // owed rewards paid before one reply
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const sumOf = record => Object.values(isRecord(record) ? record : {}).reduce((sum, value) => sum + (isAmount(value) ? value : 0), 0);
+
+/**
+ * One owed reward as it stands (null when the quest owes none): `{ id, key, giver, text, word, phrase, countable,
+ * total, credit, paid, left, open, storyMoney, budget }`. `countable`: the chat's coins count the words now (so
+ * `total` and `left` are numbers); `open`: not all of it is settled. `phrase` is the coin as the story wrote it
+ * ("copper bits"), '' once the chat counts it.
+ */
+function owedView(query, inventory, thread, currency) {
+    const owed = thread?.owed;
+    if (!isRecord(owed) || !text(owed.text)) return null;
+    const read = parseReward({ reward: owed.text }, '', { currency });
+    const reward = settleReward(read, thread.target ?? null);
+    const word = unknownCoin(owed.text, currency);
+    const credit = isAmount(owed.credit) ? owed.credit : 0;
+    const paid = sumOf(owed.paid);
+    const view = { id: thread.id, key: text(thread.key), giver: text(thread.fields?.giver), text: text(owed.text), word, phrase: word ? coinPhrase(owed.text, word) : '', countable: false, total: null, credit, paid, left: null, open: true, storyMoney: true, budget: 0 };
+    if (word || !reward || !Number.isSafeInteger(reward.amount) || read.problem) return view;
+    const terms = termsFor(query, inventory, { ...thread, reward }, currency);
+    const full = payOf(terms, terms.target, { have: isAmount(owed.units) ? owed.units : 0 });
+    const total = isAmount(owed.total) ? owed.total : full.pay;
+    const left = Math.max(0, total - credit - paid);
+    // Settled once a step has counted it (the first payment sets `total`) and nothing is left.
+    return { ...view, countable: true, total, left, open: !(isAmount(owed.total) && left <= 0), storyMoney: full.storyMoney, budget: terms.budget };
+}
+
+// What the step may still give of the story's money in the reply it is kept on: Story Block's tally for that reply
+// (the head carrier: its own `+ coin` lines and the quests it paid), else the reply budget whole.
+function stepBudget(query, budget) {
+    const host = tryQuery(query, 'inventory.storyBudget', {}, null);
+    return isAmount(host?.budget) && isAmount(host?.paid) ? Math.max(0, host.budget - Math.min(host.paid, host.budget)) : budget;
+}
+
+/** Every reward owed, oldest closing first (`quest.owed`): the views of owedView with `payable`, `ask` and `hint`. */
+function owedList(state, tools) {
+    const director = state?.domains?.director;
+    const query = queryOf(state, tools);
+    const currency = currencyOf(query);
+    const out = [];
+    for (const thread of Object.values(director?.threads ?? {})) {
+        if (thread?.kind !== 'quest' || !isRecord(thread.owed)) continue;
+        const view = owedView(query, state?.domains?.inventory, thread, currency);
+        if (!view?.open) continue;
+        const room = view.countable ? (view.storyMoney ? Math.min(view.left, stepBudget(query, view.budget)) : view.left) : 0;
+        out.push({
+            ...view, payable: room, rev: thread.owed.rev ?? 0,
+            // Asked for when it can be paid now, or counted as settled by the story's coin.
+            ask: view.countable && (view.left <= 0 || room > 0),
+            hint: view.countable ? '' : `add ${view.phrase || view.text} in Settings → Coins`,
+        });
+    }
+    return out.sort((a, b) => a.rev - b.rev || (a.id < b.id ? -1 : 1));
+}
+
+/**
+ * `quest.payOwed({ id })` (system steps only: code pays, never a click or a line): pays an owed reward the
+ * chat can count now, once, right after the last story line of the reply it is kept on; what that reply's
+ * story-money budget does not allow stays owed for the next one. `{ id, credit: true }` (the reply's afterCapture): the story's own coin
+ * this reply, written for a reward owed, counts toward it (one reply's coin credits one reward, claim
+ * `storycoin:<sid>`) so the reward and the coin never stack. The receipt is kept on the reply, so a swipe or a
+ * delete of it puts the reward back to owed.
+ */
+function payOwed(ctx, payload = {}) {
+    if (ctx.cause !== 'system') fail(ctx, CODES.invalid, 'A reward owed is paid by code, not by a click or a line.');
+    const director = ctx.draft('director');
+    const thread = findQuest(director, payload);
+    if (!thread || !isRecord(thread.owed)) fail(ctx, CODES.notFound, 'That quest owes no reward.');
+    const currency = currencyOf(ctx.query);
+    let view = owedView(ctx.query, readOr(ctx, 'inventory'), thread, currency);
+    if (!view?.open) fail(ctx, CODES.claimed, `${thread.key}'s reward is not owed.`);
+    const sid = ctx.reply?.sid;
+    if (payload?.credit === true) {
+        const coin = view.credit > 0 || !sid ? 0 : storyCoinOf(ctx.query, null, sid);
+        if (!(coin > 0) || !ctx.claim(`storycoin:${sid}`)) fail(ctx, CODES.invalid, 'No coin of this reply counts toward that reward.');
+        thread.owed.credit = coin;
+        return { summary: `${view.giver || whoName(ctx.query)}'s ${view.text} for ${thread.key}: the story's own coin this reply, ${money(coin, currency)}, counts toward it.`, narrate: true, data: { quest: thread.id, key: thread.key, credit: coin }, replan: true };
+    }
+    if (!view.countable) fail(ctx, CODES.invalid, `${thread.key}'s ${view.text} cannot be counted yet: add ${view.phrase || view.text} in Settings → Coins.`);
+    // The story wrote coin for it in the reply this step is kept on, as much as it comes to: that is the reward.
+    if (view.credit <= 0 && view.paid <= 0 && view.left > 0) {
+        const coin = sid ? storyCoinOf(ctx.query, null, sid) : 0;
+        if (coin > 0 && coin === view.total && ctx.claim(`storycoin:${sid}`)) {
+            thread.owed.credit = coin;
+            view = { ...view, credit: coin, left: 0 };
+        }
+    }
+    const allowed = view.left <= 0 ? 0 : view.storyMoney ? Math.min(view.left, stepBudget(ctx.query, view.budget)) : view.left;
+    if (view.left > 0 && allowed <= 0) fail(ctx, CODES.invalid, `${thread.key}'s reward waits: one reply gives no more of the story's money.`);
+    let amount = 0;
+    if (allowed > 0) {
+        const out = call(ctx, 'wallet.receive', { owner: 'party', amount: allowed, note: `${thread.key} reward`, ...(view.storyMoney ? { story: true } : {}) });
+        const given = out?.data?.amount ?? out?.receipt?.data?.amount;
+        amount = Number.isSafeInteger(given) && given >= 0 && given < allowed ? given : allowed;
+    }
+    ctx.ifThere('director', `/threads/${thread.id}`);
+    const rev = receiptRev(ctx);
+    if (!isAmount(thread.owed.total)) thread.owed.total = view.total;
+    thread.owed.paid = { ...(isRecord(thread.owed.paid) ? thread.owed.paid : {}), [String(rev)]: amount };
+    const left = Math.max(0, view.left - amount);
+    if (left <= 0) dropProblems(director, problem => (problem.kind === 'reward-owed' || problem.kind === 'reward-coin') && problem.key === thread.key);
+    const who = view.giver || whoName(ctx.query);
+    const covered = view.credit > 0 ? ` (the story's own coin, ${money(view.credit, currency)}, counted toward it)` : '';
+    const summary = left > 0 ? `${who}'s ${view.text} for ${thread.key}: ${money(amount, currency)} paid now, ${money(left, currency)} still owed (one reply gives no more).`
+        : amount > 0 ? `${who}'s ${view.text} for ${thread.key} are paid (${money(amount, currency)})${covered}.`
+            : `${who}'s ${view.text} for ${thread.key} were paid by the story's own coin; nothing more is paid.`;
+    return { summary, narrate: true, data: { quest: thread.id, key: thread.key, paid: amount, left, total: view.total, credit: view.credit } };
+}
+
+/** `afterCapture(view)`: one `quest.payOwed` step for each owed reward the chat can count now (OWED_STEPS at most). */
+function payOwedHook(view) {
+    const list = tryQuery(view?.query, 'quest.owed', {}, null);
+    const commands = (Array.isArray(list) ? list : []).filter(entry => entry?.ask === true).slice(0, OWED_STEPS).map(entry => ({ type: PAY_OWED, payload: { id: entry.id } }));
+    return commands.length ? { lines: [], commands } : undefined;
+}
+
+/**
+ * `quest.owedCredits()` → [thread id]: the owed reward the story's own coin this reply (`tools.reply`) counts
+ * toward: closed in this reply with its giver here, owed, not credited yet, and the reply's coin not counted
+ * by another step. At most one (one reply's coin credits one reward). The afterCapture step asks `quest.payOwed
+ * { id, credit: true }` for it.
+ */
+function owedCredits(state, _args = {}, tools = null) {
+    const director = state?.domains?.director;
+    const sid = tools?.reply?.sid;
+    if (!director || typeof sid !== 'string' || !sid || replyTurn(director).reply !== sid) return [];
+    const query = queryOf(state, tools);
+    if (storyCoinOf(query, state?.meta?.claims ?? null, sid) <= 0) return [];
+    const scene = hereScene(query, state?.domains?.scene);
+    const found = questLists(director).finished.find(thread => isRecord(thread.owed) && !isAmount(thread.owed.credit) && !isAmount(thread.owed.total)
+        && thread.track?.closed?.turn === director.turn?.n && giverHere(thread, scene));
+    return found ? [found.id] : [];
+}
+
+/** The quest card's line: "Reward owed: 30 copper bits (add copper bits in Settings → Coins)", or null. */
+function owedLine(view, currency) {
+    if (!view?.open) return null;
+    const note = view.countable
+        ? (view.paid > 0 ? `${money(view.left, currency)} of it still owed; paid as one reply allows` : 'paid with the next reply')
+        : `add ${view.phrase || view.text} in Settings → Coins`;
+    return { text: `Reward owed: ${view.text} (${note})`, countable: view.countable, left: view.left };
 }
 
 const TAIL_NAMES = 6;
@@ -861,11 +1044,14 @@ export const part = {
         'quest.take': take,
         'quest.abandon': abandon,
         'quest.finish': finish,
+        [PAY_OWED]: payOwed,
     },
     queries: {
         'quest.progress': progressQuery,
         'quest.autoTurnIns': autoTurnIns,
         'quest.repeatedCoin': repeatedCoin,
+        'quest.owed': (state, _args, tools) => owedList(state, tools),
+        'quest.owedCredits': owedCredits,
         'quest.details': detailsQuery,
         'quest.ranks': (state, _args, tools) => ranksOf(queryOf(state, tools)),
         // Whether quest ranks follow the reader's rank ladder (Quests: Quest ranks follow the rank ladder).
@@ -873,7 +1059,9 @@ export const part = {
     },
     kinds: {},
     context: { static: () => QUEST_STATIC, tail: questTail, budget: 250 },
-    hooks: {},
+    // Right after each reply's last story line (Story Block's afterCapture, like the tracker's settle step): the
+    // rewards owed that the chat can count now are paid, in that reply (payOwed), and told to the next one.
+    hooks: { afterCapture: payOwedHook },
     settings: {
         section: 'Quests',
         defaults: { followLadder: true, wordTurnIns: WORD_LIMIT.default },

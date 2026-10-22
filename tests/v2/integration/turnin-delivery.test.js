@@ -123,7 +123,9 @@ test('a reward in a coin the chat does not know: handed in, nothing paid by code
     assert.equal(quest(host).ended?.outcome, 'done');
     assert.equal(wallet(host), 0, 'never 40 pennies');
     const problems = Object.values(host.head().domains.director.problems).map(problem => problem.text);
-    assert.ok(problems.some(line => /the reward is not counted, "silver" is not this chat's money, which counts in pennies/.test(line)), JSON.stringify(problems));
+    // The take-on Problem became the owed one when the quest closed: the reward is owed, not lost (quest-owed.test.js).
+    assert.ok(problems.some(line => /40 silver is owed, not paid by code: "silver" is not a coin this chat counts/.test(line)), JSON.stringify(problems));
+    assert.ok(!problems.some(line => /the reward is not counted/.test(line)), 'one Problem for the quest, worded as owed');
     host.close();
 });
 

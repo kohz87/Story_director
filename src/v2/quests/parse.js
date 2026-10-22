@@ -253,6 +253,34 @@ function smallestOf(currency) {
 }
 
 /**
+ * The coin word of a written reward ("30 copper bits") that this chat cannot count, as `amountOf` refuses it
+ * (a word that is not the chat's money without Coins, a word that is none of its coins with them), else ''.
+ * A reward in such a word is owed, not lost (quests/index.js `owedPhrase`): paid once the chat can count it.
+ */
+export function unknownCoin(written, currency) {
+    const label = clean(written);
+    const match = label ? rewardPattern(currency).exec(label) : null;
+    if (!match) return '';
+    const words = [...match[1].matchAll(partPattern(currency))].map(found => clean(found[2]));
+    return (coinsIn(currency).length ? words.find(word => !coinValueIn(word, currency)) : words.map(word => foreignWord(word, currency)).find(Boolean)) || '';
+}
+
+// Words that end a coin phrase ("30 copper bits and a horse").
+const PHRASE_STOP = new Set(['and', 'plus', 'or', 'each', 'per', 'for', 'a', 'an', 'the', 'of', 'to', 'from', 'in', 'on', 'coin', 'coins', 'piece', 'pieces']);
+
+/**
+ * The coin as the story wrote it, for "add copper bits in Settings → Coins": the unknown word (`unknownCoin`)
+ * with the word after it when that is a plain word of the phrase ("copper bits"), else the word alone.
+ */
+export function coinPhrase(written, word) {
+    const label = clean(written);
+    if (!word) return '';
+    const found = new RegExp(`(?:^|[^\\p{L}])${escape(word).replace(/ /g, '\\s+')}(?:\\s+([\\p{L}'-]+))?`, 'iu').exec(label);
+    const next = clean(found?.[1]);
+    return next && !PHRASE_STOP.has(next.toLowerCase()) ? `${word} ${next}` : word;
+}
+
+/**
  * A reward from the `reward:` label, else from the goal text:
  * `{ amount, each, unit, text, per }` — `amount` a whole number of the chat's one currency, in its
  * smallest coin with Story Block's coins ("1 gold 5 silver" is 150 when gold is 100 and silver 10;

@@ -42,6 +42,15 @@ Switches are in **Settings → Features**. "No switch" means it is always on.
 - **The coin words rule:** a reward in a coin the chat does not know ("40 silver" where money is pennies) is not
   paid by code. The row keeps the story's words, and a Problem names the chat's money. Rewards are shown in
   Story Block's coin words.
+- **A reward in an unknown coin is owed, not lost:** if the quest is turned in anyway ("30 copper bits" with no
+  such coin), it closes as usual and the reward is kept as **owed**. The quest card (Quests screen, the quest's
+  details and the done list) says "Reward owed: 30 copper bits (add copper bits in Settings → Coins)" and the Problem
+  is worded as owed. Once Story Block's coins count the word (your **Settings → Coins**, or a pack's), the next reply
+  that has story lines pays it automatically, once, and the reply after is told ("Elula's 30 copper bits for
+  Sluice-Rat Bounty are paid"). Code prices it as any reward (held to the quest's rank, within the reply's story
+  money; what does not fit stays owed for the next reply) and never at a guessed rate: without Coins it stays owed.
+  If the story also writes the `+ coin` for it in that reply, the coin counts as the reward and nothing is paid on
+  top. Swipe, delete, Re-read and reload keep it right (deleting the reply that paid puts it back to owed).
 - **World** (tab; `story-director.world`, on): **Now** shows the place (its kind and region, marked when the last
   reply moved you there), the story time and **who is here**: with NPC State Delta each person is its own card,
   with their Inner chatter thought inside it; without Delta, a name. It follows the story with no tab switch. Then

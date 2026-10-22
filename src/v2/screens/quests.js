@@ -20,6 +20,7 @@ const details = x => `
             <div data-if="${x}.details.goal"><dt>Goal</dt><dd>{{ ${x}.details.goal }}</dd></div>
             <div data-if="${x}.details.note"><dt>Progress</dt><dd>{{ ${x}.details.note }}</dd></div>
             <div data-if="${x}.details.terms"><dt>Terms</dt><dd>{{ ${x}.details.terms }}</dd></div>
+            <div data-if="${x}.details.owed"><dt>Owed</dt><dd>{{ ${x}.details.owed }}</dd></div>
             <div data-if="${x}.details.rank"><dt>Rank</dt><dd>{{ ${x}.details.rank }}</dd></div>
             <div data-if="${x}.details.giver"><dt>Giver</dt><dd>{{ ${x}.details.giver }}</dd></div>
             <div data-if="${x}.details.due"><dt>Due</dt><dd>{{ ${x}.details.due }}</dd></div>
@@ -60,7 +61,8 @@ const TEMPLATE = `
     <ul class="sd-list">
       <li class="sd-done" data-each="q.board.finished as f" data-quest="{{ f.id }}" data-outcome="{{ f.outcome }}">
         <span class="sd-key">{{ f.key }}</span> <span class="sd-tag">{{ f.outcomeText }}</span>
-        <small data-if="f.reason"> — {{ f.reason }}</small>${details('f')}
+        <small data-if="f.reason"> — {{ f.reason }}</small>
+        <p class="sd-line sd-owed" data-if="f.details.owed">{{ f.details.owed }}</p>${details('f')}
       </li>
     </ul>
   </details>

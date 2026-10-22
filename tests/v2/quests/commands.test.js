@@ -72,7 +72,7 @@ test('a quest the story already accepted is adopted for counting, quietly', () =
 });
 
 test('there is no quest.decline: a quest goes straight to active, so there is nothing to turn down', () => {
-    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish']);
+    assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish', 'quest.payOwed']);
 });
 
 test('abandon gives up a taken quest; not an offer, not twice', () => {

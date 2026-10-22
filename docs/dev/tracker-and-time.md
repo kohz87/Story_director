@@ -51,6 +51,22 @@ this repo's README "The change lines", "The note".
   differs from the scene weather's; the season from `director.calendar` (a pack's `weather.seasons` first), the
   table from `packs.weather` else `TEMPERATE`, the pick `hashOf(key) % length`. A story `~ weather` (no key) is
   only marked with the day's key (`scene.weather { key }`), so it stands for the rest of that day and place.
+- **Reward owed** (`quests/index.js`, `thread.owed = { text, rev, units, credit?, total?, paid?: { [rev]: amount } }`):
+  a quest turned in with a reward in a coin word the chat cannot count (`parse.js unknownCoin`: amount null, a
+  `reward-coin` Problem) closes as usual and the story's words are kept on the thread (the Problem becomes
+  `reward-owed`). The afterCapture step `quest.payOwed { id }` (system only, one per owed reward, at most 3 per reply,
+  asked for by `quest.owed` when `ask`) re-reads the words with the chat's coins now (`parseReward`, Story Block's
+  `inventory.currency`): countable → priced by `payOf` (rank hold), paid with `wallet.receive { story: true }` within
+  what `inventory.storyBudget` leaves of the reply it is kept on, `total` fixed at the first payment, each payment an
+  add-only key `paid.<rev>`; nothing left → the Problem is dropped. Never a guessed rate: an unknown word stays owed.
+  The story's coin: `finish` credits it at the turn-in (giver here, claim `storycoin:<sid>`), the afterCapture
+  `quest.payOwed { id, credit: true }` (from `quest.owedCredits`, tracker `afterCaptureHook`) when the coin comes after
+  the turn-in line, and the pay step counts a coin of the paying reply equal to the total. Replay: deleting the paying
+  reply puts it back to owed (its ops go); deleting the reply that closed the quest makes the later payment's block
+  fail (`owed` gone), which Story Block skips and reports, so no coin is left for a turn-in that was deleted. Runs only
+  after a reply that kept a story line (Story Block's afterCapture rule). A Re-read of the closing reply after the coins
+  paid it is refused by Story Block (the payment depends on it). Tests: `tests/v2/integration/quest-owed.test.js`;
+  the delete fuzz.
 - **Reward coins:** without Coins, a reward in a coin word that is not the chat's own is amount null with a
   `problem` (`parse.js foreignWord`), never that many of the chat's money; a second amount after the first too.
 - While away recap (F21) after a big time jump; due-now items enter the tail where the scene allows.
