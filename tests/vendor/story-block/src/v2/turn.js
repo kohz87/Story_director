@@ -186,7 +186,8 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         const item = { module: null, code: 'PROBLEM', ...entry };
         problemLog.push(item);
         if (problemLog.length > MAX_PROBLEMS) problemLog.splice(0, problemLog.length - MAX_PROBLEMS);
-        console.warn(`[Story Suite] ${item.module ? `${item.module}: ` : ''}${item.message}`);
+        // A quiet one (a line of a feature the reader turned off) is listed, not warned about.
+        if (item.quiet !== true) console.warn(`[Story Suite] ${item.module ? `${item.module}: ` : ''}${item.message}`);
         return item;
     }
 
@@ -466,6 +467,12 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
             const entry = registry.capture(line.kind);
             if (!entry) {
                 found.push(problem({ index, line: line.raw, code: 'UNKNOWN_KIND', message: `No module keeps "${line.kind}", so "${line.raw}" was not used.` }));
+                continue;
+            }
+            // A kind whose feature the reader turned off (MODULES §F100): not an error, just not used.
+            if (entry.off) {
+                const label = registry.feature?.(entry.feature)?.label ?? entry.feature;
+                found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'FEATURE_OFF', quiet: true, message: `"${line.raw}" was not used: ${label} is turned off (feature off).` }));
                 continue;
             }
             let result;

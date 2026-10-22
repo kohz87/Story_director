@@ -22,6 +22,9 @@
 //   ({ index, swipe, key }) and `ctx.chat` ({ lastUser, reply }); both are null for other commands.
 // * Internal commands (registry.isInternal: capture.*, module.init.*, events.fire) are refused with
 //   REFUSED when the cause is 'ui', whether named at the top or through ctx.call.
+// * A command under a feature the reader turned off (MODULES §F100, registry.commandFeature) is refused
+//   with FEATURE_OFF, at the top or through ctx.call; like UNKNOWN_COMMAND, nothing has run, so a
+//   ctx.call caller may catch it. `ctx.feature(id)` says whether a feature is on.
 
 import { apply, checkOps, clone, counterInside, deepFreeze, diff, escapeKey, frozenCopy, isCounterPath, isDeepFrozen, isJson, valueAt } from './ops.js';
 import { isSeed, rng as makeRng, roll as rollDice, seed as freshSeed } from './rng.js';
@@ -84,7 +87,15 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
         const handler = typeof type === 'string' && type ? registry.command(type) : null;
         const moduleId = typeof handler === 'function' ? registry.commandOwner(type) : null;
         if (typeof handler !== 'function' || !moduleId) fail('UNKNOWN_COMMAND', `There is no command called "${type}".`);
+        const feature = typeof registry.commandFeature === 'function' ? registry.commandFeature(type) : null;
+        if (feature && !featureOn(feature)) featureOff(type, feature);
         return { moduleId, handler };
+    }
+
+    const featureOn = id => typeof registry.featureOn === 'function' && registry.featureOn(id) === true;
+    function featureOff(type, feature) {
+        const label = registry.feature?.(feature)?.label ?? feature;
+        fail('FEATURE_OFF', `"${type}" is part of ${label}, which is turned off in the Features settings.`);
     }
 
     // Internal commands (registry.js) are the host's own steps: never with cause 'ui'.
@@ -243,6 +254,10 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
             settings(id = moduleId) {
                 return deepFreeze(clone(settings(id) ?? {}));
             },
+            // Whether feature `id` is on for this reader (MODULES §F100); false for an id no module declares.
+            feature(id) {
+                return featureOn(id);
+            },
             // The Director's minutes: its `director.time` query when one is registered, else the
             // `director.time.minutes` of the state (SPEC §8), else null.
             time() {
@@ -322,6 +337,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
                 : resolve(type);
             if (cause === 'ui' && internal(type)) fail('REFUSED', internalMessage(type));
             if (typeof target.handler !== 'function' || !target.moduleId) fail('UNKNOWN_COMMAND', `There is no capture handler for "${type}".`);
+            if (capture?.off === true) featureOff(type, capture.feature);
             // Reads share the head's branches (readOf), so it must be frozen all the way down; a state
             // that is not (a caller's own object) is copied first rather than frozen in place.
             if (!isDeepFrozen(head)) head = deepFreeze(clone(head));

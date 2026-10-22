@@ -1,6 +1,7 @@
-# Story Director v2.0.0-alpha.1
+# Story Director v2.0.0-beta.1
 
-> **v2 (alpha, `v2` branch).** Story Director 2 is a module of **Story Block v2** and needs it
+> **v2 beta (2.0.0-beta.1, `v2` branch; for test play, not your real campaigns yet).** Story Director 2 is
+> a module of **Story Block v2** and needs Story Block 2.0.0-beta.1 or later
 > (`"dependencies": ["third-party/Story_block"]`); without it, it shows one line in the extensions drawer
 > and does nothing else. Story Block keeps the state in the replies, reads each reply's `<Changes>` block
 > and builds the prompt; Story Director adds the `director` domain (story time, threads, quests), its
@@ -22,7 +23,8 @@
 > wrote, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
 > it") and opens its details (goal, progress note, terms, dates, history). The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
-> branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
+> branch; the player guide is [Story Block docs/v2/GUIDE.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md)
+> and the release notes [RELEASES.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md). The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
 > is not loaded. Progress for the whole suite:
 > [Story Block docs/v2/STATUS.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md).
 

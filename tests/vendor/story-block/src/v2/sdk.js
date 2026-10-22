@@ -9,7 +9,8 @@ import { cutAt } from '../text.js';
 // sdk.check comes from check.js (SB-commands); the sdk still loads without it.
 const checkModule = await import('./check.js').catch(() => null);
 
-export const EVENTS = Object.freeze(['committed', 'head', 'turn']);
+// `feature` ({ id, on, prompt }) fires when the reader turns a feature on or off (MODULES §F100).
+export const EVENTS = Object.freeze(['committed', 'head', 'turn', 'feature']);
 // The most change lines one reply's block may hold; the rest are one Problem (turn.js).
 export const MAX_CHANGE_LINES = 150;
 export const HOST_SETTINGS_DEFAULTS = Object.freeze({ tailBudget: 1500, maxChangeLines: MAX_CHANGE_LINES });
@@ -171,8 +172,9 @@ export function runQuery(registry, state, name, args, { receipts = () => [] } = 
 export const mountQuery = (registry, receipts = () => []) => (name, args, state) => runQuery(registry, state, name, args, { receipts });
 
 /**
- * What modules read (§6): { state (frozen head), query(name, args), settings(id), chat: { length,
- * lastUser } }. `chat`: SillyTavern's chat array (or nothing).
+ * What modules read (§6): { state (frozen head), query(name, args), settings(id), feature(id), chat:
+ * { length, lastUser } }. `chat`: SillyTavern's chat array (or nothing). `feature(id)`: whether the
+ * reader has that feature on (MODULES §F100); false for an id no module declares.
  */
 export function makeView({ store, registry, settings, chat = [] }) {
     const state = store.head();
@@ -182,9 +184,13 @@ export function makeView({ store, registry, settings, chat = [] }) {
         state,
         query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [] }),
         settings,
+        feature: id => featureOn(registry, id),
         chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? '') }),
     });
 }
+
+/** Whether feature `id` is on (registry.featureOn); false for an unknown id or a registry without features. */
+export const featureOn = (registry, id) => typeof registry?.featureOn === 'function' && registry.featureOn(id) === true;
 
 /**
  * The registered modules whose domains the head state lacks (enabled after the chat began, or a
@@ -301,7 +307,11 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         id: newId,
         check: check ? Object.freeze({ ...check }) : null,
         settings: id => settings(id),
-        /** [{ id, name, version, domains, commands, kinds, tabs }] in id order. */
+        /** Whether the reader has feature `id` on (MODULES §F100); false for an id no module declares. */
+        feature: id => featureOn(registry, id),
+        /** Every declared feature: [{ id, moduleId, moduleName, label, describe, default, prompt, on }]. */
+        features: () => (registry.features?.() ?? []).map(feature => Object.freeze({ ...feature, on: featureOn(registry, feature.id) })),
+        /** [{ id, name, version, domains, commands, kinds, tabs, features }] in id order. */
         modules: () => registry.modules().map(def => Object.freeze({
             id: def.id,
             name: def.name ?? def.id,
@@ -310,6 +320,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             commands: Object.keys(def.commands ?? {}),
             kinds: Object.keys(def.capture?.kinds ?? {}),
             tabs: (def.tabs ?? []).map(tab => tab.id),
+            features: (def.features ?? []).map(feature => feature.id),
         })),
     });
     return { sdk, events, markReady };
