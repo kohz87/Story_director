@@ -64,6 +64,12 @@ function carrierKey(value) {
     return Number.isSafeInteger(value) || (typeof value === 'string' && value) ? value : null;
 }
 
+// Whether the reply's key is the host's record ID (`sid`), which a Continue keeps.
+function hasSid(ctx, line) {
+    const value = [ctx?.carrier, line?.carrier].find(item => carrierKey(item) !== null);
+    return Boolean(value) && typeof value === 'object' && typeof value.sid === 'string' && value.sid !== '';
+}
+
 // Which reply a line comes from: the host's carrier (`ctx.carrier`), else read from the line's
 // place in its block (a first line, or one not after the last line read, starts a reply).
 function replyOf(ctx, line) {
@@ -82,11 +88,20 @@ export function beginTurn(director, ctx, line) {
     const turn = replyTurn(director);
     const reply = replyOf(ctx, line);
     const index = Number.isSafeInteger(line?.index) ? line.index : -1;
-    const fresh = reply !== null ? reply !== turn.reply || (index >= 0 && index <= turn.index)
-        : index <= 0 || index <= turn.index;
+    // B-a1-6: the reply's record ID (`sid`) is kept by its Continues (and the extractor's late lines),
+    // whose lines are numbered from 0 again, so with a sid only another sid starts a reply: maxJump,
+    // `turn.n` and the reply's tallies (paid, added, vouched) hold for the reply and its Continues. A
+    // Re-read starts from the state before the reply and a swipe has its own sid, so both start fresh.
+    // A host with no sid is told apart by the line's place in its block, as before; with a sid the place
+    // is not kept (-1), so a Continue's lines, numbered again, and a Re-read's leave the same turn.
+    const sid = reply !== null && hasSid(ctx, line);
+    const fresh = sid ? reply !== turn.reply
+        : reply !== null ? reply !== turn.reply || (index >= 0 && index <= turn.index)
+            : index <= 0 || index <= turn.index;
     const now = fresh ? null : replyDraft(director);
-    if (!now) return startReply(director, { reply, index });
-    if (now.index !== index) now.index = index;
+    const place = sid ? -1 : index;
+    if (!now) return startReply(director, { reply, index: place });
+    if (now.index !== place) now.index = place;
     return now;
 }
 

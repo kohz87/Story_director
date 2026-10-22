@@ -123,46 +123,123 @@ export function parseTarget(fields = {}, summary = '') {
     return null;
 }
 
-// The coin words code reads as money. A chat has one currency (MODULES §F1): the word only says
-// that a number is money; the number is a whole amount of the chat's currency, whatever word the
-// story wrote ("8 silver" pays 8 of it, as v1's numbers were kept as they are).
-const COIN_WORDS = Object.freeze(['copper', 'silver', 'gold', 'platinum', 'electrum', 'cp', 'sp', 'gp', 'pp',
+// The coin words code reads as money. A chat has one currency (MODULES §F1). Without coins the word
+// only says that a number is money: the number is a whole amount of the chat's currency, whatever word
+// the story wrote ("8 silver" pays 8 of it, as v1's numbers were kept as they are). With Story Block's
+// coins (MODULES §F108) a coin word is priced from the chat's coins only (coinValueIn).
+const COIN_WORDS = Object.freeze(['copper', 'silver', 'gold', 'platinum', 'electrum', 'cp', 'sp', 'gp', 'pp', 'ep',
     'coin', 'coins', 'crown', 'crowns', 'mark', 'marks', 'penny', 'pennies', 'pence', 'shilling', 'shillings',
     'ducat', 'ducats', 'florin', 'florins', 'sovereign', 'sovereigns', 'denar', 'denars', 'gil']);
 const escape = word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EACH = `(?:\\s*,?\\s*(?:(each|apiece|a\\s+head|per\\s+head)(?![\\p{L}])(?:\\s+([\\p{L}][\\p{L}'-]*))?|(?:per|for\\s+each|for\\s+every|each)\\s+([\\p{L}][\\p{L}'-]*)))?`;
+// The count of a part without its capture group, for the whole reward's pattern.
+const COUNT_WORD = `(?:\\d+|${Object.keys(NUMBER_WORDS).join('|')})`;
+// What may stand between two parts of one amount: "1 gold 5 silver", "1 gold, 5 silver", "1 gold and 5 silver".
+const PART_JOIN = '(?:\\s*[,&+]\\s*|\\s+and\\s+|\\s+)';
+// Words that sometimes follow a coin's name and say nothing more (Story Block's money.js COIN_FILLER).
+const COIN_FILLER = new Set(['coin', 'coins', 'piece', 'pieces', 'of', 'in']);
+
+const coinsIn = currency => (Array.isArray(currency?.coins) ? currency.coins.filter(coin => coin && Number.isSafeInteger(coin.value) && coin.value >= 1) : []);
 
 // The words for money in this chat: the usual coin words plus the chat's own currency name and
-// short form ("Gil", "g"), longest first so "gold coins" is read before "gold".
-function coinPattern(currency) {
-    const coins = Array.isArray(currency?.coins) ? currency.coins.flatMap(coin => [coin?.name, coin?.plural]) : [];
+// short form ("Gil", "g") and its coins (with any short form the coin list gives), longest first so "gold coins" is
+// read before "gold". No capture group: the parts are read again one by one (PART).
+function coinWords(currency) {
+    const coins = coinsIn(currency).flatMap(coin => [coin?.name, coin?.plural]);
     const own = [currency?.name, currency?.short, ...coins].map(word => clean(word).toLowerCase()).filter(word => word && /^[\p{L}][\p{L} '-]*$/u.test(word));
-    const words = [...new Set([...COIN_WORDS, ...own.flatMap(word => [word, `${word}s`])])].sort((a, b) => b.length - a.length);
-    return `(${words.map(escape).join('|').replace(/ /g, '\\s+')})`;
+    const words = [...new Set([...COIN_WORDS, ...own.flatMap(word => [word, `${word}s`]), ...shortForms(currency).keys()])].sort((a, b) => b.length - a.length);
+    return `(?:${words.map(escape).join('|').replace(/ /g, '\\s+')})`;
 }
 
-/** What one coin named `word` is worth in the smallest unit (`currency.coins`, from inventory.currency); 1 otherwise. */
-export function coinWorth(word, currency) {
-    const want = clean(word).toLowerCase().replace(/\s+(?:coins?|pieces?)$/, '');
-    const coin = (Array.isArray(currency?.coins) ? currency.coins : []).find(entry => [entry?.name, entry?.plural, `${entry?.name}s`].some(name => clean(name).toLowerCase() === want));
-    return Number.isSafeInteger(coin?.value) && coin.value >= 1 ? coin.value : 1;
+// Short forms the chat's coin list gives its coins (a coin's own `short`, "gp" when the list says so),
+// only where one coin has it. A short form the list does not give ("gp" for a coin listed only as
+// "gold") is not guessed: Story Block's coin line refuses it too. → Map(short → value).
+function shortForms(currency) {
+    const seen = new Map();
+    for (const coin of coinsIn(currency)) {
+        const short = clean(coin.short).toLowerCase();
+        if (!short || !/^[\p{L}][\p{L}'-]*$/u.test(short)) continue;
+        seen.set(short, seen.has(short) && seen.get(short) !== coin.value ? 0 : coin.value);
+    }
+    return new Map([...seen].filter(([, value]) => value > 0));
 }
+
+/**
+ * What one of the money word `word` is worth in the smallest unit with the chat's coins
+ * (`currency.coins`, from inventory.currency), by Story Block's own rule (money.js coinValue): a coin's
+ * name or plural, or its name + "s", any case, "coins"/"pieces of" around it ignored; the currency's
+ * own name or plural is 1; a short form the coin list gives (shortForms). Anything else: 0.
+ */
+export function coinValueIn(word, currency) {
+    const want = clean(word).toLowerCase().split(' ').filter(part => part && !COIN_FILLER.has(part)).join(' ');
+    if (!want) return 0;
+    const coin = coinsIn(currency).find(entry => [entry?.name, entry?.plural, `${clean(entry?.name)}s`].some(name => clean(name).toLowerCase() === want));
+    if (coin) return coin.value;
+    const short = shortForms(currency).get(want);
+    if (short) return short;
+    const plural = clean(currency?.plural) || `${clean(currency?.name)}s`;
+    return want === clean(currency?.name).toLowerCase() || want === plural.toLowerCase() ? 1 : 0;
+}
+
+/** What one coin named `word` is worth in the smallest unit (coinValueIn); 1 otherwise (a word that only says "money"). */
+export function coinWorth(word, currency) {
+    return coinValueIn(word, currency) || 1;
+}
+
+// One "<n> <coin>" part of an amount: [count, coin word].
+const partPattern = currency => new RegExp(`(${COUNT_WORD})\\s+(${coinWords(currency)})(?:\\s+(?:coins?|pieces?))?(?![\\p{L}])`, 'giu');
 
 function rewardPattern(currency) {
-    return new RegExp(`(?:^|[^\\p{L}\\d])${COUNT}\\s+${coinPattern(currency)}(?:\\s+(?:coins?|pieces?))?(?![\\p{L}])${EACH}`, 'iu');
+    const part = `${COUNT_WORD}\\s+${coinWords(currency)}(?:\\s+(?:coins?|pieces?))?`;
+    return new RegExp(`(?:^|[^\\p{L}\\d])(${part}(?:${PART_JOIN}${part})*)(?![\\p{L}])${EACH}`, 'iu');
 }
 
 // A `reward:` label that is only a number ("30", "2 each", "1 per wolf"): money too.
 const BARE_REWARD = new RegExp(`^${COUNT}${EACH}\\.?$`, 'iu');
 
+/*
+ * The amount the parts of one written amount make ("1 gold 5 silver"): `{ amount }`, or `{ amount: null,
+ * problem }`. With coins the parts add up, each priced from the chat's coins; a word that is not one
+ * of them is refused, never read as the smallest coin ("2 platinum" in a copper/silver/gold world).
+ * Without coins one amount is the number; two are refused (no coin says what they are worth together).
+ */
+function amountOf(written, currency) {
+    const parts = [...written.matchAll(partPattern(currency))].map(match => ({ count: countOf(match[1]), word: clean(match[2]) }));
+    if (!parts.length || parts.some(part => part.count === null)) return { amount: null, problem: '' };
+    const coins = coinsIn(currency);
+    if (!coins.length) {
+        if (parts.length === 1) return { amount: parts[0].count };
+        return { amount: null, problem: `"${written}" holds more than one amount; write one amount of ${currencyName(currency)}` };
+    }
+    let amount = 0;
+    for (const part of parts) {
+        const value = coinValueIn(part.word, currency);
+        if (!value) {
+            const names = coins.map(coin => clean(coin.name)).join(', ');
+            return { amount: null, problem: `"${part.word}" is not a coin here: write ${names}, or a number of ${smallestOf(currency)}` };
+        }
+        amount += part.count * value;
+    }
+    return Number.isSafeInteger(amount) ? { amount } : { amount: null, problem: `"${written}" is too large an amount` };
+}
+
+// The smallest coin's plural (the one worth 1), else the currency's own name.
+function smallestOf(currency) {
+    const one = coinsIn(currency).find(coin => coin.value === 1);
+    return clean(one?.plural) || clean(one?.name) || currencyName(currency);
+}
+
 /**
  * A reward from the `reward:` label, else from the goal text:
- * `{ amount, each, unit, text, per }` — `amount` a whole number of the chat's one currency
- * (`unit` is always ''; the currency's name comes from `inventory.currency` when it is shown), or
+ * `{ amount, each, unit, text, per }` — `amount` a whole number of the chat's one currency, in its
+ * smallest coin with Story Block's coins ("1 gold 5 silver" is 150 when gold is 100 and silver 10;
+ * `unit` is always ''; the currency's name comes from `inventory.currency` when it is shown), or
  * null when the reward is not money code can read (a favour, a horse); `each` when it is paid per
  * unit of the target ("1 silver each wolf", "2 per tail"), `per` the unit word as written ('' when
- * "each" names none). `reward: none` is `{ amount: 0 }`. No reward written → null.
- * `options.currency` ({ name, short }) adds the chat's own currency words to the coin words.
+ * "each" names none). `reward: none` is `{ amount: 0 }`. No reward written → null. A coin amount code
+ * refuses (a coin the chat does not have, two amounts without coins) is `amount: null` with `problem`,
+ * a plain sentence for the reader. `options.currency` ({ name, short, coins }) adds the chat's own
+ * currency words to the coin words.
  */
 export function parseReward(fields = {}, summary = '', { currency = null } = {}) {
     const label = clean(fields.reward);
@@ -171,18 +248,18 @@ export function parseReward(fields = {}, summary = '', { currency = null } = {})
     const pattern = rewardPattern(currency);
     for (const text of sources) {
         const bare = text === label ? BARE_REWARD.exec(text) : null;
-        const match = bare ? [bare[0], bare[1], '', bare[2], bare[3], bare[4]] : pattern.exec(text);
+        const match = bare ? [bare[0], bare[1], bare[2], bare[3], bare[4]] : pattern.exec(text);
         if (!match) continue;
-        const count = countOf(match[1]);
-        if (count === null) continue;
         // Story Block's coins (MODULES §F108): "3 silver" is 30 when silver is worth 10 of the smallest.
-        const amount = count * coinWorth(match[2], currency);
-        const each = Boolean(match[3] || match[5]);
+        const read = bare ? { amount: countOf(bare[1]) } : amountOf(match[1], currency);
+        if (read.amount === null && !read.problem) continue;
+        const each = Boolean(match[2] || match[4]);
         // "each wolf" may be "each, paid on return": a word after a bare "each" is only a hint.
-        const per = clean(match[5] || match[4] || '');
-        const loose = !match[5] && Boolean(match[4]);
+        const per = clean(match[4] || match[3] || '');
+        const loose = !match[4] && Boolean(match[3]);
         const text2 = label || match[0].replace(/^[^\p{L}\d]/u, '').trim();
-        return { amount, each, unit: '', text: text2, per, loose };
+        if (read.amount === null) return { amount: null, each: false, unit: '', text: text2, per: '', problem: `${read.problem}.` };
+        return { amount: read.amount, each, unit: '', text: text2, per, loose };
     }
     return label ? { amount: null, each: false, unit: '', text: label, per: '' } : null;
 }
