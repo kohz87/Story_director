@@ -447,6 +447,24 @@ export function fieldReadOnly(field, values) {
     try { return Boolean(flag(values)); } catch { return false; }
 }
 
+/**
+ * The value a settings row shows: the stored value (else the default, else the field's empty value); a
+ * read-only field with `shows(values)` shows what that returns instead, for display only (the stored value
+ * is kept, so it is back when the field is editable again). A `shows` that throws or returns undefined
+ * shows the stored value.
+ */
+export function rowValue(key, field, values) {
+    const stored = Object.hasOwn(values, key) ? values[key] : emptyValue(field);
+    const shows = normalizeField(field)?.shows;
+    if (typeof shows !== 'function' || !fieldReadOnly(field, values)) return stored;
+    try {
+        const value = shows(values);
+        return value === undefined ? stored : value;
+    } catch {
+        return stored;
+    }
+}
+
 // `label.story-suite-row`: the label and its help on the left, the control on the right (stacked on a
 // phone, host.css). A list's row is a `div` whose list group is named by the label. A read-only row
 // shows its value and help with every control in it disabled, and stores nothing.
@@ -745,7 +763,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
         // The rows whose `readOnly` is a function of the values: drawn again (value, help, disabled) after
         // any other field of this module changes, so switching Calendar to Custom makes its fields editable.
         const follows = [];
-        const rowOf = (key, field, now) => fieldRow(doc, key, field, Object.hasOwn(now, key) ? now[key] : emptyValue(field), next => {
+        const rowOf = (key, field, now) => fieldRow(doc, key, field, rowValue(key, field, now), next => {
             settings.set(def.moduleId, key, next);
             if (!follows.length) return;
             const fresh = settings(def.moduleId);
@@ -770,7 +788,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
                 draw: into => {
                     for (const { key, field } of group.fields) {
                         const item = { key, field, row: rowOf(key, field, values) };
-                        if (typeof normalizeField(field)?.readOnly === 'function') follows.push(item);
+                        if (typeof normalizeField(field)?.readOnly === 'function' || typeof normalizeField(field)?.shows === 'function') follows.push(item);
                         into.appendChild(item.row);
                     }
                 },

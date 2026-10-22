@@ -111,3 +111,35 @@ test('while Calendar is pack the calendar fields are read-only; Custom makes the
     input.dispatch('change');
     assert.equal(host.sdk.query('director.calendar').era, 'AR');
 });
+
+// The gap after Custom: the reader's own calendar is stored; back on pack, the read-only rows show the
+// pack's (display only) and the stored one is kept, back when they switch to Custom again.
+test('back on pack after editing under Custom: the rows show the pack\'s calendar; Custom brings the reader\'s back', async t => {
+    const doc = installFakeDom();
+    const { host } = await director(t);
+    assert.equal((await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' })).ok, true);
+    await Promise.resolve();
+    const pack = JSON.parse(ERSVEIL).calendar;
+    host.settings.set('story-director', CALENDAR_KEYS.preset, 'custom');
+    host.settings.set('story-director', CALENDAR_KEYS.era, 'AR');
+    host.settings.set('story-director', CALENDAR_KEYS.months, [{ name: 'Frostmoon', days: 30 }]);
+    host.settings.set('story-director', CALENDAR_KEYS.preset, 'pack');
+    const root = doc.createElement('div');
+    doc.body.appendChild(root);
+    t.after(() => root.remove());
+    renderSettingsHost(root, { registry: host.registry, settings: host.settings, doc });
+    const row = key => root.querySelector(`.story-suite-row[data-field="${key}"]`);
+    const monthNames = () => row(CALENDAR_KEYS.months).querySelectorAll('.story-suite-list-item input').filter(input => input.type === 'text').map(input => input.value);
+    const monthsText = () => row(CALENDAR_KEYS.months).querySelector('textarea')?.value ?? null;
+    const shownMonths = () => monthNames().length ? monthNames() : (monthsText() ?? '').split('\n').map(line => line.split(':')[0].trim());
+    assert.equal(row(CALENDAR_KEYS.era).querySelector('input').value, pack.era, 'the pack\'s era, not the stored AR');
+    assert.deepEqual(shownMonths(), pack.months.map(month => month.name));
+    assert.equal(host.settings.stored('story-director')[CALENDAR_KEYS.era], 'AR', 'the reader\'s own is kept');
+    assert.equal(host.sdk.query('director.calendar').era, pack.era, 'and the chat runs on the pack\'s');
+    const select = row(CALENDAR_KEYS.preset).querySelector('select');
+    select.value = 'custom';
+    select.dispatch('change');
+    assert.equal(row(CALENDAR_KEYS.era).querySelector('input').value, 'AR', 'Custom: the reader\'s calendar is back');
+    assert.deepEqual(shownMonths(), ['Frostmoon']);
+    assert.equal(host.sdk.query('director.calendar').era, 'AR');
+});
