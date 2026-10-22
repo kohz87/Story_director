@@ -1,5 +1,5 @@
 // Quests part: goals (F82), goals code cannot count (F83), the details query (F84), the progress note
-// (F85), held offers (F88) and the story's own turn-in (F94) as the quests part answers them.
+// (F85), an older chat's offers (shown nowhere) and the story's own turn-in (F94) as the quests part answers them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part, QUEST_STATIC, hasGoal } from '../../../src/v2/quests/index.js';
@@ -138,19 +138,14 @@ test('F85: the note is the latest progress line, at most 160 characters', () => 
     assert.equal(details(progressFirst, { id: 'th_ring0001' }).note, 'new');
 });
 
-test('F88: held offers stay out of the tail and the lists until their reply comes; taking one on shows it', () => {
+test('an older chat\'s offers, held or not, are told nowhere and are no active quest; the story\'s + quest takes one on', () => {
     const held = quest('th_held0001', 'Second Job', { goal: 'Kill 2 rats', giver: 'Hobb' }, { offer: true, shown: { turn: 9 } });
     const first = quest('th_first001', 'First Job', { goal: 'Kill 2 wolves', giver: 'Orsa' }, { offer: true, shown: { turn: 3 } });
     const state = makeState({ threads: [held, first] });
     state.domains.director.turn = { n: 4, reply: null, index: -1, from: null, quests: [], lone: null };
-    const tail = part.context.tail(viewOf(state)).lines;
-    assert.deepEqual(tail, ['Quest offers not yet taken ({{user}} takes them on or turns them down in their own words): First Job (from Orsa).']);
-    assert.equal(details(state, { id: 'th_held0001' }).status.state, 'held');
-    state.domains.director.turn.n = 9;
-    assert.match(part.context.tail(viewOf(state)).lines[0], /First Job \(from Orsa\), Second Job \(from Hobb\)/);
-    // Taken on while held (the reader's words found it): shown from now.
-    state.domains.director.turn.n = 5;
+    assert.deepEqual(part.context.tail(viewOf(state)).lines, []);
+    assert.deepEqual(details(state, { id: 'th_first001' }).status, { state: 'untaken', text: 'Not taken on' });
     const host = makeHost(state);
     assert.equal(host.run(take, { id: 'th_held0001' }).ok, true);
-    assert.deepEqual(host.state.domains.director.threads.th_held0001.shown, { turn: 5 });
+    assert.equal(host.state.domains.director.threads.th_held0001.offer, false);
 });

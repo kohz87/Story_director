@@ -1,5 +1,5 @@
 // Story Director alone (WAVE rule 11): Story Block and Story Director, no RPG Battle (a dating sim, a
-// mystery: no fights, stats or levels). Quests are taken in the reader's words and turned in by the
+// mystery: no fights, stats or levels). Quests are taken on by the story's + quest and turned in by the
 // story; a kill goal nobody can count is the story's word; a quest with no level known pays as the
 // lowest rank and says so; the day digest, the Days board, the atlas, the chronicle, director.advance
 // and the tail all work; the fixed prompt asks for no fights and is the same bytes every reply.

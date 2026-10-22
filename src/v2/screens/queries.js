@@ -174,7 +174,7 @@ export function nextDue(state, args, tools, { settings = null } = {}) {
 export function finishState(thread, progress) {
     if (!progress || !(progress.need > 0 || isRecord(progress.finish))) return { show: false, blocked: true, reason: '' };
     let reason = '';
-    if (!thread.taken) reason = 'Take it on first: fights count from then.';
+    if (!thread.taken) reason = 'It was never taken on.';
     else if (!progress.met) reason = text(progress.reason) || 'Not done yet.';
     else if (isRecord(progress.finish) && progress.finish.ok === false) reason = text(progress.finish.reason) || 'It cannot be turned in here.';
     return { show: true, blocked: Boolean(reason), reason };
@@ -205,13 +205,6 @@ function progressOf(query, thread) {
     };
 }
 
-// An offer the story made within the offer cooldown of the one before (F88): kept, shown from reply
-// `shown.turn` (the director's `turn.n`).
-function isHeld(thread, state) {
-    const turn = state?.domains?.director?.turn?.n;
-    return isOffer(thread) && Number.isSafeInteger(thread.shown?.turn) && thread.shown.turn > (Number.isSafeInteger(turn) ? turn : 0);
-}
-
 // The story time written on the chat's calendar, '' when there is none.
 function dateText(minutes, calendar) {
     if (!Number.isSafeInteger(minutes)) return '';
@@ -224,8 +217,7 @@ function dateText(minutes, calendar) {
 
 // A quest's status line without the quests part's `quest.details` (F95's three words).
 function plainStatus(thread, progress) {
-    if (isOffer(thread)) return { state: 'offered', text: 'Offered — say you take it' };
-    if (!thread.taken) return { state: 'untaken', text: 'Not taken on yet — say you take it on' };
+    if (!thread.taken) return { state: 'untaken', text: 'Not taken on' };
     if (progress?.met) return { state: progress.finish?.ok === false ? 'ready' : 'here', text: progress.finish?.ok === false ? 'Ready' : 'Ready to turn in' };
     return { state: 'notyet', text: progress?.label ? `Not yet: ${progress.label}` : 'Not yet' };
 }
@@ -255,16 +247,15 @@ function detailsOf(thread, given, calendar) {
 }
 
 /**
- * `quest.board` → the Quests screen's lists (no buttons: taking on, turning down, giving up and turning in
- * follow the reader's words and the story, F95):
- * `{ offers: [{ id, key, goal, giver, reward, due, status, details }],
- *    active: [{ id, key, goal, note, step, giver, reward, due, taken, ready, progress, meter, status: { state, text },
+ * `quest.board` → the Quests screen's lists (no buttons: giving up follows the reader's words, taking on and
+ * turning in the story, F95):
+ * `{ active: [{ id, key, goal, note, step, giver, reward, due, taken, ready, progress, meter, status: { state, text },
  *               finish: { show, blocked, reason, title }, details }],
  *    finished: [{ id, key, outcome, outcomeText, reason, details }]  (latest first, at most FINISHED_SHOWN),
- *    finishedCount, heldCount, hasOffers, hasActive, hasFinished }`.
- * `status` is the row's words ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
- * it"); `progress` is `quest.progress` or null; `meter` is true when it has a target to draw. Offers held back
- * by the offer cooldown (F88) are left out until they are shown (`heldCount`).
+ *    finishedCount, hasActive, hasFinished }`.
+ * `status` is the row's words ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves"); `progress` is
+ * `quest.progress` or null; `meter` is true when it has a target to draw. There are no offers: the story's
+ * `+ quest` makes a quest active at once, and an older chat's offers are left out.
  */
 export function questBoard(state, args, tools, { settings = null } = {}) {
     const query = queryFrom(tools);
@@ -275,20 +266,6 @@ export function questBoard(state, args, tools, { settings = null } = {}) {
         const given = ask(query, 'quest.details', { id: thread.id }, null);
         return { given: isRecord(given) ? given : null, details: detailsOf(thread, given, calendar) };
     };
-    const offered = quests.filter(isOffer);
-    const offers = offered.filter(thread => !isHeld(thread, state)).sort(byKey).map(thread => {
-        const { given, details } = detailsFor(thread);
-        return {
-            id: thread.id,
-            key: text(thread.key),
-            goal: details.goal,
-            giver: details.giver,
-            reward: rewardOf(thread),
-            due: details.due,
-            status: isRecord(given?.status) ? given.status : plainStatus(thread, null),
-            details,
-        };
-    });
     const active = quests.filter(thread => isOpen(thread) && !isOffer(thread)).sort(byKey).map(thread => {
         const progress = progressOf(query, thread);
         const finish = finishState(thread, progress);
@@ -318,12 +295,9 @@ export function questBoard(state, args, tools, { settings = null } = {}) {
         return { id: thread.id, key: text(thread.key), outcome, outcomeText: OUTCOME_TEXT[outcome] ?? 'Closed', reason: text(thread.ended?.reason), details: detailsFor(thread).details };
     });
     return {
-        offers,
         active,
         finished,
         finishedCount: closed.length,
-        heldCount: offered.length - offers.length,
-        hasOffers: offers.length > 0,
         hasActive: active.length > 0,
         hasFinished: closed.length > 0,
     };
@@ -352,15 +326,15 @@ export function readerWords(value, substitute = null) {
     return out;
 }
 
-// A Problem about a passing state of a quest is shown only while that state lasts: "was offered, not
-// taken on" while the quest is still an open offer, "has no goal" while it is open with no goal (the
-// quests part's `quest.details` says; without it, a `goal:` field).
+// A Problem about a passing state of a quest is shown only while that state lasts: "has no goal" while it
+// is open with no goal (the quests part's `quest.details` says; without it, a `goal:` field). An older
+// chat's "was offered, not taken on" is not shown: there is nothing to accept any more.
 function stillSo(problem, director, query) {
-    if (problem.kind !== 'offered' && problem.kind !== 'no-goal') return true;
+    if (problem.kind === 'offered') return false;
+    if (problem.kind !== 'no-goal') return true;
     const id = director?.keys?.[lineKey(text(problem.key))];
     const thread = id ? director?.threads?.[id] : null;
     if (!thread) return true;
-    if (problem.kind === 'offered') return isOffer(thread);
     if (!isOpen(thread)) return false;
     const details = ask(query, 'quest.details', { id: thread.id }, null);
     return isRecord(details) && typeof details.hasGoal === 'boolean' ? !details.hasGoal : !text(thread.fields?.goal);
@@ -369,7 +343,7 @@ function stillSo(problem, director, query) {
 /**
  * `director.problems` → the last replies' Director problems, oldest first as kept: `[{ rev, kind, text }]`,
  * the text with `{{user}}` written out (the host's `tools.substitute` when there is one, else "you"). A
- * Problem about an offer or a missing goal is left out once the quest is taken on, given a goal or over.
+ * Problem about a missing goal is left out once the quest is given a goal or over; one about an offer, always.
  */
 export function problemsList(state, args, tools) {
     const director = state?.domains?.director;

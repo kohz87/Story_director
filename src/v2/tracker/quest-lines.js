@@ -6,8 +6,6 @@
 // * `| met: yes` / `| met: no` (F83): the story says the goal of a quest code cannot count is met
 //   (or undone). It marks the thread `ready: { rev }` (or clears it) and never reaches v1's rules.
 // * A `+ quest` with no goal code can read is kept and flagged (F82, Problem "no-goal").
-// * An offer within `offerCooldown` replies of the one before is held (F88): kept, not shown until
-//   `shown.turn`. Nothing the story wrote is lost, and no Problem is raised.
 // * A taken quest the story closes as done is turned in by code (F94/F95): `quest.finish` with
 //   `by: 'story'` when quest.progress's checks pass, else it stays open with a Problem and a
 //   narrated receipt that tells the next reply why.
@@ -106,24 +104,6 @@ export function applyMet(ctx, thread, met, metText, rev) {
         return { changed: true, problem: null };
     }
     return { changed: false, problem: null };
-}
-
-/**
- * Marks an offer with the reply it is shown from (F88): now, or, within `cooldown` replies of the
- * last offer, `cooldown` replies after it (held). Done once per offer. True when it is held.
- */
-export function markOffer(director, thread, cooldown) {
-    if (!thread || thread.kind !== 'quest' || !thread.offer || thread.taken || thread.shown) return false;
-    const now = Number.isSafeInteger(director.turn?.n) ? director.turn.n : 0;
-    let last = null;
-    for (const other of Object.values(director.threads ?? {})) {
-        if (other === thread || other?.kind !== 'quest' || !Number.isSafeInteger(other.shown?.turn)) continue;
-        if (last === null || other.shown.turn > last) last = other.shown.turn;
-    }
-    const gap = Number.isSafeInteger(cooldown) && cooldown > 0 ? cooldown : 0;
-    const turn = gap && last !== null && now - last < gap ? last + gap : now;
-    thread.shown = { turn };
-    return turn > now;
 }
 
 /**

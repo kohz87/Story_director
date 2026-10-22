@@ -5,7 +5,7 @@
 //   threads: { [id]: thread },                    // MODULES §C1
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
-//   (a quest thread may also carry `ready: { rev }`, F83, and an offer `shown: { turn }`, F88)
+//   (a quest thread may also carry `ready: { rev }`, F83, and an older chat's offer `shown: { turn }`, F88)
 //   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, paid }] },
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
@@ -168,7 +168,7 @@ function threadErrors(id, thread) {
         errors.push(`${at}.reward must be null or { amount, each, unit, text }.`);
     }
     if (!isInt(thread.rev) || thread.rev < 0) errors.push(`${at}.rev must be a whole number.`);
-    // F83: the story said the goal is met; F88: the reply an offer is shown from.
+    // F83: the story said the goal is met; F88 (older chats): the reply an offer was shown from.
     if (thread.ready !== undefined && thread.ready !== null && !(isRecord(thread.ready) && isInt(thread.ready.rev))) errors.push(`${at}.ready must be null or { rev }.`);
     if (thread.shown !== undefined && !(isRecord(thread.shown) && isInt(thread.shown.turn) && thread.shown.turn >= 0)) errors.push(`${at}.shown must be { turn }.`);
     if (thread.track !== undefined && !isRecord(thread.track)) errors.push(`${at}.track must be an object.`);

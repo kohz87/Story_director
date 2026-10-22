@@ -1,7 +1,7 @@
 // Quests that follow the story, on the real Story Block v2 host (tests/vendor/story-block): the story's
 // turn-in checked and paid by code (F94/F95), goals the story judges (F83), details with the receipts that
-// touched a quest (F84), the rank ladder from RPG Battle's tiers (F86/F87), held offers (F88), and the
-// Director screen's clock line and stale offer Problems.
+// touched a quest (F84), the rank ladder from RPG Battle's tiers (F86/F87), quests active at once (no
+// offers, no held offers), and the Director screen's clock line.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,11 +38,9 @@ async function ok(promise) {
 const RATS = '+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 cellar rats | reward: 2 gold each';
 
 async function ratsTaken(host) {
-    await host.send('Any work in Bluewatch?', reply('Fenna looks up. "Rats," she says.', ['~ place Bluewatch | kind: settlement', '+ present Fenna', RATS]));
-    assert.equal(quest(host, 'Granary Rats').offer, true);
-    await host.send('I\'ll take the rat job.', reply('Fenna hands you a lantern.', [RATS]));
+    await host.send('Any work in Bluewatch?', reply('Fenna looks up. "Rats," she says, and you take the job.', ['~ place Bluewatch | kind: settlement', '+ present Fenna', RATS]));
     const rats = quest(host, 'Granary Rats');
-    assert.ok(rats.taken, 'taken in the reader\'s own words');
+    assert.deepEqual([rats.offer, Boolean(rats.taken)], [false, true], 'taken on by the story\'s + quest');
     return rats;
 }
 
@@ -127,30 +125,23 @@ test('F86/F87: with RPG Battle\'s tiers, quest.ranks is its ladder and a ranked 
     host.close();
 });
 
-test('F88: a second offer soon after the first is held off the board until the cooldown passes', async () => {
+test('quests go straight to active: two in a row are both on the board at once, none held, nothing offered', async () => {
     const host = await newHost();
     await host.send('Work?', reply('Two notices.', ['+ quest First Job — wolves | giver: Orsa | goal: Kill 2 wolves']));
     await host.send('More?', reply('Another.', ['+ quest Second Job — rats | giver: Hobb | goal: Kill 2 rats']));
-    let board = host.sdk.query('quest.board');
-    assert.deepEqual(board.offers.map(offer => offer.key), ['First Job']);
-    assert.equal(board.heldCount, 1);
-    assert.equal(quest(host, 'Second Job').offer, true, 'kept: the story\'s line is not lost');
-    for (let i = 0; i < 5; i += 1) await host.send('Wait.', reply('Time passes.', ['! time +1h']));
-    board = host.sdk.query('quest.board');
-    assert.deepEqual(board.offers.map(offer => offer.key), ['First Job', 'Second Job']);
-    host.close();
+    const board = host.sdk.query('quest.board');
+    assert.deepEqual(board.active.map(entry => [entry.key, entry.taken]), [['First Job', true], ['Second Job', true]]);
+    assert.equal(board.offers, undefined);
+    assert.equal(board.heldCount, undefined);
 });
 
-test('the Director screen: its clock line, and an offer Problem gone once the quest is taken on', async () => {
+test('the Director screen: its clock line, and no offer Problem for a quest the story started', async () => {
     const host = await newHost();
     await host.send('Work?', reply('Fenna has a job.', ['~ time March 3, 8:00 am', RATS]));
-    assert.ok(host.sdk.query('director.problems').some(problem => problem.kind === 'offered'));
-    await ok(host.sdk.command('quest.take', { key: 'Granary Rats' }));
     assert.equal(host.sdk.query('director.problems').some(problem => problem.kind === 'offered'), false);
     const director = host.registry.screens().find(screen => screen.id === 'story-director/director');
     assert.deepEqual(director.data.time, { query: 'director.time' });
     assert.match(host.sdk.query('director.time').text, /March 3/);
-    host.close();
 });
 
 test('F94: a swipe of the reply that turned a quest in takes the payment back; the turn-in again pays once', async () => {

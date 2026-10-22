@@ -5,7 +5,7 @@
 > and does nothing else. Story Block keeps the state in the replies, reads each reply's `<Changes>` block
 > and builds the prompt; Story Director adds the `director` domain (story time, threads, quests), its
 > change-line kinds (`agenda`, `event`, `hook`, `quest`, `clock`, `beat`, `secret`, `time`, `route`,
-> `landmark`, `world`, `faction`), the Director note, the commands `quest.take`, `quest.decline`, `quest.abandon`,
+> `landmark`, `world`, `faction`), the Director note, the commands `quest.take`, `quest.abandon`,
 > `quest.finish`, deadlines that slip or lapse as story time passes with a *While away* recap after a
 > jump, the atlas (places, routes, travel times), the chronicle (world events under way and the factions
 > behind them, three of them recalled to the story each reply), a day digest written by code when a story
@@ -15,13 +15,18 @@
 > clock runs on the reader's calendar, or by default on the enabled pack's (Ersveil: CY, twelve months
 > of 30 days), and starts at the pack's start date when the story has not set it. Quest rewards are whole
 > amounts of the chat's one currency, paid once by code; one fight pays one kill quest. Quests follow the
-> story: you take one on, turn it down or give it up in your own words, and when the story turns a quest in
+> story: when the story has your character accept a job it writes `+ quest`, and the quest is active at
+> once (taken on from that reply; there is no Offered list and nothing to accept). A job the story only
+> mentions stays in the story (a `+ hook` is an open thread, whatever it pays, and never a quest until
+> the `+ quest`). You give a quest up in your own words, and when the story turns a quest in
 > code checks the target (or, for a goal code cannot count, the story's `met: yes`) and the place, then
 > pays, held inside the quest's rank range (F to S, or the pack's or RPG Battle's ladder; a rank the story
 > writes is held to the party's own, and one reply pays at most that rank's top in money the story
 > wrote, its own coin lines and quest rewards together, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
-> where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves", "Offered — say you take
-> it") and opens its details (goal, progress note, terms, dates, history). The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
+> where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves") and opens its details
+> (goal, progress note, terms, dates, history). An older chat's offers still load; they are shown nowhere
+> (the Director tab tags them "offered") and become the quest when the story writes `+ quest` for one.
+> The v1 text below on offers, Take on and Turn down describes v1 only. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
 > branch. The v1 description below is kept for its rules, which v2 reuses; the v1 glue (`index.v1.js`)
 > is not loaded. Progress for the whole suite:
 > [Story Block docs/v2/STATUS.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/STATUS.md).
@@ -147,6 +152,16 @@ only before one of these field names, so a comma inside a value (`giver: Nelke, 
 stays.
 
 ### Quests
+
+> **v2: quests go straight to active.** The story writes `+ quest` when your character accepts a job,
+> and the quest is active and taken on from that reply, whatever your message said: there is no
+> Offered list, no Take on or Turn down, and no offer cooldown. A job the story only mentions stays in
+> the story: a `+ hook` is an open thread even with a `giver` and a `reward`, a `~` never turns it into
+> a quest, and closing it never makes it a finished quest; `+ quest` (or a `-` saying it was taken on)
+> does. Giving a quest up is still your choice, in your own words (`- quest Key — abandoned`), and the
+> story turns quests in as below. An older chat's offers load as they were stored and are shown
+> nowhere (the Director tab tags them "offered"); `+ quest` for one takes it on. Rank hold, the money
+> budget and Story Director alone are unchanged. The offer rules below are v1's.
 
 Long-running work your character has taken on: bounties, contracts, favours owed, a hunt.
 Short errands that end within the scene do not need one.

@@ -93,8 +93,9 @@ test('queries: time, threads by kind, status and offer, one thread by key, alias
     assert.deepEqual(threads(), ['Wolf Hunt', 'River stranger', 'Ferry Run']);
     assert.deepEqual(threads({ kind: 'quest' }), ['Wolf Hunt', 'Ferry Run']);
     assert.deepEqual(threads({ status: 'resolved' }), ['River stranger']);
-    assert.deepEqual(threads({ kind: 'quest', offer: true }), ['Ferry Run']);
-    assert.deepEqual(threads({ kind: 'quest', status: 'active', offer: false }), ['Wolf Hunt']);
+    // + quest is active at once: no offers.
+    assert.deepEqual(threads({ kind: 'quest', offer: true }), []);
+    assert.deepEqual(threads({ kind: 'quest', status: 'active', offer: false }), ['Wolf Hunt', 'Ferry Run']);
     const wolf = part.queries['director.thread'](state, { key: 'wolf hunt' });
     assert.equal(wolf.fields.step, 'tracking');
     assert.equal(part.queries['director.thread'](state, { key: 'Wolf Hunts' }).id, wolf.id, 'by a name it was reached by');
