@@ -70,7 +70,7 @@ function stampOf(director, rev) {
 /** The chat's one currency (`inventory.currency`, MODULES §F1), `{ name, plural, short }`; gold without it. */
 function currencyOf(query) {
     const currency = tryQuery(query, 'inventory.currency', {}, null);
-    return { name: currencyName(currency), plural: text(currency?.plural), short: text(currency?.short) };
+    return { name: currencyName(currency), plural: text(currency?.plural), short: text(currency?.short), ...(Array.isArray(currency?.coins) && currency.coins.length ? { coins: currency.coins } : {}) };
 }
 
 /** The player character's name for summaries ("Astra"), else "The party". */
@@ -648,6 +648,13 @@ export const QUEST_STATIC = [
     'Quest pacing: offer a new quest rarely, when the story calls for it, and leave quiet stretches with no new jobs. A passer-by is only a passer-by, not a quest-giver. Trouble does not come looking for {{user}} unless they provoke it.',
 ].join('\n');
 
+/** Quest ranks follow the reader's ladder unless the reader turned it off (tools.settings: this part's). */
+function followsLadder(tools) {
+    let own = null;
+    try { own = typeof tools?.settings === 'function' ? tools.settings() : null; } catch { own = null; }
+    return own?.followLadder !== false;
+}
+
 export const part = {
     domains: {},
     commands: {
@@ -659,10 +666,23 @@ export const part = {
         'quest.progress': progressQuery,
         'quest.details': detailsQuery,
         'quest.ranks': (state, _args, tools) => ranksOf(queryOf(state, tools)),
+        // Whether quest ranks follow the reader's rank ladder (Quests: Quest ranks follow the rank ladder).
+        'quest.followsLadder': (_state, _args, tools) => followsLadder(tools),
     },
     kinds: {},
     context: { static: () => QUEST_STATIC, tail: questTail, budget: 250 },
     hooks: {},
+    settings: {
+        section: 'Quests',
+        defaults: { followLadder: true },
+        schema: {
+            // WAVE rule 11: Story Director stands alone. Its quest ranks without RPG Battle are its own.
+            followLadder: {
+                type: 'bool', label: 'Quest ranks follow the rank ladder',
+                help: 'The world\'s rank ladder and its levels are set in RPG Battle\'s Terms; with RPG Battle, quest ranks use them. Without RPG Battle a ladder has no levels to band, so quests keep Story Director\'s own ranks: the pack\'s, else F to S. Off: always Story Director\'s own.',
+            },
+        },
+    },
     // The Quests board is the screens part's `story-director/quests` screen.
     tabs: [],
 };

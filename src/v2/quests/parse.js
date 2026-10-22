@@ -135,9 +135,17 @@ const EACH = `(?:\\s*,?\\s*(?:(each|apiece|a\\s+head|per\\s+head)(?![\\p{L}])(?:
 // The words for money in this chat: the usual coin words plus the chat's own currency name and
 // short form ("Gil", "g"), longest first so "gold coins" is read before "gold".
 function coinPattern(currency) {
-    const own = [currency?.name, currency?.short].map(word => clean(word).toLowerCase()).filter(word => word && /^[\p{L}][\p{L} '-]*$/u.test(word));
+    const coins = Array.isArray(currency?.coins) ? currency.coins.flatMap(coin => [coin?.name, coin?.plural]) : [];
+    const own = [currency?.name, currency?.short, ...coins].map(word => clean(word).toLowerCase()).filter(word => word && /^[\p{L}][\p{L} '-]*$/u.test(word));
     const words = [...new Set([...COIN_WORDS, ...own.flatMap(word => [word, `${word}s`])])].sort((a, b) => b.length - a.length);
     return `(${words.map(escape).join('|').replace(/ /g, '\\s+')})`;
+}
+
+/** What one coin named `word` is worth in the smallest unit (`currency.coins`, from inventory.currency); 1 otherwise. */
+export function coinWorth(word, currency) {
+    const want = clean(word).toLowerCase().replace(/\s+(?:coins?|pieces?)$/, '');
+    const coin = (Array.isArray(currency?.coins) ? currency.coins : []).find(entry => [entry?.name, entry?.plural, `${entry?.name}s`].some(name => clean(name).toLowerCase() === want));
+    return Number.isSafeInteger(coin?.value) && coin.value >= 1 ? coin.value : 1;
 }
 
 function rewardPattern(currency) {
@@ -165,8 +173,10 @@ export function parseReward(fields = {}, summary = '', { currency = null } = {})
         const bare = text === label ? BARE_REWARD.exec(text) : null;
         const match = bare ? [bare[0], bare[1], '', bare[2], bare[3], bare[4]] : pattern.exec(text);
         if (!match) continue;
-        const amount = countOf(match[1]);
-        if (amount === null) continue;
+        const count = countOf(match[1]);
+        if (count === null) continue;
+        // Story Block's coins (MODULES §F108): "3 silver" is 30 when silver is worth 10 of the smallest.
+        const amount = count * coinWorth(match[2], currency);
         const each = Boolean(match[3] || match[5]);
         // "each wolf" may be "each, paid on return": a word after a bare "each" is only a hint.
         const per = clean(match[5] || match[4] || '');

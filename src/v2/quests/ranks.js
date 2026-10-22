@@ -98,7 +98,16 @@ export function scaledReward(reward, scale) {
  * Plain copies.
  */
 export function ranksOf(query) {
-    const records = firstPack(tryQuery(query, 'packs.content', { kind: 'ranks' }, null));
+    // Quests: Quest ranks follow the rank ladder (on by default). Off: the packs' own ladder, never the
+    // reader's, nor RPG Battle's banding of it.
+    const follow = tryQuery(query, 'quest.followsLadder', {}, true) !== false;
+    let records = firstPack(tryQuery(query, 'packs.content', { kind: 'ranks' }, null));
+    if (!follow && records?.length && records.every(record => record.reader === true)) records = packOwnRanks(query);
+    if (!follow) {
+        const packs = ladderFrom(records);
+        const scale = moneyScale(query);
+        return packs ?? DEFAULT_RANKS.map(rank => ({ ...rank, levels: [...rank.levels], reward: scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) }));
+    }
     // The reader's own ladder (Story Block's Rank ladder setting, MODULES §F105: records with `reader:
     // true`): RPG Battle's `party.ranks` when it is there (it bands the same ranks by its levels and keeps
     // the same rewards), else the reader's ranks as they are, each with the pack's reward Story Block kept
@@ -110,6 +119,17 @@ export function ranksOf(query) {
     const scale = moneyScale(query);
     const scaled = rank => ({ ...rank, levels: rank.levels ? [...rank.levels] : null, reward: scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) });
     return (party ?? DEFAULT_RANKS).map(scaled);
+}
+
+/** The first enabled pack's own ranks (`packs.content` with its `pack`), past the reader's ladder; null for none. */
+function packOwnRanks(query) {
+    const list = tryQuery(query, 'packs.list', {}, null);
+    for (const entry of Array.isArray(list) ? list : []) {
+        if (!entry?.enabled || typeof entry.id !== 'string') continue;
+        const own = tryQuery(query, 'packs.content', { kind: 'ranks', pack: entry.id }, null);
+        if (Array.isArray(own) && own.length) return own;
+    }
+    return null;
 }
 
 /** The reader's ladder (see ranksOf): RPG Battle's banding of it when that answers with the same ranks, else its own. */

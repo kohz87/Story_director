@@ -746,6 +746,9 @@ function render(el, props, api) {
         viewKey = text(next?.viewKey) || 'map';
         onSelect = text(next?.onSelect);
         root.setAttribute('aria-label', text(next?.label) || 'Map');
+        // "Centre on where you are" works once a place is known (breaker a3-2): until then it is off and says why.
+        centreMe.disabled = !data.current;
+        centreMe.setAttribute('title', data.current ? 'Centre on where you are' : 'Centre on where you are (once the story names where you are)');
         computePoints();
         const keep = !first && (layer === ALL || data.layers.some(item => item.id === layer));
         if (keep) {

@@ -61,7 +61,7 @@ test('F86: without pack ranks, RPG Battle\'s party.ranks with rewards by place; 
         throw new Error('unknown');
     };
     const ladder = ranksOf(query);
-    assert.deepEqual(calls, ['packs.content', 'party.ranks', 'inventory.economy']);
+    assert.deepEqual(calls, ['quest.followsLadder', 'packs.content', 'party.ranks', 'inventory.economy']);
     assert.deepEqual(ladder, [
         { id: 'soul-1', title: 'Soul Class I', levels: [1, 10], reward: [10, 50] },
         { id: 'soul-2', title: 'Soul Class II', levels: [11, 20], reward: [50, 230] },

@@ -13,15 +13,17 @@
 > Chronicle, Days, the time-and-place
 > strip and a status card under every reply (on by default, collapsed; turn it off per screen). The story
 > clock runs on the reader's calendar, or by default on the enabled pack's (Ersveil: CY, twelve months
-> of 30 days), and starts at the pack's start date when the story has not set it. Quest rewards are whole
+> of 30 days; the Calendar settings then show the pack's calendar and say so, and Custom starts from it), and starts at the pack's start date when the story has not set it. Quest rewards are whole
 > amounts of the chat's one currency, paid once by code; one fight pays one kill quest. Quests follow the
 > story: when the story has your character accept a job it writes `+ quest`, and the quest is active at
 > once (taken on from that reply; there is no Offered list and nothing to accept). A job the story only
 > mentions stays in the story (a `+ hook` is an open thread, whatever it pays, and never a quest until
 > the `+ quest`). You give a quest up in your own words, and when the story turns a quest in
 > code checks the target (or, for a goal code cannot count, the story's `met: yes`) and the place, then
-> pays, held inside the quest's rank range (F to S, or your own ladder from Story Block's settings → Terms →
-> Rank ladder, e.g. Soul Class I to IX or F to SSS, or the pack's or RPG Battle's ladder; a rank the story
+> pays, held inside the quest's rank range (F to S, or your own ladder from RPG Battle's settings → Terms →
+> Rank ladder and Levels per rank, e.g. Soul Class I to IX or F to SSS, or the pack's; without RPG Battle a
+> ladder has no levels to band, so quests keep Story Director's own ranks, the pack's else F to S, and
+> Quests → **Quest ranks follow the rank ladder** off keeps them always; a rank the story
 > writes is held to the party's own, and one reply pays at most that rank's top in money the story
 > wrote, its own coin lines and quest rewards together, pack quests aside); a turn-in that fails a check stays open and the next reply is told why. The Quests screen has no buttons: each row says
 > where the quest stands ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves") and opens its details
