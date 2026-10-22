@@ -61,7 +61,7 @@ const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'di
 // or a module committed on its own (cause `system`) that the story was not told (RX-cap-5: RPG Battle's
 // `checks.prepare` dice for the next reply, a module set up): per-reply bookkeeping, not what happened.
 // Making a character is the start of the story, not a day's event.
-const QUIET_TYPES = new Set([DIGEST, 'chronicle.surface', 'director.seed', 'checks.prepare', 'party.create']);
+const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed', 'checks.prepare', 'party.create']);
 const quiet = receipt => QUIET_TYPES.has(receipt.type) || String(receipt.type).startsWith('creation.')
     || (receipt.cause === 'system' && receipt.narrate !== true);
 const SETTLE = 'time.settle';
@@ -146,14 +146,15 @@ const clockSet = receipt => CLOCK_TYPES.has(receipt.type) && (receipt.module ===
 
 /**
  * The receipts (`[{ index, receipt }]` in chat order, as `tools.receipts()` gives them) by story
- * day: `{ days: Map(day → [receipt]), revs: Map(rev → day), settle: { from, to } | null }`.
+ * day (only those after revision `after` when given, with the clock at `minutes` before them): `{ days: Map(day → [receipt]), revs: Map(rev → day), settle: { from, to } | null }`.
  * `settle` is the last time settle's jump (the time part's receipt: the clock before and after it).
  */
-export function walkDays(entries) {
-    const list = (Array.isArray(entries) ? entries : []).map(receiptOf).filter(Boolean);
+export function walkDays(entries, { after = null, minutes: start = null } = {}) {
+    const list = (Array.isArray(entries) ? entries : []).map(receiptOf).filter(Boolean)
+        .filter(receipt => after === null || (isInt(receipt.rev) && receipt.rev > after));
     const days = new Map();
     const revs = new Map();
-    let minutes = null;
+    let minutes = isInt(start) ? start : null;
     let waiting = [];
     let settle = null;
     const put = (day, receipt) => {
@@ -228,12 +229,16 @@ function fightOf(receipt) {
     return ['won', 'lost', 'fled'].includes(data.outcome) ? data.outcome : null;
 }
 
+// One entry's lists at most (an entry is one reply's part of a day, see entryOf).
+const ENTRY_HAPPENED = MAX_HAPPENED;
+
 /**
- * The facts of `day`: its receipts (in order), the day of every receipt revision (`revDay`, from
- * walkDays) and the state now (for the threads' `taken` and `ended` stamps). `{ count, happened, more, places, quests, fights, money, npcs,
- * world }`; `count` is how many receipts the day had, leaving out the clock's and bookkeeping.
+ * What a run of receipts (one reply's, on one day) holds, as a day-facts entry is kept
+ * (`chronicle.dayFacts`): `{ day, count, happened: [{ text, told }], more, places, fights, money,
+ * npcs: [{ name, meter, from, to }], world: [{ id, text }], revs: [first, last] }`. Quests are not in
+ * it: they are read from the threads' own stamps when the day is written.
  */
-export function dayFacts(receipts, { revDay = new Map(), state = null, day = null } = {}) {
+export function entryOf(receipts, day = null) {
     const candidates = [];
     const seenHappened = new Set();
     const places = [];
@@ -242,8 +247,10 @@ export function dayFacts(receipts, { revDay = new Map(), state = null, day = nul
     const money = { in: 0, out: 0 };
     const npcMoves = new Map();
     const world = new Map();
+    const revs = [];
     let count = 0;
     for (const receipt of receipts) {
+        if (isInt(receipt.rev)) revs.push(receipt.rev);
         // Bookkeeping and the clock's own receipts are no fact of the day (a day only slept through has none).
         if (quiet(receipt) || clockSet(receipt)) continue;
         count += 1;
@@ -251,7 +258,7 @@ export function dayFacts(receipts, { revDay = new Map(), state = null, day = nul
         const said = cut(receipt.summary, MAX_ITEM);
         if (said && !TOLD_ELSEWHERE.has(receipt.type) && !ECHO.test(said) && !seenHappened.has(said)) {
             seenHappened.add(said);
-            candidates.push({ said, told: receipt.narrate === true, at: candidates.length });
+            candidates.push({ text: said, told: receipt.narrate === true, at: candidates.length });
         }
         if (receipt.type === 'capture.place' && data.moved === true) pushUnique(places, data.name, MAX_PLACES, seenPlaces);
         const fight = fightOf(receipt);
@@ -268,38 +275,113 @@ export function dayFacts(receipts, { revDay = new Map(), state = null, day = nul
                 if (!isRecord(move) || typeof move.meter !== 'string') continue;
                 const key = `${keyOf(data.name)}\u0000${move.meter}`;
                 const before = npcMoves.get(key);
-                npcMoves.set(key, { name: data.name, meter: move.meter, from: before ? before.from : move.from ?? null, to: move.to ?? null });
+                npcMoves.set(key, { name: cut(data.name, MAX_NAME), meter: cut(move.meter, MAX_NAME), from: before ? before.from : textOrNull(move.from), to: textOrNull(move.to) });
             }
         }
         // The chronicle's own world lines: the last summary of each event that day.
         if (receipt.type === 'capture.world' && said && (receipt.module === undefined || receipt.module === 'story-director')) {
-            const id = typeof data.event === 'string' ? data.event : said;
+            const id = cut(typeof data.event === 'string' ? data.event : said, MAX_NAME);
             world.delete(id);
             world.set(id, said);
         }
     }
-    // At most MAX_HAPPENED, those the story was told first, in the order they came.
-    const kept = [...candidates].sort((a, b) => Number(b.told) - Number(a.told) || a.at - b.at).slice(0, MAX_HAPPENED).sort((a, b) => a.at - b.at);
-    const happened = kept.map(entry => entry.said);
-    const more = candidates.length - kept.length;
-    const npcs = [...npcMoves.values()].filter(move => move.from !== move.to).slice(0, MAX_NPCS)
-        .map(move => cut(`${flat(move.name)}: ${move.meter} ${move.from ? `${flat(move.from)} → ` : '→ '}${move.to ? flat(move.to) : 'none'}`, MAX_ITEM));
+    const kept = pickHappened(candidates);
     return {
+        day,
         count,
-        happened,
-        more,
+        happened: kept.map(({ text: said, told }) => ({ text: said, told })),
+        more: candidates.length - kept.length,
         places,
-        quests: questsOf(state, { revDay, day }),
         fights,
         money,
-        npcs,
-        world: [...world.values()].slice(-MAX_WORLD),
+        npcs: [...npcMoves.values()].slice(0, MAX_NPCS * 2),
+        world: [...world].slice(-MAX_WORLD).map(([id, said]) => ({ id, text: said })),
+        revs: revs.length ? [Math.min(...revs), Math.max(...revs)] : [],
     };
+}
+
+const textOrNull = value => (typeof value === 'string' && value ? cut(value, MAX_NAME) : null);
+
+// At most MAX_HAPPENED, those the story was told first, in the order they came.
+function pickHappened(candidates) {
+    return [...candidates].sort((a, b) => Number(b.told) - Number(a.told) || a.at - b.at).slice(0, ENTRY_HAPPENED).sort((a, b) => a.at - b.at);
+}
+
+/** Entries of one day merged into one (in their order): what a fold keeps (see digest.js). */
+export function foldEntries(entries, day) {
+    const out = { day, count: 0, happened: [], more: 0, places: [], fights: { count: 0, won: 0, lost: 0, fled: 0 }, money: { in: 0, out: 0 }, npcs: [], world: [], revs: [] };
+    const candidates = [];
+    const seenHappened = new Set();
+    const seenPlaces = new Set();
+    const npcMoves = new Map();
+    const world = new Map();
+    const revs = [];
+    for (const entry of entries) {
+        out.count += entry.count;
+        out.more += entry.more;
+        for (const item of entry.happened) {
+            if (seenHappened.has(item.text)) continue;
+            seenHappened.add(item.text);
+            candidates.push({ text: item.text, told: item.told, at: candidates.length });
+        }
+        for (const place of entry.places) pushUnique(out.places, place, MAX_PLACES, seenPlaces);
+        for (const name of ['count', 'won', 'lost', 'fled']) out.fights[name] += entry.fights[name];
+        out.money.in += entry.money.in;
+        out.money.out += entry.money.out;
+        for (const move of entry.npcs) {
+            const key = `${keyOf(move.name)}\u0000${move.meter}`;
+            const before = npcMoves.get(key);
+            npcMoves.set(key, { ...move, from: before ? before.from : move.from });
+        }
+        for (const item of entry.world) {
+            world.delete(item.id);
+            world.set(item.id, item.text);
+        }
+        revs.push(...entry.revs);
+    }
+    const kept = pickHappened(candidates);
+    out.happened = kept.map(({ text: said, told }) => ({ text: said, told }));
+    out.more += candidates.length - kept.length;
+    out.npcs = [...npcMoves.values()].slice(0, MAX_NPCS * 2);
+    out.world = [...world].slice(-MAX_WORLD).map(([id, said]) => ({ id, text: said }));
+    out.revs = revs.length ? [Math.min(...revs), Math.max(...revs)] : [];
+    return out;
+}
+
+/**
+ * A day's facts out of its entries (entryOf, in order) and the state now (the threads' `taken` and
+ * `ended` stamps; `dayOfRev(rev)` → the day a receipt revision belongs to, or null):
+ * `{ count, happened, more, places, quests, fights, money, npcs, world }`.
+ */
+export function factsOf(entries, { state = null, day = null, dayOfRev = () => null } = {}) {
+    const merged = foldEntries(entries, day);
+    const npcs = merged.npcs.filter(move => move.from !== move.to).slice(0, MAX_NPCS)
+        .map(move => cut(`${flat(move.name)}: ${move.meter} ${move.from ? `${flat(move.from)} → ` : '→ '}${move.to ? flat(move.to) : 'none'}`, MAX_ITEM));
+    return {
+        count: merged.count,
+        happened: merged.happened.map(item => item.text),
+        more: merged.more,
+        places: merged.places,
+        quests: questsOf(state, { dayOfRev, day }),
+        fights: merged.fights,
+        money: merged.money,
+        npcs,
+        world: merged.world.map(item => item.text),
+        revs: merged.revs,
+    };
+}
+
+/**
+ * The facts of `day` from its receipts (in order), the day of every receipt revision (`revDay`, from
+ * walkDays) and the state now: what factsOf gives for one entry of those receipts.
+ */
+export function dayFacts(receipts, { revDay = new Map(), state = null, day = null } = {}) {
+    return factsOf([entryOf(receipts, day)], { state, day, dayOfRev: rev => (revDay.has(rev) ? revDay.get(rev) : null) });
 }
 
 // The quests taken on and ended on that day, by the stamps the threads keep: the day of the receipt
 // whose revision a stamp names, else the day of its story minutes.
-function questsOf(state, { revDay, day }) {
+function questsOf(state, { dayOfRev, day }) {
     const out = { taken: [], done: [], failed: [], dropped: [] };
     const seen = { taken: new Set(), done: new Set(), failed: new Set(), dropped: new Set() };
     const threads = Object.values(isRecord(state?.domains?.director?.threads) ? state.domains.director.threads : {})
@@ -307,7 +389,8 @@ function questsOf(state, { revDay, day }) {
         .sort((a, b) => (a.track?.order ?? 0) - (b.track?.order ?? 0) || (String(a.id) < String(b.id) ? -1 : 1));
     const onDay = stamp => {
         if (!isRecord(stamp) || day === null) return false;
-        if (isInt(stamp.rev) && revDay.has(stamp.rev)) return revDay.get(stamp.rev) === day;
+        const known = isInt(stamp.rev) ? dayOfRev(stamp.rev) : null;
+        if (known !== null && known !== undefined) return known === day;
         return isInt(stamp.at) && dayOf(stamp.at) === day;
     };
     for (const thread of threads) {
@@ -453,9 +536,118 @@ function digestErrors(key, stored) {
     return errors;
 }
 
+// ---- the day facts kept as replies go (chronicle.dayFacts, chronicle.noted) ----------------------
+//
+// Story Block keeps a receipt's `data` only for the last couple of hundred replies (its storage trim),
+// so a long day cannot be read back from the receipts when it ends (RX-TL-3). Instead, before each
+// reply, `chronicle.note` reads the receipts committed since the last note (fresh, whole) and keeps
+// what they hold for the day digest as small entries under `chronicle.dayFacts["<day>.<rev>"]` (`rev`
+// is the note's own receipt revision): added whole, never changed, on the reply the note is a receipt
+// of, so deleting or swiping that reply takes exactly its facts away. When a day's digest is written,
+// its entries are removed by key. `chronicle.noted = [{ rev, minutes, from, settle }]` is where the
+// notes got to: the revision and the clock after the last one, the day notes began (`from`), and the
+// time part's last settle jump seen (`settle`).
+
+// The quest history (quest.details, F84) is read from receipts too: `chronicle.questLog["<rev>"] =
+// { thread, text }` keeps, per receipt revision, the summary of each receipt that touched a quest or
+// thread, written by the note on the reply it belongs to; the newest QUEST_LOG_KEPT per thread stay.
+export const QUEST_LOG_KEPT = 8;
+const QUEST_LOG_CEILING = 3000;
+export const QUEST_LOG_TEXT = 200;
+const THREAD_REF = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+/** A thread's kept history, oldest first: `[{ rev, text }]` (the last QUEST_LOG_KEPT). */
+export function questLogOf(chronicle, id) {
+    if (typeof id !== 'string' || !id) return [];
+    return Object.entries(isRecord(chronicle?.questLog) ? chronicle.questLog : {})
+        .filter(([key, entry]) => /^\d+$/.test(key) && isRecord(entry) && entry.thread === id)
+        .map(([key, entry]) => ({ rev: Number(key), text: entry.text }))
+        .sort((a, b) => a.rev - b.rev)
+        .slice(-QUEST_LOG_KEPT);
+}
+
+/** Entries a day may keep before a note folds them into its own one (a very long day). */
+export const FOLD_AT = 200;
+const ENTRY_CEILING = 4000;
+const ENTRY_KEY = /^(-?\d{1,15})\.(\d{1,15})$/;
+
+/** `chronicle.noted` (where the notes got to), or null. */
+export const notedOf = chronicle => slotValue(chronicle?.noted);
+
+/** The day-facts entries kept, by day: `Map(day → [{ key, entry }])`, each day's in revision order. */
+export function entriesByDay(chronicle) {
+    const out = new Map();
+    for (const [key, entry] of Object.entries(isRecord(chronicle?.dayFacts) ? chronicle.dayFacts : {})) {
+        const match = ENTRY_KEY.exec(key);
+        if (!match || !isRecord(entry) || entry.day !== Number(match[1])) continue;
+        if (!out.has(entry.day)) out.set(entry.day, []);
+        out.get(entry.day).push({ key, rev: Number(match[2]), entry });
+    }
+    for (const list of out.values()) list.sort((a, b) => a.rev - b.rev);
+    return out;
+}
+
+/** `dayOfRev(rev)`: the day whose entries' revision ranges hold `rev`, else null. */
+export function rangeDays(byDay) {
+    const ranges = [];
+    for (const [day, list] of byDay) for (const { entry } of list) if (entry.revs.length === 2) ranges.push([entry.revs[0], entry.revs[1], day]);
+    return rev => ranges.find(([lo, hi]) => rev >= lo && rev <= hi)?.[2] ?? null;
+}
+
+function entryErrors(key, entry) {
+    const at = `chronicle.dayFacts.${key}`;
+    const match = ENTRY_KEY.exec(key);
+    if (!match) return [`chronicle.dayFacts["${key}"] is not "<day>.<rev>".`];
+    if (!isRecord(entry) || entry.day !== Number(match[1])) return [`${at} is not a day's facts.`];
+    const errors = [];
+    if (!countOk(entry.count) || !countOk(entry.more)) errors.push(`${at}.count and .more must be whole numbers.`);
+    if (!Array.isArray(entry.happened) || entry.happened.length > ENTRY_HAPPENED
+        || !entry.happened.every(item => isRecord(item) && textOk(item.text, MAX_ITEM) && typeof item.told === 'boolean')) errors.push(`${at}.happened must be at most ${ENTRY_HAPPENED} { text, told }.`);
+    if (!textsOk(entry.places, MAX_PLACES, MAX_NAME)) errors.push(`${at}.places must be at most ${MAX_PLACES} names.`);
+    const fights = entry.fights;
+    if (!isRecord(fights) || !['count', 'won', 'lost', 'fled'].every(name => countOk(fights[name]))) errors.push(`${at}.fights must be whole numbers.`);
+    if (!isRecord(entry.money) || !countOk(entry.money.in) || !countOk(entry.money.out)) errors.push(`${at}.money must be { in, out } in whole numbers.`);
+    const nameOrNull = value => value === null || textOk(value, MAX_NAME);
+    if (!Array.isArray(entry.npcs) || entry.npcs.length > MAX_NPCS * 2
+        || !entry.npcs.every(move => isRecord(move) && textOk(move.name, MAX_NAME) && textOk(move.meter, MAX_NAME) && nameOrNull(move.from) && nameOrNull(move.to))) errors.push(`${at}.npcs must be stage moves.`);
+    if (!Array.isArray(entry.world) || entry.world.length > MAX_WORLD
+        || !entry.world.every(item => isRecord(item) && textOk(item.id, MAX_NAME) && textOk(item.text, MAX_ITEM))) errors.push(`${at}.world must be at most ${MAX_WORLD} { id, text }.`);
+    if (!Array.isArray(entry.revs) || ![0, 2].includes(entry.revs.length) || !entry.revs.every(countOk)) errors.push(`${at}.revs must be [first, last] revisions.`);
+    for (const field of Object.keys(entry)) {
+        if (!['day', 'count', 'happened', 'more', 'places', 'fights', 'money', 'npcs', 'world', 'revs'].includes(field)) errors.push(`${at} has an unknown field "${field}".`);
+    }
+    return errors;
+}
+
 /** The validator's part for `days` and `written` (both optional: a chronicle from before digests has neither). */
 export function validateDays(slice) {
     const errors = [];
+    if (slice.dayFacts !== undefined) {
+        if (!isRecord(slice.dayFacts)) errors.push('chronicle.dayFacts is not an object.');
+        else {
+            const entries = Object.entries(slice.dayFacts);
+            for (const [key, entry] of entries) errors.push(...entryErrors(key, entry));
+            if (entries.length > ENTRY_CEILING) errors.push(`The chronicle keeps at most ${ENTRY_CEILING} day-facts entries.`);
+        }
+    }
+    if (slice.questLog !== undefined) {
+        if (!isRecord(slice.questLog)) errors.push('chronicle.questLog is not an object.');
+        else {
+            const entries = Object.entries(slice.questLog);
+            if (entries.some(([key, entry]) => !/^\d{1,15}$/.test(key) || !isRecord(entry) || !THREAD_REF.test(entry.thread ?? '') || !textOk(entry.text, QUEST_LOG_TEXT)
+                || Object.keys(entry).some(field => field !== 'thread' && field !== 'text'))) errors.push('chronicle.questLog entries must be { thread, text } under a revision.');
+            if (entries.length > QUEST_LOG_CEILING) errors.push(`The chronicle keeps at most ${QUEST_LOG_CEILING} quest history lines.`);
+        }
+    }
+    if (slice.noted !== undefined && slice.noted !== null) {
+        const noted = slotValue(slice.noted);
+        const settleOk = value => value === null || (isRecord(value) && (value.from === null || isInt(value.from)) && isInt(value.to));
+        if (!noted || !Array.isArray(slice.noted) || slice.noted.length !== 1 || !countOk(noted.rev)
+            || !(noted.minutes === null || isInt(noted.minutes)) || !(noted.from === null || isInt(noted.from)) || !settleOk(noted.settle)
+            || Object.keys(noted).some(key => !['rev', 'minutes', 'from', 'settle'].includes(key))) {
+            errors.push('chronicle.noted must be null or { rev, minutes, from, settle }.');
+        }
+    }
     if (slice.days !== undefined) {
         if (!isRecord(slice.days)) errors.push('chronicle.days is not an object.');
         else {

@@ -220,6 +220,10 @@ function viewOn({ feature, minutes, written, recap = null }) {
 test('the feature: declared on by default; off, the hook writes nothing and the tail says nothing', () => {
     assert.deepEqual(features.map(feature => [feature.id, feature.default]), [[DIGEST_FEATURE, true]]);
     assert.equal(part.commands[DIGEST].feature, DIGEST_FEATURE);
+    // B-rxui-3: the three digest settings show only while the feature is on (Story Block's schema-field `feature`).
+    for (const key of ['digestDays', 'digestKeep', 'digestTail']) assert.equal(part.settings.schema[key].feature, DIGEST_FEATURE, key);
+    const schema = createModule().settings.schema;
+    for (const key of ['chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail']) assert.equal(schema[key].feature, DIGEST_FEATURE, key);
     assert.equal(part.screens.find(screen => screen.id === 'story-director/days').feature, DIGEST_FEATURE);
     const due = { minutes: 12 * 1440 + 60, written: { through: 11, days: [10], at: 6, skip: true } };
     assert.deepEqual(digestCommands(viewOn({ ...due, feature: undefined })), [{ type: DIGEST, payload: { at: 6 } }], 'an older host has no features: on');
@@ -234,4 +238,59 @@ test('the feature: declared on by default; off, the hook writes nothing and the 
     assert.equal(digestTailLine(viewOn(later)), '');
     assert.equal(digestTailLine(viewOn({ ...later, recap: { lines: ['[While away] …'], at: 6, rev: 5 } })), `${LAST_DAY_TAG} Day 10: 1 gold in.`);
     assert.equal(digestTailLine(viewOn({ ...later, recap: { lines: ['[While away] …'], at: 2, rev: 1 } })), '', 'a recap for an earlier reply');
+});
+
+test('RX-TL-3: a 250-reply day keeps its facts in state as it goes (folded past 200), a middle delete takes one reply\'s away, replay equals live', { timeout: 300000 }, async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await newHost();
+    await host.send('Start.', reply('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5']));
+    for (let n = 1; n <= 250; n += 1) {
+        await host.send(`On (${n}).`, reply(`Reply ${n}.`, ['+ coin 1']));
+        if (n === 40) {
+            await deleteExchange(host, 'On (10).');
+            sameOnReload(host, 'after the middle delete');
+        }
+    }
+    const kept = Object.keys(host.head().domains.chronicle.dayFacts);
+    assert.ok(kept.length <= 200, `${kept.length} entries kept for the day: folded`);
+    sameOnReload(host, 'a long day');
+    await host.send('Sleep.', reply('Morning comes.', ['! time +1d']));
+    await host.send('Up.', reply('A new day.'));
+    const june3 = host.sdk.query('chronicle.days').find(day => day.date === 'June 3, 1200');
+    assert.ok(june3, 'June 3 has its digest');
+    assert.deepEqual(june3.money, { in: 5 + 249, out: 0 }, 'every reply\'s coin but the deleted one\'s');
+    assert.deepEqual(june3.places, ['Bluewatch']);
+    // The day's entries went once it was written; the next day's are kept until it ends.
+    assert.ok(Object.values(host.head().domains.chronicle.dayFacts).every(entry => entry.day > june3.day));
+    sameOnReload(host, 'after the digest');
+    host.close();
+});
+
+// Story Block's storage trim (RX-TL-3): old receipts lose their `data`. Done here to every stored receipt.
+function trimAll(host) {
+    for (const message of host.ctx.chat) {
+        for (const extra of [message?.extra, ...(message?.swipe_info ?? []).map(info => info?.extra)]) {
+            for (const receipt of extra?.storySuite?.receipts ?? []) delete receipt.data;
+        }
+    }
+}
+
+test('RX-TL-3: the quest history and the day digest outlive the receipts\' data', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await newHost();
+    await host.send('Hello.', reply('Harrow.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Orsa', '+ coin 9']));
+    await host.send("I'll take it, I'll find your letter.", reply('Orsa nods.', ['+ quest Lost Letter — Orsa lost a letter | giver: Orsa | goal: Find the letter | reward: 30 gold']));
+    await host.send('Found it.', reply('Under a bench.', ['~ quest Lost Letter | met: yes | progress: found under a bench']));
+    await host.send('Here.', reply('Orsa reads it.'));
+    const id = host.sdk.query('director.threads', { kind: 'quest' })[0].id;
+    const before = host.sdk.query('quest.details', { id }).history;
+    assert.ok(before.length >= 2, JSON.stringify(before));
+    trimAll(host);
+    assert.deepEqual(host.sdk.query('quest.details', { id }).history, before, 'kept by the note, not read from receipts');
+    await host.send('Sleep.', reply('Morning.', ['! time +1d']));
+    await host.send('Up.', reply('A new day.'));
+    const [day] = host.sdk.query('chronicle.days');
+    assert.equal(day.line, 'June 3, 1200: to Harrow; took on Lost Letter; 9 gold in.');
+    sameOnReload(host, 'after the trim');
+    host.close();
 });

@@ -9,6 +9,9 @@
 //   surfaced: null | [{ at, round, ids }],      // the pick for the reply being written
 //   days:     { [day]: [Digest] },              // the day digests (days.js), each day a slot
 //   written:  null | [{ through, days, at, skip }], // where the digests were last written (days.js)
+//   dayFacts: { ["<day>.<rev>"]: entry },        // each reply's facts for the digest, until its day is written
+//   noted:    null | [{ rev, minutes, from, settle }], // where those notes got to (days.js)
+//   questLog: { ["<rev>"]: { thread, text } },  // the quest history lines (quest.details), kept by the note
 // }
 // An event is a lasting situation of the wider world (a war, a plague, a calamity) the story
 // keeps moving: `state` is looming, ongoing or resolved. `since` and `updated` are story minutes
@@ -43,7 +46,7 @@ export const MAX_AKA = 6;
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 export function initialChronicle() {
-    return { events: {}, factions: {}, seen: toSlot({}), round: 0, surfaced: null, days: {}, written: null };
+    return { events: {}, factions: {}, seen: toSlot({}), round: 0, surfaced: null, days: {}, written: null, dayFacts: {}, noted: null, questLog: {} };
 }
 
 /** The round each event was last in the tail (`seen`; an older state kept the map bare). */
@@ -243,7 +246,7 @@ export function validateChronicle(slice) {
     // A chronicle from before the day digest has no `days` or `written`.
     errors.push(...validateDays(slice));
     for (const key of Object.keys(slice)) {
-        if (!['events', 'factions', 'seen', 'round', 'surfaced', 'days', 'written'].includes(key)) errors.push(`chronicle has an unknown field "${key}".`);
+        if (!['events', 'factions', 'seen', 'round', 'surfaced', 'days', 'written', 'dayFacts', 'noted', 'questLog'].includes(key)) errors.push(`chronicle has an unknown field "${key}".`);
     }
     return errors;
 }

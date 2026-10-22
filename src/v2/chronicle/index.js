@@ -20,7 +20,7 @@
 
 import { applyFactionLine, applyWorldLine, edit, remove } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
-import { DIGEST_TAIL_BUDGET, digestCommand, digestCommands, digestTailLine } from './digest.js';
+import { DIGEST_TAIL_BUDGET, NOTE, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
 import { daysScreen } from './days-screen.js';
 import { initialChronicle, validateChronicle } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, chronicleTail } from './note.js';
@@ -40,10 +40,12 @@ export const features = Object.freeze([
 
 // The command owned by the feature: a handler with `feature` (Story Block refuses it while it is off).
 const digestHandler = Object.assign((ctx, payload) => digestCommand(ctx, payload), { feature: DIGEST_FEATURE });
+// The note keeps the quest history too, so it is not under the digest feature (it skips the day facts while that is off).
+const noteHandler = ctx => noteCommand(ctx);
 
-/** `beforeGenerate(view)`: the digest when a day ended, then the world events' pick. */
+/** `beforeGenerate(view)`: the last reply's day facts, the digest when a day ended, then the world events' pick. */
 export function beforeGenerate(view) {
-    const commands = [...digestCommands(view), ...(surfaceHook(view)?.commands ?? [])];
+    const commands = [...noteCommands(view), ...digestCommands(view), ...(surfaceHook(view)?.commands ?? [])];
     return commands.length ? { commands } : undefined;
 }
 
@@ -57,13 +59,15 @@ export function tail(view) {
 export const part = {
     features,
     domains: {
-        chronicle: { initial: initialChronicle, validate: validateChronicle },
+        // `dayFacts` is per-reply bookkeeping (SPEC §2.2 scratch): an entry whose holder a deleted reply made is replayed all the same.
+        chronicle: { initial: initialChronicle, validate: validateChronicle, scratch: ['dayFacts', 'questLog'] },
     },
     commands: {
         'chronicle.edit': edit,
         'chronicle.remove': remove,
         [SURFACE]: surface,
         [DIGEST]: digestHandler,
+        [NOTE]: noteHandler,
     },
     queries,
     kinds: {
@@ -82,9 +86,10 @@ export const part = {
         // The While away threshold is the time part's: a jump that long is a time skip.
         reads: { recapHours: 'time.recapHours' },
         schema: {
-            digestDays: { type: 'int', label: 'Day digest: whole days kept', min: 1, max: FULL_MAX },
-            digestKeep: { type: 'int', label: 'Day digest: days kept in all (older ones are dropped)', min: 1, max: KEEP_MAX },
-            digestTail: { type: 'bool', label: 'Day digest: remind the story of the last day after a time skip' },
+            // Shown only while the feature is on (Story Block 2 settings fields' `feature`, B-rxui-3).
+            digestDays: { type: 'int', label: 'Day digest: whole days kept', min: 1, max: FULL_MAX, feature: DIGEST_FEATURE },
+            digestKeep: { type: 'int', label: 'Day digest: days kept in all (older ones are dropped)', min: 1, max: KEEP_MAX, feature: DIGEST_FEATURE },
+            digestTail: { type: 'bool', label: 'Day digest: remind the story of the last day after a time skip', feature: DIGEST_FEATURE },
         },
     },
     tabs: [],

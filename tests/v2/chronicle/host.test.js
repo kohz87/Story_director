@@ -63,7 +63,9 @@ test('on the host: world and faction lines are the chronicle\'s, event lines the
 test('on the host: a swipe or a delete takes the reply\'s world lines back; replay equals rebuild', async () => {
     const host = await newHost();
     await host.send('Begin.', reply('The war starts.', ['~ time June 3, 1200, 08:00 pm', '+ world Border War — raids on the river']));
-    const before = JSON.stringify(host.head().domains.chronicle);
+    // The world lines only: the day digest's notes of the first reply are kept on it before the next one.
+    const lines = () => { const { dayFacts: _facts, noted: _noted, ...rest } = host.head().domains.chronicle; return JSON.stringify(rest); };
+    const before = lines();
     await host.send('What news?', reply('The plague.', ['+ world Red Plague — coughing in the docks', '~ world Border War | state: resolved — a truce']));
     assert.equal(host.sdk.query('chronicle.event', { name: 'Border War' }).state, 'resolved');
     const head = JSON.stringify(host.head());
@@ -71,7 +73,7 @@ test('on the host: a swipe or a delete takes the reply\'s world lines back; repl
     assert.equal(JSON.stringify(host.head()), head, 'replay equals rebuild');
 
     await host.swipe(reply('Nothing new.'));
-    assert.equal(JSON.stringify(host.head().domains.chronicle), before, 'the swipe took both lines back');
+    assert.equal(lines(), before, 'the swipe took both lines back');
     assert.equal(host.sdk.query('chronicle.event', { name: 'Border War' }).state, 'ongoing');
     assert.equal(host.sdk.query('chronicle.event', { name: 'Red Plague' }), null);
 
