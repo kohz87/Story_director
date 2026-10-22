@@ -9,8 +9,8 @@
 > `quest.finish`, deadlines that slip or lapse as story time passes with a *While away* recap after a
 > jump, the atlas (places, routes, travel times), the chronicle (world events under way and the factions
 > behind them, three of them recalled to the story each reply), a day digest written by code when a story
-> day ends (feature `story-director.digest`, on by default) and its screens: Quests, Director, Map,
-> Chronicle, Days, the time-and-place
+> day ends (feature `story-director.digest`, on by default) and its screens: World (Now and Journal, see
+> [The World screen](#the-world-screen-in-v2)), Quests, Director, Map, Chronicle, the time-and-place
 > strip and a status card under every reply (on by default, collapsed; turn it off per screen). The story
 > clock runs on the reader's calendar, or by default on the enabled pack's (Ersveil: CY, twelve months
 > of 30 days; the Calendar settings then show the pack's calendar and say so, and Custom starts from it), and starts at the pack's start date when the story has not set it. Quest rewards are whole
@@ -32,7 +32,8 @@
 > **Arc planning** (feature `story-director.arc`, on; needs Story Block 2.0.0-beta.1 or newer for its model
 > call, else the Director tab says so and shows no buttons): **Plan arc** asks a planner model, on its own
 > connection profile, for the next arc; the plan waits for your review (**Accept**, **Discard**, **Plan
-> again**) and, accepted, becomes the Director's own beats, agendas, hooks, clocks and secrets. See
+> again**) and, accepted, becomes the Director's own beats, agendas, hooks, clocks and secrets (or, with
+> **Accept planned arcs automatically** on, is accepted at once and the Director tab notes that an arc began). See
 > [Arc planning in v2](#arc-planning-in-v2). **Behind the scenes** (agendas, planned beats, clocks, secrets)
 > is hidden on the Director tab until you press **Reveal** (per chat, remembered); the story is told all of it.
 > The v1 text below on offers, Take on and Turn down describes v1 only. The contract is `docs/v2/SPEC.md` and `docs/v2/MODULES.md` on Story Block's `v2`
@@ -812,6 +813,35 @@ are kept under "Do not reveal". The planning prompt is editable (with reset); it
 `{{recent}}`, `{{tracker}}`, `{{now}}`, `{{place}}`, `{{nearby}}`, `{{note}}`, `{{genre}}`,
 `{{previous_arc}}`, `{{user}}` and `{{char}}`.
 
+### The World screen in v2
+
+The **World** tab (and game-view screen) shows only what your character knows, in two views; the
+**Director** tab stays the game master's view, with what is behind the scenes behind **Reveal**.
+
+- **Now.** *Here*: the place (the map's, else Story Block's scene) and the people the scene lists as
+  present (`+ present`). With NPC State Delta each is a chip with their stance (their stage-ladder rank,
+  disposition or meter stage) that opens their dossier; without it, the plain names. *Upcoming*: what you
+  know is coming within the next 30 story days (setting **World: Upcoming looks this many story days
+  ahead**): your quests' due dates (an overdue one first), the dates of world events and leads the story
+  told you, and the pack calendar's holidays (`packs.calendar().holidays`, `[{ name, month, day }]`, only
+  while the chat runs on that pack's calendar). *News and events*: the chronicle's world events and the
+  Director's dated events, newest first, each with a short summary. *Factions*: those the chronicle knows,
+  newest first.
+- **Journal.** One entry per story day, newest first, from the day digest: where you went, who you met
+  (new in the scene that day), the news, the quests taken on, finished, failed or given up, fights and
+  money, NPC stage moves and what else the story was told, with a search box; the day under way shows as
+  *today so far*. It took the Days screen's place: the old id `story-director/days` is now a dialog of the
+  Journal alone. With the day digest off it says so.
+- **What "known" means.** Shown: what a reply's story lines wrote (world events, factions, dated events,
+  hooks, quests) or you wrote on the Chronicle screen, and Story Block's scene. Never shown, revealed or
+  not: agendas, beats, clocks, secrets, the arcs and anything the arc planner made or changed (a thread
+  tagged with an arc), and the Director's problems; a chronicle entry named like one of those is left out,
+  and a journal line naming a secret or an arc is dropped. Quests show only their name, goal and due date.
+- Feature **World view** (`story-director.world`, on). Queries: `director.world`, `director.world.here`
+  (`{ place, present, people, nsd }`; NPC State Delta reads `present` to know who is in the scene) and
+  `director.journal`. Nothing is stored: all of it is worked out on read, so swipes, deletes and reloads
+  show what a rebuild shows.
+
 ### Arc planning in v2
 
 The v1 rules above hold, in v2's shape (Story Block v2, the Director tab):
@@ -831,8 +861,14 @@ The v1 rules above hold, in v2's shape (Story Block v2, the Director tab):
   left out or changed.
 - **Review.** The plan waits on the panel as text you may edit; Accept reads your text again the same
   strict way. With behind the scenes hidden it says only "A new arc plan is waiting" with **Accept without
-  reading**, **Review** (reveals) and **Discard**. *Use a plan without review* skips this. The waiting plan
-  is yours, kept per chat in this browser: a swipe does not throw it away.
+  reading**, **Review** (reveals) and **Discard**. The waiting plan is yours, kept per chat in this browser:
+  a swipe does not throw it away.
+- **Accept planned arcs automatically** (off by default) skips the review: a plan the planner made, by
+  **Plan arc** or by itself, is accepted at once through the same strict reading and the same commands as
+  **Accept** (a plan code cannot use is still refused, and the panel says why). The Arc panel then says
+  quietly "A new arc began by itself (accepted without review)" with **OK**, naming nothing of the arc
+  while behind the scenes is hidden; the toast names nothing either. Deleting the reply it was accepted on
+  takes the arc and the note away.
 - **Accepted** (commands `director.arc.accept`, then `director.arc.update` for each item naming a thread
   already tracked): an arc record and the plan's threads, each tagged with the arc, made by the tracker's
   own rules, on the latest reply like any action of yours. Swiping or deleting that reply takes the plan
@@ -843,7 +879,7 @@ The v1 rules above hold, in v2's shape (Story Block v2, the Director tab):
   when every beat of the arc played out (the arc is ended first), when no beat is due within *Stalled after
   story days* (7), or when open threads run low (*Running low below*, 3; after 5 replies since the last ask).
   Never while a plan waits.
-- **Settings** (Story Director → Arc planning): planner connection, when to plan, use without review, genre
+- **Settings** (Story Director → Arc planning): planner connection, when to plan, accept planned arcs automatically, genre
   and tone, Director's note (used for one arc: once an arc planned with it is accepted it is left out until
   you change it, unless *Keep the note for every plan*), messages the planner reads (40), longest plan
   (tokens), stall days, running low. The planner prompt is under **More**, with **Reset**; its macros are

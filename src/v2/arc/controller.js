@@ -5,8 +5,10 @@
 // (MODULES §G; Story Block
 // ARC_NEEDS_STORY_BLOCK or newer). Without it the arc panel says so plainly and shows no buttons. What
 // comes back is read strictly (plan.js readPlan) and waits for the reader's review (Accept, Discard,
-// Plan again; Accept without reading while behind the scenes is hidden), unless they chose to use plans
-// without review. Only Accept writes anything, and it does so as the reader's commands
+// Plan again; Accept without reading while behind the scenes is hidden), unless they chose to accept
+// planned arcs automatically (setting `arc.autoAccept`, off by default): then a plan the planner made, by the
+// reader's Plan arc or by itself, is accepted at once through the same strict reading and commands, and the
+// arc panel says quietly that an arc began (nothing of it while behind the scenes is hidden). Only Accept writes anything, and it does so as the reader's commands
 // (commands.js), so the plan is ops on the latest reply like any reader action: replay is the same as
 // live, and deleting or swiping that reply takes the plan back.
 //
@@ -76,7 +78,7 @@ export function recentStory(chat, count) {
 /**
  * The arc planner for one page. `deps` (tests): { sdk () → Story Block's sdk, chat () → the chat's
  * messages, chatId () → its id, store (browserStore), reveal (screens/reveal.js), notify(kind, text) }.
- * Returns { status(), plan({ reason }), accept(text?), discard(), end(), cancel(), onTurn(turn), subscribe(fn) }.
+ * Returns { status(), plan({ reason }), accept(text?, { auto }), seen(), discard(), end(), cancel(), onTurn(turn), subscribe(fn) }.
  */
 export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stChatId, store = browserStore(), reveal = pageReveal, notify = toast } = {}) {
     const listeners = new Set();
@@ -189,6 +191,7 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
             error: errorChat === id ? error : '',
             draft: draftOf(id),
             hidden: reveal?.hidden?.() ?? false,
+            began: begunOf(id, api),
             arc: api ? arcQuery((() => { try { return api.view?.()?.state ?? null; } catch { return null; } })()) : { current: null, previous: null, count: 0 },
         };
     }
@@ -251,7 +254,8 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
             if (errors.length) return fail(id, `The plan could not be used: ${errors.map(entry => entry.text).join(' ')}`);
             const draft = { text: planText(read), findings: read.findings, reason, note: mark, noteUsed };
             keep(id, { draft });
-            if (settings.autoAccept && chatId() === id) return await accept(draft.text);
+            // Accept planned arcs automatically: the same strict reading and the same commands as Accept.
+            if (settings.autoAccept && chatId() === id) return await accept(draft.text, { auto: true });
             if (reason !== 'manual') notify('info', `A new arc plan is ready in the Director tab (${REASON_TEXT[reason] ?? reason}).`);
             return { ok: true, draft };
         } catch (thrown) {
@@ -262,8 +266,12 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
         }
     }
 
-    /** Accepts the waiting plan (or `text`, the reader's edit of it): the arc and its threads, as commands. */
-    async function accept(text = null) {
+    /**
+     * Accepts the waiting plan (or `text`, the reader's edit of it): the arc and its threads, as commands.
+     * `auto`: accepted by itself (setting `arc.autoAccept`): the Director screen notes quietly that an arc
+     * began (the arc's id, kept per chat in this browser), and the toast names nothing of the plan.
+     */
+    async function accept(text = null, { auto = false } = {}) {
         const api = host();
         const id = chatId();
         if (!api) return fail(id, NEEDS_TEXT);
@@ -278,12 +286,29 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
             const out = await api.command(UPDATE, { arc, line });
             if (!out?.ok) skipped.push(out?.message ?? line);
         }
-        keep(id, { draft: null });
+        keep(id, { draft: null, began: auto && typeof arc === 'string' ? { arc } : null });
         error = skipped.length ? `The arc is tracked, but ${skipped.length === 1 ? 'one change' : `${skipped.length} changes`} could not be made: ${skipped.join(' ')}` : '';
         errorChat = id;
         emit();
-        notify('success', 'The new arc is being tracked.');
+        notify(auto ? 'info' : 'success', auto ? 'A new arc began (accepted without review). See the Director tab.' : 'The new arc is being tracked.');
         return result;
+    }
+
+    // The arc accepted by itself that the panel still notes: `{ arc }` while it is the current arc (a swipe
+    // or delete that took the plan's reply away takes the note with it), else null.
+    function begunOf(id, api) {
+        const began = chatEntry(id).began;
+        if (!began || typeof began.arc !== 'string') return null;
+        let current = null;
+        try { current = currentArc(api?.view?.()?.state?.domains?.arc); } catch { current = null; }
+        return current?.id === began.arc ? { arc: began.arc } : null;
+    }
+
+    /** The reader read the note that an arc began by itself. */
+    function seen() {
+        keep(chatId(), { began: null });
+        emit();
+        return { ok: true };
     }
 
     function discard() {
@@ -344,6 +369,7 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
         status,
         plan,
         accept,
+        seen,
         discard,
         end,
         cancel,

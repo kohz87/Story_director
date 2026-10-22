@@ -6,7 +6,7 @@
 //
 // The day digest (feature `story-director.digest`, on by default; days.js, digest.js): when the story
 // clock has passed into a new day, code writes what each finished day held from the receipts (no model
-// call), keeps them by day in `chronicle.days`, shows them on the Days screen, and tells the reply after
+// call), keeps them by day in `chronicle.days`, shows them on the World screen's Journal, and tells the reply after
 // a time skip or a While away recap the last day's one line.
 //
 // The tracker part owns the kind `event` (a dated happening, MODULES §C1), so a world event is a
@@ -21,7 +21,6 @@
 import { applyFactionLine, applyWorldLine, edit, remove } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
 import { DIGEST_TAIL_BUDGET, NOTE, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
-import { daysScreen } from './days-screen.js';
 import { initialChronicle, validateChronicle } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, chronicleTail } from './note.js';
 import { SURFACE, beforeGenerate as surfaceHook, surface } from './pick.js';
@@ -33,7 +32,7 @@ export const features = Object.freeze([
     Object.freeze({
         id: DIGEST_FEATURE,
         label: 'Day digest',
-        describe: 'When a story day ends, code writes what it held (places, quests, money, NPC stages, world news and the day\'s other events) from the receipts, for the Days screen and a one-line reminder after a time skip.',
+        describe: 'When a story day ends, code writes what it held (places, quests, money, NPC stages, world news and the day\'s other events) from the receipts, for the Journal on the World screen and a one-line reminder after a time skip.',
         default: true,
     }),
 ]);
@@ -94,5 +93,6 @@ export const part = {
         },
     },
     tabs: [],
-    screens: [chronicleScreen, daysScreen],
+    // The day digests are read on the World screen's Journal (world/screen.js); the Days screen is gone.
+    screens: [chronicleScreen],
 };

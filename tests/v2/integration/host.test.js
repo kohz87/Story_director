@@ -262,7 +262,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.take', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
-        'story-director/map', 'story-director/chronicle', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
+        'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
     ]);
     const defs = host.registry.settingsDefs().find(entry => entry.moduleId === MODULE_ID);
     assert.deepEqual(Object.keys(defs.schema).sort(), [
@@ -272,6 +272,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
         'quests.followLadder', 'screens.hideBehind', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays', 'tracker.maxJump',
+        'world.upcomingDays',
     ]);
     assert.equal(defs.schema['tracker.calendar.preset'].label, 'Calendar: Calendar');
     assert.deepEqual(defs.schema['tracker.calendar.preset'].options, ['pack', 'gregorian', 'custom']);

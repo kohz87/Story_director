@@ -11,7 +11,7 @@ import { RECAP_BUDGET } from '../../../src/v2/time/recap.js';
 import { screens as SCREENS } from '../../../src/v2/screens/index.js';
 import { mapScreen } from '../../../src/v2/atlas/screen.js';
 import { chronicleScreen } from '../../../src/v2/chronicle/screen.js';
-import { daysScreen } from '../../../src/v2/chronicle/days-screen.js';
+import { daysScreen, worldScreen } from '../../../src/v2/world/index.js';
 import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
 import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
@@ -22,7 +22,7 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     assert.equal(ATLAS_STATIC, '');
     assert.equal(def.context.static(), `${STATIC_TEXT}\n${QUEST_STATIC}\n${CHRONICLE_STATIC}`);
     assert.equal(def.context.budget, 500 + 250 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'quests', 'time', 'atlas', 'chronicle', 'arc', 'screens']);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'quests', 'time', 'atlas', 'chronicle', 'world', 'arc', 'screens']);
     assert.ok(def.capture.kinds.quest.grammar.startsWith('+ quest Name'));
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;
@@ -90,9 +90,9 @@ test('two parts claiming one name is refused', () => {
 });
 
 test('screens and widgets: every part\'s, in part order; one id in two parts is refused', () => {
-    assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, daysScreen, ...SCREENS].map(screen => screen.id));
+    assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, worldScreen, daysScreen, ...SCREENS].map(screen => screen.id));
     assert.deepEqual(storyDirectorModule.tabs, []);
-    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.arc', 'story-director.behind'], 'the atlas\'s Map, the arc panel and behind the scenes');
+    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.arc', 'story-director.behind'], 'the atlas\'s Map, the World screen\'s people, the arc panel and behind the scenes');
     const status = storyDirectorModule.screens.find(screen => screen.id === 'story-director/status-card');
     assert.equal(status.defaultOn, true, 'the status card is on under every reply by default (§F24)');
     const widget = { render: () => {} };

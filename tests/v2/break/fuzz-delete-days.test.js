@@ -2,7 +2,8 @@
 // the clock by hours or days (time lines and crafting's director.advance), with money, places, items
 // and world lines, and middle exchanges deleted along the way. After each delete every stored block must still apply, a rebuild must give the live
 // state and every validator must pass; after the next reply every day the digests had is there again
-// and none is for today or later; the caps hold throughout; a fresh load gives the live state. Some
+// and none is for today or later; the caps hold throughout; the World screen and its Journal read the same
+// after a rebuild; a fresh load gives the live state. Some
 // deletes are inside a day that already has its digest: the digest follows the facts left.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -63,6 +64,8 @@ function replyLines(r, n) {
     if (r.chance(0.4)) lines.push(`~ place ${r.pick(PLACES)}`);
     if (r.chance(0.3)) lines.push(`+ item Trinket ${n}`);
     if (r.chance(0.2)) lines.push(`+ world Trouble ${n} — afoot | state: ${r.pick(['looming', 'ongoing'])}`);
+    // Someone new in the scene every third reply (the digest's `met`; no draw, so the seeds' stories stay as they were).
+    if (n % 3 === 0) lines.push(`+ present Visitor ${n}`);
     // Crafting moves the clock through director.advance (sometimes twice for one cause: held to once).
     if (r.chance(0.3)) lines.push(`! craft Tool ${n} | hours: ${r.int(1, 30)}`);
     if (r.chance(0.1)) lines.push(`! craft Spare ${n} | hours: ${r.int(1, 5)}`);
@@ -150,8 +153,10 @@ for (const seed of SEEDS) {
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
                 assert.deepEqual(host.store.problems().map(problem => problem.why ?? problem.message), [], `${where}: a later block no longer applies`);
                 const live = JSON.stringify(host.head());
+                const shown = JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal')]);
                 host.store.rebuild();
                 assert.equal(JSON.stringify(host.head()), live, `${where}: rebuild != live`);
+                assert.equal(JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal')]), shown, `${where}: World and Journal after a rebuild`);
                 assert.deepEqual(validatorErrors(host), [], where);
                 capsHold(host, where, caps);
                 digestsFollow(host, where);

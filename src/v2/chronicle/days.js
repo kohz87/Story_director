@@ -10,7 +10,9 @@
 //   fights    how many ended, won, lost, fled (RPG Battle's fight results);
 //   money     what came in and went out, in the currency's smallest unit (the receipts' own amounts);
 //   npcs      stage moves of NPC State Delta's meters (its receipts' `stages`);
-//   world     the chronicle's own world lines of that day (their receipt summaries).
+//   world     the chronicle's own world lines of that day (their receipt summaries);
+//   met       who came into the scene that day (Story Block's `present` receipts' `added` names), kept
+//             only when there is someone (older digests have none), for the World screen's Journal.
 // and one line made of those facts. Every number is one code wrote down; every text is a receipt's
 // own summary, a name the state keeps, or a calendar date.
 //
@@ -53,6 +55,7 @@ export const MAX_ITEM = 160;
 export const MAX_LINE = 200;
 export const MAX_DATE = 80;
 export const MAX_NAME = 80;
+export const MAX_MET = 8;
 
 // Receipts that set the clock (module story-director, `data.minutes`). `director.advance` called by
 // another module's command has no receipt of its own; the time part's settle before the next reply
@@ -63,9 +66,14 @@ const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'di
 // `checks.prepare` dice for the next reply, a module set up): per-reply bookkeeping, not what happened.
 // Making a character is the start of the story, not a day's event.
 const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed', 'checks.prepare', 'party.create']);
+// The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's
+// name and counts are never a fact of the day (the Journal shows only what {{user}} knows).
+const PLANNED_TYPES = new Set(['director.arc.accept', 'director.arc.update', 'director.arc.end']);
 const quiet = receipt => QUIET_TYPES.has(receipt.type) || String(receipt.type).startsWith('creation.')
     || (receipt.cause === 'system' && receipt.narrate !== true);
 const SETTLE = 'time.settle';
+// Story Block's scene receipts that name who came into the scene (`data.added`).
+const PRESENT_TYPES = new Set(['capture.present', 'scene.present']);
 // Receipts a section of the digest already tells (places, money, world), or the reader's own edits and
 // a fight's blow-by-blow: never repeated under "happened".
 const TOLD_ELSEWHERE = new Set([
@@ -282,12 +290,14 @@ export function entryOf(receipts, day = null) {
     const money = { in: 0, out: 0 };
     const npcMoves = new Map();
     const world = new Map();
+    const met = [];
+    const seenMet = new Set();
     const revs = [];
     let count = 0;
     for (const receipt of receipts) {
         if (isInt(receipt.rev)) revs.push(receipt.rev);
         // Bookkeeping and the clock's own receipts are no fact of the day (a day only slept through has none).
-        if (quiet(receipt) || clockSet(receipt)) continue;
+        if (quiet(receipt) || clockSet(receipt) || PLANNED_TYPES.has(receipt.type)) continue;
         count += 1;
         const data = isRecord(receipt.data) ? receipt.data : {};
         const said = cut(receipt.summary, MAX_ITEM);
@@ -296,6 +306,8 @@ export function entryOf(receipts, day = null) {
             candidates.push({ text: said, told: receipt.narrate === true, at: candidates.length });
         }
         if (receipt.type === 'capture.place' && data.moved === true) pushUnique(places, data.name, MAX_PLACES, seenPlaces);
+        // Story Block's scene: who came into the scene (`+ present`, the reader's scene.present).
+        if (PRESENT_TYPES.has(receipt.type) && Array.isArray(data.added)) for (const name of data.added) pushUnique(met, name, MAX_MET, seenMet);
         const fight = fightOf(receipt);
         if (fight) {
             fights.count += 1;
@@ -332,6 +344,7 @@ export function entryOf(receipts, day = null) {
         npcs: [...npcMoves.values()].slice(0, MAX_NPCS * 2),
         world: [...world].slice(-MAX_WORLD).map(([id, said]) => ({ id, text: said })),
         revs: revs.length ? [Math.min(...revs), Math.max(...revs)] : [],
+        ...(met.length ? { met } : {}),
     };
 }
 
@@ -350,6 +363,8 @@ export function foldEntries(entries, day) {
     const seenPlaces = new Set();
     const npcMoves = new Map();
     const world = new Map();
+    const met = [];
+    const seenMet = new Set();
     const revs = [];
     for (const entry of entries) {
         out.count += entry.count;
@@ -372,6 +387,7 @@ export function foldEntries(entries, day) {
             world.delete(item.id);
             world.set(item.id, item.text);
         }
+        for (const name of Array.isArray(entry.met) ? entry.met : []) pushUnique(met, name, MAX_MET, seenMet);
         revs.push(...entry.revs);
     }
     const kept = pickHappened(candidates);
@@ -380,6 +396,7 @@ export function foldEntries(entries, day) {
     out.npcs = [...npcMoves.values()].slice(0, MAX_NPCS * 2);
     out.world = [...world].slice(-MAX_WORLD).map(([id, said]) => ({ id, text: said }));
     out.revs = revs.length ? [Math.min(...revs), Math.max(...revs)] : [];
+    if (met.length) out.met = met;
     return out;
 }
 
@@ -403,6 +420,7 @@ export function factsOf(entries, { state = null, day = null, dayOfRev = () => nu
         npcs,
         world: merged.world.map(item => item.text),
         revs: merged.revs,
+        ...(merged.met?.length ? { met: [...merged.met] } : {}),
     };
 }
 
@@ -514,6 +532,7 @@ export function makeDigest(day, facts, { date = '', currency = null, made = 0, r
         money: { ...facts.money },
         npcs: [...facts.npcs],
         world: [...facts.world],
+        ...(Array.isArray(facts.met) && facts.met.length ? { met: facts.met.slice(0, MAX_MET) } : {}),
         revs: sorted.length ? [sorted[0], sorted.at(-1)] : [],
         made,
         ...(sources.length ? { src: sources } : {}),
@@ -541,7 +560,7 @@ export function capDays(days, { full, keep }) {
 
 // ---- the validator ----------------------------------------------------------------------------
 
-const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'revs', 'made', 'src'];
+const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'met', 'revs', 'made', 'src'];
 const KEYS_BRIEF = ['day', 'date', 'line', 'brief', 'count', 'made'];
 const textOk = (value, max) => typeof value === 'string' && codePoints(value) <= max;
 const textsOk = (list, max, each) => Array.isArray(list) && list.length <= max && list.every(item => textOk(item, each));
@@ -573,6 +592,7 @@ function digestErrors(key, stored) {
     if (!isRecord(money) || Object.keys(money).length !== 2 || !countOk(money.in) || !countOk(money.out)) errors.push(`${at}.money must be { in, out } in whole numbers.`);
     if (!textsOk(digest.npcs, MAX_NPCS, MAX_ITEM)) errors.push(`${at}.npcs must be at most ${MAX_NPCS} lines.`);
     if (!textsOk(digest.world, MAX_WORLD, MAX_ITEM)) errors.push(`${at}.world must be at most ${MAX_WORLD} lines.`);
+    if (digest.met !== undefined && !textsOk(digest.met, MAX_MET, MAX_NAME)) errors.push(`${at}.met must be at most ${MAX_MET} names.`);
     if (!Array.isArray(digest.revs) || digest.revs.length > 2 || !digest.revs.every(countOk)) errors.push(`${at}.revs must be [first, last] revisions.`);
     if (digest.src !== undefined && (!Array.isArray(digest.src) || !digest.src.length || digest.src.length > FOLD_AT * 2 || !digest.src.every(countOk))) errors.push(`${at}.src must be the revisions of its day's entries.`);
     return errors;
@@ -663,8 +683,9 @@ function entryErrors(key, entry) {
     if (!Array.isArray(entry.world) || entry.world.length > MAX_WORLD
         || !entry.world.every(item => isRecord(item) && textOk(item.id, MAX_NAME) && textOk(item.text, MAX_ITEM))) errors.push(`${at}.world must be at most ${MAX_WORLD} { id, text }.`);
     if (!Array.isArray(entry.revs) || ![0, 2].includes(entry.revs.length) || !entry.revs.every(countOk)) errors.push(`${at}.revs must be [first, last] revisions.`);
+    if (entry.met !== undefined && !textsOk(entry.met, MAX_MET, MAX_NAME)) errors.push(`${at}.met must be at most ${MAX_MET} names.`);
     for (const field of Object.keys(entry)) {
-        if (!['day', 'count', 'happened', 'more', 'places', 'fights', 'money', 'npcs', 'world', 'revs'].includes(field)) errors.push(`${at} has an unknown field "${field}".`);
+        if (!['day', 'count', 'happened', 'more', 'places', 'fights', 'money', 'npcs', 'world', 'met', 'revs'].includes(field)) errors.push(`${at} has an unknown field "${field}".`);
     }
     return errors;
 }
@@ -733,7 +754,7 @@ export function digestOut(digest, { currency = null, substitute = value => value
     if (digest.brief) {
         return {
             ...base, happened: [], more: 0, places: [], quests: { taken: [], done: [], failed: [], dropped: [] },
-            fights: { count: 0, won: 0, lost: 0, fled: 0 }, money: { in: 0, out: 0 }, npcs: [], world: [], revs: [],
+            fights: { count: 0, won: 0, lost: 0, fled: 0 }, money: { in: 0, out: 0 }, npcs: [], world: [], met: [], revs: [],
             moneyText: '', fightText: '',
         };
     }
@@ -747,6 +768,7 @@ export function digestOut(digest, { currency = null, substitute = value => value
         money: { ...digest.money },
         npcs: [...digest.npcs],
         world: digest.world.map(sub),
+        met: Array.isArray(digest.met) ? [...digest.met] : [],
         revs: [...digest.revs],
         moneyText: moneyText(digest.money, currency),
         fightText: fightText(digest.fights),

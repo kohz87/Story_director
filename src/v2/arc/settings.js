@@ -28,7 +28,8 @@ export const SCHEMA = Object.freeze({
     // A Connection Manager profile's name ('' = the chat's own connection); Story Block draws the dropdown.
     profile: field({ type: 'profile', label: 'Arc planning: Planner connection', help: 'The model that plans arcs. Same as chat uses the chat\'s own connection.' }),
     trigger: field({ type: 'choice', label: 'Arc planning: When to plan', options: [{ value: 'manual', label: 'When I press Plan arc' }, { value: 'auto', label: 'By itself (no arc, arc played out, stalled, running low)' }] }),
-    autoAccept: field({ type: 'bool', label: 'Arc planning: Use a plan without review' }),
+    // Off by default: a plan waits for the reader's review. On, it is accepted through the same strict reading and commands.
+    autoAccept: field({ type: 'bool', label: 'Arc planning: Accept planned arcs automatically', help: 'A planned arc (yours or one planned by itself) is accepted without review; the Director tab notes that an arc began, without naming it while behind the scenes is hidden.' }),
     genre: field({ type: 'text', label: 'Arc planning: Genre and tone', max: 200 }),
     note: field({ type: 'text', label: 'Arc planning: Director\'s note (used for one arc)', multiline: true, max: 1000 }),
     keepNote: field({ type: 'bool', label: 'Arc planning: Keep the note for every plan' }),
