@@ -4,7 +4,8 @@
 // ladder), else the built-in F to S ladder. A quest's `rank:` (or `difficulty:` when it names a rank)
 // is matched against whichever ladder is in use. A quest from a pack takes the pack's rank. A quest with
 // no rank gets one from its difficulty (defaultRank, B-b4-10 / B-b3-18), so every reward is held inside
-// some rank's range.
+// some rank's range. A written rank is held to one above the party's, or to the party's own on a quest
+// turned in on the story's word alone (questRank).
 
 import { tryQuery } from './progress.js';
 
@@ -76,16 +77,31 @@ function firstPack(list) {
 }
 
 /**
+ * The pack's money scale (F104): `inventory.economy` → `{ scale }`, a positive finite number; 1 when the
+ * query is not there, throws, or gives anything else.
+ */
+export function moneyScale(query) {
+    const scale = tryQuery(query, 'inventory.economy', {}, null)?.scale;
+    return typeof scale === 'number' && Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/** A DEFAULT_RANKS reward range times `scale`, in whole units, at least 1 each. */
+export function scaledReward(reward, scale) {
+    return reward.map(n => Math.max(1, Math.round(n * scale)));
+}
+
+/**
  * `quest.ranks` → `[{ id, title, levels: [lo, hi] | null, reward: [lo, hi] }]`, lowest first: the first
- * enabled pack's `ranks` content, else RPG Battle's `party.ranks` with rewards by place, else
- * DEFAULT_RANKS. Plain copies.
+ * enabled pack's `ranks` content (as written), else RPG Battle's `party.ranks` with rewards by place, else
+ * DEFAULT_RANKS with their rewards times the pack's money scale (moneyScale, F104). Plain copies.
  */
 export function ranksOf(query) {
     const packs = ladderFrom(firstPack(tryQuery(query, 'packs.content', { kind: 'ranks' }, null)));
     if (packs) return packs;
     const party = ladderFrom(tryQuery(query, 'party.ranks', {}, null), { withRewards: false });
     if (party) return party;
-    return DEFAULT_RANKS.map(rank => ({ ...rank, levels: [...rank.levels], reward: [...rank.reward] }));
+    const scale = moneyScale(query);
+    return DEFAULT_RANKS.map(rank => ({ ...rank, levels: [...rank.levels], reward: scale === 1 ? [...rank.reward] : scaledReward(rank.reward, scale) }));
 }
 
 // "D", "d-rank", "Rank D", "D rank", "Soul Class II" read the same way: lower case, the word rank set aside.
@@ -127,13 +143,21 @@ export const DIFFICULTY_STEPS = Object.freeze({ easy: -1, normal: 0, hard: 1, ni
 export const WRITTEN_RANKS_ABOVE = 1;
 
 /**
+ * The same for a quest turned in on the story's word alone (no goal code can count, and not a pack's
+ * reward): none. Its written rank or difficulty may only lower the reward, never lift it above the
+ * party's own rank's range (nothing but the story vouches for the work).
+ */
+export const STORY_RANKS_ABOVE = 0;
+
+/**
  * The rank a quest that names none is paid as: the party's rank on `ladder` (the rank whose levels hold
  * `level`, the player character's level; above every band, the highest band below it; the lowest rank
  * when the level is not known) moved by DIFFICULTY_STEPS for `difficulty` (easy, normal, hard,
- * nightmare; anything else is normal), and never more than WRITTEN_RANKS_ABOVE above the party's rank:
- * a difficulty reaches no further than a written rank may (B-b3-r2-7). Null only for an empty ladder.
+ * nightmare; anything else is normal), and never more than `above` (WRITTEN_RANKS_ABOVE, or
+ * STORY_RANKS_ABOVE for a story-vouched quest) above the party's rank: a difficulty reaches no further
+ * than a written rank may (B-b3-r2-7). Null only for an empty ladder.
  */
-export function defaultRank(ladder, difficulty, level = null) {
+export function defaultRank(ladder, difficulty, level = null, above = WRITTEN_RANKS_ABOVE) {
     if (!Array.isArray(ladder) || !ladder.length) return null;
     let base = 0;
     if (Number.isSafeInteger(level) && level > 0) {
@@ -141,7 +165,7 @@ export function defaultRank(ladder, difficulty, level = null) {
         if (at >= 0) base = at;
         else ladder.forEach((rank, index) => { if (rank.levels && rank.levels[1] < level) base = index; });
     }
-    const step = Math.min(WRITTEN_RANKS_ABOVE, Object.hasOwn(DIFFICULTY_STEPS, difficulty) ? DIFFICULTY_STEPS[difficulty] : 0);
+    const step = Math.min(above, Object.hasOwn(DIFFICULTY_STEPS, difficulty) ? DIFFICULTY_STEPS[difficulty] : 0);
     return ladder[Math.min(ladder.length - 1, Math.max(0, base + step))];
 }
 
@@ -150,17 +174,21 @@ export function defaultRank(ladder, difficulty, level = null) {
  * `letter`), 'written' (its own `rank:`, or a `difficulty:` that names a rank) or 'difficulty'
  * (defaultRank). `pack` is the quest's pack record or null; `level` the player character's level.
  * Code sets the numbers: a written rank more than WRITTEN_RANKS_ABOVE above the party's own is held
- * there, and `said` is the rank the story wrote. A pack's rank is not held.
+ * there, and `said` is the rank the story wrote. `vouched`: the quest is turned in on the story's word
+ * alone (no goal code can count, not a pack's reward), and its written rank or difficulty is held to
+ * the party's own rank (STORY_RANKS_ABOVE): it may lower the reward, never raise it. A rank below the
+ * party's is kept either way. A pack's rank is not held.
  */
-export function questRank(thread, ladder, { pack = null, level = null, difficulty = 'normal' } = {}) {
+export function questRank(thread, ladder, { pack = null, level = null, difficulty = 'normal', vouched = false } = {}) {
     const fromPack = pack ? rankNamed(pack.rank ?? pack.letter ?? '', ladder) : null;
     if (fromPack) return { rank: fromPack, by: 'pack' };
+    const above = vouched ? STORY_RANKS_ABOVE : WRITTEN_RANKS_ABOVE;
     const written = rankOf(thread, ladder);
     if (written) {
-        const most = Math.min(ladder.length - 1, ladder.indexOf(defaultRank(ladder, 'normal', level)) + WRITTEN_RANKS_ABOVE);
+        const most = Math.min(ladder.length - 1, ladder.indexOf(defaultRank(ladder, 'normal', level)) + above);
         return ladder.indexOf(written) > most ? { rank: ladder[most], by: 'written', said: written } : { rank: written, by: 'written' };
     }
-    const rank = defaultRank(ladder, difficulty, level);
+    const rank = defaultRank(ladder, difficulty, level, above);
     return { rank, by: rank ? 'difficulty' : null };
 }
 

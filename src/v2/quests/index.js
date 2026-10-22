@@ -130,7 +130,9 @@ function pcLevel(query) {
 /**
  * A quest's terms: `{ target, reward, said, pack, rank }`. `reward` is its pack quest's when it is one
  * (`said`: the reward the story wrote, when that differs), else the one it was taken on with, else read
- * from its labels; `rank` (questRank) is the range the reward is held to.
+ * from its labels; `rank` (questRank) is the range the reward is held to. A quest code cannot count and
+ * that is not paid the pack's reward is turned in on the story's word alone (`vouched`, the same test as
+ * `story: true` money at turn-in): its written rank is held to the party's own.
  */
 function termsFor(query, inventory, thread, currency) {
     const target = thread.target ?? withKind(inventory, parseTarget(thread.fields, thread.summary));
@@ -139,7 +141,8 @@ function termsFor(query, inventory, thread, currency) {
     const fromPack = packReward(pack, target, currency);
     const differs = fromPack && JSON.stringify(fromPack) !== JSON.stringify(own);
     const level = pcLevel(query);
-    const rank = questRank(thread, ranksOf(query), { pack, level, difficulty: questDifficulty(thread.fields?.difficulty) });
+    const vouched = !target && !fromPack;
+    const rank = questRank(thread, ranksOf(query), { pack, level, difficulty: questDifficulty(thread.fields?.difficulty), vouched });
     const rankNote = rank.said ? rankHeldText(rank.said, rank.rank, level) : '';
     return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote };
 }

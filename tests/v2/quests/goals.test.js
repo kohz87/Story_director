@@ -109,7 +109,7 @@ test('F83: quest.finish refuses a quest code cannot count until the story says i
 });
 
 test('F84: quest.details gives goal, note, terms, rank, giver, due, dates, status and the receipts touching the quest', () => {
-    const state = makeState({ threads: [ring({ ready: { rev: 9 }, fields: { goal: 'Find the ring', giver: 'Mara', reward: '900 gold', rank: 'E', due: 'Goldwane 3', step: 'searching the well' }, taken: { rev: 4, at: 600 }, rev: 9 })], scene: settlement });
+    const state = makeState({ threads: [ring({ ready: { rev: 9 }, fields: { goal: 'Find the ring', giver: 'Mara', reward: '900 gold', rank: 'F', due: 'Goldwane 3', step: 'searching the well' }, taken: { rev: 4, at: 600 }, rev: 9 })], scene: settlement });
     const receipts = [
         { index: 1, receipt: { rev: 4, summary: 'Astra takes on Lost Ring: 900 gold.', data: { quest: 'th_ring0001' } } },
         { index: 1, receipt: { rev: 5, summary: 'Something else.', data: { quest: 'th_other001' } } },
@@ -118,8 +118,8 @@ test('F84: quest.details gives goal, note, terms, rank, giver, due, dates, statu
     const got = details(state, { key: 'lost ring' }, { query: (name, args) => fakeQueries[name]?.(state, args), receipts: () => receipts });
     assert.deepEqual(got, {
         id: 'th_ring0001', key: 'Lost Ring', goal: 'Find the ring', hasGoal: true, countable: false, note: 'searching the well',
-        giver: 'Mara', due: 'Goldwane 3', rank: { id: 'E', title: 'E-rank', reward: [50, 230] },
-        terms: { target: '', reward: '900 gold', held: 'reward clamped to E-rank range: 50–230 gold (clamped from 900 gold)', text: '900 gold (reward clamped to E-rank range: 50–230 gold (clamped from 900 gold)); E-rank' },
+        giver: 'Mara', due: 'Goldwane 3', rank: { id: 'F', title: 'F-rank', reward: [10, 50] },
+        terms: { target: '', reward: '900 gold', held: 'reward clamped to F-rank range: 10–50 gold (clamped from 900 gold)', text: '900 gold (reward clamped to F-rank range: 10–50 gold (clamped from 900 gold)); F-rank' },
         ready: true, taken: { rev: 4, at: 600 }, ended: null,
         status: { state: 'here', text: 'Ready to turn in — goal met' },
         history: [{ rev: 4, text: 'Astra takes on Lost Ring: 900 gold.' }, { rev: 9, text: '~ quest Lost Ring | met: yes' }],
