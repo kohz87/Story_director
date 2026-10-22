@@ -138,13 +138,13 @@ test('a day whose digest a deleted reply wrote is written again by the next repl
     await host.send('Four.', reply('Still day three.', ['+ coin 1']));                               // writes June 4 (on "Three.")
     assert.deepEqual(host.sdk.query('chronicle.days').map(day => day.line), ['June 3, 1200: 10 gold in.', 'June 4, 1200: 20 gold in.']);
     assert.deepEqual(writtenOf(host.head().domains.chronicle).days.length, 2);
-    // "Two." carried June 3's digest and was June 4's only reply: June 3 is gone, June 4's digest names
-    // money a deleted reply had.
+    // "Two." carried June 3's digest and was June 4's only reply: June 3 is gone with the digest it
+    // carried, and June 4 follows its facts (none left: not shown).
     await deleteExchange(host, 'Two.');
-    assert.deepEqual(host.sdk.query('chronicle.days').map(day => day.date), ['June 4, 1200']);
+    assert.deepEqual(host.sdk.query('chronicle.days').map(day => day.date), []);
     sameOnReload(host, 'after the delete');
     await host.send('Five.', reply('On.'));
-    assert.deepEqual(host.sdk.query('chronicle.days').map(day => day.line), ['June 3, 1200: 10 gold in.', 'June 4, 1200: 20 gold in.']);
+    assert.deepEqual(host.sdk.query('chronicle.days').map(day => day.line), ['June 3, 1200: 10 gold in.'], 'June 3 written again, June 4 dropped');
     sameOnReload(host, 'after the rewrite');
     // Once written again, nothing more to do.
     const count = digests(host).length;
@@ -260,8 +260,10 @@ test('RX-TL-3: a 250-reply day keeps its facts in state as it goes (folded past 
     assert.ok(june3, 'June 3 has its digest');
     assert.deepEqual(june3.money, { in: 5 + 249, out: 0 }, 'every reply\'s coin but the deleted one\'s');
     assert.deepEqual(june3.places, ['Bluewatch']);
-    // The day's entries went once it was written; the next day's are kept until it ends.
-    assert.ok(Object.values(host.head().domains.chronicle.dayFacts).every(entry => entry.day > june3.day));
+    // The day's entries stay while its digest is whole (it follows them); the next day's are kept until it ends.
+    const left = Object.entries(host.head().domains.chronicle.dayFacts).filter(([, entry]) => entry.day === june3.day);
+    const src = host.head().domains.chronicle.days[String(june3.day)][0].src;
+    assert.deepEqual(left.map(([key]) => Number(key.split('.')[1])).sort((a, b) => a - b), src, 'exactly the entries it was made from');
     sameOnReload(host, 'after the digest');
     host.close();
 });

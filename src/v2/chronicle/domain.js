@@ -4,8 +4,9 @@
 // chronicle = {
 //   events:   { [ev_id]: { id, name, summary, state, since, updated, place, factions, aka, rev } },
 //   factions: { [fa_id]: { id, name, summary, area, stance, aka, rev } },
-//   seen:     [{ [ev_id]: round }],             // the round an open event was last in the tail
-//   round:    int,                              // tail picks made so far (chronicle.surface)
+//   seen:     [{ [ev_id]: round }],             // an older chat's rounds, written whole (read, never written now)
+//   seenAt:   { [ev_id]: round },               // the round an open event was last in the tail, by key
+//   round:    int,                              // tail picks made so far (chronicle.surface; a counter)
 //   surfaced: null | [{ at, round, ids }],      // the pick for the reply being written
 //   days:     { [day]: [Digest] },              // the day digests (days.js), each day a slot
 //   written:  null | [{ through, days, at, skip }], // where the digests were last written (days.js)
@@ -19,10 +20,15 @@
 // set), never written by the model. `rev` is the receipt that last changed the entry. `factions`
 // are the names a line gave (a faction need not be in the chronicle to be named). `aka` keeps a
 // name the entry had before the reader renamed it, so the story's old name still finds it.
-// `seen` and `surfaced` are kept apart from the events, so an event changes only when the story
-// or the reader changes it. Both are slots (../slot.js), written whole, so a later reply's pick or
-// line never depends on what a deleted reply's pick wrote (B-b1r2-12); an id in them whose event is
-// gone (its reply deleted) is passed over.
+// `seenAt` and `surfaced` are kept apart from the events, so an event changes only when the story
+// or the reader changes it. `seenAt` is per-reply bookkeeping (SPEC §2.2, a scratch field): each pick
+// adds its events' rounds by key and removes closed ones by key, a world line that closes an event
+// removes its key; nothing writes it whole, so deleting a reply never makes a later reply's change
+// rewrite a deleted pick's rounds (final soak: a later world line was lost). `round` is a counter: a
+// deleted pick takes its +1 away and later picks still count theirs, so a round kept in `seenAt` may
+// be past `round` after a delete; that is read as "just shown", never refused. `surfaced` is a slot
+// (../slot.js) the pick writes whole for its own reply. An id whose event is gone is passed over.
+// `seen` (a slot) is an older chat's rounds: read under `seenAt`, never written again.
 
 import { slotValue, toSlot } from '../slot.js';
 import { validateDays } from './days.js';
@@ -46,22 +52,18 @@ export const MAX_AKA = 6;
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 export function initialChronicle() {
-    return { events: {}, factions: {}, seen: toSlot({}), round: 0, surfaced: null, days: {}, written: null, dayFacts: {}, noted: null, questLog: {} };
+    return { events: {}, factions: {}, seen: toSlot({}), seenAt: {}, round: 0, surfaced: null, days: {}, written: null, dayFacts: {}, noted: null, questLog: {} };
 }
 
-/** The round each event was last in the tail (`seen`; an older state kept the map bare). */
-export const seenOf = chronicle => slotValue(chronicle?.seen) ?? {};
+/** The round each event was last in the tail: `seenAt`, over an older chat's `seen` (a slot, or bare). */
+export const seenOf = chronicle => ({ ...(slotValue(chronicle?.seen) ?? {}), ...(isRecord(chronicle?.seenAt) ? chronicle.seenAt : {}) });
 
 /** The pick for the reply being written (`surfaced`), or null. */
 export const surfacedOf = chronicle => slotValue(chronicle?.surfaced);
 
-/** Drops `id` from `seen` (a draft), writing the slot whole; nothing when it is not there. */
+/** Drops `id` from `seenAt` (a draft) by its key; nothing when it is not there (an older chat's `seen` stays as it is). */
 export function forgetSeen(chronicle, id) {
-    const seen = seenOf(chronicle);
-    if (!Object.hasOwn(seen, id)) return;
-    const next = { ...seen };
-    delete next[id];
-    chronicle.seen = toSlot(next);
+    if (isRecord(chronicle?.seenAt) && Object.hasOwn(chronicle.seenAt, id)) delete chronicle.seenAt[id];
 }
 
 export const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -233,7 +235,18 @@ export function validateChronicle(slice) {
     else {
         for (const [id, round] of Object.entries(seen)) {
             if (!EVENT_ID.test(id)) errors.push(`chronicle.seen["${id}"] is for no event.`);
-            else if (!isInt(round) || round < 0 || (isInt(slice.round) && round > slice.round)) errors.push(`chronicle.seen["${id}"] must be a round so far.`);
+            else if (!isInt(round) || round < 0) errors.push(`chronicle.seen["${id}"] must be a round.`);
+        }
+    }
+    // A round past `round` (a pick before it deleted) is read as just shown: never refused.
+    if (slice.seenAt !== undefined) {
+        if (!isRecord(slice.seenAt)) errors.push('chronicle.seenAt is not an object.');
+        else {
+            for (const [id, round] of Object.entries(slice.seenAt)) {
+                if (!EVENT_ID.test(id)) errors.push(`chronicle.seenAt["${id}"] is for no event.`);
+                else if (!isInt(round) || round < 0) errors.push(`chronicle.seenAt["${id}"] must be a round.`);
+            }
+            if (Object.keys(slice.seenAt).length > MAX_EVENTS * 4) errors.push(`chronicle.seenAt keeps about ${MAX_EVENTS} events at most.`);
         }
     }
     const surfaced = slotValue(slice.surfaced);
@@ -246,7 +259,7 @@ export function validateChronicle(slice) {
     // A chronicle from before the day digest has no `days` or `written`.
     errors.push(...validateDays(slice));
     for (const key of Object.keys(slice)) {
-        if (!['events', 'factions', 'seen', 'round', 'surfaced', 'days', 'written', 'dayFacts', 'noted', 'questLog'].includes(key)) errors.push(`chronicle has an unknown field "${key}".`);
+        if (!['events', 'factions', 'seen', 'seenAt', 'round', 'surfaced', 'days', 'written', 'dayFacts', 'noted', 'questLog'].includes(key)) errors.push(`chronicle has an unknown field "${key}".`);
     }
     return errors;
 }

@@ -20,6 +20,7 @@
 // clock was first set, to the first day it was set to.
 //
 // chronicle.days    = { [day]: [Digest] }   each day a slot (../slot.js), written whole
+//   a whole Digest made from the day's kept entries has `src` (their revisions) and follows them (daysOf);
 // chronicle.written = null | [{ through, days: [day], at, skip }]
 //   through: the day the clock was on when digests were last written (days before it are done);
 //   days:    the days that had a digest then, so one a deleted reply took away is written again;
@@ -98,18 +99,52 @@ const codePoints = value => Array.from(text(value)).length;
 /** The story day of `minutes` (whole days since the calendar's start). */
 export const dayOf = minutes => Math.floor(minutes / DAY_MINUTES);
 
-/** The day digests a chronicle keeps, by day number. */
-export function daysOf(chronicle) {
+/**
+ * The day digests a chronicle keeps, by day number, as the day's facts stand now. A digest written
+ * from the day's kept entries (`src`: their revisions) follows them: when a reply of that day is
+ * deleted later (its entry goes with it), the digest is worked out again from the entries left
+ * (followDigest), and a day none is left of is not there (the next digest drops it). Nothing of
+ * this is stored: it is read from the state. `state` (the threads' stamps, for the quests) and
+ * `currency` (the money's words in the line) are for a digest worked out again; without `state`
+ * its quests stay as written.
+ */
+export function daysOf(chronicle, { state = null, currency = null } = {}) {
     const out = {};
+    let byDay = null;
+    let dayOfRev = null;
     for (const [key, stored] of Object.entries(isRecord(chronicle?.days) ? chronicle.days : {})) {
         const digest = slotValue(stored);
-        if (digest && isInt(digest.day) && String(digest.day) === key) out[key] = digest;
+        if (!digest || !isInt(digest.day) || String(digest.day) !== key) continue;
+        if (digest.brief || !Array.isArray(digest.src) || !digest.src.length) {
+            out[key] = digest;
+            continue;
+        }
+        byDay ??= entriesByDay(chronicle);
+        const src = new Set(digest.src);
+        const left = (byDay.get(digest.day) ?? []).filter(item => src.has(item.rev));
+        if (!left.length) continue;
+        if (left.length === src.size) {
+            out[key] = digest;
+            continue;
+        }
+        dayOfRev ??= rangeDays(byDay);
+        out[key] = followDigest(digest, left, { state, currency, dayOfRev });
     }
     return out;
 }
 
-/** The days kept, oldest first. */
-export const orderedDays = chronicle => Object.values(daysOf(chronicle)).sort((a, b) => a.day - b.day);
+/**
+ * `digest` worked out again from `left` (the day's entries still kept, `[{ rev, entry }]` in order):
+ * its facts and line from them, its date and `made` as written, its quests from `state` when given.
+ */
+export function followDigest(digest, left, { state = null, currency = null, dayOfRev = () => null } = {}) {
+    const facts = factsOf(left.map(item => item.entry), { state, day: digest.day, dayOfRev });
+    const quests = state ? facts.quests : digest.quests;
+    return makeDigest(digest.day, { ...facts, quests }, { date: digest.date, currency, made: digest.made, revs: facts.revs, src: left.map(item => item.rev) });
+}
+
+/** The days kept, oldest first (daysOf's options). */
+export const orderedDays = (chronicle, options) => Object.values(daysOf(chronicle, options)).sort((a, b) => a.day - b.day);
 
 /** `chronicle.written` (where digests were last written), or null. */
 export const writtenOf = chronicle => slotValue(chronicle?.written);
@@ -457,9 +492,14 @@ export function dayLine(date, facts, { currency = null } = {}) {
     return cut(`${flat(date) || 'A day'}: ${parts.join('; ')}.`, MAX_LINE);
 }
 
-/** The digest kept for a day (full), from its facts. `made`: the receipt revision writing it. */
-export function makeDigest(day, facts, { date = '', currency = null, made = 0, revs = [] } = {}) {
+/**
+ * The digest kept for a day (full), from its facts. `made`: the receipt revision writing it; `src`:
+ * the revisions of the day-facts entries it was made from (it follows them, daysOf), none when it was
+ * read from the receipts.
+ */
+export function makeDigest(day, facts, { date = '', currency = null, made = 0, revs = [], src = null } = {}) {
     const sorted = [...revs].filter(isInt).sort((a, b) => a - b);
+    const sources = Array.isArray(src) ? [...new Set(src.filter(isInt))].sort((a, b) => a - b) : [];
     return {
         day,
         date: cut(date, MAX_DATE),
@@ -476,6 +516,7 @@ export function makeDigest(day, facts, { date = '', currency = null, made = 0, r
         world: [...facts.world],
         revs: sorted.length ? [sorted[0], sorted.at(-1)] : [],
         made,
+        ...(sources.length ? { src: sources } : {}),
     };
 }
 
@@ -500,7 +541,7 @@ export function capDays(days, { full, keep }) {
 
 // ---- the validator ----------------------------------------------------------------------------
 
-const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'revs', 'made'];
+const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'revs', 'made', 'src'];
 const KEYS_BRIEF = ['day', 'date', 'line', 'brief', 'count', 'made'];
 const textOk = (value, max) => typeof value === 'string' && codePoints(value) <= max;
 const textsOk = (list, max, each) => Array.isArray(list) && list.length <= max && list.every(item => textOk(item, each));
@@ -533,6 +574,7 @@ function digestErrors(key, stored) {
     if (!textsOk(digest.npcs, MAX_NPCS, MAX_ITEM)) errors.push(`${at}.npcs must be at most ${MAX_NPCS} lines.`);
     if (!textsOk(digest.world, MAX_WORLD, MAX_ITEM)) errors.push(`${at}.world must be at most ${MAX_WORLD} lines.`);
     if (!Array.isArray(digest.revs) || digest.revs.length > 2 || !digest.revs.every(countOk)) errors.push(`${at}.revs must be [first, last] revisions.`);
+    if (digest.src !== undefined && (!Array.isArray(digest.src) || !digest.src.length || digest.src.length > FOLD_AT * 2 || !digest.src.every(countOk))) errors.push(`${at}.src must be the revisions of its day's entries.`);
     return errors;
 }
 
@@ -543,8 +585,12 @@ function digestErrors(key, stored) {
 // reply, `chronicle.note` reads the receipts committed since the last note (fresh, whole) and keeps
 // what they hold for the day digest as small entries under `chronicle.dayFacts["<day>.<rev>"]` (`rev`
 // is the note's own receipt revision): added whole, never changed, on the reply the note is a receipt
-// of, so deleting or swiping that reply takes exactly its facts away. When a day's digest is written,
-// its entries are removed by key. `chronicle.noted = [{ rev, minutes, from, settle }]` is where the
+// of, so deleting or swiping that reply takes exactly its facts away. When a day's digest is written
+// from them, its entries stay while the digest is whole (the newest FOLLOW_MAX of them, newest days
+// first): the digest follows them (daysOf), so a reply of that day deleted later takes its facts out
+// of the digest and its time-skip line. They are removed by key when the day goes short or past
+// FOLLOW_MAX (its digest then stays as it was, `src` cleared), and at once for a day not written from
+// them. `chronicle.noted = [{ rev, minutes, from, settle }]` is where the
 // notes got to: the revision and the clock after the last one, the day notes began (`from`), and the
 // time part's last settle jump seen (`settle`).
 
@@ -568,6 +614,8 @@ export function questLogOf(chronicle, id) {
 
 /** Entries a day may keep before a note folds them into its own one (a very long day). */
 export const FOLD_AT = 200;
+/** Entries the written days keep in all, so their digests follow them (newest days first, each day whole). */
+export const FOLLOW_MAX = 800;
 const ENTRY_CEILING = 4000;
 const ENTRY_KEY = /^(-?\d{1,15})\.(\d{1,15})$/;
 

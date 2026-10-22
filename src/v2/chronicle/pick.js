@@ -15,7 +15,7 @@
 // pick. Without the hook (a host that runs none), the tail picks the same way with a hash of the
 // head's rev and each id instead, so the same state always gives the same events.
 
-import { isOpen, keyOf, orderedEvents, seenOf, surfacedOf } from './domain.js';
+import { isOpen, isRecord, keyOf, orderedEvents, seenOf, surfacedOf } from './domain.js';
 import { toSlot } from '../slot.js';
 
 export const SURFACE = 'chronicle.surface';
@@ -141,11 +141,13 @@ export function surface(ctx, payload = {}) {
     // One draw per open event, in id order, so the pick depends only on the seed and the state.
     const draws = new Map(orderedEvents(chronicle).filter(isOpen).map(event => event.id).sort().map(id => [id, ctx.rng()]));
     const ids = pickEvents(chronicle, { round, near, jitter: id => draws.get(id) ?? 0 });
+    // A counter (a deleted pick takes its +1 away; later ones keep theirs).
     chronicle.round = round;
-    // Both written whole (slots): only open events stay in `seen`.
-    const seen = Object.fromEntries(Object.entries(seenOf(chronicle)).filter(([id]) => isOpen(chronicle.events[id])));
-    for (const id of ids) seen[id] = round;
-    chronicle.seen = toSlot(seen);
+    // By key (SPEC §2.2): the picked events' rounds added, closed events' keys removed; never written whole.
+    if (!isRecord(chronicle.seenAt)) chronicle.seenAt = {};
+    for (const id of Object.keys(chronicle.seenAt)) if (!isOpen(chronicle.events[id])) delete chronicle.seenAt[id];
+    for (const id of ids) chronicle.seenAt[id] = round;
+    // This reply's pick, written whole (a slot).
     chronicle.surfaced = toSlot({ at, round, ids });
     const names = ids.map(id => chronicle.events[id].name);
     return { summary: names.length ? `World news for the next reply: ${names.join(', ')}.` : '', narrate: false, data: { ids, round } };

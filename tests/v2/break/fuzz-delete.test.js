@@ -6,6 +6,8 @@
 // never deleted), so a skip can only come from bookkeeping one reply keeps for another (B-b1r2-12).
 // The first reply's threads are made with every field later lines change: a later reply that changes
 // a field only a deleted reply had added is Story Block's to replay (its `replace` finds no key).
+// The first reply also opens six world events; later replies resolve or move them, and a delete is
+// often of a reply holding a world pick (final soak: a later world line was lost with it).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
@@ -55,6 +57,9 @@ function seedCrypto(seed) {
 
 const BASE = ['Base Hook', 'Base Rumour'];
 const BASE_PLACES = ['Bluewatch', 'Ridge Fort'];
+// World events the first reply opens: more than three stay open, so a world pick (chronicle.surface, on
+// the carrier before each reply) runs before nearly every reply, and later replies move them on.
+const BASE_WORLD = ['Salt Riots', 'Hill Rains', 'Wolf Winter', 'River Levy', 'Grain Fever', 'Pass Bandits'];
 const THREAD_KINDS = ['hook', 'agenda', 'event', 'beat', 'secret'];
 const STATES = ['looming', 'ongoing', 'resolved'];
 const FUNNY = ['Ro​pe', '‮Rope', 'Rópe', '__proto__', 'constructor', 'x'.repeat(130)];
@@ -90,6 +95,10 @@ function replyLines(r, n) {
             const key = name();
             lines.push(`+ world ${key} — afoot | state: ${r.pick(STATES)}`);
             if (r.chance(0.4)) lines.push(`~ world ${key} | state: ${r.pick(STATES)}`);
+        } else if (roll < 0.76) {
+            // A world line on one of the first reply's events: resolved or moved on (it writes the pick's
+            // rounds by key only, so a deleted pick before it never makes it fail).
+            lines.push(r.chance(0.5) ? `- world ${r.pick(BASE_WORLD)} — it ends` : `~ world ${r.pick(BASE_WORLD)} | state: ${r.pick(['looming', 'ongoing'])}`);
         } else if (roll < 0.8) {
             lines.push(r.chance(0.7) ? `! time +${r.int(1, 30)}h` : '~ time June 9, 1200, 10:00 am');
         } else if (roll < 0.9) {
@@ -125,7 +134,8 @@ for (const seed of SEEDS) {
         const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
         try {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
-                ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`)]));
+                ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
+                ...BASE_WORLD.map(key => `+ world ${key} — afoot | state: ongoing`)]));
             for (let n = 1; n <= REPLIES; n += 1) {
                 const lines = replyLines(r, n);
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
@@ -133,7 +143,10 @@ for (const seed of SEEDS) {
                 // A middle exchange in the first half (so many replies come after it): never the first.
                 const chat = host.ctx.chat;
                 const users = chat.map((message, i) => (message.is_user ? i : -1)).filter(i => i > 2 && i < chat.length / 2);
-                const user = r.pick(users);
+                // Often one whose reply holds a world pick (chronicle.surface) with replies after it.
+                const picks = host.sdk.receipts().filter(entry => entry.receipt.type === 'chronicle.surface').map(entry => entry.index);
+                const picked = users.filter(i => picks.includes(i + 1));
+                const user = picked.length && r.chance(0.5) ? r.pick(picked) : r.pick(users);
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
