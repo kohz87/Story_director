@@ -12,9 +12,15 @@ import { installFakeDom } from '../../ui-fake-dom.js';
 export const said = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 export const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-/** NPC State Delta's queries as a test module: dossiers for `people` ({ name: { rank?, disposition?, stages? } }). */
+/**
+ * NPC State Delta's queries as a test module: dossiers for `people` ({ name: { rank?, disposition?, stages?,
+ * aliases? } }), found by name or alias, any case (as Delta's npc.dossier). `people` may change later (a scan).
+ */
 export function fakeDelta(people = {}) {
-    const find = name => Object.keys(people).find(key => key.toLowerCase() === String(name ?? '').toLowerCase()) ?? null;
+    const find = name => {
+        const want = String(name ?? '').toLowerCase();
+        return Object.keys(people).find(key => key.toLowerCase() === want || (people[key]?.aliases ?? []).some(alias => alias.toLowerCase() === want)) ?? null;
+    };
     return {
         id: 'npc-state-delta',
         name: 'NPC State Delta (test stand-in)',
@@ -30,12 +36,12 @@ export function fakeDelta(people = {}) {
 }
 
 /** A host with Story Director (and `rpg` / `delta` stand-ins); `settings`: Story Director's. */
-export async function worldHost({ rpg = false, delta = null, settings = {}, extra = [] } = {}) {
+export async function worldHost({ rpg = false, delta = null, settings = {}, extra = [], features = {} } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
     host = await createHost({
         modules: [...(rpg ? [fakeRpgBattle()] : []), ...(delta ? [fakeDelta(delta)] : []), module, ...extra],
-        settings: { modules: { 'story-director': settings } },
+        settings: { modules: { 'story-director': settings }, features },
     });
     return host;
 }
