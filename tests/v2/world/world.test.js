@@ -249,3 +249,44 @@ test('Story Director alone with no scene, no clock and no chronicle: plain sente
     for (const phrase of ['Nowhere named yet.', 'No one else is in the scene.', 'The story\'s clock is not set', 'No news yet.', 'No factions known yet.']) assert.ok(textOf.includes(phrase), phrase);
     assert.ok(createModule().screens.some(screen => screen.id === WORLD_ID));
 });
+
+// FL-live3 (final live check, "weather"): with World in the panel, Story Block's Scene tab (which shows the
+// weather) is hidden, so the weather had no place in the panel; only the reply's Status card showed it. Here
+// shows it now, by rule with no `~ weather` line and the story's own over it.
+test('Here shows the weather: the rule\'s with no ~ weather line, the story\'s over it for the day, the rule\'s again on a new day', async () => {
+    const host = await worldHost();
+    const here = () => host.sdk.query('director.world.here');
+    try {
+        assert.equal(here().weather, '', 'no reply yet, no weather');
+        await host.send('Hello.', said('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am', '~ place Harbour']));
+        const ruled = here().weather;
+        assert.ok(ruled.length > 0, `the rule's weather with no ~ weather line: "${ruled}"`);
+        assert.equal(ruled, host.sdk.query('scene.weather').text, 'the same words the Status card shows');
+        const drawn = drawWorld(worldData(host));
+        assert.deepEqual(drawn.warnings, []);
+        assert.ok(squash(drawn.el.textContent).includes(`Weather ${ruled}`), squash(drawn.el.textContent).slice(0, 200));
+        await host.send('The rain sets in.', said('Rain falls hard.', ['~ weather heavy rain']));
+        assert.equal(here().weather, 'heavy rain', 'the story\'s own word wins');
+        assert.ok(squash(drawWorld(worldData(host)).el.textContent).includes('Weather heavy rain'));
+        await host.send('Later that day.', said('The rain goes on.', []));
+        assert.equal(here().weather, 'heavy rain', 'it stands for the rest of that day and place');
+        await host.send('Days later.', said('Another morning.', ['~ time June 9, 1200, 08:00 am']));
+        assert.notEqual(here().weather, 'heavy rain', 'a new day brings the rule\'s weather back');
+        assert.ok(here().weather.length > 0);
+    } finally {
+        host.close();
+    }
+});
+
+test('Here has no Weather row while the weather is off or there is none', async () => {
+    const host = await worldHost({ features: { 'story-block.weather': false } });
+    try {
+        await host.send('Hello.', said('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am', '~ place Harbour', '~ weather fog']));
+        const data = worldData(host);
+        assert.equal(data.world.here.weather, '');
+        const drawn = drawWorld(data);
+        assert.ok(!squash(drawn.el.textContent).includes('Weather'), 'no row, no heading, no empty line');
+    } finally {
+        host.close();
+    }
+});

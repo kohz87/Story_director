@@ -64,8 +64,8 @@ Switches are in **Settings → Features**. "No switch" means it is always on.
   thread to take the first step; the note names them. **Calendar → NPC initiative: replies before the same person
   again** (default 2).
 - **Weather from the calendar** (`story-director.weather`, on): each story day gets weather from the season and
-  region (a pack may bring its own table), shown on Scene, Home and the Status card. A `~ weather` line the story
-  writes wins for that day and place.
+  region (a pack may bring its own table), shown on Scene, Home, the Status card and, where World takes the
+  Scene's place in the panel, on World → Now → Here. A `~ weather` line the story writes wins for that day and place.
 - **Status card** (folded, under each reply): the place with its map coordinates when the atlas knows it, and the
   weather. It never shows the next planned beat, so it cannot spoil.
 - **Arc planning** (Director tab; `story-director.arc`, on): **Plan arc** asks a planner model for the next arc;

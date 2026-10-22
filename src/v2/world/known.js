@@ -158,15 +158,17 @@ function stanceOf(entry) {
 }
 
 /**
- * `director.world.here` → `{ place: { name, region, kind } | null, moved, present: [name], people: [{ name,
+ * `director.world.here` → `{ place: { name, region, kind } | null, moved, weather, present: [name], people: [{ name,
  * stance, dossier, key, thought }], chatter: [{ key, name, text }], nsd, hasPeople }`. `present` is Story
  * Block's scene list (NPC State Delta reads it to know who is here); `people` adds, when NPC State Delta
  * answers (`npc.known`), each one's stance and whether they have a dossier. Without it the names stand
  * alone (`nsd: false`, no stance). `moved`: the newest reply moved the scene here (Story Block's
- * `scene.moved`). `chatter`: the newest reply's Inner chatter (Story Block's `chatter.head`; empty while it
- * is off), one thought per thinker (their last line), each under `key`: the dossier's name when NPC State
- * Delta knows the name or alias (`npc.dossier`, as the chatter strip links a dossier), else the name, folded
- * (lineKey); a person's `thought` is the one under their key (MODULES §F119).
+ * `scene.moved`). `weather`: the day's weather (Story Block's `scene.weather`: the story's `~ weather` or the
+ * rule's own), '' while there is none or the weather is off. `chatter`: the newest reply's Inner chatter
+ * (Story Block's `chatter.head`; empty while it is off), one thought per thinker (their last line), each
+ * under `key`: the dossier's name when NPC State Delta knows the name or alias (`npc.dossier`, as the chatter
+ * strip links a dossier), else the name, folded (lineKey); a person's `thought` is the one under their key
+ * (MODULES §F119).
  */
 export function hereView(state, _args, tools) {
     const query = queryOf(tools);
@@ -175,6 +177,8 @@ export function hereView(state, _args, tools) {
     const name = text(atlas?.name) || text(scenePlace?.name);
     const place = name ? { name: cut(name, 80), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
     const moved = Boolean(place) && tryQuery(query, 'scene.moved', {}, false) === true;
+    // Story Block's Scene tab shows the weather and World replaces that tab, so Here must too (MODULES §F119/§F122).
+    const weather = cut(text(tryQuery(query, 'scene.weather', {}, null)?.text), 80);
     const listed = tryQuery(query, 'scene.present', {}, null) ?? state?.domains?.scene?.present ?? [];
     const present = [];
     const seen = new Set();
@@ -212,7 +216,7 @@ export function hereView(state, _args, tools) {
         const dossier = Boolean(dossierOf(who));
         return { name: who, stance: dossier ? stanceOf(tryQuery(query, 'npc.meters', { name: who }, null)) : '', dossier, key, thought };
     });
-    return { place, moved, present, people, chatter: [...thoughts.values()], nsd, hasPeople: people.length > 0 };
+    return { place, moved, weather, present, people, chatter: [...thoughts.values()], nsd, hasPeople: people.length > 0 };
 }
 
 // ---- news, events and factions ------------------------------------------------------------------
