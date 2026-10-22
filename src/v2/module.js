@@ -1,5 +1,5 @@
 // Story Director v2: the module definition (MODULES §A, §C). The parts (tracker, quests, time,
-// atlas, chronicle, screens) are merged here into the one `sdk.registerModule` definition of module
+// atlas, chronicle, world, arc, screens) are merged here into the one `sdk.registerModule` definition of module
 // `story-director`:
 //
 // - domains, commands, queries: the parts' own, each name owned by one part (a clash throws);
@@ -35,6 +35,7 @@ import { part as quests } from './quests/index.js';
 import { part as time } from './time/index.js';
 import { part as atlas } from './atlas/index.js';
 import { part as chronicle } from './chronicle/index.js';
+import { part as world } from './world/index.js';
 import { part as arc } from './arc/index.js';
 import { part as screens } from './screens/index.js';
 import { calendarConfig, packCalendarOf } from './tracker/time.js';
@@ -47,7 +48,7 @@ export const VERSION = '2.0.0-alpha.1';
 export const STORY_BLOCK_RANGE = '>=2.0.0-alpha.2';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['arc', arc], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {

@@ -4,7 +4,8 @@
 // flush pending saves, let modules add cues (beforeGenerate), collect the untold receipts and
 // assemble the two prompt texts; the static part goes in-prompt, this reply's part in-chat at
 // depth 0. The interceptor's context size holds them to a share of it (prompt.js contextFit): the
-// tail is cut to fit, and when the static part alone is too big the reader is told once per chat. Quiet and impersonate generations (and any other kind) get both slots emptied.
+// tail is cut to fit (what modules send under their own keys, their `ownPrompt` hooks, counts toward it
+// too), and when the static part alone is too big the reader is told once per chat. Quiet and impersonate generations (and any other kind) get both slots emptied.
 // At prompt-ready: hidden change blocks leave the prompt history, and when the preset left out
 // the Main Prompt (SillyTavern then drops in-prompt text) the static part is put back at the
 // start of this reply's part, for the story's own prompt only.
@@ -23,7 +24,7 @@ import { continuation, cutLine, defangMarker, extractBlock, grammarHeads, hideBl
 import { displayLines, readDisplayLine } from './extras.js';
 import { hash, readRecord } from './persist.js';
 import { CAPTURE_PREFIX } from './registry.js';
-import { STATIC_MARKER, assemble, contextNotice } from './prompt.js';
+import { STATIC_MARKER, assemble, contextNotice, estimateTokens } from './prompt.js';
 import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
 import { cutAt } from '../text.js';
 
@@ -36,6 +37,9 @@ export const V1_KEYS = Object.freeze([
     ['story_block', 'static'],
 ]);
 export const FOREGROUND = Object.freeze(['normal', 'swipe', 'regenerate', 'continue']);
+// A module's `ownPrompt` hook: at most this many parts, each counted up to this many characters.
+export const OWN_PROMPT_PARTS = 8;
+export const OWN_PROMPT_CHARS = 200000;
 export const INTERCEPTOR_NAME = 'storyBlockGenerationInterceptor';
 // SillyTavern's extension_prompt_types and extension_prompt_roles, when the context lacks them.
 const IN_PROMPT = 0;
@@ -325,11 +329,42 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         return cues;
     }
 
+    // What modules send with the reply on their own, under their own prompt keys (SPEC §5: NPC State
+    // Delta's dossiers): each `ownPrompt(view)` hook's [{ label, text }] (one { label, text } or a string
+    // also do), read at once (a promise is not waited for), names filled in as SillyTavern fills them.
+    // It is counted, never sent by Story Block: the share of the context (prompt.js contextFit) and the
+    // settings' prompt size count it. A hook that throws or answers nothing counts nothing; the size is a
+    // report, never a reason to hold the reply back. → [{ module, label, place: 'own', text, tokens }]
+    function sentByModules(current) {
+        const out = [];
+        for (const { moduleId, fn } of registry.hookEntries('ownPrompt')) {
+            let answer;
+            try { answer = fn(current); } catch { continue; }
+            if (typeof answer?.then === 'function') {
+                answer.then?.(() => {}, () => {});
+                continue;
+            }
+            const list = typeof answer === 'string' ? [{ text: answer }] : Array.isArray(answer) ? answer : answer && typeof answer === 'object' ? [answer] : [];
+            const name = registry.module(moduleId)?.name ?? moduleId;
+            for (const item of list.slice(0, OWN_PROMPT_PARTS)) {
+                const raw = typeof item === 'string' ? item : item?.text;
+                if (typeof raw !== 'string' || !raw.trim()) continue;
+                const text = substituteNames(cutAt(raw, OWN_PROMPT_CHARS), ctx);
+                const label = typeof item?.label === 'string' && item.label.trim() ? cutAt(item.label.replace(/\s+/g, ' ').trim(), 80) : name;
+                out.push({ module: moduleId, label, place: 'own', text, tokens: estimateTokens(text) });
+            }
+        }
+        return out;
+    }
+
     function build(cues = {}) {
         const untold = store.untold();
-        const result = assemble({ registry, view: view(), untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow() });
+        const current = view();
+        const own = sentByModules(current);
+        const ownTokens = own.reduce((sum, part) => sum + part.tokens, 0);
+        const result = assemble({ registry, view: current, untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow(), ownTokens });
         for (const message of result.problems) problem({ code: 'FAILED', message });
-        return { ...result, untold };
+        return { ...result, own, untold };
     }
 
     /** SillyTavern's generate interceptor: (chat, contextSize, abort, type). */
@@ -957,10 +992,13 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         reread,
         /** What the next ordinary reply would be sent, without changing anything (no cues run). */
         preview: () => build().parts,
-        /** The same with how it fits the context: { parts, fit } (prompt.js contextFit, or null). */
+        /**
+         * The same with how it fits the context and what modules send on their own: { parts, fit, own }
+         * (fit: prompt.js contextFit, or null; own: [{ module, label, place: 'own', text, tokens }]).
+         */
         previewFit: () => {
             const built = build();
-            return { parts: built.parts, fit: built.fit };
+            return { parts: built.parts, fit: built.fit, own: built.own };
         },
         /** Adds { module?, code?, message, index?, line? } to the Problems list (and the console). */
         report: entry => problem(entry),

@@ -1,6 +1,7 @@
 // Story Director v2, part **arc**: the arc panel, widget `story-director.arc` (MODULES §F9), on the
 // Director screen. Its buttons are the reader's controls for planning (Plan arc, End arc, Accept,
-// Discard, Plan again), not story actions (F95/F96 cover those).
+// Discard, Plan again), not story actions (F95/F96 cover those). An arc accepted by itself (setting
+// `arc.autoAccept`) gets a quiet note with OK, which names nothing of it while behind the scenes is hidden.
 //
 // It shows the current arc (its name, what it is about, how many of its beats have played) and the
 // buttons; a plan waiting for review as text the reader may edit, with what code left out or changed;
@@ -81,6 +82,12 @@ function render(el, props, api, controller) {
                 }),
             ));
         } else {
+            // Accepted by itself (arc.autoAccept): a quiet note, naming nothing while behind the scenes is hidden.
+            if (status.began && current?.active) {
+                const note = make('p', 'sd-arc-note sd-arc-began', status.hidden ? 'A new arc began by itself (accepted without review).' : 'This arc began by itself (accepted without review).', { role: 'status' });
+                note.append(' ', button(make, 'OK', 'sd-quiet sd-arc-seen', 'fa-check', () => controller.seen?.()));
+                parts.push(note);
+            }
             if (!current) parts.push(make('p', 'sd-arc-desc sd-arc-none', 'No arc planned yet.'));
             else if (status.hidden) {
                 parts.push(make('p', 'sd-arc-desc', current.active ? `An arc is in progress${beats ? ` (${beats})` : ''}.` : 'The last arc has ended.'));

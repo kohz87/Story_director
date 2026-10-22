@@ -1,14 +1,15 @@
-// Chronicle part: the Days screen, checked by Story Block's screen validator and drawn by its template
-// renderer (vendored in tests/vendor/story-block) with the real condition language: newest day first,
-// each folded to its line and opening to its facts; the search box keeps the days that hold what was
-// typed; an older day shows its line only; with no day yet, one plain sentence.
+// World part: the Journal (the World screen's second view, which took the Days screen's place), drawn by
+// Story Block's template renderer (vendored in tests/vendor/story-block) with the real condition language:
+// newest day first, each folded to its line and opening to its facts; the search box keeps the days that
+// hold what was typed; an older day shows its line only; with no day yet, one plain sentence. The old Days
+// id is a dialog of the Journal alone.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DAYS_ID, daysScreen } from '../../../src/v2/chronicle/days-screen.js';
+import { DAYS_ID, WORLD_ID, daysScreen, part, worldScreen } from '../../../src/v2/world/index.js';
 import { DIGEST_FEATURE } from '../../../src/v2/chronicle/days.js';
-import { part } from '../../../src/v2/chronicle/index.js';
+import { part as chronicle } from '../../../src/v2/chronicle/index.js';
 import { validateScreen } from '../../vendor/story-block/src/v2/view/screens.js';
 import { compileTemplate, renderTemplate } from '../../vendor/story-block/src/v2/view/template/index.js';
 import { conditionEvaluator } from '../../vendor/story-block/src/v2/view/bind.js';
@@ -32,21 +33,21 @@ async function threeDays() {
     await host.send('Rest.', reply('Rest.', ['~ time June 6, 1200, 08:00 am']));
     // June 5 is written before this reply.
     await host.send('On.', reply('On.'));
-    const board = host.sdk.query('chronicle.dayBoard');
+    const journal = host.sdk.query('director.journal');
     host.close();
-    return board;
+    return journal;
 }
 
-function draw(board) {
+function draw(journal, { screen = worldScreen } = {}) {
     const doc = installFakeDom();
     doc.head = doc.createElement('head');
     const el = doc.createElement('div');
-    el.setAttribute('data-ss-screen', DAYS_ID);
+    el.setAttribute('data-ss-screen', screen.id);
     doc.body.appendChild(el);
-    const compiled = compileTemplate(daysScreen.template);
+    const compiled = compileTemplate(screen.template);
     const warnings = [...compiled.warnings];
-    const draft = {};
-    const scopeOf = () => ({ state: {}, q: { board }, draft, settings: {}, mount: 'tab', screenId: DAYS_ID, api: {} });
+    const draft = { view: 'journal' };
+    const scopeOf = () => ({ state: {}, q: { world: null, journal }, draft, settings: {}, mount: 'tab', screenId: screen.id, api: {} });
     const view = renderTemplate(el, compiled, scopeOf(), {
         evaluate: conditionEvaluator({ compile, evaluate }),
         widgets: {},
@@ -55,36 +56,45 @@ function draw(board) {
     return { el, view, warnings, find: text => { draft.find = text; view.update(scopeOf()); } };
 }
 
-test('the Days screen is a valid definition for the tab and the full screen, under the digest feature', () => {
-    assert.ok(part.screens.includes(daysScreen));
+test('the Days screen is gone from the tabs: its id is a dialog of the Journal; the World screen draws the Journal', () => {
+    assert.ok(part.screens.includes(daysScreen) && part.screens.includes(worldScreen));
+    assert.ok(!chronicle.screens.some(screen => screen.id === DAYS_ID));
     assert.equal(DAYS_ID, 'story-director/days');
+    assert.equal(WORLD_ID, 'story-director/world');
     assert.equal(daysScreen.feature, DIGEST_FEATURE);
-    assert.deepEqual([...daysScreen.mounts], ['tab', 'screen']);
+    assert.deepEqual([...daysScreen.mounts], ['dialog']);
     assert.deepEqual(validateScreen(daysScreen), []);
     for (const binding of Object.values(daysScreen.data)) assert.ok(Object.hasOwn(part.queries, binding.query));
     assert.deepEqual(scopeCss(daysScreen.css, DAYS_ID).warnings, []);
 });
 
-test('drawn: newest day first, each folded to its line; an older day keeps its line only; no warnings', async () => {
-    const board = await threeDays();
-    const { el, warnings } = draw(board);
+test('the old Days id draws the same Journal', async () => {
+    const journal = await threeDays();
+    const { el, warnings } = draw(journal, { screen: daysScreen });
     assert.deepEqual(warnings, []);
-    const days = el.querySelectorAll('.dy-day');
-    assert.deepEqual(days.map(node => node.querySelector('.dy-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
+    assert.deepEqual(el.querySelectorAll('.wv-day').map(node => node.querySelector('.wv-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
+});
+
+test('drawn: newest day first, each folded to its line; an older day keeps its line only; no warnings', async () => {
+    const journal = await threeDays();
+    const { el, warnings } = draw(journal);
+    assert.deepEqual(warnings, []);
+    const days = el.querySelectorAll('.wv-day');
+    assert.deepEqual(days.map(node => node.querySelector('.wv-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
     // The date once: beside the line, which leaves its own off (B-c1-3).
-    assert.equal(squash(days[0].querySelector('.dy-line').textContent), 'to Ridge Fort; 5 gold out.');
+    assert.equal(squash(days[0].querySelector('.wv-line').textContent), 'to Ridge Fort; 5 gold out.');
     assert.equal(days[0].querySelector('details').hasAttribute('open'), false, 'folded');
     assert.match(squash(days[0].textContent), /Went to: Ridge Fort ?Money: 5 gold out/);
-    assert.match(squash(days[1].textContent), /The wider world ?World: Red Plague is now ongoing — coughing in the docks/);
+    assert.match(squash(days[1].textContent), /News ?World: Red Plague is now ongoing — coughing in the docks/);
     // June 3 is past the two whole days: its line only.
     assert.equal(days[2].getAttribute('data-brief'), 'true');
     assert.match(squash(days[2].textContent), /^June 3, 1200 to Harrow; 40 gold in\. Only this line is kept for an older day\./);
-    assert.equal(days[2].querySelectorAll('.dy-facts li').length, 0);
+    assert.equal(days[2].querySelectorAll('.wv-facts li').length, 0);
 });
 
 test('the search box keeps the days that hold what was typed, any case; empty shows them all', async () => {
     const { el, find } = draw(await threeDays());
-    const shown = () => el.querySelectorAll('.dy-day').map(node => node.querySelector('.dy-date').textContent);
+    const shown = () => el.querySelectorAll('.wv-day').map(node => node.querySelector('.wv-date').textContent);
     find('plague');
     assert.deepEqual(shown(), ['June 4, 1200']);
     find('HARROW');
@@ -98,8 +108,8 @@ test('the search box keeps the days that hold what was typed, any case; empty sh
 });
 
 test('no day yet: one plain sentence, no search box', () => {
-    const { el, warnings } = draw({ days: [], hasDays: false, count: 0, today: '' });
+    const { el, warnings } = draw({ on: true, days: [], hasDays: false, count: 0, today: '' });
     assert.deepEqual(warnings, []);
-    assert.match(squash(el.textContent), /^No story day has ended yet\./);
-    assert.equal(el.querySelectorAll('input').length, 0);
+    assert.match(squash(el.textContent), /^Now Journal No story day is written yet\./);
+    assert.equal(el.querySelectorAll('input[type="search"]').length, 0);
 });
