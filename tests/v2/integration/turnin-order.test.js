@@ -148,6 +148,94 @@ test('a Continue after the paid turn-in pays nothing again', async () => {
     host.close();
 });
 
+// A reply cut off by the length limit: its first part turns in away from the giver, and its Continue is
+// where the party reaches her. The place refused it at the end of the first part; the Continue pays it.
+const REFUSED = 'The story says Sluice-Rat Bounty was turned in, but it can only be turned in at a settlement or where Elula is; it stays open.';
+const block = lines => `\n<Changes>\n${lines.join('\n')}\n</Changes>`;
+const turnInText = host => problems(host).map(problem => problem.text);
+// What a Re-read of the joined reply must give as the live run gave (revs aside: the live run has one step more).
+const outcome = host => ({
+    wallet: wallet(host), status: quest(host).status, ended: quest(host).ended?.outcome ?? null, ready: quest(host).ready ?? null,
+    problems: turnInText(host), paid: turnIns(host).length, claims: claims(host), waiting: details(host).waiting,
+    retriable: host.sdk.query('director.retriable'),
+});
+
+test('cut reply: first part turns in away from the giver, the Continue reaches her: paid once in that reply', async () => {
+    const host = await newHost();
+    await bountyDone(host);
+    await host.send('Back to the guild.', reply('You head up with the tails, still in the tunnels', [TURN_IN, '! time +5m']));
+    const index = host.st.ctx.chat.length - 1;
+    assert.deepEqual(wallet(host), {});
+    assert.deepEqual(turnInText(host), [REFUSED], 'refused at the end of the first part');
+    assert.deepEqual(host.sdk.query('director.retriable'), [quest(host).id], 'and kept for a Continue of the same reply');
+    await host.cont(` and out to the guild, where Elula pays.${block(TO_ELULA)}`);
+    assert.deepEqual(wallet(host), { coin: 30 }, 'paid in that reply');
+    assert.deepEqual([quest(host).status, quest(host).ended.outcome], ['resolved', 'done']);
+    assert.deepEqual(turnInText(host), [], 'the first part\'s refusal is taken back');
+    assert.equal(quest(host).ready ?? null, null);
+    assert.equal(turnIns(host).length, 1);
+    const paid = turnIns(host)[0];
+    assert.deepEqual([paid.cause, paid.type, paid.afterCapture], ['system', 'quest.settle', true]);
+    assert.deepEqual(host.sdk.query('director.retriable'), []);
+    sameRebuilt(host);
+    const live = outcome(host);
+    // Re-read of the joined reply: the same outcome, paid once.
+    await ok(host.sdk.reread(index));
+    assert.deepEqual(outcome(host), live);
+    sameRebuilt(host);
+    // Told to the next reply; nothing paid again.
+    await host.send('Thanks.', reply('Elula nods.'));
+    assert.match(tails(host).at(-1), /Astra turns in Sluice-Rat Bounty: 4 sluice-rats beaten \(target 4\), 30 gold paid\./);
+    assert.deepEqual(wallet(host), { coin: 30 });
+    assert.equal(turnIns(host).length, 1);
+    sameRebuilt(host);
+    host.close();
+});
+
+test('cut reply: the Continue still away from the giver: refused once; a later reply at the giver does not pay it', async () => {
+    const host = await newHost();
+    await bountyDone(host);
+    await host.send('Back to the guild.', reply('You head up with the tails', [TURN_IN, '! time +5m']));
+    const index = host.st.ctx.chat.length - 1;
+    await host.cont(` but the tunnels go on.${block(['! time +10m', '+ item Rope'])}`);
+    assert.deepEqual(wallet(host), {});
+    assert.equal(quest(host).status, 'active');
+    assert.deepEqual(turnInText(host), [REFUSED], 'refused once');
+    sameRebuilt(host);
+    const live = outcome(host);
+    await ok(host.sdk.reread(index));
+    assert.deepEqual(outcome(host), live, 'Re-read of the joined reply: refused once as well');
+    // A later reply that reaches the giver without a turn-in line pays nothing: only that reply's Continue could.
+    await host.send('Go see Elula.', reply('You find Elula at the guild.', TO_ELULA));
+    assert.deepEqual(wallet(host), {});
+    assert.equal(quest(host).status, 'active');
+    assert.deepEqual(turnInText(host), [REFUSED]);
+    // Turned in again there, it pays once.
+    await host.send('Hand them over.', reply('Elula pays.', [TURN_IN]));
+    assert.deepEqual(wallet(host), { coin: 30 });
+    assert.equal(turnIns(host).length, 1);
+    sameRebuilt(host);
+    host.close();
+});
+
+test('cut reply: the Continue reaches the giver and writes the turn-in again: paid once, the refusal taken back', async () => {
+    const host = await newHost();
+    await bountyDone(host);
+    await host.send('Back to the guild.', reply('You head up with the tails', [TURN_IN]));
+    assert.deepEqual(turnInText(host), [REFUSED]);
+    await host.cont(` and hand them to Elula.${block([...TO_ELULA, TURN_IN])}`);
+    assert.deepEqual(wallet(host), { coin: 30 });
+    assert.equal(turnIns(host).length, 1);
+    assert.deepEqual(turnInText(host), []);
+    assert.deepEqual(host.sdk.query('director.retriable'), []);
+    sameRebuilt(host);
+    // A second Continue at the giver pays nothing again.
+    await host.cont(` She counts twice.${block(['! time +5m'])}`);
+    assert.deepEqual(wallet(host), { coin: 30 });
+    assert.equal(turnIns(host).length, 1);
+    host.close();
+});
+
 test('older Story Block (no afterCapture): turn-in before the place lines waits, then paid before the next reply', async () => {
     const host = await newHost({ older: true });
     await bountyDone(host);

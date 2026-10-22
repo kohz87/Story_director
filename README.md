@@ -30,7 +30,8 @@
 > that writes the turn-in before the `~ place` / `+ present` lines that bring the party to the giver is paid
 > at its next Director line (often its `! time`), else right after the reply's last line, in that reply
 > (Story Block's `afterCapture` step); a reply that ends away from the giver and from a settlement is refused
-> then, with the reason. On an older Story Block without that step it is checked just before the next reply
+> then, with the reason. A Continue is the same reply: when a reply cut off by the length limit reaches the
+> giver in its Continue, that refusal is taken back and the turn-in is paid, once. On an older Story Block without that step it is checked just before the next reply
 > is written (until then the quest says "Turned in by the story — checked where this reply ends up, before
 > the next reply"). Terms and the row's reward name the money as the wallet
 > does (the chat's coins, mixed and largest first). The Quests screen has no buttons: each row says

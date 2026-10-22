@@ -21,6 +21,11 @@
 //   older Story Block, which never calls afterCapture, the same step runs before the next reply is written
 //   (beforeGenerate, on the scene after the reply's lines and the reader's actions after it). A turn-in the
 //   place rule allows when its line is read is paid at once, as before.
+// * A Continue is the same reply: a reply cut off by the length limit often reaches the giver in its
+//   Continue. A turn-in the place alone refused at the end of the first part is kept as retriable in the
+//   reply's bookkeeping (`turn.now.refused`), and the Continue's afterCapture step pays it once the place
+//   rule holds (`quest.settle { id, retry: true }`), taking back the refusal's Problem and the `ready` mark
+//   it set; a Continue still away changes nothing (refused once). A later reply never pays it.
 //
 // The quests part's rules are reached only through its queries and commands (`quest.details`,
 // `quest.progress`, `quest.finish`); without that part a line is read as before.
@@ -139,6 +144,7 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw, defer = tr
         const out = ctx.call('quest.finish', { id: thread.id, by: 'story' }) ?? {};
         const closed = director.threads[thread.id];
         if (closed) closed.track = { ...(closed.track ?? {}), closed: { turn: director.turn.n, time: director.time.minutes ?? null } };
+        clearRefusal(director, thread.id);
         return { summary: text(out.summary) || `Director: ${raw}`, narrate: true, data: { thread: thread.id, quest: thread.id, problems: [], turnIn: out.data ?? null } };
     }
     // One reply turns in one quest on the story's word alone (B-b3-r2-5), and pays at most its budget in
@@ -146,6 +152,7 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw, defer = tr
     // ready (as `met: yes` would) when code cannot count its goal, for a later reply to turn in.
     // `countable` (quest.progress): whether code counts its target; a kill goal with no fights module is the story's word.
     const vouched = check.countable === undefined ? !thread.target : !check.countable;
+    const wasReady = Boolean(thread.ready);
     if ((check.finish.word || (check.finish.budget && vouched)) && !thread.ready) {
         const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
         thread.ready = { rev };
@@ -153,8 +160,34 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw, defer = tr
     }
     const why = text(check.refusal) || text(check.finish.reason).replace(/\.$/, '').replace(/^./, c => c.toLowerCase());
     const message = `The story says ${thread.key} was turned in, but ${why}; it stays open.`;
-    addProblem(director, ctx, { kind: 'turn-in', severity: 'warn', key: thread.key, op: '-', text: message });
+    const problem = addProblem(director, ctx, { kind: 'turn-in', severity: 'warn', key: thread.key, op: '-', text: message });
+    // Refused by the place alone: a Continue of this reply may still bring the party to the giver.
+    if (check.place === true) {
+        const now = replyDraft(director);
+        if (now) {
+            const others = replyTurn(director).refused.filter(entry => entry.id !== thread.id);
+            now.refused = [...others, { id: thread.id, problem: typeof problem === 'string' ? problem : null, ready: !wasReady && Boolean(thread.ready) }];
+        }
+    }
     return { summary: message, narrate: true, data: { thread: thread.id, quest: thread.id, problems: ['turn-in'], refused: true } };
+}
+
+/**
+ * A turn-in this reply refused by the place is paid after all (a Continue reached the giver): the refusal's
+ * Problem and the `ready` mark it set go, and it is no longer retriable, so the reply ends as if it had been
+ * paid at once (Re-read of the joined reply pays it at once).
+ */
+function clearRefusal(director, id) {
+    const entry = replyTurn(director).refused.find(item => item.id === id);
+    if (!entry) return;
+    const problems = director.problems;
+    if (problems && typeof problems === 'object' && !Array.isArray(problems) && typeof entry.problem === 'string') delete problems[entry.problem];
+    if (entry.ready && director.threads?.[id]) delete director.threads[id].ready;
+    const now = replyDraft(director);
+    if (!now) return;
+    const rest = replyTurn(director).refused.filter(item => item.id !== id);
+    if (rest.length) now.refused = rest;
+    else delete now.refused;
 }
 
 /** The step that checks the reply's waiting turn-ins before the next reply (the quests' cue). */
@@ -216,6 +249,18 @@ export function settleCommand(ctx, payload = {}) {
     if (ctx.cause === 'ui') ctx.fail('REFUSED', 'A turn-in is checked by the story, not by a click.');
     const director = ctx.draft('director');
     const id = text(payload?.id);
+    // `retry`: a Continue of the reply that refused it by the place (afterCaptureHook): paid now, or refused
+    // as it was (nothing kept, no second Problem). Only on that reply.
+    if (payload?.retry === true) {
+        const sid = ctx.reply?.sid;
+        const turn = replyTurn(director);
+        if (!id || !sid || turn.reply !== sid || !turn.refused.some(entry => entry.id === id)) ctx.fail('REFUSED', 'No turn-in of this reply waits for another try.');
+        const thread = director.threads?.[id];
+        if (!isWaitingQuest(thread)) ctx.fail('REFUSED', 'That quest is no longer open.');
+        const result = storyTurnIn(ctx, director, thread, { addProblem: addDirectorProblem, raw: `- quest ${thread.key} — turned in`, defer: false });
+        if (!result || result.data?.refused) ctx.fail('REFUSED', `${thread.key} still cannot be turned in here.`);
+        return { ...result, replan: true };
+    }
     if (!id || !replyTurn(director).pending.includes(id)) ctx.fail('REFUSED', 'No turn-in waits for that quest.');
     const [settled] = settleTurnIns(ctx, director, { addProblem: addDirectorProblem, final: true, only: id });
     if (!settled) return { summary: 'Director: a turn-in that waited is no longer open.', narrate: false, data: { quest: id }, replan: true };
@@ -223,7 +268,24 @@ export function settleCommand(ctx, payload = {}) {
 }
 
 /**
- * `afterCapture(view)` and `beforeGenerate(view)`: `{ commands: [quest.settle] }`, one per turn-in the reply
+ * `afterCapture(view)`: the reply's waiting turn-ins (settleHook), and the ones the place refused at the end
+ * of an earlier part of the same reply (`director.retriable`, the head reply's only) that the place rule now
+ * allows: `quest.settle { id, retry: true }`. One still refused asks for nothing (refused once).
+ */
+export function afterCaptureHook(view) {
+    const turn = replyTurn(view?.state?.domains?.director);
+    const commands = turn.pending.map(id => ({ type: SETTLE, payload: { id } }));
+    const retriable = tryQuery(view?.query, 'director.retriable', {});
+    for (const id of Array.isArray(retriable) ? retriable : []) {
+        if (turn.pending.includes(id)) continue;
+        const check = tryQuery(view?.query, 'quest.progress', { id, closing: true });
+        if (check?.finish?.ok === true) commands.push({ type: SETTLE, payload: { id, retry: true } });
+    }
+    return commands.length ? { lines: [], commands } : undefined;
+}
+
+/**
+ * `beforeGenerate(view)` (and afterCaptureHook): `{ commands: [quest.settle] }`, one per turn-in the reply
  * left waiting. Story Block's afterCapture settles them in that reply; on a Story Block without it, nothing
  * is settled until the step before the next reply, which then finds them still waiting (the fallback). With
  * afterCapture nothing is left waiting for beforeGenerate, so it asks for nothing.

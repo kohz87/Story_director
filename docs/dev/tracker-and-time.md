@@ -28,6 +28,8 @@ this repo's README "The change lines", "The note".
   `afterCapture` step right after the reply's last line (`quest.settle`, cause `system`, kept on that reply)
   pays or refuses it on the final scene, in that reply. The beforeGenerate `quest.settle` (`replan`) is the
   fallback for an older Story Block without `afterCapture`; with it, nothing is left waiting for it.
+  A place-only refusal at the end of a reply stays retriable in `turn.now.refused` for that reply's
+  Continue (`quest.settle { id, retry: true }`, `director.retriable`); paying it takes the refusal's Problem back.
 - **Quests:** a job accepted is `taken`; goals counted by code where it can (foes beaten from RPG Battle's
   `combat.foesBeaten` when present), `met:` when the story says a goal code cannot count is met; rewards priced
   by code (coin forms through Story Block's currency), story-written pay within the per-reply story budget.
