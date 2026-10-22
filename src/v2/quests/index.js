@@ -134,7 +134,8 @@ function pcLevel(query) {
  * A quest's terms: `{ target, reward, said, pack, rank }`. `reward` is its pack quest's when it is one
  * (`said`: the reward the story wrote, when that differs), else the one it was taken on with, else read
  * from its labels; `rank` (questRank) is the range the reward is held to (a written rank: at most the
- * party's own). `budget`: the most one reply may pay in rewards the story wrote (replyBudget).
+ * party's own). `budget`: the most one reply may pay in rewards the story wrote (replyBudget), used
+ * only when Story Block does not keep that tally itself (spendOf).
  */
 function termsFor(query, inventory, thread, currency) {
     const target = thread.target ?? withKind(inventory, parseTarget(thread.fields, thread.summary));
@@ -166,28 +167,48 @@ function payOf(terms, target, progress) {
     return { units, said, hold, pay: hold.total, storyMoney: !terms.byPack };
 }
 
+const isAmount = value => Number.isSafeInteger(value) && value >= 0;
+
 /*
- * One reply pays at most `budget` in quest rewards the story wrote (RX-E-1: four "bring 1 Torch" quests
- * one reply wrote, finished by clicks, paid four rank tops). `paid` in `director.turn.now` is what this
- * reply's turn-ins have paid so far, clicks after the reply included (the tracker starts a fresh
- * `turn` for each reply's Director lines, so the tally goes with the reply, as `vouched` does). The
- * first turn-in of a reply is paid up to the budget; a later one that would go past it waits for the
- * next reply, unpaid and open: `{ ok: false, budget: true, reason }`, else null. Story Block's own
- * per-reply coin budget holds such payouts too while a reply is read (`wallet.receive { story: true }`);
- * this one also holds the clicks after it, which Story Block does not count.
+ * What one reply may pay in money the story wrote: `{ budget, used, quests, host }`, `used` what it has
+ * paid and `quests` the part of it quest turn-ins (vouched payouts) paid. Story Block keeps one tally per
+ * reply (RX-E-2): `inventory.storyBudget` → `{ budget, paid, left, vouched }` counts the reply's own
+ * `+ coin` lines, the quests it closed and the clicks after it, against the reader's `storyCoinPerReply`
+ * or the party rank's top (`host: true`). Without that query (an older Story Block, which does not count
+ * clicks) this module keeps its own: `paid` in `director.turn.now`, what this reply's turn-ins paid,
+ * against `budget` (replyBudget; the tracker starts a fresh `turn` for each reply's Director lines, so
+ * the tally goes with the reply, as `vouched` does).
  */
-function budgetRule(director, pay, budget, currency) {
-    if (!pay.storyMoney || !Number.isSafeInteger(pay.pay) || pay.pay <= 0) return null;
+function spendOf(query, director, budget) {
+    const host = tryQuery(query, 'inventory.storyBudget', {}, null);
+    if (isAmount(host?.budget) && isAmount(host?.paid)) {
+        const used = Math.min(host.paid, host.budget);
+        return { budget: host.budget, used, quests: isAmount(host.vouched) ? Math.min(host.vouched, used) : used, host: true };
+    }
     const used = replyTurn(director).paid;
-    if (used <= 0 || used + pay.pay <= budget) return null;
-    return { ok: false, budget: true, reason: `One reply pays at most ${money(budget, currency)} in quest rewards the story wrote (${money(used, currency)} so far); it is ready for the next reply.` };
+    return { budget, used, quests: used, host: false };
+}
+
+/*
+ * One reply pays at most its budget (spendOf) in rewards the story wrote (RX-E-1: four "bring 1 Torch"
+ * quests one reply wrote, finished by clicks, paid four rank tops; RX-E-2: a reply's `+ coin` lines and
+ * a Finish click after it). A turn-in waits for the next reply, unpaid and open, when nothing is left, or
+ * when another turn-in already paid from this reply's budget and this one does not fit: `{ ok: false,
+ * budget: true, reason }`, else null. The reply's first turn-in is otherwise paid what is left (the
+ * story's own coin lines may have taken part of it).
+ */
+function budgetRule(spend, pay, currency) {
+    if (!pay.storyMoney || !Number.isSafeInteger(pay.pay) || pay.pay <= 0) return null;
+    const { budget, used, quests, host } = spend;
+    if (used + pay.pay <= budget || (used < budget && quests <= 0)) return null;
+    const what = host ? 'in money the story wrote, quest rewards included' : 'in quest rewards the story wrote';
+    return { ok: false, budget: true, reason: `One reply pays at most ${money(budget, currency)} ${what} (${money(used, currency)} so far); it is ready for the next reply.` };
 }
 
 // What this turn-in may pay of `pay`: a reward the story wrote, what is left of this reply's budget.
-function spendBudget(director, pay, budget) {
+function spendBudget(spend, pay) {
     if (!pay.storyMoney) return pay.pay;
-    const used = replyTurn(director).paid;
-    return Math.max(0, Math.min(pay.pay, budget - used));
+    return Math.max(0, Math.min(pay.pay, spend.budget - spend.used));
 }
 
 /*
@@ -347,7 +368,8 @@ function finish(ctx, payload) {
     if (word) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${word.reason}`);
     const terms = { reward, byPack, rank, rankBy };
     const owed = payOf(terms, target, progress);
-    const over = budgetRule(director, owed, budget, currency);
+    const spend = spendOf(ctx.query, director, budget);
+    const over = budgetRule(spend, owed, currency);
     if (over) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${over.reason}`);
     const now = replyDraft(director);
     if (!counted && now) now.vouched = thread.id;
@@ -368,20 +390,21 @@ function finish(ctx, payload) {
     // gives (ranks.js defaultRank), so every reward is held; only a pack's reward is raised to the
     // floor (rewardHold). Then held to what this reply may still pay (budgetRule).
     const { units, said, hold, pay } = owed;
-    const allowed = spendBudget(director, owed, budget);
+    const allowed = spendBudget(spend, owed);
     let paid = null;
     if (pay > 0) {
         // A whole amount of the chat's one currency (MODULES §F1, §F5). A reward the story wrote (every
         // one but a pack quest's own) is the story's money: `story: true` asks Story Block to count it
-        // against what one reply may give (B-b3-r2-5, RX-E-1). A Story Block without that budget ignores
-        // the flag; this reply's own tally above still holds. What it says it paid is what was paid.
+        // against what one reply may give (B-b3-r2-5, RX-E-1), in the tally spendOf read (RX-E-2). A Story
+        // Block without that budget ignores the flag; this reply's own tally then holds. What it says it
+        // paid is what was paid.
         let amount = 0;
         if (allowed > 0) {
             const out = call(ctx, 'wallet.receive', { owner: 'party', amount: allowed, note: `${thread.key} reward`, ...(owed.storyMoney ? { story: true } : {}) });
             const given = out?.data?.amount ?? out?.receipt?.data?.amount;
             amount = Number.isSafeInteger(given) && given >= 0 && given < allowed ? given : allowed;
         }
-        if (owed.storyMoney && now) now.paid = replyTurn(director).paid + amount;
+        if (owed.storyMoney && now && !spend.host) now.paid = replyTurn(director).paid + amount;
         paid = { amount, ...(hold.held ? { said, rank: rank.id, range: [...rank.reward] } : {}), ...(amount < pay ? { owed: pay } : {}) };
     }
     // XP is RPG Battle's: it scales quest XP by difficulty (MODULES §F5). A written amount (an `xp:`
@@ -445,7 +468,7 @@ function progressQuery(state, args = {}, tools = null) {
     if (finish.ok && progress.met) {
         const currency = currencyOf(query);
         const terms = termsFor(query, state?.domains?.inventory, thread, currency);
-        finish = budgetRule(director, payOf(terms, target, progress), terms.budget, currency) ?? finish;
+        finish = budgetRule(spendOf(query, director, terms.budget), payOf(terms, target, progress), currency) ?? finish;
     }
     return {
         have, need, met, ready: !counted && Boolean(thread.ready), countable: Boolean(counted), source, noun, label: progressLabel(view, { have, need }), reason, finish,

@@ -20,8 +20,15 @@
 //   have, `ctx.id(prefix)` a new `<prefix>_<8 base36>` drawn from the receipt's seed (so the same seed
 //   gives the same IDs, and ctx.rng() is not disturbed), and, for capture runs, `ctx.carrier`
 //   ({ index, swipe, key }) and `ctx.chat` ({ lastUser, reply }); both are null for other commands.
+//   `ctx.reply` ({ index, sid }) is the reply the command's changes are stored on, for every command:
+//   the capture's carrier, else the head carrier (the last reply, where store.append puts a click's
+//   ops, SPEC §2.2); null when the chat has no reply yet. Queries get the same as `tools.reply`, so
+//   per-reply bookkeeping (a budget tally under the reply's sid) can be read and kept for a click too.
 // * Internal commands (registry.isInternal: capture.*, module.init.*, events.fire) are refused with
 //   REFUSED when the cause is 'ui', whether named at the top or through ctx.call.
+// * A command under a feature the reader turned off (MODULES §F100, registry.commandFeature) is refused
+//   with FEATURE_OFF, at the top or through ctx.call; like UNKNOWN_COMMAND, nothing has run, so a
+//   ctx.call caller may catch it. `ctx.feature(id)` says whether a feature is on.
 
 import { apply, checkOps, clone, counterInside, deepFreeze, diff, escapeKey, frozenCopy, isCounterPath, isDeepFrozen, isJson, valueAt } from './ops.js';
 import { isSeed, rng as makeRng, roll as rollDice, seed as freshSeed } from './rng.js';
@@ -57,6 +64,24 @@ function isRecord(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// `{ index, sid }` frozen, or null without a usable sid.
+function replyOf(index, sid) {
+    return Number.isInteger(index) && index >= 0 && typeof sid === 'string' && sid ? Object.freeze({ index, sid }) : null;
+}
+
+/**
+ * The reply a command outside a capture is stored on (`ctx.reply`): the head carrier, store.append's,
+ * with the record ID its record has or will get (store.carrierSid). null for a store that cannot say.
+ */
+export function headReply(store) {
+    try {
+        const index = typeof store?.headIndex === 'function' ? store.headIndex() : -1;
+        return typeof store?.carrierSid === 'function' && Number.isInteger(index) && index >= 0 ? replyOf(index, store.carrierSid(index)) : null;
+    } catch {
+        return null;
+    }
+}
+
 /** `<prefix>_<8 base36>` from crypto (SPEC §2.1), for receipt IDs when no `id` option is given. */
 export function newId(prefix, cryptoApi = globalThis.crypto) {
     if (typeof cryptoApi?.getRandomValues !== 'function') throw new Error('This browser has no crypto random source for IDs.');
@@ -84,7 +109,15 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
         const handler = typeof type === 'string' && type ? registry.command(type) : null;
         const moduleId = typeof handler === 'function' ? registry.commandOwner(type) : null;
         if (typeof handler !== 'function' || !moduleId) fail('UNKNOWN_COMMAND', `There is no command called "${type}".`);
+        const feature = typeof registry.commandFeature === 'function' ? registry.commandFeature(type) : null;
+        if (feature && !featureOn(feature)) featureOff(type, feature);
         return { moduleId, handler };
+    }
+
+    const featureOn = id => typeof registry.featureOn === 'function' && registry.featureOn(id) === true;
+    function featureOff(type, feature) {
+        const label = registry.feature?.(feature)?.label ?? feature;
+        fail('FEATURE_OFF', `"${type}" is part of ${label}, which is turned off in the Features settings.`);
     }
 
     // Internal commands (registry.js) are the host's own steps: never with cause 'ui'.
@@ -142,6 +175,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
     // stored receipts in chat order.
     function queryTools(tx, state = currentState(tx)) {
         const tools = Object.freeze({
+            reply: tx.reply,
             query(name, args) {
                 const fn = findQuery(name);
                 if (!fn) fail('NOT_FOUND', `There is no query called "${name}".`);
@@ -174,6 +208,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
             rev: tx.rev,
             carrier: tx.carrier,
             chat: tx.chat,
+            reply: tx.reply,
             id(prefix) {
                 open();
                 if (typeof prefix !== 'string' || !ID_PREFIX.test(prefix)) fail('INVALID', `An id prefix is lowercase letters and digits (like "it"), not "${prefix}".`);
@@ -242,6 +277,10 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
             },
             settings(id = moduleId) {
                 return deepFreeze(clone(settings(id) ?? {}));
+            },
+            // Whether feature `id` is on for this reader (MODULES §F100); false for an id no module declares.
+            feature(id) {
+                return featureOn(id);
             },
             // The Director's minutes: its `director.time` query when one is registered, else the
             // `director.time.minutes` of the state (SPEC §8), else null.
@@ -322,6 +361,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
                 : resolve(type);
             if (cause === 'ui' && internal(type)) fail('REFUSED', internalMessage(type));
             if (typeof target.handler !== 'function' || !target.moduleId) fail('UNKNOWN_COMMAND', `There is no capture handler for "${type}".`);
+            if (capture?.off === true) featureOff(type, capture.feature);
             // Reads share the head's branches (readOf), so it must be frozen all the way down; a state
             // that is not (a caller's own object) is copied first rather than frozen in place.
             if (!isDeepFrozen(head)) head = deepFreeze(clone(head));
@@ -331,6 +371,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
                 rev: headRev + 1, carrier: carrierOf(carrier), chat: chatOf(chat),
                 drafts: new Map(), meta: null, failure: null, closed: false,
             };
+            tx.reply = tx.carrier ? replyOf(tx.carrier.index, tx.carrier.sid ?? tx.carrier.key) : headReply(store);
             const out = invoke(tx, type, target, payload, 0);
             if (tx.failure) throw tx.failure;
             const { summary, narrate, data, problem } = resultOf(type, out, cause);

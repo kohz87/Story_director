@@ -44,7 +44,7 @@ test('four story-written "bring 1 Torch" quests from one reply pay no more than 
         assert.ok(paid <= top, `four quests one reply wrote, each for 1 Torch (2 marks), paid ${paid} (one reply's coin budget, the party rank's top, is ${top})`);
         assert.equal(paid, top, 'the first is paid, held to the party\'s rank; the rest wait for the next reply');
         assert.deepEqual(names.map(name => host.sdk.query('director.thread', { key: name }).status), ['resolved', 'active', 'active', 'active']);
-        assert.match(host.sdk.query('quest.progress', { key: 'Torch Run B' }).finish.reason, /^One reply pays at most 50 marks in quest rewards the story wrote \(50 marks so far\); it is ready for the next reply\.$/);
+        assert.match(host.sdk.query('quest.progress', { key: 'Torch Run B' }).finish.reason, /^One reply pays at most 50 marks in money the story wrote, quest rewards included \(50 marks so far\); it is ready for the next reply\.$/);
     } finally { host.close(); }
 });
 
@@ -146,7 +146,7 @@ test('the story closing two torch quests in one reply turns in one; the other st
         assert.equal(wallet(host) - before, top);
         assert.deepEqual(names.map(name => host.sdk.query('director.thread', { key: name }).status), ['resolved', 'active']);
         const problem = host.sdk.query('director.problems').filter(entry => entry.kind === 'turn-in').at(-1);
-        assert.equal(problem.text, `The story says Torch Run B was turned in, but one reply pays at most ${top} marks in quest rewards the story wrote (${top} marks so far); it is ready for the next reply; it stays open.`);
+        assert.equal(problem.text, `The story says Torch Run B was turned in, but one reply pays at most ${top} marks in money the story wrote, quest rewards included (${top} marks so far); it is ready for the next reply; it stays open.`);
         // The next reply turns it in.
         await host.send('And the other?', reply('Fenna nods.', ['- quest Torch Run B — turned in']));
         assert.equal(host.sdk.query('director.thread', { key: 'Torch Run B' }).status, 'resolved');

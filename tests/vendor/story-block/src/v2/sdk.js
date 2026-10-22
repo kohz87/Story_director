@@ -4,12 +4,14 @@
 // module's initial state. No SillyTavern import (turn.js wires SillyTavern).
 
 import { INIT_PREFIX, normalizeField } from './registry.js';
+import { headReply } from './commands.js';
 import { cutAt } from '../text.js';
 
 // sdk.check comes from check.js (SB-commands); the sdk still loads without it.
 const checkModule = await import('./check.js').catch(() => null);
 
-export const EVENTS = Object.freeze(['committed', 'head', 'turn']);
+// `feature` ({ id, on, prompt }) fires when the reader turns a feature on or off (MODULES §F100).
+export const EVENTS = Object.freeze(['committed', 'head', 'turn', 'feature']);
 // The most change lines one reply's block may hold; the rest are one Problem (turn.js).
 export const MAX_CHANGE_LINES = 150;
 export const HOST_SETTINGS_DEFAULTS = Object.freeze({ tailBudget: 1500, maxChangeLines: MAX_CHANGE_LINES });
@@ -149,14 +151,17 @@ export function createSettings({ root, registry, save = () => {} }) {
 
 /**
  * Runs a registered query on `state`; the answer is a plain copy. Throws for an unknown query.
- * A query is called (state, args, tools) with tools.query(name, args) over the same state and
- * tools.receipts() → [{ index, receipt }], the stored receipts in chat order (`receipts` option).
+ * A query is called (state, args, tools) with tools.query(name, args) over the same state,
+ * tools.receipts() → [{ index, receipt }], the stored receipts in chat order (`receipts` option), and
+ * tools.reply ({ index, sid } or null, the `reply` option): the reply the state is the head of, as a
+ * command's ctx.reply (commands.js).
  */
-export function runQuery(registry, state, name, args, { receipts = () => [] } = {}) {
+export function runQuery(registry, state, name, args, { receipts = () => [], reply = null } = {}) {
     const query = registry.query(name);
     if (!query) throw new Error(`Story Suite: no module answers the query "${name}".`);
     const tools = Object.freeze({
-        query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts }),
+        reply,
+        query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply }),
         receipts: () => receipts() ?? [],
     });
     const answer = query(state, args === undefined ? undefined : structuredClone(args), tools);
@@ -171,8 +176,9 @@ export function runQuery(registry, state, name, args, { receipts = () => [] } = 
 export const mountQuery = (registry, receipts = () => []) => (name, args, state) => runQuery(registry, state, name, args, { receipts });
 
 /**
- * What modules read (§6): { state (frozen head), query(name, args), settings(id), chat: { length,
- * lastUser } }. `chat`: SillyTavern's chat array (or nothing).
+ * What modules read (§6): { state (frozen head), query(name, args), settings(id), feature(id), chat:
+ * { length, lastUser } }. `chat`: SillyTavern's chat array (or nothing). `feature(id)`: whether the
+ * reader has that feature on (MODULES §F100); false for an id no module declares.
  */
 export function makeView({ store, registry, settings, chat = [] }) {
     const state = store.head();
@@ -180,11 +186,15 @@ export function makeView({ store, registry, settings, chat = [] }) {
     const lastUser = [...messages].reverse().find(message => message?.is_user);
     return Object.freeze({
         state,
-        query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [] }),
+        query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [], reply: headReply(store) }),
         settings,
+        feature: id => featureOn(registry, id),
         chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? '') }),
     });
 }
+
+/** Whether feature `id` is on (registry.featureOn); false for an unknown id or a registry without features. */
+export const featureOn = (registry, id) => typeof registry?.featureOn === 'function' && registry.featureOn(id) === true;
 
 /**
  * The registered modules whose domains the head state lacks (enabled after the chat began, or a
@@ -274,7 +284,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             ? refused(`"${type}" is a step Story Block takes itself; it cannot be sent as an action.`)
             : bus.preview(type, payload)),
         commit: async token => saved(committed(await bus.commit(token))),
-        query: (name, args) => runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [] }),
+        query: (name, args) => runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [], reply: headReply(store) }),
         /** The stored receipts on the current line of history, in chat order: [{ index, receipt }]. */
         receipts: () => store.receipts?.() ?? [],
         /**
@@ -301,7 +311,11 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         id: newId,
         check: check ? Object.freeze({ ...check }) : null,
         settings: id => settings(id),
-        /** [{ id, name, version, domains, commands, kinds, tabs }] in id order. */
+        /** Whether the reader has feature `id` on (MODULES §F100); false for an id no module declares. */
+        feature: id => featureOn(registry, id),
+        /** Every declared feature: [{ id, moduleId, moduleName, label, describe, default, prompt, on }]. */
+        features: () => (registry.features?.() ?? []).map(feature => Object.freeze({ ...feature, on: featureOn(registry, feature.id) })),
+        /** [{ id, name, version, domains, commands, kinds, tabs, features }] in id order. */
         modules: () => registry.modules().map(def => Object.freeze({
             id: def.id,
             name: def.name ?? def.id,
@@ -310,6 +324,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             commands: Object.keys(def.commands ?? {}),
             kinds: Object.keys(def.capture?.kinds ?? {}),
             tabs: (def.tabs ?? []).map(tab => tab.id),
+            features: (def.features ?? []).map(feature => feature.id),
         })),
     });
     return { sdk, events, markReady };

@@ -18,18 +18,23 @@ export const DEFAULTS = Object.freeze({
     [SETTING.profile]: '',
 });
 
+// The two switches are features of Story Block (MODULES §F100, Settings → Features): their texts are
+// here, the reader's choice is extension_settings.storySuite.features (the runtime gives the helpers
+// these two keys from it). A value an older version stored under the keys is that choice until the
+// reader changes the feature.
+export const FEATURE_TEXT = Object.freeze({
+    classifier: Object.freeze({
+        label: 'Roll checks before the reply',
+        describe: 'One small extra model call per message: when you try something risky, the check is rolled first and the reply tells how it went.',
+    }),
+    extractor: Object.freeze({
+        label: 'Read changes from replies that forgot them',
+        describe: 'One small extra model call when a reply comes without its change lines: the items, coins, places and other changes it told are kept anyway.',
+    }),
+});
+
 // The overlay's field types (registry.js: bool, int, choice, text, list).
 export const SCHEMA = Object.freeze({
-    [SETTING.classifier]: Object.freeze({
-        type: 'bool',
-        label: 'Roll checks before the reply',
-        help: 'One small extra model call per message: when you try something risky, the check is rolled first and the reply tells how it went.',
-    }),
-    [SETTING.extractor]: Object.freeze({
-        type: 'bool',
-        label: 'Read changes from replies that forgot them',
-        help: 'One small extra model call when a reply comes without its change lines: the items, coins, places and other changes it told are kept anyway.',
-    }),
     [SETTING.profile]: Object.freeze({
         type: 'text',
         label: 'Connection profile for these calls',
