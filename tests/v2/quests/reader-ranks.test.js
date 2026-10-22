@@ -1,6 +1,6 @@
 // The reader's rank ladder (live test, MODULES §F105): Story Block's Rank ladder setting answers the
 // packs' ranks (records with `reader: true`), and quest ranks follow it: alone (no RPG Battle, WAVE rule
-// 11), with RPG Battle's banding of the same ranks, with the pack's rewards Story Block kept at a place,
+// 11, where there is no reader's ladder since terms2), with RPG Battle's banding of the same ranks, with the pack's rewards Story Block kept at a place,
 // and the money scale on rewards set by place.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,23 +45,34 @@ test('a pack\'s rewards Story Block kept at a place stay as written; RPG Battle\
     assert.deepEqual(ranksOf(asking({ 'packs.content:ranks': [{ id: 'F', title: 'Registered', reward: [50, 400], pack: 'e' }] })).map(rank => rank.title), ['Registered']);
 });
 
-test('alone on the host: a quest\'s rank line and terms use the reader\'s rank names', async t => {
+test('alone on the host: no rank ladder without a module that bands levels; Story Block\'s old Terms value is not read', async t => {
     t.mock.method(console, 'warn', () => {});
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
     host = await createHost({ modules: [module], settings: { modules: { 'story-block': { ranks: SOUL.map(rank => ({ rank })) } } } });
     t.after(() => host.close());
     assert.deepEqual(host.sdk.modules().map(entry => entry.id).filter(id => id !== 'story-block'), ['story-director']);
-    assert.deepEqual(host.sdk.query('quest.ranks').map(rank => rank.title), SOUL);
+    assert.deepEqual(host.sdk.query('quest.ranks').map(rank => rank.id), ['F', 'E', 'D', 'C', 'B', 'A', 'S'], 'Story Director\'s own F to S');
+    assert.match(module.settings.schema['quests.followLadder'].help, /Without RPG Battle a ladder has no levels to band/);
+});
+
+// A module that gives the reader's ladder the way RPG Battle does (its Terms: Rank ladder and Levels per rank).
+const LADDER = { id: 'ladder-test', name: 'Ladder', version: '0.0.0', hooks: { 'ranks.reader': () => ({ lines: SOUL.map(rank => ({ rank })), perRank: 10 }) } };
+
+test('with a module that gives the ladder: quest ranks follow it, with its levels; off, Story Director\'s own', async t => {
+    t.mock.method(console, 'warn', () => {});
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    host = await createHost({ modules: [module, LADDER] });
+    t.after(() => host.close());
+    const ladder = host.sdk.query('quest.ranks');
+    assert.deepEqual(ladder.map(rank => rank.title), SOUL);
+    assert.deepEqual(ladder.slice(0, 2).map(rank => rank.levels), [[1, 10], [11, 20]]);
     const reply = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
     await host.send('Hello.', reply('The square.', ['~ place Harrow | kind: settlement', '+ present Orsa']));
     await host.send("I'll take it.", reply('Orsa nods.', ['+ quest Lost Letter — Orsa lost a letter | giver: Orsa | goal: Find the letter | reward: 30 gold | rank: Soul Class I']));
     const letter = host.sdk.query('director.threads', { kind: 'quest' }).find(thread => thread.key === 'Lost Letter');
-    const details = host.sdk.query('quest.details', { id: letter.id });
-    assert.equal(details.rank.title, 'Soul Class I');
-    assert.match(details.terms.text, /Soul Class I/);
-    // No ladder set: the built-in F to S, as before.
-    const plain = await createHost({ modules: [createModule({ host: { settings: () => null, substitute: text => text } })] });
-    t.after(() => plain.close());
-    assert.deepEqual(plain.sdk.query('quest.ranks').map(rank => rank.id), ['F', 'E', 'D', 'C', 'B', 'A', 'S']);
+    assert.equal(host.sdk.query('quest.details', { id: letter.id }).rank.title, 'Soul Class I');
+    host.settings.set('story-director', 'quests.followLadder', false);
+    assert.deepEqual(host.sdk.query('quest.ranks').map(rank => rank.id), ['F', 'E', 'D', 'C', 'B', 'A', 'S']);
 });

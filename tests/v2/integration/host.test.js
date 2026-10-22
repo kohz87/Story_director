@@ -268,7 +268,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual(Object.keys(defs.schema).sort(), [
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail',
-        'time.lapses', 'time.recapHours',
+        'quests.followLadder', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays', 'tracker.maxJump',
     ]);

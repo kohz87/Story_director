@@ -33,7 +33,7 @@ export const features = Object.freeze([
     Object.freeze({
         id: DIGEST_FEATURE,
         label: 'Day digest',
-        describe: 'When a story day ends, code writes what it held (places, quests, fights, money, NPC stages, world news) from the receipts, for the Days screen and a one-line reminder after a time skip.',
+        describe: 'When a story day ends, code writes what it held (places, quests, money, NPC stages, world news and the day\'s other events) from the receipts, for the Days screen and a one-line reminder after a time skip.',
         default: true,
     }),
 ]);

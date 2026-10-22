@@ -133,7 +133,7 @@ test('F88 is gone: + quest is taken on at once, never an offer, never held; no o
     assert.match(note, /First Job/);
     assert.match(note, /Second Job/);
     assert.equal(part.settings.reads, undefined);
-    assert.equal(quests.settings, undefined);
+    assert.deepEqual(Object.keys(quests.settings.schema), ['followLadder'], 'no offer cooldown setting');
 });
 
 function wolfCull(options, kind = 'settlement') {

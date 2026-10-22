@@ -69,6 +69,8 @@ const LIVE_HOST = Object.freeze({
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+import { CALENDAR_KEYS, liveCalendarSettings } from './tracker/calendar-settings.js';
+
 // ---- settings --------------------------------------------------------------------------------
 
 /** A schema field as the overlay knows it: `choices` is `options`. */
@@ -368,6 +370,15 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         }
     }
 
+    // The Calendar settings show the calendar in use (tracker/calendar-settings.js): with `pack`, the
+    // pack's, and Custom starts from it. Read from Story Block's live queries when the settings are drawn.
+    const askLive = name => tryLive(() => (typeof host.query === 'function' ? host.query(name, {}) : liveSdk()?.query?.(name, {})), null);
+    const liveView = () => {
+        const stored = tryLive(() => host.settings(MODULE_ID), null);
+        return { calendar: packCalendarOf(name => askLive(name)), list: askLive('packs.list'), preset: stored?.[CALENDAR_KEYS.preset] };
+    };
+    liveView.calendar = () => packCalendarOf(name => askLive(name));
+    liveCalendarSettings(defaults, schema, liveView);
     const def = {
         id: MODULE_ID,
         name: MODULE_NAME,

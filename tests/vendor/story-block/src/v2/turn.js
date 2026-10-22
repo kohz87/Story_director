@@ -19,7 +19,8 @@
 // turn.js receives the SillyTavern context and the host parts; it never imports the store or
 // the command bus (their interfaces are docs/v2/SPEC.md §12).
 
-import { continuation, cutLine, defangMarker, extractBlock, hideBlock, parseChanges, stripBlock } from './capture.js';
+import { continuation, cutLine, defangMarker, extractBlock, grammarHeads, hideBlock, parseChanges, strayLines, stripBlock } from './capture.js';
+import { readDisplayLine } from './extras.js';
 import { hash, readRecord } from './persist.js';
 import { CAPTURE_PREFIX } from './registry.js';
 import { STATIC_MARKER, assemble, contextNotice } from './prompt.js';
@@ -511,6 +512,17 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         return { lines: parsed.lines, problems };
     }
 
+    // The heads of the kinds the reply may write ("! encounter", "+ quest"), for the change lines a
+    // model writes in the story near the block (capture.js strayLines). Read at each capture, so a
+    // feature turned off takes its kinds' heads with it.
+    function changeHeads() {
+        try { return grammarHeads(registry.contexts().flatMap(context => context.kinds ?? [])); } catch { return new Set(); }
+    }
+    // The story's change lines that were not taken (too far up, written another way) as Problems.
+    function strayProblems(index, text, heads, options) {
+        return strayLines(text, heads, options).problems.map(({ line, reason }) => problem({ index, line, code: 'STRAY', message: `"${line}" was not used: ${reason}.` }));
+    }
+
     function capped(index, all, found) {
         const cap = lineCap();
         if (all.length > cap) {
@@ -540,10 +552,12 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         // `sid`: the reply's record ID, which stays with the reply when earlier messages are deleted.
         const carrier = { index, swipe: Number.isInteger(message?.swipe_id) ? message.swipe_id : 0, sid: store.carrierSid?.(index) ?? null };
         const reader = (ctx?.chat ?? []).slice(0, index).findLast(item => item?.is_user);
-        const chat = { lastUser: String(reader?.mes ?? ''), reply: stripBlock(String(message?.mes ?? '')) };
+        const chat = { lastUser: String(reader?.mes ?? ''), reply: stripBlock(String(message?.mes ?? ''), 'Changes', { heads: changeHeads() }) };
         // A Re-read (a2-3): the reply as it stands now, for bookkeeping its kept blocks wrote (ctx.standing).
         let standing = null;
         if (base) { try { standing = store.at(index); } catch { standing = null; } }
+        // How many lines of each display kind this reply has shown so far (their cap per reply).
+        const shown = new Map();
         for (const line of lines) {
             const entry = registry.capture(line.kind);
             if (!entry) {
@@ -559,6 +573,14 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             if (entry.off && !again) {
                 const label = registry.feature?.(entry.feature)?.label ?? entry.feature;
                 found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'FEATURE_OFF', quiet: true, message: `"${line.raw}" was not used: ${label} is turned off (feature off).` }));
+                continue;
+            }
+            // A display kind (Choices, Inner chatter; extras.js): read for the reader alone. No command
+            // runs and nothing is stored; what is shown is read again from the reply's hidden block, by
+            // the same rule (readDisplayLine), so only what the rule refuses is told here.
+            if (entry.display) {
+                const read = readDisplayLine(entry, line, shown);
+                if (!read.ok) found.push(problem({ module: entry.moduleId, index, line: line.raw, code: read.code, message: `"${line.raw}" was not used: ${read.message}.` }));
                 continue;
             }
             let result;
@@ -634,9 +656,10 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const base = store.before?.(index);
         if (!base) return refusal('FAILED', 'This chat has no story state yet.');
         const mes = String(message.mes ?? '');
-        const block = extractBlock(mes);
+        const heads = changeHeads();
+        const block = extractBlock(mes, 'Changes', null, { heads });
         const parsed = block === null ? { lines: [], problems: [] } : readBlock(index, block);
-        const problems = [...parsed.problems];
+        const problems = [...parsed.problems, ...strayProblems(index, mes, heads)];
         const receipts = [];
         const lines = capped(index, parsed.lines, problems);
         const swipe = message.swipe_id;
@@ -656,7 +679,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             return refusal('CONFLICT', `${error?.message ?? error}`);
         }
         if (block !== null) {
-            const hidden = hideBlock(mes);
+            const hidden = hideBlock(mes, 'Changes', { heads });
             if (hidden !== mes) {
                 message.mes = hidden;
                 if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
@@ -712,9 +735,11 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             }
             // The reader stopped it (GENERATION_STOPPED): an open block's unfinished last line is left out.
             const stopped = current.stopped === true;
-            const block = extractBlock(text, 'Changes', at, { stopped });
+            // Change lines written in the story near the block are read with it (capture.js strayLines).
+            const heads = changeHeads();
+            const block = extractBlock(text, 'Changes', at, { stopped, heads });
             const parsed = block === null ? { lines: [], problems: [] } : readBlock(id, block);
-            const problems = [...parsed.problems];
+            const problems = [...parsed.problems, ...strayProblems(id, text, heads, { from: at?.from ?? 0, tail: at?.tail === true, stopped })];
             const cut = block === null ? null : cutLine(text, 'Changes', at, { stopped });
             if (cut) problems.push(problem({ index: id, line: cut, code: 'CUT_OFF', message: `The reply stopped in the middle of the change line "${cutAt(cut, 80)}", so it was not used.` }));
             const result = await captureLines(id, parsed.lines);
@@ -727,7 +752,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             store.setNarrated(id, [...new Set([...before, ...current.untold])]);
 
             if (block !== null) {
-                const hidden = hideBlock(message.mes, 'Changes', { ...(at ?? {}), stopped });
+                const hidden = hideBlock(message.mes, 'Changes', { ...(at ?? {}), stopped, heads });
                 if (hidden !== message.mes) {
                     message.mes = hidden;
                     if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
@@ -796,6 +821,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         session = null;
         clearPrompts();
         rebuild();
+        // A1-2: read-backs of a write that timed out before a reload of the page go on.
+        try { store.resume?.(); } catch { /* only a guard */ }
         // A cue left for the reply's save (runCues) whose reply will not come here: saved now (into its
         // own chat's file when this is another chat, the store's rescue).
         if (deferred) {
