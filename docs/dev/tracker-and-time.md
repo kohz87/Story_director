@@ -30,6 +30,12 @@ this repo's README "The change lines", "The note".
   fallback for an older Story Block without `afterCapture`; with it, nothing is left waiting for it.
   A place-only refusal at the end of a reply stays retriable in `turn.now.refused` for that reply's
   Continue (`quest.settle { id, retry: true }`, `director.retriable`); paying it takes the refusal's Problem back.
+- **Safeguard:** the afterCapture step also turns a ready quest in from where things stand when the reply shows
+  it was (`turn.now.intent` from `~`/`!` quest lines in `TURN_IN_WORDS`, the story's coin equal to the reward, the
+  reward item given; `quest.autoTurnIns`, `quest.settle { id, auto: true }`), and takes back a `+ coin` that
+  repeats a reward already paid (`quest.repeatedCoin`, `{ repeated: true }`). The story's own coin this reply is
+  counted as a turn-in's reward (claim `storycoin:<sid>`). `quests.wordTurnIns` (1–5) is the story's-word
+  turn-ins per reply (`turn.now.words` past 1).
 - **Quests:** a job accepted is `taken`; goals counted by code where it can (foes beaten from RPG Battle's
   `combat.foesBeaten` when present), `met:` when the story says a goal code cannot count is met; rewards priced
   by code (coin forms through Story Block's currency), story-written pay within the per-reply story budget.

@@ -182,6 +182,12 @@ export const isSettlementKind = kind => SETTLEMENT_KIND.test(text(kind).toLowerC
  * has none: quests/index.js hereScene), or with the giver in `scene.present` (whole-word names: "Fenna"
  * is "Fenna the miller"). `{ ok, reason }`.
  */
+/** Whether the quest's giver is among the people present in `scene` (Story Block's scene). */
+export function giverHere(thread, scene) {
+    const giver = text(thread?.fields?.giver);
+    return Boolean(giver) && (scene?.present ?? []).some(name => samePersonName(giver, name));
+}
+
 export function placeRule(thread, scene) {
     const kind = text(scene?.place?.kind).toLowerCase();
     if (SETTLEMENT_KIND.test(kind)) return { ok: true, reason: '' };

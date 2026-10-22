@@ -72,10 +72,9 @@ test('tail: quests ready to turn in (an older chat\'s offer is not told); done-b
         scene: { place: { kind: 'wild' }, present: ['Orsa'] },
     });
     const tail = part.context.tail(viewOf(state));
-    assert.deepEqual(tail.lines, [
-        'Quests ready to turn in here (code checks and pays when the story turns one in): EastBluffWolves (Wolves 8/3).',
-    ]);
-    assert.deepEqual(tail.optional, ['Quests done but turned in only at a settlement or with their giver: Bear Trouble (Bears 1/1).']);
+    // One line, at most two quests, each with its giver and where it can be turned in.
+    assert.deepEqual(tail.lines, ['Ready to turn in: Bear Trouble (to Hobb, at a settlement or where Hobb is); EastBluffWolves (to Orsa, here).']);
+    assert.deepEqual(tail.optional, []);
     assert.equal(part.context.budget, 250);
 });
 
@@ -103,7 +102,7 @@ test('the part has the MODULES §A shape and no domain of its own', () => {
     assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
     assert.deepEqual(part.domains, {});
     assert.deepEqual(Object.keys(part.commands), ['quest.take', 'quest.abandon', 'quest.finish']);
-    assert.deepEqual(Object.keys(part.queries), ['quest.progress', 'quest.details', 'quest.ranks', 'quest.followsLadder']);
+    assert.deepEqual(Object.keys(part.queries), ['quest.progress', 'quest.autoTurnIns', 'quest.repeatedCoin', 'quest.details', 'quest.ranks', 'quest.followsLadder']);
     // The Quests board is the screens part's screen now.
     assert.deepEqual(part.tabs, []);
 });

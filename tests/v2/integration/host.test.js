@@ -269,7 +269,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
         'arc.autoAccept', 'arc.genre', 'arc.keepNote', 'arc.lowThreads', 'arc.maxTokens', 'arc.note', 'arc.profile', 'arc.recent', 'arc.stallDays', 'arc.trigger',
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail',
-        'quests.followLadder', 'screens.hideBehind', 'time.lapses', 'time.recapHours',
+        'quests.followLadder', 'quests.wordTurnIns', 'screens.hideBehind', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays', 'tracker.maxJump',
         'world.upcomingDays',

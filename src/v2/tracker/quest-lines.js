@@ -190,6 +190,14 @@ function clearRefusal(director, id) {
     else delete now.refused;
 }
 
+// Words in a quest line that say the story turned it in, however it put them (an `~` or `!` line the
+// tracker does not read as closing it: "~ quest X — Elula pays you", "! quest X — reward handed over").
+// Kept by the tracker as the reply's `intent` (turn.now); the line itself changes only what it says.
+export const TURN_IN_WORDS = /\b(?:turn(?:s|ed|ing)?\s+(?:\w+\s+)?in|hand(?:s|ed|ing)?\s+(?:\w+\s+)?(?:in|over)|deliver(?:s|ed|ing|y)?|rewards?|rewarded|pa(?:y|ys|id|ying)|bount(?:y|ies)|collect(?:s|ed|ing)?|claim(?:s|ed|ing)?|complet(?:e|es|ed|ing)|finish(?:es|ed|ing)?|done)\b/i;
+
+/** The words of a line (its text and labels' values), for TURN_IN_WORDS. */
+export const lineWords = line => [line?.text, ...Object.values(line?.labels ?? {})].map(value => String(value ?? '')).join(' ');
+
 /** The step that checks the reply's waiting turn-ins before the next reply (the quests' cue). */
 export const SETTLE = 'quest.settle';
 
@@ -249,6 +257,28 @@ export function settleCommand(ctx, payload = {}) {
     if (ctx.cause === 'ui') ctx.fail('REFUSED', 'A turn-in is checked by the story, not by a click.');
     const director = ctx.draft('director');
     const id = text(payload?.id);
+    // `repeated`: the story's own coin this reply repeated a reward code paid in it (quest.repeatedCoin): taken
+    // back, at most what the party holds, and counted (claim), so it is done once.
+    if (payload?.repeated === true) {
+        const amount = Number(ctx.query('quest.repeatedCoin', {})?.amount);
+        const sid = ctx.reply?.sid;
+        if (!Number.isSafeInteger(amount) || amount <= 0 || !sid || !ctx.claim(`storycoin:${sid}`)) ctx.fail('REFUSED', 'No coin of this reply repeats a reward.');
+        const held = Number(ctx.query('inventory.wallet', { owner: 'party' })?.coin);
+        const back = Math.min(amount, Number.isSafeInteger(held) && held > 0 ? held : 0);
+        if (back > 0) ctx.call('wallet.pay', { owner: 'party', amount: back, note: 'the story\'s coin for a reward already paid' });
+        return { summary: `Director: the story's own coin this reply repeated a quest reward code had already paid; ${back} of it was taken back, so it is not paid twice.`, narrate: true, data: { repeated: back }, replan: true };
+    }
+    // `auto`: turned in from where things stand (afterCaptureHook, quest.autoTurnIns): quest.finish as code
+    // runs it, never on the story's word alone, so a goal not met is refused. Kept on the reply, `replan`.
+    if (payload?.auto === true) {
+        const thread = director.threads?.[id];
+        if (!id || !isWaitingQuest(thread)) ctx.fail('REFUSED', 'That quest is not open.');
+        const out = ctx.call('quest.finish', { id }) ?? {};
+        const closed = director.threads[id];
+        if (closed) closed.track = { ...(closed.track ?? {}), closed: { turn: director.turn.n, time: director.time.minutes ?? null } };
+        clearRefusal(director, id);
+        return { summary: text(out.summary) || `Director: ${thread.key} turned in.`, narrate: true, data: { thread: id, quest: id, problems: [], turnIn: out.data ?? null, auto: true }, replan: true };
+    }
     // `retry`: a Continue of the reply that refused it by the place (afterCaptureHook): paid now, or refused
     // as it was (nothing kept, no second Problem). Only on that reply.
     if (payload?.retry === true) {
@@ -281,6 +311,17 @@ export function afterCaptureHook(view) {
         const check = tryQuery(view?.query, 'quest.progress', { id, closing: true });
         if (check?.finish?.ok === true) commands.push({ type: SETTLE, payload: { id, retry: true } });
     }
+    // Turned in from where things stand (quest.autoTurnIns): the goal met, the place allowed, and the reply
+    // shows it was turned in though no line was read as a turn-in. One step per quest; paid at most once.
+    const asked = new Set(commands.map(command => command.payload.id));
+    const auto = tryQuery(view?.query, 'quest.autoTurnIns', {});
+    for (const id of Array.isArray(auto) ? auto : []) {
+        if (typeof id === 'string' && !asked.has(id)) commands.push({ type: SETTLE, payload: { id, auto: true } });
+    }
+    // The story's own `+ coin` after a turn-in had paid in this reply: the reward and the coin do not
+    // stack, so the repeat is taken back (quest.repeatedCoin). Not asked when a step above will pay: that
+    // one counts the coin as its reward instead.
+    if (!commands.length && Number(tryQuery(view?.query, 'quest.repeatedCoin', {})?.amount) > 0) commands.push({ type: SETTLE, payload: { repeated: true } });
     return commands.length ? { lines: [], commands } : undefined;
 }
 

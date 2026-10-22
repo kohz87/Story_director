@@ -19,7 +19,7 @@
 
 import { lineKey, questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
-import { NOT_MET_YET, beatenClaim, countedTarget, finishRule, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
+import { NOT_MET_YET, beatenClaim, countedTarget, finishRule, giverHere, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
 import { heldText, questRank, rankHeldText, ranksOf, replyBudget, rewardHold } from './ranks.js';
 // The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
 import { addProblem, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
@@ -267,17 +267,51 @@ const isOver = thread => Boolean(thread.ended) || thread.status !== 'active';
 
 /*
  * A goal code cannot count is met on the story's word alone (F83, F94), so one reply turns in at most
- * one such quest (B-b3-r2-5): `vouched` in `director.turn.now` is the one this reply turned in. The tracker starts
- * a fresh `turn` for each reply's Director lines, so the mark goes with the reply (and a click after the
- * reply counts against it too). `{ ok: false, word: true, other, reason }` when another quest already
- * took this reply's turn-in, else null.
+ * `limit` such quests (B-b3-r2-5; the Quests setting "Story's-word turn-ins per reply", WORD_LIMIT, 1 by
+ * default): `vouched` in `director.turn.now` is the first this reply turned in, `words` all of them (kept
+ * only while the limit is above 1). The tracker starts a fresh `turn` for each reply's Director lines, so
+ * the mark goes with the reply (and a click after the reply counts against it too). `{ ok: false, word:
+ * true, other, limit, reason }` when this reply's turn-ins on the story's word are used up, else null.
  */
-function wordRule(director, thread, target) {
+function wordRule(director, thread, target, limit = 1) {
     if (target) return null;
-    const used = replyTurn(director).vouched;
-    if (typeof used !== 'string' || !used || used === thread.id) return null;
-    const other = text(director.threads?.[used]?.key) || 'another quest';
-    return { ok: false, word: true, other, reason: `One reply turns in only one quest on the story's word alone (${other} was); it is ready for the next reply.` };
+    const used = replyTurn(director).words;
+    if (used.includes(thread.id) || used.length < limit) return null;
+    const other = text(director.threads?.[used.at(-1)]?.key) || 'another quest';
+    const reason = limit === 1
+        ? `One reply turns in only one quest on the story's word alone (${other} was); it is ready for the next reply.`
+        : `One reply turns in at most ${limit} quests on the story's word alone (${used.length} were); it is ready for the next reply.`;
+    return { ok: false, word: true, other, limit, reason };
+}
+
+// The Quests setting "Story's-word turn-ins per reply": a whole number from 1 to 5, 1 by default.
+export const WORD_LIMIT = Object.freeze({ min: 1, max: 5, default: 1 });
+function wordLimit(settings) {
+    let own = null;
+    try { own = typeof settings === 'function' ? settings() : null; } catch { own = null; }
+    const value = Number(own?.wordTurnIns);
+    return Number.isSafeInteger(value) ? Math.min(WORD_LIMIT.max, Math.max(WORD_LIMIT.min, value)) : WORD_LIMIT.default;
+}
+
+/*
+ * The story's own coin this reply (its `+ coin` lines; Story Block's `inventory.storyBudget` → paid less
+ * the modules' vouched payouts), which a story or system turn-in counts as its reward instead of paying
+ * on top of it, so the reward and the story's coin for it never stack. Counted for one turn-in a reply
+ * (claim `storycoin:<sid>`). 0 on a Story Block without that query, or once claimed.
+ */
+// What of the story's coin this reply counts as this quest's reward (`owed`, payOf): when it is the reward's
+// amount, or when the giver is here (the giver paying); never more than the reward. 0 otherwise: coin the
+// story wrote for something else is not a quest's.
+function creditFor(coin, owed, here) {
+    if (!(coin > 0) || !(owed?.pay > 0)) return 0;
+    return here || coin === owed.pay || coin === owed.said ? Math.min(coin, owed.pay) : 0;
+}
+
+function storyCoinOf(query, claims, sid) {
+    if (typeof sid !== 'string' || !sid || (claims && Object.hasOwn(claims, `storycoin:${sid}`))) return 0;
+    const host = tryQuery(query, 'inventory.storyBudget', {}, null);
+    if (!isAmount(host?.paid)) return 0;
+    return Math.max(0, host.paid - (isAmount(host.vouched) ? host.vouched : 0));
 }
 
 /**
@@ -363,15 +397,28 @@ function finish(ctx, payload) {
     const progress = progressOf(thread, ctx.query, { free: fightRev => ctx.claim(beatenClaim(fightRev)), closing: byStory });
     if (!progress.met) fail(ctx, CODES.notMet, `${thread.key} is not done yet (${progressLabel(thread, progress)}). ${progress.reason}`.trim());
     if (!place.ok) fail(ctx, CODES.wrongPlace, `${thread.key} cannot be turned in here. ${place.reason}`);
-    const word = wordRule(director, thread, counted);
+    const limit = wordLimit(ctx.settings);
+    const word = wordRule(director, thread, counted, limit);
     if (word) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${word.reason}`);
     const terms = { reward, byPack, rank, rankBy };
-    const owed = payOf(terms, target, progress);
+    const full = payOf(terms, target, progress);
+    // The story already wrote coin this reply (its own `+ coin` line for the reward): counted as the
+    // reward, never on top of it. Not for a click, whose coin is the reader's own action.
+    const coin = ctx.cause === 'ui' ? 0 : creditFor(storyCoinOf(ctx.query, null, ctx.reply?.sid), full, giverHere(thread, hereScene(ctx.query, ctx.read('scene'))));
+    // Claimed once a reply: a second turn-in of the same reply finds it counted already.
+    const credit = coin > 0 && ctx.claim(`storycoin:${ctx.reply.sid}`) ? coin : 0;
+    const owed = { ...full, pay: full.pay - credit };
     const spend = spendOf(ctx.query, director, budget);
     const over = budgetRule(spend, owed, currency);
     if (over) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${over.reason}`);
     const now = replyDraft(director);
-    if (!counted && now) now.vouched = thread.id;
+    if (!counted && now) {
+        if (limit === 1) now.vouched = thread.id;
+        else {
+            if (!now.vouched) now.vouched = thread.id;
+            now.words = [...replyTurn(director).words.filter(id => id !== thread.id), thread.id];
+        }
+    }
 
     // Fetched items are handed over: exactly the target's count, stack by stack.
     const consumed = [];
@@ -391,6 +438,7 @@ function finish(ctx, payload) {
     const { units, said, hold, pay } = owed;
     const allowed = spendBudget(spend, owed);
     let paid = null;
+    if (credit > 0 && pay <= 0) paid = { amount: 0, story: credit, ...(hold.held ? { said, rank: rank.id, range: [...rank.reward] } : {}) };
     if (pay > 0) {
         // A whole amount of the chat's one currency (MODULES §F1, §F5). A reward the story wrote (every
         // one but a pack quest's own) is the story's money: `story: true` asks Story Block to count it
@@ -404,7 +452,7 @@ function finish(ctx, payload) {
             amount = Number.isSafeInteger(given) && given >= 0 && given < allowed ? given : allowed;
         }
         if (owed.storyMoney && now && !spend.host) now.paid = replyTurn(director).paid + amount;
-        paid = { amount, ...(hold.held ? { said, rank: rank.id, range: [...rank.reward] } : {}), ...(amount < pay ? { owed: pay } : {}) };
+        paid = { amount, ...(credit > 0 ? { story: credit } : {}), ...(hold.held ? { said, rank: rank.id, range: [...rank.reward] } : {}), ...(amount < pay ? { owed: pay } : {}) };
     }
     // XP is RPG Battle's: it scales quest XP by difficulty (MODULES §F5). A written amount (an `xp:`
     // label) is never sent (B-b3-19).
@@ -429,7 +477,8 @@ function finish(ctx, payload) {
     const rankText = (rankNote || levelNote) && hold.held ? ` (${rankNote || levelNote})` : '';
     if (rankNote) rankProblem(ctx, director, thread, rankNote);
     const budgetText = paid?.owed ? ` (${money(paid.owed, currency)} was owed; one reply may give no more)` : '';
-    const payText = paid ? `${money(paid.amount, currency)} paid${hold.held ? ` (${heldText(rank, money(said, currency), currency)})` : ''}${rankText}${fromPack}${budgetText}`
+    const storyText = paid?.story ? ` (${money(paid.story, currency)} of it the story's own coin this reply)` : '';
+    const payText = paid ? `${money(paid.amount + (paid.story ?? 0), currency)} paid${storyText}${hold.held ? ` (${heldText(rank, money(said, currency), currency)})` : ''}${rankText}${fromPack}${budgetText}`
         : reward?.amount === 0 ? 'no reward in money'
             : reward?.text ? `reward as the story tells it: ${reward.text}`
                 : 'no reward was named';
@@ -463,19 +512,101 @@ function progressQuery(state, args = {}, tools = null) {
     const scene = hereScene(query, state?.domains?.scene);
     const rule = finishRule(view, progress, scene);
     const director = state?.domains?.director;
-    let finish = rule.ok ? wordRule(director, thread, counted) ?? rule : rule;
+    let finish = rule.ok ? wordRule(director, thread, counted, wordLimit(tools?.settings)) ?? rule : rule;
     // Refused only by where the scene is: the story's own turn-in then waits for the scene the reply ends
     // up in (the tracker's pending turn-ins, tracker/quest-lines.js), as its place lines may come after it.
     const placeOnly = !rule.ok && progress.met && !isOver(thread) && Boolean(thread.taken) && !placeRule(view, scene).ok;
     if (finish.ok && progress.met) {
         const currency = currencyOf(query);
         const terms = termsFor(query, state?.domains?.inventory, thread, currency);
-        finish = budgetRule(spendOf(query, director, terms.budget), payOf(terms, target, progress), currency) ?? finish;
+        const owed = payOf(terms, target, progress);
+        // Asked as the story's or a system step's turn-in (`closing`, `asStory`): the story's own coin this
+        // reply counts as the reward (finish); a click's does not.
+        const story = args?.closing === true || args?.asStory === true;
+        const credit = story ? creditFor(storyCoinOf(query, state?.meta?.claims ?? null, tools?.reply?.sid), owed, giverHere(view, scene)) : 0;
+        finish = budgetRule(spendOf(query, director, terms.budget), { ...owed, pay: owed.pay - credit }, currency) ?? finish;
     }
     return {
         have, need, met, ready: !counted && Boolean(thread.ready), countable: Boolean(counted), source, noun, label: progressLabel(view, { have, need }), reason, finish,
         ...(args?.closing === true ? { refusal: storyRefusal(view, progress, finish), place: placeOnly } : {}),
     };
+}
+
+/**
+ * `quest.repeatedCoin()` → `{ amount }`: the story's own coin this reply (`tools.reply`) that repeats a quest
+ * reward code already paid in it: the story wrote `+ coin` after the turn-in had paid, so turn-in and coin
+ * would stack. At most the rewards modules paid this reply on the story's word (`inventory.storyBudget`
+ * vouched). 0 once the reply's coin was counted (claim `storycoin:<sid>`), or on a Story Block without the
+ * query. The afterCapture step takes it back (quest.settle { repeated: true }).
+ */
+function repeatedCoin(state, _args = {}, tools = null) {
+    const sid = tools?.reply?.sid;
+    const lines = storyCoinOf(queryOf(state, tools), state?.meta?.claims ?? null, sid);
+    if (lines <= 0) return { amount: 0 };
+    const query = queryOf(state, tools);
+    const host = tryQuery(query, 'inventory.storyBudget', {}, null);
+    const vouched = isAmount(host?.vouched) ? host.vouched : 0;
+    if (vouched <= 0) return { amount: 0 };
+    // For a reward: the same amount, or a quest this reply closed whose giver is here.
+    const director = state?.domains?.director;
+    const turn = replyTurn(director);
+    const scene = hereScene(query, state?.domains?.scene);
+    const closedHere = turn.reply === sid && questLists(director).finished
+        .some(thread => thread.track?.closed?.turn === director?.turn?.n && giverHere(thread, scene));
+    return { amount: lines === vouched || closedHere ? Math.min(lines, vouched) : 0 };
+}
+
+const looseName = value => text(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+// The names of the items the reply's story lines gave (Story Block's per-reply tally, `perReply[<sid>]
+// .items` by def id), [] when the host keeps none.
+function itemsGiven(state, sid) {
+    const inventory = state?.domains?.inventory;
+    const items = inventory?.perReply?.[sid]?.items;
+    if (!items || typeof items !== 'object') return [];
+    return Object.keys(items).map(id => looseName(inventory?.defs?.[id]?.name)).filter(name => name.length >= 3);
+}
+
+/**
+ * `quest.autoTurnIns()` → [thread id]: the quests the reply asked about (`tools.reply`, the head reply)
+ * turned in from where things stand, with no turn-in line read as one (Story Director's afterCapture step,
+ * quest-lines.js): open and taken, the goal met by code or by the story's `met: yes` (never on the story's
+ * word alone), quest.finish's rules allow it here now (the place, the per-reply limits), and the reply
+ * shows it was turned in: a quest line of this reply in turn-in words (the tracker's `intent`), the story's
+ * own coin this reply equal to the reward, or an item the reply gave named in the reward.
+ */
+function autoTurnIns(state, _args = {}, tools = null) {
+    const director = state?.domains?.director;
+    const sid = tools?.reply?.sid;
+    if (!director || typeof sid !== 'string' || !sid) return [];
+    const query = queryOf(state, tools);
+    const turn = replyTurn(director);
+    const intent = turn.reply === sid ? turn.intent : [];
+    const coin = storyCoinOf(query, state?.meta?.claims ?? null, sid);
+    const given = itemsGiven(state, sid);
+    const currency = currencyOf(query);
+    const out = [];
+    for (const thread of questLists(director).active) {
+        if (!thread.taken || turn.pending.includes(thread.id)) continue;
+        const check = progressQuery(state, { id: thread.id, asStory: true }, tools);
+        if (!check?.met || check.finish?.ok !== true) continue;
+        // The giver handing over the coin or the item: only with the giver here.
+        const here = giverHere(thread, hereScene(query, state?.domains?.scene));
+        let shown = intent.includes(thread.id);
+        if (!shown && here && coin > 0) {
+            const terms = termsFor(query, state?.domains?.inventory, thread, currency);
+            const target = terms.target;
+            const progress = progressOf({ ...thread, target }, query, { free: unclaimedIn(state) });
+            const owed = payOf(terms, target, progress);
+            shown = owed.pay > 0 && (coin === owed.pay || coin === owed.said);
+        }
+        if (!shown && here && given.length) {
+            const reward = looseName(`${text(thread.fields?.reward)} ${text(thread.reward?.text)}`);
+            shown = given.some(name => ` ${reward} `.includes(` ${name} `));
+        }
+        if (shown) out.push(thread.id);
+    }
+    return out;
 }
 
 /**
@@ -492,6 +623,7 @@ function storyRefusal(thread, progress, finish) {
         return `only ${progress.have} of ${progress.need} ${nounFor(target, progress.need)} ${progress.have === 1 ? 'is' : 'are'} ${target.kind === 'items' ? 'held' : 'beaten'}`;
     }
     if (!progress.met) return 'its goal is not met yet';
+    if (finish.word && finish.limit > 1) return `one reply turns in at most ${finish.limit} quests on the story's word alone, so it is ready for the next reply`;
     if (finish.word) return `one reply turns in only one quest on the story's word alone (${finish.other} was turned in), so it is ready for the next reply`;
     if (finish.budget) return lowerFirst(text(finish.reason).replace(/\.$/, ''));
     const where = text(finish.reason).replace(/^Turn it in /, '').replace(/\.$/, '');
@@ -606,6 +738,7 @@ function detailsQuery(state, args = {}, tools = null) {
 }
 
 const TAIL_NAMES = 6;
+const READY_SHOWN = 2;      // quests ready to turn in named in the tail, with their giver and where
 const TAIL_CHARS = 1000;    // budget 250 tokens at chars/4
 const JUDGED_SHOWN = 3;     // F83: open quests code cannot count, one line each
 const GOAL_CHARS = 80;
@@ -633,7 +766,6 @@ export function questTail(view) {
     const goalless = active.filter(thread => !hasGoal(thread));
     if (goalless.length) lines.push(`Quests with no goal yet (give each a concrete goal: ~ quest Name | goal: …): ${listText(goalless.map(thread => thread.key))}.`);
     const ready = [];
-    const elsewhere = [];
     const judged = [];
     for (const thread of active) {
         if (!thread.taken) continue;
@@ -644,15 +776,22 @@ export function questTail(view) {
         }
         const progress = progressOf(thread, query, { free: unclaimedIn(state) });
         if (!progress.met) continue;
-        const entry = target ? `${thread.key} (${progressLabel(thread, progress)})` : `${thread.key} (goal met)`;
-        if (placeRule(thread, hereScene(query, state.domains.scene)).ok) ready.push(entry);
-        else elsewhere.push(entry);
+        ready.push(thread);
     }
     for (const thread of judged.sort(byRecent).slice(0, JUDGED_SHOWN)) {
         lines.push(`Quest goal the story judges: ${thread.key} — ${cut(text(thread.fields?.goal), GOAL_CHARS)}.`);
     }
-    if (ready.length) lines.push(`Quests ready to turn in here (code checks and pays when the story turns one in): ${listText(ready)}.`);
-    if (elsewhere.length) optional.push(`Quests done but turned in only at a settlement or with their giver: ${listText(elsewhere)}.`);
+    // While a quest's goal is met: one short line, at most READY_SHOWN quests (the latest), each with its
+    // giver and where it can be turned in ("here" when the place rule holds now).
+    if (ready.length) {
+        const scene = hereScene(query, state.domains.scene);
+        const named = ready.sort(byRecent).slice(0, READY_SHOWN).map(thread => {
+            const giver = cut(text(thread.fields?.giver), 40);
+            const where = placeRule(thread, scene).ok ? 'here' : giver ? `at a settlement or where ${giver} is` : 'at a settlement';
+            return `${thread.key} (${giver ? `to ${giver}, ` : ''}${where})`;
+        });
+        lines.push(`Ready to turn in: ${named.join('; ')}.`);
+    }
     // Keep within the budget: optional goes first, then lines are cut.
     while (optional.length && [...lines, ...optional].join('\n').length > TAIL_CHARS) optional.pop();
     return { lines: lines.map(line => cut(line, TAIL_CHARS)), optional };
@@ -682,6 +821,8 @@ export const part = {
     },
     queries: {
         'quest.progress': progressQuery,
+        'quest.autoTurnIns': autoTurnIns,
+        'quest.repeatedCoin': repeatedCoin,
         'quest.details': detailsQuery,
         'quest.ranks': (state, _args, tools) => ranksOf(queryOf(state, tools)),
         // Whether quest ranks follow the reader's rank ladder (Quests: Quest ranks follow the rank ladder).
@@ -692,12 +833,17 @@ export const part = {
     hooks: {},
     settings: {
         section: 'Quests',
-        defaults: { followLadder: true },
+        defaults: { followLadder: true, wordTurnIns: WORD_LIMIT.default },
         schema: {
             // WAVE rule 11: Story Director stands alone. Its quest ranks without RPG Battle are its own.
             followLadder: {
                 type: 'bool', label: 'Quest ranks follow the rank ladder',
                 help: 'The world\'s rank ladder and its levels are set in RPG Battle\'s Terms; with RPG Battle, quest ranks use them. Without RPG Battle a ladder has no levels to band, so quests keep Story Director\'s own ranks: the pack\'s, else F to S. Off: always Story Director\'s own.',
+            },
+            // B-b3-r2-5: how many quests code cannot count one reply turns in on the story's word alone.
+            wordTurnIns: {
+                type: 'int', min: WORD_LIMIT.min, max: WORD_LIMIT.max, label: 'Story\'s-word turn-ins per reply',
+                help: 'How many quests whose goal code cannot count (the story says it is met) one reply may turn in. The others stay ready for the next reply. Quests code counts (foes beaten, items fetched) are not limited by this.',
             },
         },
     },
