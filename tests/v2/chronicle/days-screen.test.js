@@ -71,13 +71,14 @@ test('drawn: newest day first, each folded to its line; an older day keeps its l
     assert.deepEqual(warnings, []);
     const days = el.querySelectorAll('.dy-day');
     assert.deepEqual(days.map(node => node.querySelector('.dy-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
-    assert.equal(squash(days[0].querySelector('.dy-line').textContent), 'June 5, 1200: to Ridge Fort; 5 gold out.');
+    // The date once: beside the line, which leaves its own off (B-c1-3).
+    assert.equal(squash(days[0].querySelector('.dy-line').textContent), 'to Ridge Fort; 5 gold out.');
     assert.equal(days[0].querySelector('details').hasAttribute('open'), false, 'folded');
     assert.match(squash(days[0].textContent), /Went to: Ridge Fort ?Money: 5 gold out/);
     assert.match(squash(days[1].textContent), /The wider world ?World: Red Plague is now ongoing — coughing in the docks/);
     // June 3 is past the two whole days: its line only.
     assert.equal(days[2].getAttribute('data-brief'), 'true');
-    assert.match(squash(days[2].textContent), /June 3, 1200: to Harrow; 40 gold in\. Only this line is kept for an older day\./);
+    assert.match(squash(days[2].textContent), /^June 3, 1200 to Harrow; 40 gold in\. Only this line is kept for an older day\./);
     assert.equal(days[2].querySelectorAll('.dy-facts li').length, 0);
 });
 

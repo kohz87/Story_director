@@ -590,9 +590,11 @@ function digestErrors(key, stored) {
 // first): the digest follows them (daysOf), so a reply of that day deleted later takes its facts out
 // of the digest and its time-skip line. They are removed by key when the day goes short or past
 // FOLLOW_MAX (its digest then stays as it was, `src` cleared), and at once for a day not written from
-// them. `chronicle.noted = [{ rev, minutes, from, settle }]` is where the
-// notes got to: the revision and the clock after the last one, the day notes began (`from`), and the
-// time part's last settle jump seen (`settle`).
+// them. `chronicle.noted = [{ rev, minutes, from, settle, gap? }]` is where the
+// notes got to: the revision and the clock after the last one, the day notes began (`from`), the
+// time part's last settle jump seen (`settle`), and, while the digest feature is off, where the day
+// facts stopped (`gap: { rev, minutes }`): the first note with the feature back on reads the receipts
+// from there, so the days that ended while it was off are written too (B-c2-3).
 
 // The quest history (quest.details, F84) is read from receipts too: `chronicle.questLog["<rev>"] =
 // { thread, text }` keeps, per receipt revision, the summary of each receipt that touched a quest or
@@ -690,10 +692,12 @@ export function validateDays(slice) {
     if (slice.noted !== undefined && slice.noted !== null) {
         const noted = slotValue(slice.noted);
         const settleOk = value => value === null || (isRecord(value) && (value.from === null || isInt(value.from)) && isInt(value.to));
+        const gapOk = value => value === undefined || (isRecord(value) && (value.rev === null || countOk(value.rev))
+            && (value.minutes === null || isInt(value.minutes)) && Object.keys(value).every(key => key === 'rev' || key === 'minutes'));
         if (!noted || !Array.isArray(slice.noted) || slice.noted.length !== 1 || !countOk(noted.rev)
             || !(noted.minutes === null || isInt(noted.minutes)) || !(noted.from === null || isInt(noted.from)) || !settleOk(noted.settle)
-            || Object.keys(noted).some(key => !['rev', 'minutes', 'from', 'settle'].includes(key))) {
-            errors.push('chronicle.noted must be null or { rev, minutes, from, settle }.');
+            || !gapOk(noted.gap) || Object.keys(noted).some(key => !['rev', 'minutes', 'from', 'settle', 'gap'].includes(key))) {
+            errors.push('chronicle.noted must be null or { rev, minutes, from, settle, gap? }.');
         }
     }
     if (slice.days !== undefined) {

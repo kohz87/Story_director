@@ -14,11 +14,15 @@ const checkModule = await import('./check.js').catch(() => null);
 export const EVENTS = Object.freeze(['committed', 'head', 'turn', 'feature']);
 // The most change lines one reply's block may hold; the rest are one Problem (turn.js).
 export const MAX_CHANGE_LINES = 150;
-export const HOST_SETTINGS_DEFAULTS = Object.freeze({ tailBudget: 1500, maxChangeLines: MAX_CHANGE_LINES });
+export const HOST_SETTINGS_DEFAULTS = Object.freeze({ tailBudget: 1500, contextShare: 40, maxChangeLines: MAX_CHANGE_LINES });
 export const HOST_SETTINGS_SCHEMA = Object.freeze({
     tailBudget: Object.freeze({
         type: 'int', min: 100, max: 20000, label: 'Notes per reply (tokens)',
         help: 'The most Story Suite adds to the end of each reply\'s prompt, about four characters a token.',
+    }),
+    contextShare: Object.freeze({
+        type: 'int', min: 10, max: 90, label: 'Share of the context (%)',
+        help: 'The most of SillyTavern\'s context size (less the reply) Story Suite\'s instructions and notes take together; the rest is left for the conversation. The notes are cut to fit, the instructions never are.',
     }),
     maxChangeLines: Object.freeze({
         type: 'int', min: 10, max: 1000, label: 'Change lines per reply',
@@ -238,11 +242,11 @@ export async function ensureModules({ store, bus, registry, events = null }) {
 /**
  * The public sdk. `deps`: { store, bus, registry, settings (createSettings), events
  * (createEvents), chat?: () => Message[], check?, onRegister?(def) (after each registerModule),
- * rewind?({ index, beforeRev }) (src/v2/rewind.js), substitute?(text), dialog?(screenId, opts), reread?(index) (turn.js) }.
+ * rewind?({ index, beforeRev }) (src/v2/rewind.js), substitute?(text), dialog?(screenId, opts), dialogCurrent?(), reread?(index) (turn.js) }.
  * Returns { sdk, events, markReady }:
  * `sdk.ready` resolves to the sdk once the host calls markReady().
  */
-export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, reread = null }) {
+export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null }) {
     let markReady;
     const ready = new Promise(resolve => { markReady = () => resolve(sdk); });
     const refused = message => ({ ok: false, code: 'REFUSED', message });
@@ -305,9 +309,13 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         substitute: text => substitute(text),
         /**
          * Dialogs and wizards (SPEC §13.6): `open(screenId, opts)` → the dialog handle, or null where no
-         * page is shown (opts as the dialog mount's: draft, submit, random, onDone, onClose…).
+         * page is shown (opts as the dialog mount's: draft, submit, random, onDone, onClose…);
+         * `current()` → the topmost open dialog's handle, or null (so a module does not open a second).
          */
-        dialog: Object.freeze({ open: (screenId, opts = {}) => (typeof dialog === 'function' ? dialog(screenId, opts) : null) }),
+        dialog: Object.freeze({
+            open: (screenId, opts = {}) => (typeof dialog === 'function' ? dialog(screenId, opts) : null),
+            current: () => (typeof dialogCurrent === 'function' ? dialogCurrent() ?? null : null),
+        }),
         id: newId,
         check: check ? Object.freeze({ ...check }) : null,
         settings: id => settings(id),

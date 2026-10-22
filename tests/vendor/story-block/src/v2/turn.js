@@ -3,7 +3,8 @@
 // Before the reply (the generation interceptor, for normal, swipe, regenerate and continue):
 // flush pending saves, let modules add cues (beforeGenerate), collect the untold receipts and
 // assemble the two prompt texts; the static part goes in-prompt, this reply's part in-chat at
-// depth 0. Quiet and impersonate generations (and any other kind) get both slots emptied.
+// depth 0. The interceptor's context size holds them to a share of it (prompt.js contextFit): the
+// tail is cut to fit, and when the static part alone is too big the reader is told once per chat. Quiet and impersonate generations (and any other kind) get both slots emptied.
 // At prompt-ready: hidden change blocks leave the prompt history, and when the preset left out
 // the Main Prompt (SillyTavern then drops in-prompt text) the static part is put back at the
 // start of this reply's part, for the story's own prompt only.
@@ -21,7 +22,7 @@
 import { continuation, cutLine, extractBlock, hideBlock, parseChanges, stripBlock } from './capture.js';
 import { hash, readRecord } from './persist.js';
 import { CAPTURE_PREFIX } from './registry.js';
-import { STATIC_MARKER, assemble } from './prompt.js';
+import { STATIC_MARKER, assemble, contextNotice } from './prompt.js';
 import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
 import { cutAt } from '../text.js';
 
@@ -61,6 +62,32 @@ const STRIP_CACHE = 500;
 const HAS_BLOCK = /<changes/i;
 
 const defaultNotify = reason => globalThis.toastr?.warning?.(reason, 'Story Suite');
+
+/**
+ * The room the prompt has, from the interceptor's `size` and SillyTavern's context `c`: { size (the
+ * context size the reader set), reply (the reply's length, or null), room (tokens the prompt may take) }
+ * or null. SillyTavern 1.19 hands the interceptor its context size less the reply's length
+ * (getMaxContextSize); the API settings tell the context size the reader set and the reply's length, and
+ * take the reply off a size that still holds it. Without a size, the settings alone (the settings' prompt
+ * size before a reply).
+ */
+export function contextRoom(c, size = null) {
+    const n = value => {
+        const x = Number(value);
+        return Number.isFinite(x) && x > 0 ? Math.round(x) : null;
+    };
+    const cc = c?.mainApi === 'openai' ? c?.chatCompletionSettings : null;
+    const full = n(cc ? cc.openai_max_context : c?.maxContext);
+    const reply = n(cc ? cc.openai_max_tokens : c?.amount_gen ?? c?.amountGen);
+    const given = n(size);
+    if (given) {
+        if (full && reply && given === full - reply) return { size: full, reply, room: given };
+        if (full && reply && given === full && reply < full) return { size: full, reply, room: full - reply };
+        return { size: given, reply: null, room: given };
+    }
+    if (full) return { size: full, reply, room: reply && reply < full ? full - reply : full };
+    return null;
+}
 
 export const normalizeType = type => String(type ?? 'normal').trim().toLowerCase() || 'normal';
 
@@ -152,16 +179,17 @@ export function restoreMissing(chat, staticText, tailText) {
 }
 
 /**
- * Wires one SillyTavern context. `deps`: { ctx, store, bus, registry, settings, events?,
+ * Wires one SillyTavern context. `deps`: { ctx, live?() (SillyTavern's live context, for its API settings;
+ * default ctx), store, bus, registry, settings, events?,
  * onBlocked?(reason, moduleId), notify?(reason, moduleId) (default: a toastr warning),
  * initial?() → the initial State for a chat with none (default registry.initialState(); the host
  * adds the packs' start, SPEC §2.6) }.
  * `settings` is createSettings() (settings() → host settings, settings(id) → a module's).
  * Returns { interceptor, install, uninstall, onPromptReady, onTextPromptReady, onMessageReceived,
- * onChatChanged, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems,
+ * onChatChanged, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems, blocked, blockers, unblock,
  * session }.
  */
-export function createTurn({ ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState() }) {
+export function createTurn({ ctx, live = () => ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState() }) {
     const types = () => ctx?.extension_prompt_types ?? ctx?.extensionPromptTypes ?? {};
     const roles = () => ctx?.extension_prompt_roles ?? ctx?.extensionPromptRoles ?? {};
     const position = place => (place === 'static' ? types().IN_PROMPT ?? IN_PROMPT : types().IN_CHAT ?? IN_CHAT);
@@ -171,6 +199,12 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
     let listeners = [];
     const problemLog = [];
     const blocks = [];
+    let lastSize = null;          // the context size the last interceptor call was handed
+    const toldSmall = new Set();  // chats whose reader was told the context is too small
+    const liveContext = () => {
+        try { return live() ?? ctx; } catch { return ctx; }
+    };
+    const contextNow = () => contextRoom(liveContext(), lastSize);
 
     function setPrompt(key, text, place) {
         if (typeof ctx?.setExtensionPrompt !== 'function') return;
@@ -264,34 +298,60 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
 
     function build(cues = {}) {
         const untold = store.untold();
-        const result = assemble({ registry, view: view(), untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx) });
+        const result = assemble({ registry, view: view(), untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow() });
         for (const message of result.problems) problem({ code: 'FAILED', message });
         return { ...result, untold };
     }
 
     /** SillyTavern's generate interceptor: (chat, contextSize, abort, type). */
     // canGenerate (MODULES §F12): every module may hold a story generation back, e.g. until the
-    // player character exists. `false` or { ok: false, reason } blocks; the first one is the answer.
+    // player character exists. `false` or { ok: false, reason, action? } blocks; the first one is the answer.
     // A hook that throws, or does not answer within HOOK_TIMEOUT_MS, is logged and does not block
-    // (a bug must not lock the reader out).
-    async function blockedBy() {
+    // (a bug must not lock the reader out). `all` asks every module (Home's "Before you start"): the
+    // list of those that hold back, nothing logged (it is asked again on each redraw).
+    async function askCanGenerate({ all = false } = {}) {
+        const found = [];
         for (const { moduleId, fn } of registry.hookEntries('canGenerate')) {
             let answer;
             try { answer = await within(fn(view()), HOOK_TIMEOUT_MS); } catch (error) {
-                problem({ module: moduleId, code: 'FAILED', message: `canGenerate failed: ${error?.message ?? error}` });
+                if (!all) problem({ module: moduleId, code: 'FAILED', message: `canGenerate failed: ${error?.message ?? error}` });
                 continue;
             }
             if (answer === TIMED_OUT) {
-                problem({ module: moduleId, code: 'TIMEOUT', message: `canGenerate did not answer within ${HOOK_TIMEOUT_MS / 1000} s; the story went on.` });
+                if (!all) problem({ module: moduleId, code: 'TIMEOUT', message: `canGenerate did not answer within ${HOOK_TIMEOUT_MS / 1000} s; the story went on.` });
                 continue;
             }
             if (answer === false || (answer && typeof answer === 'object' && answer.ok === false)) {
                 const name = registry.module(moduleId)?.name ?? moduleId;
                 const reason = typeof answer?.reason === 'string' && answer.reason.trim() ? answer.reason.trim() : `${name} is not ready for the story to go on yet.`;
-                return { moduleId, reason };
+                const entry = { moduleId, reason };
+                if (all) {
+                    // The button's words (a module's `action`, flattened, ≤ 40 code points), or false for none.
+                    const action = answer?.action === false ? false
+                        : typeof answer?.action === 'string' ? Array.from(answer.action.replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim()).slice(0, 40).join('').trim() : '';
+                    entry.name = name;
+                    entry.action = action;
+                    entry.canOpen = action !== false && typeof registry.module(moduleId)?.hooks?.onBlocked === 'function';
+                } else return entry;
+                found.push(entry);
             }
         }
-        return null;
+        return all ? found : null;
+    }
+    const blockedBy = () => askCanGenerate();
+
+    // A module's own onBlocked hook (what it does when it held the story back: RPG Battle opens the
+    // character wizard). → true when it ran without throwing.
+    function runOnBlocked(moduleId, reason) {
+        const fn = registry.module(moduleId)?.hooks?.onBlocked;
+        if (typeof fn !== 'function') return false;
+        try {
+            fn(reason, moduleId);
+            return true;
+        } catch (error) {
+            problem({ module: moduleId, code: 'FAILED', message: `onBlocked failed: ${error?.message ?? error}` });
+            return false;
+        }
     }
 
     function block({ moduleId, reason }, abort) {
@@ -299,16 +359,30 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         clearPrompts();
         try { abort?.(true); } catch (error) { console.warn('[Story Suite] the generation could not be stopped', error); }
         try { notify?.(reason, moduleId); } catch { /* a missing toastr is not an error */ }
-        for (const fn of [registry.module(moduleId)?.hooks?.onBlocked, onBlocked]) {
-            if (typeof fn !== 'function') continue;
-            try { fn(reason, moduleId); } catch (error) {
+        runOnBlocked(moduleId, reason);
+        if (typeof onBlocked === 'function') {
+            try { onBlocked(reason, moduleId); } catch (error) {
                 problem({ module: moduleId, code: 'FAILED', message: `onBlocked failed: ${error?.message ?? error}` });
             }
         }
         blocks.push({ moduleId, reason });
     }
 
-    async function interceptor(_chat, _contextSize, abort, type) {
+    // The static part alone is over Story Suite's share of the context: told once per chat (a toast and the
+    // Problems list); the reply still goes out with it.
+    function tellTooSmall(fit) {
+        if (!fit?.tooSmall) return;
+        let chatId = null;
+        try { chatId = typeof ctx?.getCurrentChatId === 'function' ? ctx.getCurrentChatId() : ctx?.chatId; } catch { chatId = null; }
+        const key = String(chatId ?? '');
+        if (toldSmall.has(key)) return;
+        toldSmall.add(key);
+        const reason = contextNotice(fit);
+        problem({ code: 'CONTEXT_SMALL', message: reason });
+        try { notify?.(reason, null); } catch { /* a missing toastr is not an error */ }
+    }
+
+    async function interceptor(_chat, contextSize, abort, type) {
         const kind = normalizeType(type);
         if (!FOREGROUND.includes(kind)) {
             // A quiet prompt built while the reply's own is pending must not carry its text; the
@@ -319,6 +393,7 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
             return;
         }
         if (!ctx?.chat) return;
+        if (Number.isFinite(Number(contextSize)) && Number(contextSize) > 0) lastSize = Number(contextSize);
         // B-b2-timeline-r2-1: never a dry run (SillyTavern runs interceptors only for real generations).
         // It is not read from GENERATION_STARTED: another caller's dry run (token counting) can start
         // between this generation's GENERATION_STARTED and this call, and would cost the reply its capture.
@@ -335,6 +410,7 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
             }
             const cues = await runCues(kind);
             const built = build(cues);
+            tellTooSmall(built.fit);
             const chat = ctx.chat;
             const last = chat.length - 1;
             const index = kind === 'swipe' || kind === 'continue' ? last : chat.length;
@@ -790,6 +866,11 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         reread,
         /** What the next ordinary reply would be sent, without changing anything (no cues run). */
         preview: () => build().parts,
+        /** The same with how it fits the context: { parts, fit } (prompt.js contextFit, or null). */
+        previewFit: () => {
+            const built = build();
+            return { parts: built.parts, fit: built.fit };
+        },
         /** Adds { module?, code?, message, index?, line? } to the Problems list (and the console). */
         report: entry => problem(entry),
         /** The Problems list, oldest first; `moduleId` narrows it (null: the host's own). */
@@ -797,6 +878,14 @@ export function createTurn({ ctx, store, bus, registry, settings, events = null,
         clearProblems: () => { problemLog.length = 0; },
         /** Generations a canGenerate hook stopped: [{ moduleId, reason }], oldest first. */
         blocked: () => blocks.map(item => ({ ...item })),
+        /**
+         * Every module holding the story back now (each canGenerate asked, none logged):
+         * Promise<[{ moduleId, name, reason, action, canOpen }]> (`action`: the module's button words, '' for
+         * the host's own, false for no button; `canOpen`: it has an onBlocked hook to run).
+         */
+        blockers: () => askCanGenerate({ all: true }),
+        /** Runs module `moduleId`'s onBlocked(reason, moduleId) hook (Home's button). → true when it ran. */
+        unblock: (moduleId, reason = '') => runOnBlocked(moduleId, reason),
         /** The pending reply's session (for status and tests), or null. */
         session: () => (session ? { ...session } : null),
     };

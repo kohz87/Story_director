@@ -54,12 +54,18 @@ export function daysToWrite(chronicle, today) {
 /**
  * Whether the hook should commit `chronicle.digest` on `state` at story day `today`: the day moved
  * since digests were last written, or a day written then is gone. With nothing written yet, when the
- * clock has moved into a later day since the time part last settled it (`settledDay`).
+ * clock has moved into a later day since the time part last settled it (`settledDay`), or the notes
+ * began on an earlier day (`chronicle.noted.from`) or kept facts of one: the digest was off while a
+ * day ended, and is back on (B-c2-3).
  */
 export function needsDigest(chronicle, today, { settledDay = null } = {}) {
     if (!chronicle || !isInt(today)) return false;
     const written = writtenOf(chronicle);
-    if (!written) return isInt(settledDay) && settledDay < today;
+    if (!written) {
+        const begun = notedOf(chronicle)?.from;
+        const earlier = [...entriesByDay(chronicle).keys()].some(day => day < today);
+        return (isInt(settledDay) && settledDay < today) || (isInt(begun) && begun < today) || earlier;
+    }
     if (written.through !== today) return true;
     return daysToWrite(chronicle, today).missing.length > 0;
 }
@@ -82,7 +88,12 @@ export function noteCommand(ctx) {
     if (!isMap(chronicle.questLog)) chronicle.questLog = {};
     const before = notedOf(chronicle);
     const now = minutesFrom(query);
-    const plan = ask(query, 'chronicle.noteFacts', { after: before ? before.rev : null, minutes: before ? before.minutes : null }) ?? { entries: [], settle: null };
+    const on = digestOn(ctx);
+    // Where the day facts stopped while the digest was off (`gap`): back on, the note reads from there.
+    // The quest history read again from there adds what it holds already (the same keys and texts).
+    const gap = isMap(before?.gap) ? before.gap : null;
+    const after = on && gap ? { after: gap.rev, minutes: gap.minutes } : { after: before ? before.rev : null, minutes: before ? before.minutes : null };
+    const plan = ask(query, 'chronicle.noteFacts', after) ?? { entries: [], settle: null };
     const rev = isInt(ctx.rev) ? ctx.rev : 0;
     // The quest history: each receipt that touched a quest or thread, by its revision; the newest few
     // per thread stay (older ones removed by key).
@@ -101,7 +112,7 @@ export function noteCommand(ctx) {
     const byDay = entriesByDay(chronicle);
     const kept = [];
     // The day facts only while the digest is on.
-    for (const { day, entry } of digestOn(ctx) ? plan.entries ?? [] : []) {
+    for (const { day, entry } of on ? plan.entries ?? [] : []) {
         if (!isInt(day) || !entry || entry.count <= 0) continue;
         const earlier = byDay.get(day) ?? [];
         let own = entry;
@@ -117,8 +128,10 @@ export function noteCommand(ctx) {
     chronicle.noted = toSlot({
         rev,
         minutes: isInt(now) ? now : before?.minutes ?? null,
-        from: before ? before.from : firstDay,
+        // The first day a note saw the clock on (a note before the clock was set leaves it to a later one).
+        from: before && isInt(before.from) ? before.from : firstDay,
         settle: plan.settle ?? before?.settle ?? null,
+        ...(on ? {} : { gap: gap ?? { rev: before ? before.rev : null, minutes: before ? before.minutes : null } }),
     });
     return { summary: '', narrate: false, data: { days: kept } };
 }
@@ -186,10 +199,13 @@ export function digestCommand(ctx, payload = {}) {
         chronicle.days[String(entry.day)] = toSlot(makeDigest(entry.day, entry.facts, { date, currency, made: rev, revs: entry.revs ?? entry.facts.revs ?? [], src: entry.src ?? null }));
         written.push(date || `day ${entry.day}`);
     }
-    // A day to write that no receipt is left for (the only reply of that day was deleted): it goes.
+    // A day to write that no receipt is left for (the only reply of that day was deleted): it goes. So
+    // does a day that has not ended any more: the clock went back to it or before it (the reply that
+    // moved the clock past it was deleted, which takes its move back). Its facts stay, and it is
+    // written again when the clock passes it.
     for (const key of Object.keys(chronicle.days)) {
         const day = Number(key);
-        if (wanted(day) && !found.has(day)) delete chronicle.days[key];
+        if ((wanted(day) && !found.has(day)) || day >= today) delete chronicle.days[key];
     }
     const live = { state, currency };
     for (const [key, change] of Object.entries(capDays(daysOf(chronicle, live), settings))) {

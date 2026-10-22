@@ -118,8 +118,12 @@ test('a swipe keeps the digest; deleting the reply that crossed the day writes t
     await deleteExchange(host, 'Cross.');
     assert.deepEqual(host.sdk.query('chronicle.days'), []);
     sameOnReload(host, 'after the delete');
-    // The clock is still on June 4 (the later reply set it): the next reply writes June 3 again.
-    await host.send('Go on.', reply('More.'));
+    // The deleted reply's +20h goes with it (C1-6: the clock is a count, SPEC §2.2), and the later
+    // reply's "~ time June 4, 10:00 am" is kept as the move it made (6 h), so the clock is back on
+    // June 3. Once the story crosses midnight again, the next reply writes June 3 again.
+    assert.equal(host.sdk.query('director.time').text, 'June 3, 1200, 02:00 pm');
+    await host.send('Go on.', reply('More.', ['! time +12h']));
+    await host.send('On.', reply('On.'));
     assert.equal(lineOf(host, 'June 3, 1200'), 'June 3, 1200: to Harrow; 40 gold in.');
     sameOnReload(host, 'after the rewrite');
     const again = await newHost();

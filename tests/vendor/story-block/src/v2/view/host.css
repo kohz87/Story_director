@@ -243,6 +243,7 @@ body.story-suite-open { overflow: hidden; }
 .story-suite-size-n { font-variant-numeric: tabular-nums; }
 .story-suite-size-meter { flex: 1 1 100%; width: 100%; height: 8px; }
 .story-suite-size-over .story-suite-size-n { color: var(--warning, #d9a33a); }
+.story-suite-size-warn { margin: 6px 0; padding: 6px 8px; border-left: 3px solid var(--warning, #d9a33a); overflow-wrap: anywhere; }
 .story-suite-size-total { border-top: 1px solid var(--story-suite-line); padding-top: 4px; }
 .story-suite-size-table { width: 100%; border-collapse: collapse; margin: 6px 0 2px; font-size: 0.9em; }
 .story-suite-size-table caption { text-align: left; opacity: 0.75; padding-bottom: 2px; }

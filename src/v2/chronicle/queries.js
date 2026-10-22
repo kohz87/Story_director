@@ -8,7 +8,11 @@
 
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { findIn, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
-import { dayFacts, dayOf, digestOut, entryOf, orderedDays, questLogOf, walkDays } from './days.js';
+import { DIGEST_FEATURE, dayFacts, dayOf, digestOut, entryOf, orderedDays, questLogOf, walkDays } from './days.js';
+
+// A query of the day digest only (MODULES §F100): tagged with its feature, so Story Block answers null
+// while the reader has the digest off (B-c2-2). An older host without features keeps it on.
+const digestOnly = fn => Object.assign((state, args, tools) => fn(state, args, tools), { feature: DIGEST_FEATURE });
 
 const isInt = value => Number.isSafeInteger(value);
 const toolsQuery = tools => (typeof tools?.query === 'function' ? (name, args) => tools.query(name, args) : typeof tools === 'function' ? tools : null);
@@ -164,7 +168,9 @@ export function dayBoard(state, _args, tools) {
             digest.moneyText ? `Money: ${digest.moneyText}` : '',
         ].filter(Boolean);
         const search = [digest.date, digest.line, ...digest.happened, ...digest.places, ...Object.values(quests).flat(), ...digest.npcs, ...digest.world].join(' \u2022 ');
-        return { ...digest, facts, hasFacts: facts.length > 0, hasHappened: digest.happened.length > 0, hasNpcs: digest.npcs.length > 0, hasWorld: digest.world.length > 0, search };
+        // The line starts with its date (made for the [Yesterday] tail); the screen shows the date beside it.
+        const short = digest.date && digest.line.startsWith(`${digest.date}: `) ? digest.line.slice(digest.date.length + 2) : digest.line;
+        return { ...digest, short, facts, hasFacts: facts.length > 0, hasHappened: digest.happened.length > 0, hasNpcs: digest.npcs.length > 0, hasWorld: digest.world.length > 0, search };
     });
     const now = env.now;
     return { days, hasDays: days.length > 0, count: days.length, today: Number.isSafeInteger(now) ? dateText(env.calendar, now) : '' };
@@ -243,15 +249,15 @@ export const queries = {
     },
     'chronicle.board': chronicleBoard,
     /** The day digests kept, oldest first (`daysQuery`): other modules' and the fold history's. */
-    'chronicle.days': daysQuery,
+    'chronicle.days': digestOnly(daysQuery),
     /** One day's digest by its day number, or null. */
-    'chronicle.day': (state, { day = null } = {}, tools) => {
+    'chronicle.day': digestOnly((state, { day = null } = {}, tools) => {
         const wanted = dayArg(day);
         if (wanted === null || Number.isNaN(wanted)) return null;
         return daysQuery(state, { from: wanted, to: wanted }, tools)?.[0] ?? null;
-    },
-    'chronicle.dayBoard': dayBoard,
-    'chronicle.dayFacts': dayFactsQuery,
+    }),
+    'chronicle.dayBoard': digestOnly(dayBoard),
+    'chronicle.dayFacts': digestOnly(dayFactsQuery),
     'chronicle.noteFacts': noteFactsQuery,
     /** The kept history of a quest or thread `id`: `[{ rev, text }]`, oldest first (the last few). */
     'chronicle.questLog': (state, { id = null } = {}) => questLogOf(state?.domains?.chronicle, id),

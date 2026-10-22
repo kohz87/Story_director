@@ -19,7 +19,7 @@ export const PRESET_CHOICES = Object.freeze([PACK_PRESET, 'gregorian', 'custom']
 /** The claim that keeps the clock from being seeded from a pack twice. */
 export const SEED_CLAIM = 'clock:seed';
 
-/** The longest a single time line may move the clock forward, in story days (`maxJump`), by default. */
+/** The longest one reply may move the clock forward, in story days (`maxJump`), by default. */
 export const MAX_JUMP_DAYS = 30;
 /** The furthest year a time line may name, either way of year 0. */
 export const MAX_YEAR = 999999;
@@ -134,8 +134,10 @@ export function durationMinutes(input) {
  * What a `time` line does to the story time `minutes` (null: not set yet): `{ minutes }`, or
  * `{ error }` in plain words. A date alone runs from its day's start, as v1 reads the scene's
  * time; a bare clock time or part of the day that is earlier than now is the next day's.
+ * `from` is the clock when the reply began (default `minutes`): the reply's lines together move it at
+ * most `maxJump` past that, however many they are (C2-5).
  */
-export function timeAfter(line, minutes, calendar, { maxJump = MAX_JUMP_DAYS * DAY_MINUTES } = {}) {
+export function timeAfter(line, minutes, calendar, { maxJump = MAX_JUMP_DAYS * DAY_MINUTES, from = null } = {}) {
     const words = [line?.name, line?.text].map(part => String(part ?? '').trim()).filter(Boolean).join(' ');
     if (line?.op === '-' || line?.op === '?') return { error: 'Story time only moves forward or is set: write "! time +2h" or "~ time <date, clock time>".' };
     if (!words) return { error: 'A time line needs a date or a stretch of time.' };
@@ -144,7 +146,7 @@ export function timeAfter(line, minutes, calendar, { maxJump = MAX_JUMP_DAYS * D
     const stretch = durationMinutes(words);
     if (stretch !== null) {
         if (!known) return { error: `The story time is not set yet, so "${shown}" cannot move it on; write "~ time <date, clock time>" first.` };
-        return held(minutes, minutes + stretch, maxJump, shown);
+        return held(minutes, minutes + stretch, maxJump, shown, from);
     }
     const bad = badClock(words);
     if (bad) return { error: `"${shown}" has ${bad}, which is not a clock time; the story time is left as it was.` };
@@ -155,17 +157,23 @@ export function timeAfter(line, minutes, calendar, { maxJump = MAX_JUMP_DAYS * D
     // No date written (only "evening", "08:00 am"): the reference's day, or the next one.
     const bare = calendar.parse(words, { reference: null }) === null;
     if (known && bare && abs < minutes) abs += DAY_MINUTES;
-    return known ? held(minutes, abs, maxJump, shown) : { minutes: abs };
+    return known ? held(minutes, abs, maxJump, shown, from) : { minutes: abs };
 }
 
-// A move forward of more than `maxJump` minutes is held to it: `{ minutes, held: { asked } }`.
-function held(minutes, next, maxJump, shown) {
-    if (!(next - minutes > maxJump)) return { minutes: next };
+// A move past `maxJump` minutes from the reply's start (`from`, else `minutes`) is held there:
+// `{ minutes, held: { asked } }`. The clock never goes back for it (another rule moved it further).
+function held(minutes, next, maxJump, shown, from) {
+    const start = Number.isSafeInteger(from) ? from : minutes;
+    const limit = Math.max(minutes, start + maxJump);
+    if (!(next > limit)) return { minutes: next };
     const days = Math.round(maxJump / DAY_MINUTES);
+    const span = `${days} day${days === 1 ? '' : 's'}`;
     return {
-        minutes: minutes + maxJump,
+        minutes: limit,
         held: { asked: Number.isSafeInteger(next) ? next - minutes : null },
-        problem: `"${shown}" moves the story time more than ${days} day${days === 1 ? '' : 's'} at once; it moved ${days} day${days === 1 ? '' : 's'} (the longest jump is the Calendar setting "Longest time jump").`,
+        problem: start === minutes
+            ? `"${shown}" moves the story time more than ${span} at once; it moved ${span} (the longest jump is the Calendar setting "Longest time jump").`
+            : `"${shown}" would take the story time more than ${span} past where this reply began; it stops there (the longest jump in one reply is the Calendar setting "Longest time jump").`,
     };
 }
 

@@ -26,7 +26,7 @@ import { HOST_SETTINGS_SCHEMA, SETTING_LIST_ROWS } from './sdk.js';
 import { PROMPT_HINT, featureOf } from './features.js';
 import { compatReport, renderCompat } from './compat.js';
 import { scrollCue } from './view/scroll-cue.js';
-import { DEFAULT_TAIL_BUDGET, estimateTokens } from './prompt.js';
+import { DEFAULT_TAIL_BUDGET, contextNotice, estimateTokens } from './prompt.js';
 import { fill } from './strings.js';
 import { cutAt } from '../text.js';
 
@@ -78,8 +78,14 @@ export const SETTINGS_TEXT = Object.freeze({
         module: 'Module',
         staticShort: 'Instructions',
         tailShort: 'This reply',
-        howAbout: 'Estimated at four characters a token. The budget is Notes per reply, above.',
-        howExact: 'Counted with SillyTavern\'s tokenizer. The budget is Notes per reply, above.',
+        howAbout: 'Estimated at four characters a token. The budget is Notes per reply, above, or less when the context is small.',
+        howExact: 'Counted with SillyTavern\'s tokenizer. The budget is Notes per reply, above, or less when the context is small.',
+        context: 'Context size',
+        contextValue: '{n} tokens',
+        contextReply: '{n} tokens ({reply} of them for the reply)',
+        share: 'Story Suite\'s share',
+        shareValue: '{share} of {room} tokens ({percent}%)',
+        contextUnknown: 'The context size is shown after the next reply.',
     }),
 });
 export const FEATURE_TEXT = Object.freeze({
@@ -549,7 +555,8 @@ const FOLD_SELECTOR = 'details.story-suite-fold, details.story-suite-subfold';
  *
  * `options`: { registry, settings (createSettings), doc?, sdk?, features? (createFeatureStore; without
  * it no Features are shown), promptParts?() (the parts of the prompt the next reply would get, as
- * prompt.js assemble() lists them; without it no prompt size is shown), countTokens?(text) (SillyTavern's
+ * prompt.js assemble() lists them, or { parts, fit } with how they fit the context (prompt.js contextFit);
+ * without it no prompt size is shown), countTokens?(text) (SillyTavern's
  * tokenizer, a number or a promise of one; without it the size is estimated at four characters a token),
  * openState? (a Map of fold key → open, kept across redraws; a new one by default) }.
  * A module's `section(el, api)` gets api = { get(key), set(key, value), values(), sdk } (a section
@@ -752,9 +759,10 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
         const value = settings()?.tailBudget;
         return Number.isInteger(value) && value > 0 ? value : DEFAULT_TAIL_BUDGET;
     };
-    function paintSize(block, size, exact) {
+    function paintSize(block, size, exact, fit = null) {
         const T = SETTINGS_TEXT.size;
         const amount = n => fill(exact ? T.exact : T.about, { n: n.toLocaleString('en-US') });
+        const num = n => Number(n).toLocaleString('en-US');
         const list = el(doc, 'ul', 'story-suite-size-sum');
         const line = (label, value, className = '') => {
             const item = el(doc, 'li', className);
@@ -762,6 +770,12 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
             list.appendChild(item);
             return item;
         };
+        // The context size and the share Story Suite may take of it (the tail's budget follows from it).
+        if (fit) {
+            line(T.context, fit.reply ? fill(T.contextReply, { n: num(fit.size), reply: num(fit.reply) }) : fill(T.contextValue, { n: num(fit.size) }), 'story-suite-size-context');
+            const share = line(T.share, fill(T.shareValue, { share: num(fit.share), room: num(fit.room), percent: fit.percent }), 'story-suite-size-share');
+            if (fit.tooSmall) share.classList.add('story-suite-size-over');
+        }
         line(T.static, amount(size.static));
         const tail = line(T.tail, fill(T.ofBudget, { size: amount(size.tail), budget: size.budget.toLocaleString('en-US') }), 'story-suite-size-tail');
         const meter = el(doc, 'meter', 'story-suite-size-meter');
@@ -793,25 +807,35 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
         }
         table.append(thead, tbody);
         block.dataset.exact = String(exact);
-        block.replaceChildren(
+        const warn = fit?.tooSmall ? el(doc, 'p', 'story-suite-size-warn', contextNotice(fit)) : null;
+        if (warn) warn.setAttribute('role', 'status');
+        block.replaceChildren(...[
             el(doc, 'h4', '', T.title),
             el(doc, 'p', 'story-suite-muted', T.help),
+            warn,
             list,
             table,
+            fit ? null : el(doc, 'p', 'story-suite-muted story-suite-size-context-unknown', T.contextUnknown),
             el(doc, 'p', 'story-suite-muted story-suite-size-how', exact ? T.howExact : T.howAbout),
-        );
+        ].filter(Boolean));
     }
     function drawSize(block) {
         const run = ++sizeRun;
         let parts = null;
-        try { parts = promptParts(); } catch { parts = null; }
+        let fit = null;
+        try {
+            const got = promptParts();
+            parts = Array.isArray(got) ? got : got?.parts;
+            fit = Array.isArray(got) ? null : got?.fit ?? null;
+        } catch { parts = null; }
         if (!Array.isArray(parts)) {
             block.replaceChildren(el(doc, 'h4', '', SETTINGS_TEXT.size.title), el(doc, 'p', 'story-suite-muted', SETTINGS_TEXT.size.none));
             return;
         }
-        const budget = tailBudget();
+        // A small context cuts the tail's budget (prompt.js contextFit).
+        const budget = Number.isInteger(fit?.budget) ? fit.budget : tailBudget();
         const names = moduleName;
-        paintSize(block, promptSize(parts, { names, budget }), false);
+        paintSize(block, promptSize(parts, { names, budget }), false, fit);
         if (typeof countTokens !== 'function') return;
         // SillyTavern's tokenizer: every text counted once, then the same sums with its numbers.
         const texts = [...new Set([
@@ -823,7 +847,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
             .then(counts => {
                 if (run !== sizeRun || !counts.every(n => Number.isFinite(n) && n >= 0)) return;
                 const known = new Map(texts.map((text, at) => [text, Math.round(counts[at])]));
-                paintSize(block, promptSize(parts, { names, budget, tokensOf: text => known.get(text) ?? estimateTokens(text) }), true);
+                paintSize(block, promptSize(parts, { names, budget, tokensOf: text => known.get(text) ?? estimateTokens(text) }), true, fit);
             })
             .catch(() => { /* the estimate stays */ });
     }
@@ -838,7 +862,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
         for (const [key, field] of Object.entries(HOST_SETTINGS_SCHEMA)) {
             body.appendChild(fieldRow(doc, key, field, values[key], next => {
                 settings.set(null, key, next);
-                if (key === 'tailBudget') refreshSize();
+                if (key === 'tailBudget' || key === 'contextShare') refreshSize();
             }, 'story_suite_host'));
         }
         if (typeof promptParts === 'function') {

@@ -433,10 +433,12 @@ function metOnly(ctx, director, line, met, metText, raw) {
 /** `apply(ctx, line)` for `time` lines: `~ time <date, clock time>`, `! time +2h`. */
 export function applyTimeLine(ctx, line) {
     const director = ctx.draft('director');
-    beginTurn(director, ctx, line);
+    // `from`: the clock when this reply's first Director line was read. maxJump holds for the whole
+    // reply, so a reply that repeats "! time +30d" moves the clock 30 days in all (C2-5).
+    const { from } = beginTurn(director, ctx, line);
     const settings = settingsFrom(typeof ctx.settings === 'function' ? ctx.settings() : ctx.settings);
     const calendar = calendarOf(settings, packCalendarOf(ctx.query));
-    const next = timeAfter(line, director.time.minutes, calendar, { maxJump: maxJumpMinutes(settings) });
+    const next = timeAfter(line, director.time.minutes, calendar, { maxJump: maxJumpMinutes(settings), from });
     if (next.problem) addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? '').slice(0, KEY_CHARS), op: line?.op, text: next.problem });
     if (next.error) {
         addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? '').slice(0, KEY_CHARS), op: line?.op, text: next.error });

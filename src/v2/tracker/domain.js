@@ -1,7 +1,7 @@
 // Story Director v2, tracker part: the `director` domain's shape, validator and queries (pure).
 //
 // director = {
-//   time:    { minutes: null | int },             // story clock on the reader's calendar
+//   time:    { minutes: null | int },             // story clock on the reader's calendar (a counter: moves keep `was`)
 //   threads: { [id]: thread },                    // MODULES §C1
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
