@@ -120,9 +120,10 @@ test('F86/F87: with RPG Battle\'s tiers, quest.ranks is its ladder and a ranked 
     await host.send('I\'ll take the bandit job.', reply('The reeve nods.', ['+ quest Bandit Camp — clear the camp']));
     await ok(host.sdk.command('combat.win', { foes: [{ name: 'Bandit', count: 2 }] }));
     await host.send('Done.', reply('The reeve pays.', ['- quest Bandit Camp — turned in']));
-    assert.deepEqual(wallet(host), { coin: 230 });
+    // RX-E-1: a level-1 party's written Soul Class II is held to its own Soul Class I.
+    assert.deepEqual(wallet(host), { coin: 50 });
     const turnIn = receipts(host).find(receipt => /turns in Bandit Camp/.test(receipt.summary));
-    assert.match(turnIn.summary, /230 gold paid \(reward clamped to Soul Class II range: 50–230 gold \(clamped from 5000 gold\)\)/);
+    assert.match(turnIn.summary, /50 gold paid \(reward clamped to Soul Class I range: 10–50 gold \(clamped from 5000 gold\)\) \(the story said Soul Class II; held to Soul Class I for a level-1 party\)/);
     host.close();
 });
 

@@ -126,8 +126,8 @@ test('the tail lists only the most relevant threads, and stays cheap with 600', 
 
 test('defaultRank: the party\'s rank by level, moved by difficulty, held to the ends of the ladder', () => {
     const at = (difficulty, level) => defaultRank(DEFAULT_RANKS, difficulty, level).id;
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 1)), ['F', 'F', 'E', 'E']);
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 25)), ['D', 'C', 'B', 'B']);
+    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 1)), ['F', 'F', 'F', 'F'], 'RX-E-1: no step above the party\'s rank');
+    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 25)), ['D', 'C', 'C', 'C']);
     assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 99)), ['A', 'S', 'S', 'S']);
     assert.equal(at('normal', null), 'F', 'no level known: the lowest rank');
     assert.equal(defaultRank([], 'normal', 1), null);
@@ -135,7 +135,7 @@ test('defaultRank: the party\'s rank by level, moved by difficulty, held to the 
     const thread = { fields: { rank: 'D', difficulty: 'easy' } };
     assert.deepEqual(questRank(thread, DEFAULT_RANKS, { pack: { letter: 'F' } }).by, 'pack');
     assert.deepEqual(questRank(thread, DEFAULT_RANKS, { level: 13 }).rank.id, 'D');
-    assert.deepEqual(questRank({ fields: {} }, DEFAULT_RANKS, { difficulty: 'hard', level: 1 }), { rank: DEFAULT_RANKS[1], by: 'difficulty' });
+    assert.deepEqual(questRank({ fields: {} }, DEFAULT_RANKS, { difficulty: 'hard', level: 1 }), { rank: DEFAULT_RANKS[0], by: 'difficulty' });
 });
 
 test('a pack quest pays the pack\'s reward, also for a quest taken on before (its stored reward is the story\'s)', () => {

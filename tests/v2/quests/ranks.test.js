@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part } from '../../../src/v2/quests/index.js';
-import { DEFAULT_RANKS, STORY_RANKS_ABOVE, WRITTEN_RANKS_ABOVE, defaultRank, holdReward, ladderFrom, moneyScale, questRank, rankNamed, rankOf, ranksOf, rewardByPlace } from '../../../src/v2/quests/ranks.js';
+import { DEFAULT_RANKS, WRITTEN_RANKS_ABOVE, holdReward, ladderFrom, moneyScale, questRank, rankNamed, rankOf, ranksOf, replyBudget, rewardByPlace } from '../../../src/v2/quests/ranks.js';
 import { fakeQueries, makeHost, makeState, quest } from './helpers/fake-ctx.js';
 
 const ranks = part.queries['quest.ranks'];
@@ -129,11 +129,11 @@ test('F87: a per-unit reward is held on its total; inside the range it is paid a
     const inside = rankedHost({ goal: 'Kill 3 wolves', reward: '10 gold each wolf', rank: 'F' }).run(finish, { id: 'th_wolves01' });
     assert.deepEqual(inside.receipt.data.paid, { amount: 30 });
     assert.match(inside.receipt.summary, /30 gold paid\.$/);
-    // B-b4-10: a quest with no rank takes one from its difficulty (hard: one above the party's F), and
-    // only the top of that range holds: a small reward is paid as written, never raised.
+    // B-b4-10: a quest with no rank takes one from its difficulty (hard: the party's F since RX-E-1),
+    // and only the top of that range holds: a small reward is paid as written, never raised.
     const unranked = rankedHost({ goal: 'Kill 3 wolves', reward: '5000 gold', difficulty: 'hard' }, { level: 1 }).run(finish, { id: 'th_wolves01' });
-    assert.deepEqual(unranked.receipt.data.paid, { amount: 230, said: 5000, rank: 'E', range: [50, 230] });
-    assert.match(unranked.receipt.summary, /230 gold paid \(reward clamped to E-rank range: 50–230 gold \(clamped from 5000 gold\)\)\.$/);
+    assert.deepEqual(unranked.receipt.data.paid, { amount: 50, said: 5000, rank: 'F', range: [10, 50] });
+    assert.match(unranked.receipt.summary, /50 gold paid \(reward clamped to F-rank range: 10–50 gold \(clamped from 5000 gold\)\)\.$/);
     const small = rankedHost({ goal: 'Kill 3 wolves', reward: '5 gold', difficulty: 'hard' }, { level: 1 }).run(finish, { id: 'th_wolves01' });
     assert.deepEqual(small.receipt.data.paid, { amount: 5 }, 'a rank from the difficulty is not a floor');
     const none = rankedHost({ goal: 'Kill 3 wolves', reward: 'none', rank: 'S' }).run(finish, { id: 'th_wolves01' });
@@ -142,7 +142,7 @@ test('F87: a per-unit reward is held on its total; inside the range it is paid a
 
 test('F87: the clamp follows the ladder in use: a pack\'s, or RPG Battle\'s tiers', () => {
     const packQueries = { ...fakeQueries, 'packs.content': () => ERSVEIL };
-    const pack = rankedHost({ goal: 'Kill 3 wolves', reward: '9000 gold', rank: 'Journeyman' }, {}, packQueries).run(finish, { id: 'th_wolves01' });
+    const pack = rankedHost({ goal: 'Kill 3 wolves', reward: '9000 gold', rank: 'Journeyman' }, { level: 6 }, packQueries).run(finish, { id: 'th_wolves01' });
     assert.equal(pack.receipt.data.paid.amount, 3000);
     assert.match(pack.receipt.summary, /reward clamped to Journeyman range: 800–3000 gold/);
     const rbQueries = { ...fakeQueries, 'party.ranks': () => SOUL };
@@ -151,7 +151,7 @@ test('F87: the clamp follows the ladder in use: a pack\'s, or RPG Battle\'s tier
     assert.match(rb.receipt.summary, /reward clamped to Soul Class II range: 50–230 gold/);
 });
 
-// ---- Story-vouched turn-ins: a written rank may only lower the reward ------------------------------
+// ---- A written rank may only lower the reward (B-b3-r3-1, RX-E-1) ----------------------------------
 
 const ring = (fields, more = {}) => quest('th_ring0001', 'Lost Ring', { giver: 'Mara', goal: 'Find the ring', reward: '9999 gold', ...fields }, { offer: true, ...more });
 
@@ -162,27 +162,26 @@ function vouchedHost(fields, { level = 12, queries = fakeQueries } = {}) {
     return host;
 }
 
-test('questRank: a story-vouched quest\'s written rank is held to the party\'s own; a lower one is kept; a pack\'s is not held', () => {
-    assert.equal(STORY_RANKS_ABOVE, 0);
-    assert.equal(WRITTEN_RANKS_ABOVE, 1, 'quests code can count keep one rank above the party\'s');
+test('questRank: a written rank or difficulty is held to the party\'s own, counted or not; a lower one is kept; a pack\'s is not held', () => {
+    assert.equal(WRITTEN_RANKS_ABOVE, 0);
     const S = { fields: { rank: 'S' } };
     // Level 12: the party is E (6–12).
-    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 12, vouched: true }), { rank: DEFAULT_RANKS[1], by: 'written', said: DEFAULT_RANKS[6] });
-    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[2], by: 'written', said: DEFAULT_RANKS[6] }, 'counted: one above');
-    assert.deepEqual(questRank({ fields: { rank: 'D' } }, DEFAULT_RANKS, { level: 12, vouched: true }).rank.id, 'E');
-    assert.deepEqual(questRank({ fields: { rank: 'E' } }, DEFAULT_RANKS, { level: 12, vouched: true }), { rank: DEFAULT_RANKS[1], by: 'written' });
-    assert.deepEqual(questRank({ fields: { rank: 'F' } }, DEFAULT_RANKS, { level: 12, vouched: true }), { rank: DEFAULT_RANKS[0], by: 'written' }, 'a lower rank lowers');
-    assert.equal(questRank(S, DEFAULT_RANKS, { level: null, vouched: true }).rank.id, 'F', 'level not known: the lowest rank');
-    assert.equal(questRank(S, DEFAULT_RANKS, { level: 55, vouched: true }).rank.id, 'S');
-    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 1, pack: { letter: 'S' }, vouched: true }), { rank: DEFAULT_RANKS[6], by: 'pack' });
+    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written', said: DEFAULT_RANKS[6] });
+    assert.deepEqual(questRank({ fields: { rank: 'D' } }, DEFAULT_RANKS, { level: 12 }).rank.id, 'E');
+    assert.deepEqual(questRank({ fields: { rank: 'E' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written' });
+    assert.deepEqual(questRank({ fields: { rank: 'F' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[0], by: 'written' }, 'a lower rank lowers');
+    assert.equal(questRank(S, DEFAULT_RANKS, { level: null }).rank.id, 'F', 'level not known: the lowest rank');
+    assert.equal(questRank(S, DEFAULT_RANKS, { level: 55 }).rank.id, 'S');
+    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 1, pack: { letter: 'S' } }), { rank: DEFAULT_RANKS[6], by: 'pack' });
     // A difficulty that names no rank: nightmare and hard reach the party's own, easy still one below.
-    for (const difficulty of ['nightmare', 'hard', 'normal']) assert.equal(questRank({ fields: {} }, DEFAULT_RANKS, { level: 12, difficulty, vouched: true }).rank.id, 'E', difficulty);
-    assert.equal(questRank({ fields: {} }, DEFAULT_RANKS, { level: 12, difficulty: 'easy', vouched: true }).rank.id, 'F');
-    assert.equal(defaultRank(DEFAULT_RANKS, 'nightmare', 12, STORY_RANKS_ABOVE).id, 'E');
-    assert.equal(defaultRank(DEFAULT_RANKS, 'nightmare', 12).id, 'D', 'the default stays one above');
+    for (const difficulty of ['nightmare', 'hard', 'normal']) assert.equal(questRank({ fields: {} }, DEFAULT_RANKS, { level: 12, difficulty }).rank.id, 'E', difficulty);
+    assert.equal(questRank({ fields: {} }, DEFAULT_RANKS, { level: 12, difficulty: 'easy' }).rank.id, 'F');
+    assert.equal(replyBudget(DEFAULT_RANKS, 12), 230, 'the budget: the party rank\'s top');
+    assert.equal(replyBudget(DEFAULT_RANKS, null), 50);
+    assert.equal(replyBudget([], 1), 0);
 });
 
-test('quest.finish: a quest met on the story\'s word with rank: S pays the party rank\'s top; a kill quest keeps one above', () => {
+test('quest.finish: rank: S pays the party rank\'s top, met on the story\'s word or counted by code', () => {
     const word = vouchedHost({ rank: 'S' }).run(finish, { id: 'th_ring0001' });
     assert.equal(word.ok, true, word.message);
     assert.deepEqual(word.receipt.data.paid, { amount: 230, said: 9999, rank: 'E', range: [50, 230] });
@@ -190,7 +189,7 @@ test('quest.finish: a quest met on the story\'s word with rank: S pays the party
     const nightmare = vouchedHost({ difficulty: 'nightmare' }).run(finish, { id: 'th_ring0001' });
     assert.equal(nightmare.receipt.data.paid.amount, 230, 'difficulty: nightmare reaches no higher');
     const kills = rankedHost({ goal: 'Kill 3 wolves', reward: '9999 gold', rank: 'S' }, { level: 12 }).run(finish, { id: 'th_wolves01' });
-    assert.equal(kills.receipt.data.paid.amount, 1000, 'fights code counted: D, one above the party\'s E');
+    assert.equal(kills.receipt.data.paid.amount, 230, 'RX-E-1: fights code counted, held to the party\'s E too');
 });
 
 test('quest.finish: a written rank below the party\'s still lowers a story-vouched reward', () => {

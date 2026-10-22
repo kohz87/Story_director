@@ -100,7 +100,7 @@ test('quests: each row opens its details (F84): goal, progress, terms, rank, giv
     const minutes = calendar.parse('June 9, 2025, 8:00 am', { reference: null }).abs;
     const state = makeState({
         minutes,
-        threads: [wolves({ taken: { rev: 10, at: minutes }, fields: { goal: 'Clear at least 3 wolves', giver: 'Orsa', step: 'Hunt along the ridge', rank: 'E', due: 'June 20, 2025' }, reward: { amount: 900, each: false, unit: '', text: '900 gold' } })],
+        threads: [wolves({ taken: { rev: 10, at: minutes }, fields: { goal: 'Clear at least 3 wolves', giver: 'Orsa', step: 'Hunt along the ridge', rank: 'F', due: 'June 20, 2025' }, reward: { amount: 900, each: false, unit: '', text: '900 gold' } })],
         beaten: [{ rev: 11, foes: [{ name: 'Wolf', count: 1 }], won: true }],
     });
     const { el } = draw(QUESTS_ID, state);
@@ -110,8 +110,8 @@ test('quests: each row opens its details (F84): goal, progress, terms, rank, giv
     const facts = Object.fromEntries(more.querySelectorAll('.sd-facts > div').map(row => [squash(row.querySelector('dt').textContent), squash(row.querySelector('dd').textContent)]));
     assert.equal(facts.Goal, 'Clear at least 3 wolves');
     assert.equal(facts.Progress, 'Hunt along the ridge');
-    assert.equal(facts.Terms, 'beat 3 wolves; 900 gold (reward clamped to E-rank range: 50–230 gold (clamped from 900 gold)); E-rank');
-    assert.equal(facts.Rank, 'E-rank');
+    assert.equal(facts.Terms, 'beat 3 wolves; 900 gold (reward clamped to F-rank range: 10–50 gold (clamped from 900 gold)); F-rank');
+    assert.equal(facts.Rank, 'F-rank');
     assert.equal(facts.Giver, 'Orsa');
     assert.equal(facts.Due, 'June 20, 2025');
     assert.equal(facts['Taken on'], calendar.format(minutes));

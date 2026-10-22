@@ -5,7 +5,8 @@
 //   has one), unless the pack wrote the reward.
 // * r2-6: a reward the story wrote is only ever lowered to its rank's top, never raised to its floor;
 //   only a pack quest's own reward is raised.
-// * r2-7: a difficulty puts a quest no more than WRITTEN_RANKS_ABOVE above the party's rank.
+// * r2-7: a difficulty puts a quest no more than WRITTEN_RANKS_ABOVE above the party's rank (0 since
+//   RX-E-1; every reward but a pack quest's own is the story's money since then, too).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,7 +63,7 @@ test('r2-5: one reply turns in one quest on the story\'s word; a second waits, r
     assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 40 });
 });
 
-test('r2-5: quests code counts are not bounded by the one-a-reply rule', () => {
+test('r2-5: quests code counts are not bounded by the one-a-reply rule (but are the story\'s money, RX-E-1)', () => {
     const state = errands(['Errand A']);
     const wolves = quest('th_wolves01', 'Wolves', { goal: 'Kill 3 wolves', giver: 'Fenna', reward: '30 gold' }, { taken: { rev: 4 }, target: { noun: 'wolf', count: 3, kind: 'foes' } });
     state.domains.director.threads[wolves.id] = wolves;
@@ -72,7 +73,8 @@ test('r2-5: quests code counts are not bounded by the one-a-reply rule', () => {
     assert.equal(host.run(finish, { id: 'th_errand00', by: 'story' }).ok, true);
     const counted = host.run(finish, { id: 'th_wolves01', by: 'story' });
     assert.equal(counted.ok, true, counted.message);
-    assert.equal(host.calls.filter(call => call.type === 'wallet.receive').at(-1).payload.story, undefined, 'code counted it: not the story\'s money');
+    assert.equal(host.calls.filter(call => call.type === 'wallet.receive').at(-1).payload.story, true, 'the story wrote its reward: the story\'s money');
+    assert.equal(replyTurn(host.state.domains.director).paid, 50, 'both counted against the reply');
 });
 
 test('r2-5: the story-vouched reward is sent as the story\'s money and paid what Story Block allows', () => {
@@ -137,9 +139,9 @@ test('r2-6: a reward the story wrote is never raised to its rank\'s floor; a pac
 });
 
 test('r2-7: nightmare reaches no further above the party\'s rank than a written rank may', () => {
-    assert.equal(WRITTEN_RANKS_ABOVE, 1);
-    assert.equal(defaultRank(DEFAULT_RANKS, 'nightmare', 1).id, 'E');
-    assert.equal(defaultRank(DEFAULT_RANKS, 'nightmare', 25).id, 'B');
-    assert.equal(defaultRank(DEFAULT_RANKS, 'hard', 25).id, 'B');
+    assert.equal(WRITTEN_RANKS_ABOVE, 0);
+    assert.equal(defaultRank(DEFAULT_RANKS, 'nightmare', 1).id, 'F');
+    assert.equal(defaultRank(DEFAULT_RANKS, 'nightmare', 25).id, 'C');
+    assert.equal(defaultRank(DEFAULT_RANKS, 'hard', 25).id, 'C');
     assert.equal(defaultRank(DEFAULT_RANKS, 'easy', 25).id, 'D');
 });

@@ -16,7 +16,7 @@
 import { lineKey, questDifficulty } from '../../changes.js';
 import { currencyName, nameMatches, nounFor, money, parseReward, parseTarget, payFor, rewardText, settleReward, targetText } from './parse.js';
 import { NOT_MET_YET, beatenClaim, finishRule, isHeld, isSettlementKind, placeRule, progressLabel, progressOf, questLists, stateQuery, tryQuery, unclaimedIn } from './progress.js';
-import { heldText, questRank, rankHeldText, ranksOf, rewardHold } from './ranks.js';
+import { heldText, questRank, rankHeldText, ranksOf, replyBudget, rewardHold } from './ranks.js';
 // The director domain's Problem list: the tracker part's limits (the list it shows and the room it grows in).
 import { addProblem, problemList, replyDraft, replyTurn } from '../tracker/domain.js';
 
@@ -130,9 +130,8 @@ function pcLevel(query) {
 /**
  * A quest's terms: `{ target, reward, said, pack, rank }`. `reward` is its pack quest's when it is one
  * (`said`: the reward the story wrote, when that differs), else the one it was taken on with, else read
- * from its labels; `rank` (questRank) is the range the reward is held to. A quest code cannot count and
- * that is not paid the pack's reward is turned in on the story's word alone (`vouched`, the same test as
- * `story: true` money at turn-in): its written rank is held to the party's own.
+ * from its labels; `rank` (questRank) is the range the reward is held to (a written rank: at most the
+ * party's own). `budget`: the most one reply may pay in rewards the story wrote (replyBudget).
  */
 function termsFor(query, inventory, thread, currency) {
     const target = thread.target ?? withKind(inventory, parseTarget(thread.fields, thread.summary));
@@ -141,10 +140,48 @@ function termsFor(query, inventory, thread, currency) {
     const fromPack = packReward(pack, target, currency);
     const differs = fromPack && JSON.stringify(fromPack) !== JSON.stringify(own);
     const level = pcLevel(query);
-    const vouched = !target && !fromPack;
-    const rank = questRank(thread, ranksOf(query), { pack, level, difficulty: questDifficulty(thread.fields?.difficulty), vouched });
+    const ladder = ranksOf(query);
+    const rank = questRank(thread, ladder, { pack, level, difficulty: questDifficulty(thread.fields?.difficulty) });
     const rankNote = rank.said ? rankHeldText(rank.said, rank.rank, level) : '';
-    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote };
+    return { target, reward: fromPack ?? own, said: differs ? own : null, pack, byPack: Boolean(fromPack), rank: rank.rank, rankBy: rank.by, rankNote, budget: replyBudget(ladder, level) };
+}
+
+/*
+ * What a turn-in pays before the reply's budget: `{ units, said, hold, pay, storyMoney }`. Per unit: the
+ * target's count at most (B-b4-10: foes beaten past the target are not paid for); items: the ones
+ * handed over. A goal code cannot count pays its fixed amount (there are no units). Held inside the
+ * rank's range (F87, rewardHold). `storyMoney`: every reward but a pack quest's own is the story's
+ * number, held to what one reply may pay (budgetRule, RX-E-1), counted or not.
+ */
+function payOf(terms, target, progress) {
+    const units = !target ? 0 : target.kind === 'items' ? target.count : Math.min(progress.have, target.count);
+    const said = payFor(terms.reward, units);
+    const hold = rewardHold(said, terms.rank, terms.rankBy);
+    return { units, said, hold, pay: hold.total, storyMoney: !terms.byPack };
+}
+
+/*
+ * One reply pays at most `budget` in quest rewards the story wrote (RX-E-1: four "bring 1 Torch" quests
+ * one reply wrote, finished by clicks, paid four rank tops). `paid` in `director.turn.now` is what this
+ * reply's turn-ins have paid so far, clicks after the reply included (the tracker starts a fresh
+ * `turn` for each reply's Director lines, so the tally goes with the reply, as `vouched` does). The
+ * first turn-in of a reply is paid up to the budget; a later one that would go past it waits for the
+ * next reply, unpaid and open: `{ ok: false, budget: true, reason }`, else null. Story Block's own
+ * per-reply coin budget holds such payouts too while a reply is read (`wallet.receive { story: true }`);
+ * this one also holds the clicks after it, which Story Block does not count.
+ */
+function budgetRule(director, pay, budget, currency) {
+    if (!pay.storyMoney || !Number.isSafeInteger(pay.pay) || pay.pay <= 0) return null;
+    const used = replyTurn(director).paid;
+    if (used <= 0 || used + pay.pay <= budget) return null;
+    return { ok: false, budget: true, reason: `One reply pays at most ${money(budget, currency)} in quest rewards the story wrote (${money(used, currency)} so far); it is ready for the next reply.` };
+}
+
+// What this turn-in may pay of `pay`: a reward the story wrote, what is left of this reply's budget.
+function spendBudget(director, pay, budget) {
+    if (!pay.storyMoney) return pay.pay;
+    const used = replyTurn(director).paid;
+    return Math.max(0, Math.min(pay.pay, budget - used));
 }
 
 /*
@@ -285,7 +322,7 @@ function finish(ctx, payload) {
     if (!thread.taken) fail(ctx, CODES.invalid, `${thread.key} has not been taken on.`);
     const byStory = payload?.by === 'story' && ctx.cause !== 'ui';
     const currency = currencyOf(ctx.query);
-    const { target, reward, said: written, byPack, rank, rankBy, rankNote } = termsOf(ctx, thread, currency);
+    const { target, reward, said: written, byPack, rank, rankBy, rankNote, budget } = termsOf(ctx, thread, currency);
     if (!target && !thread.ready && !byStory) fail(ctx, CODES.invalid, `${thread.key} is not done yet: ${NOT_MET_YET.toLowerCase()}`);
     thread.target = target ? { noun: target.noun, count: target.count, kind: target.kind } : null;
     thread.reward = reward;
@@ -300,10 +337,12 @@ function finish(ctx, payload) {
     if (!place.ok) fail(ctx, CODES.wrongPlace, `${thread.key} cannot be turned in here. ${place.reason}`);
     const word = wordRule(director, thread, target);
     if (word) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${word.reason}`);
-    if (!target) {
-        const now = replyDraft(director);
-        if (now) now.vouched = thread.id;
-    }
+    const terms = { reward, byPack, rank, rankBy };
+    const owed = payOf(terms, target, progress);
+    const over = budgetRule(director, owed, budget, currency);
+    if (over) fail(ctx, CODES.invalid, `${thread.key} cannot be turned in yet. ${over.reason}`);
+    const now = replyDraft(director);
+    if (!target && now) now.vouched = thread.id;
 
     // Fetched items are handed over: exactly the target's count, stack by stack.
     const consumed = [];
@@ -317,26 +356,24 @@ function finish(ctx, payload) {
             left -= qty;
         }
     }
-    // Per unit: the target's count at most (B-b4-10: foes beaten past the target are not paid for);
-    // items: the ones handed over. A goal code cannot count pays its fixed amount (there are no units).
-    const units = !target ? 0 : target.kind === 'items' ? target.count : Math.min(progress.have, target.count);
-    const said = payFor(reward, units);
     // Held inside the rank's range (F87): the quest's own rank, its pack's, else the one its difficulty
     // gives (ranks.js defaultRank), so every reward is held; only a pack's reward is raised to the
-    // floor (rewardHold).
-    const hold = rewardHold(said, rank, rankBy);
-    const pay = hold.total;
+    // floor (rewardHold). Then held to what this reply may still pay (budgetRule).
+    const { units, said, hold, pay } = owed;
+    const allowed = spendBudget(director, owed, budget);
     let paid = null;
     if (pay > 0) {
-        // A whole amount of the chat's one currency (MODULES §F1, §F5). A reward the story alone vouched
-        // for (no target code counts, and not a pack's own reward) is the story's money: `story: true`
-        // asks Story Block to count it against what one reply may give (B-b3-r2-5). A Story Block
-        // without that budget ignores the flag; the one-a-reply rule above still holds. What it says it
-        // paid is what was paid.
-        const storyMoney = !target && !byPack;
-        const out = call(ctx, 'wallet.receive', { owner: 'party', amount: pay, note: `${thread.key} reward`, ...(storyMoney ? { story: true } : {}) });
-        const given = out?.data?.amount ?? out?.receipt?.data?.amount;
-        const amount = Number.isSafeInteger(given) && given >= 0 && given < pay ? given : pay;
+        // A whole amount of the chat's one currency (MODULES §F1, §F5). A reward the story wrote (every
+        // one but a pack quest's own) is the story's money: `story: true` asks Story Block to count it
+        // against what one reply may give (B-b3-r2-5, RX-E-1). A Story Block without that budget ignores
+        // the flag; this reply's own tally above still holds. What it says it paid is what was paid.
+        let amount = 0;
+        if (allowed > 0) {
+            const out = call(ctx, 'wallet.receive', { owner: 'party', amount: allowed, note: `${thread.key} reward`, ...(owed.storyMoney ? { story: true } : {}) });
+            const given = out?.data?.amount ?? out?.receipt?.data?.amount;
+            amount = Number.isSafeInteger(given) && given >= 0 && given < allowed ? given : allowed;
+        }
+        if (owed.storyMoney && now) now.paid = replyTurn(director).paid + amount;
         paid = { amount, ...(hold.held ? { said, rank: rank.id, range: [...rank.reward] } : {}), ...(amount < pay ? { owed: pay } : {}) };
     }
     // XP is RPG Battle's: it scales quest XP by difficulty (MODULES §F5). A written amount (an `xp:`
@@ -394,7 +431,13 @@ function progressQuery(state, args = {}, tools = null) {
     const progress = progressOf(view, query, { free: unclaimedIn(state), closing: args?.closing === true });
     const { have, need, met, source, noun, reason } = progress;
     const rule = finishRule(view, progress, hereScene(query, state?.domains?.scene));
-    const finish = rule.ok ? wordRule(state?.domains?.director, thread, target) ?? rule : rule;
+    const director = state?.domains?.director;
+    let finish = rule.ok ? wordRule(director, thread, target) ?? rule : rule;
+    if (finish.ok && progress.met) {
+        const currency = currencyOf(query);
+        const terms = termsFor(query, state?.domains?.inventory, thread, currency);
+        finish = budgetRule(director, payOf(terms, target, progress), terms.budget, currency) ?? finish;
+    }
     return {
         have, need, met, ready: !target && Boolean(thread.ready), source, noun, label: progressLabel(view, { have, need }), reason, finish,
         ...(args?.closing === true ? { refusal: storyRefusal(view, progress, finish) } : {}),
@@ -417,6 +460,7 @@ function storyRefusal(thread, progress, finish) {
     }
     if (!progress.met) return 'its goal is not met yet';
     if (finish.word) return `one reply turns in only one quest on the story's word alone (${finish.other} was turned in), so it is ready for the next reply`;
+    if (finish.budget) return lowerFirst(text(finish.reason).replace(/\.$/, ''));
     const where = text(finish.reason).replace(/^Turn it in /, '').replace(/\.$/, '');
     return where ? `it can only be turned in ${where}` : 'it cannot be turned in here';
 }

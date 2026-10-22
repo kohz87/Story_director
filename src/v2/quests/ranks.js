@@ -4,8 +4,7 @@
 // ladder), else the built-in F to S ladder. A quest's `rank:` (or `difficulty:` when it names a rank)
 // is matched against whichever ladder is in use. A quest from a pack takes the pack's rank. A quest with
 // no rank gets one from its difficulty (defaultRank, B-b4-10 / B-b3-18), so every reward is held inside
-// some rank's range. A written rank is held to one above the party's, or to the party's own on a quest
-// turned in on the story's word alone (questRank).
+// some rank's range. A rank the story writes is held to the party's own (questRank, RX-E-1).
 
 import { tryQuery } from './progress.js';
 
@@ -135,27 +134,27 @@ export function rankOf(thread, ladder) {
 /**
  * How far from the party's own rank a quest's difficulty puts it when it names no rank: easy one rank
  * below, normal the party's, hard one above, nightmare two above (held to the ends of the ladder, and
- * never more than WRITTEN_RANKS_ABOVE above the party's rank: see defaultRank).
+ * never more than WRITTEN_RANKS_ABOVE above the party's rank: see defaultRank, so today hard and
+ * nightmare pay as normal; RPG Battle still scales their XP).
  */
 export const DIFFICULTY_STEPS = Object.freeze({ easy: -1, normal: 0, hard: 1, nightmare: 2 });
 
-/** How many ranks above the party's own (defaultRank's base) a rank the story writes may be. */
-export const WRITTEN_RANKS_ABOVE = 1;
-
 /**
- * The same for a quest turned in on the story's word alone (no goal code can count, and not a pack's
- * reward): none. Its written rank or difficulty may only lower the reward, never lift it above the
- * party's own rank's range (nothing but the story vouches for the work).
+ * How many ranks above the party's own (defaultRank's base) a rank the story writes may be: none. A
+ * written rank or difficulty may lower a reward, never lift it above the party's rank's range. Not even
+ * on a quest code counts (RX-E-1): "bring 1 Torch" or "kill 1 rat" is counted but cheap, and RPG
+ * Battle's fight records (`combat.foesBeaten`: names and counts) do not say how strong the foes were,
+ * so code cannot tell a hard job from a written word. A pack quest keeps its pack's rank.
  */
-export const STORY_RANKS_ABOVE = 0;
+export const WRITTEN_RANKS_ABOVE = 0;
 
 /**
  * The rank a quest that names none is paid as: the party's rank on `ladder` (the rank whose levels hold
  * `level`, the player character's level; above every band, the highest band below it; the lowest rank
  * when the level is not known) moved by DIFFICULTY_STEPS for `difficulty` (easy, normal, hard,
- * nightmare; anything else is normal), and never more than `above` (WRITTEN_RANKS_ABOVE, or
- * STORY_RANKS_ABOVE for a story-vouched quest) above the party's rank: a difficulty reaches no further
- * than a written rank may (B-b3-r2-7). Null only for an empty ladder.
+ * nightmare; anything else is normal), and never more than `above` (WRITTEN_RANKS_ABOVE) above the
+ * party's rank: a difficulty reaches no further than a written rank may (B-b3-r2-7). Null only for an
+ * empty ladder.
  */
 export function defaultRank(ladder, difficulty, level = null, above = WRITTEN_RANKS_ABOVE) {
     if (!Array.isArray(ladder) || !ladder.length) return null;
@@ -174,22 +173,28 @@ export function defaultRank(ladder, difficulty, level = null, above = WRITTEN_RA
  * `letter`), 'written' (its own `rank:`, or a `difficulty:` that names a rank) or 'difficulty'
  * (defaultRank). `pack` is the quest's pack record or null; `level` the player character's level.
  * Code sets the numbers: a written rank more than WRITTEN_RANKS_ABOVE above the party's own is held
- * there, and `said` is the rank the story wrote. `vouched`: the quest is turned in on the story's word
- * alone (no goal code can count, not a pack's reward), and its written rank or difficulty is held to
- * the party's own rank (STORY_RANKS_ABOVE): it may lower the reward, never raise it. A rank below the
- * party's is kept either way. A pack's rank is not held.
+ * there (the party's own today), and `said` is the rank the story wrote: a written rank or difficulty
+ * may lower the reward, never raise it. A rank below the party's is kept. A pack's rank is not held.
  */
-export function questRank(thread, ladder, { pack = null, level = null, difficulty = 'normal', vouched = false } = {}) {
+export function questRank(thread, ladder, { pack = null, level = null, difficulty = 'normal' } = {}) {
     const fromPack = pack ? rankNamed(pack.rank ?? pack.letter ?? '', ladder) : null;
     if (fromPack) return { rank: fromPack, by: 'pack' };
-    const above = vouched ? STORY_RANKS_ABOVE : WRITTEN_RANKS_ABOVE;
     const written = rankOf(thread, ladder);
     if (written) {
-        const most = Math.min(ladder.length - 1, ladder.indexOf(defaultRank(ladder, 'normal', level)) + above);
+        const most = Math.min(ladder.length - 1, ladder.indexOf(defaultRank(ladder, 'normal', level)) + WRITTEN_RANKS_ABOVE);
         return ladder.indexOf(written) > most ? { rank: ladder[most], by: 'written', said: written } : { rank: written, by: 'written' };
     }
-    const rank = defaultRank(ladder, difficulty, level, above);
+    const rank = defaultRank(ladder, difficulty, level);
     return { rank, by: rank ? 'difficulty' : null };
+}
+
+/**
+ * The most one reply may pay in quest rewards the story wrote (RX-E-1): the top of the party's own
+ * rank's range on `ladder` (the rank defaultRank gives for `level`), as Story Block's per-reply coin
+ * budget is by default. 0 for an empty ladder.
+ */
+export function replyBudget(ladder, level = null) {
+    return defaultRank(ladder, 'normal', level)?.reward?.[1] ?? 0;
 }
 
 /** "220–1000 gold". */

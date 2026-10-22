@@ -140,9 +140,10 @@ export function storyTurnIn(ctx, director, thread, { addProblem, raw }) {
         if (closed) closed.track = { ...(closed.track ?? {}), closed: { turn: director.turn.n, time: director.time.minutes ?? null } };
         return { summary: text(out.summary) || `Director: ${raw}`, narrate: true, data: { thread: thread.id, quest: thread.id, problems: [], turnIn: out.data ?? null } };
     }
-    // One reply turns in one quest on the story's word alone (B-b3-r2-5): another the story closes in the
-    // same reply stays open, marked ready (as `met: yes` would), for a later reply to turn in.
-    if (check.finish.word && !thread.ready) {
+    // One reply turns in one quest on the story's word alone (B-b3-r2-5), and pays at most its budget in
+    // rewards the story wrote (RX-E-1): another the story closes in the same reply stays open, marked
+    // ready (as `met: yes` would) when code cannot count its goal, for a later reply to turn in.
+    if ((check.finish.word || (check.finish.budget && !thread.target)) && !thread.ready) {
         const rev = Number.isSafeInteger(ctx?.rev) ? ctx.rev : 0;
         thread.ready = { rev };
         thread.rev = rev;
