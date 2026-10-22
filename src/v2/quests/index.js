@@ -528,19 +528,31 @@ function statusOf(thread, target, progress, finish, director) {
 const HISTORY_SHOWN = 8;
 
 // The receipts that touched a quest (F84): its own commands' (`data.quest`) and its change lines'
-// (`data.thread`), oldest first, the last few.
+// (`data.thread`), oldest first, the last few. Story Block trims old receipts' data (RX-TL-3), so what
+// the chronicle's note kept (`chronicle.questLog`) comes first; receipts still whole fill in the rest
+// (the latest reply's, not noted yet, and a chat from before the log).
 function historyOf(tools, id) {
+    let kept = [];
+    try {
+        const logged = typeof tools?.query === 'function' ? tools.query('chronicle.questLog', { id }) : null;
+        kept = Array.isArray(logged) ? logged.filter(item => Number.isSafeInteger(item?.rev) && text(item.text)) : [];
+    } catch {
+        kept = [];
+    }
     let list = [];
     try {
         list = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : [];
     } catch {
         list = [];
     }
-    return (Array.isArray(list) ? list : [])
+    const seen = new Set(kept.map(item => item.rev));
+    const fresh = (Array.isArray(list) ? list : [])
         .map(entry => entry?.receipt ?? entry)
-        .filter(receipt => receipt && (receipt.data?.quest === id || receipt.data?.thread === id) && text(receipt.summary))
-        .slice(-HISTORY_SHOWN)
+        .filter(receipt => receipt && (receipt.data?.quest === id || receipt.data?.thread === id) && text(receipt.summary) && !seen.has(receipt.rev))
         .map(receipt => ({ rev: Number.isSafeInteger(receipt.rev) ? receipt.rev : null, text: cut(text(receipt.summary).replace(/^Director: /, ''), 200) }));
+    return [...kept.map(item => ({ rev: item.rev, text: cut(text(item.text), 200) })), ...fresh]
+        .sort((a, b) => (a.rev ?? Infinity) - (b.rev ?? Infinity))
+        .slice(-HISTORY_SHOWN);
 }
 
 /**

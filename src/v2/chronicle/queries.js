@@ -8,7 +8,7 @@
 
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { findIn, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
-import { dayFacts, dayOf, digestOut, orderedDays, walkDays } from './days.js';
+import { dayFacts, dayOf, digestOut, entryOf, orderedDays, questLogOf, walkDays } from './days.js';
 
 const isInt = value => Number.isSafeInteger(value);
 const toolsQuery = tools => (typeof tools?.query === 'function' ? (name, args) => tools.query(name, args) : typeof tools === 'function' ? tools : null);
@@ -187,6 +187,31 @@ export function dayFactsQuery(state, { before = null } = {}, tools) {
     return { days, settle: walk.settle ? { ...walk.settle } : null, today: Number.isSafeInteger(walk.minutes) ? dayOf(walk.minutes) : null };
 }
 
+/**
+ * `chronicle.noteFacts { after, minutes }`: what the receipts committed after revision `after` hold
+ * (fresh: Story Block still keeps their data), by story day, the clock at `minutes` before them:
+ * `{ entries: [{ day, entry }], minutes, rev, settle }` (the clock and the last revision after them,
+ * and the last time settle's jump among them). The note command keeps the entries (digest.js).
+ */
+export function noteFactsQuery(_state, { after = null, minutes = null } = {}, tools) {
+    let list = [];
+    try { list = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { list = []; }
+    const walk = walkDays(list, { after: Number.isSafeInteger(after) ? after : null, minutes });
+    const entries = [...walk.days.keys()].sort((a, b) => a - b).map(day => ({ day, entry: entryOf(walk.days.get(day), day) }));
+    const revs = [...walk.revs.keys()];
+    // The receipts that touched a quest or thread (their own commands' `data.quest`, their lines'
+    // `data.thread`), for the quest history (quest.details), kept by the note before the trim.
+    const quests = [];
+    for (const item of Array.isArray(list) ? list : []) {
+        const receipt = item?.receipt ?? item;
+        if (!receipt || !Number.isSafeInteger(receipt.rev) || (Number.isSafeInteger(after) && receipt.rev <= after)) continue;
+        const thread = typeof receipt.data?.quest === 'string' ? receipt.data.quest : typeof receipt.data?.thread === 'string' ? receipt.data.thread : null;
+        const said = typeof receipt.summary === 'string' ? receipt.summary.trim() : '';
+        if (thread && said) quests.push({ rev: receipt.rev, thread, text: said });
+    }
+    return { entries, quests, minutes: walk.minutes, rev: revs.length ? Math.max(...revs) : null, settle: walk.settle ? { ...walk.settle } : null };
+}
+
 export const queries = {
     /**
      * The world events, open first (newest news first), then resolved: `[{ id, name, summary, state,
@@ -227,4 +252,7 @@ export const queries = {
     },
     'chronicle.dayBoard': dayBoard,
     'chronicle.dayFacts': dayFactsQuery,
+    'chronicle.noteFacts': noteFactsQuery,
+    /** The kept history of a quest or thread `id`: `[{ rev, text }]`, oldest first (the last few). */
+    'chronicle.questLog': (state, { id = null } = {}) => questLogOf(state?.domains?.chronicle, id),
 };

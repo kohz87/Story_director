@@ -1,16 +1,18 @@
 // Story Director v2, chronicle part: writing the day digests (feature `story-director.digest`), the
 // hook that asks for it, and the one tail line after a time skip. Pure apart from the ctx.
 //
-// Before each reply (`beforeGenerate`), the clock's day is compared with `chronicle.written`: when the
-// story has moved into a later day since digests were last written (or one of the days written then is
-// gone, because the reply that wrote it was deleted), the hook commits `chronicle.digest` (cause
-// `system`). The command walks the stored receipts (`chronicle.dayFacts`, which reads them through the
-// query tools), writes a digest for each finished day since the last write (and each one gone missing),
-// applies the caps and records where it got to. It is a receipt on the reply where the day turned, like
-// the time part's settle: a swipe or a delete of that reply takes it back, and the next reply writes
-// the day again from the receipts that are left. Replay applies the receipt's ops; it never runs this.
+// Before each reply (`beforeGenerate`), two system commands, both receipts on the head reply:
+// * `chronicle.note`, when anything was committed since the last note (meta.rev moved on): reads those
+//   receipts while they are fresh (`chronicle.noteFacts`; Story Block trims old receipts' data) and
+//   keeps their facts by day under `chronicle.dayFacts["<day>.<rev>"]` (days.js). The entries go with
+//   the reply they are a receipt of: a swipe or a delete of it takes exactly its facts away.
+// * `chronicle.digest`, when the clock's day has moved past `chronicle.written` (or a day written then
+//   is gone, because the reply that wrote it was deleted): writes a digest for each finished day since
+//   the last write (and each one gone missing) from that day's entries, removes the entries it used,
+//   applies the caps and records where it got to. A chat from before the entries (no `noted`) has its
+//   older days read from the receipts as before. Replay applies the receipts' ops; it never runs these.
 
-import { DIGEST, DIGEST_FEATURE, capDays, dayOf, daysOf, digestSettings, makeDigest, orderedDays, writtenOf } from './days.js';
+import { DIGEST, DIGEST_FEATURE, FOLD_AT, QUEST_LOG_KEPT, QUEST_LOG_TEXT, cut, capDays, dayOf, daysOf, digestSettings, entriesByDay, factsOf, foldEntries, makeDigest, notedOf, orderedDays, rangeDays, writtenOf } from './days.js';
 import { calendarFrom } from './queries.js';
 import { toSlot } from '../slot.js';
 
@@ -61,6 +63,75 @@ export function needsDigest(chronicle, today, { settledDay = null } = {}) {
     return daysToWrite(chronicle, today).missing.length > 0;
 }
 
+export const NOTE = 'chronicle.note';
+
+/**
+ * `chronicle.note {}` (cause `system`, from the hook): keeps what the receipts committed since the last
+ * note hold: by day, as entries of their own (`chronicle.dayFacts["<day>.<rev>"]`, `rev` this receipt's;
+ * only while the digest feature is on), and the quest history (`chronicle.questLog`, always), and
+ * records where it got to (`chronicle.noted`). A day already holding FOLD_AT entries has them folded
+ * into this note's one (theirs removed). Refused from a click.
+ */
+export function noteCommand(ctx) {
+    if (ctx?.cause === 'ui') return ctx.fail('REFUSED', 'Day facts are kept by Story Director itself.');
+    const query = typeof ctx.query === 'function' ? (name, args) => ctx.query(name, args) : null;
+    const chronicle = ctx.draft('chronicle');
+    const isMap = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+    if (!isMap(chronicle.dayFacts)) chronicle.dayFacts = {};
+    if (!isMap(chronicle.questLog)) chronicle.questLog = {};
+    const before = notedOf(chronicle);
+    const now = minutesFrom(query);
+    const plan = ask(query, 'chronicle.noteFacts', { after: before ? before.rev : null, minutes: before ? before.minutes : null }) ?? { entries: [], settle: null };
+    const rev = isInt(ctx.rev) ? ctx.rev : 0;
+    // The quest history: each receipt that touched a quest or thread, by its revision; the newest few
+    // per thread stay (older ones removed by key).
+    const touched = new Set();
+    for (const item of plan.quests ?? []) {
+        if (!isInt(item?.rev) || typeof item.thread !== 'string' || !/^[A-Za-z0-9_.:-]{1,64}$/.test(item.thread)) continue;
+        const said = cut(String(item.text ?? '').replace(/^Director: /, ''), QUEST_LOG_TEXT);
+        if (!said) continue;
+        chronicle.questLog[String(item.rev)] = { thread: item.thread, text: said };
+        touched.add(item.thread);
+    }
+    for (const thread of touched) {
+        const keys = Object.keys(chronicle.questLog).filter(key => chronicle.questLog[key]?.thread === thread).sort((a, b) => Number(a) - Number(b));
+        for (const key of keys.slice(0, Math.max(0, keys.length - QUEST_LOG_KEPT))) delete chronicle.questLog[key];
+    }
+    const byDay = entriesByDay(chronicle);
+    const kept = [];
+    // The day facts only while the digest is on.
+    for (const { day, entry } of digestOn(ctx) ? plan.entries ?? [] : []) {
+        if (!isInt(day) || !entry || entry.count <= 0) continue;
+        const earlier = byDay.get(day) ?? [];
+        let own = entry;
+        // A very long day: its entries become this one (each removed by its key).
+        if (earlier.length >= FOLD_AT) {
+            own = foldEntries([...earlier.map(item => item.entry), entry], day);
+            for (const item of earlier) delete chronicle.dayFacts[item.key];
+        }
+        chronicle.dayFacts[`${day}.${rev}`] = own;
+        kept.push(day);
+    }
+    const firstDay = isInt(now) ? dayOf(now) : null;
+    chronicle.noted = toSlot({
+        rev,
+        minutes: isInt(now) ? now : before?.minutes ?? null,
+        from: before ? before.from : firstDay,
+        settle: plan.settle ?? before?.settle ?? null,
+    });
+    return { summary: '', narrate: false, data: { days: kept } };
+}
+
+/** The hook's note: `[{ type: chronicle.note }]` when something was committed since the last note. */
+export function noteCommands(view) {
+    const chronicle = view?.state?.domains?.chronicle;
+    if (!chronicle) return [];
+    const rev = view.state.meta?.rev;
+    const noted = notedOf(chronicle);
+    if (!isInt(rev) || (noted && noted.rev >= rev)) return [];
+    return [{ type: NOTE, payload: {} }];
+}
+
 /**
  * `chronicle.digest { at? }` (cause `system`, from the hook): writes the digests of the finished days
  * (see above) and records where it got to. `at`: the chat's length when the hook ran. Refused from a
@@ -80,20 +151,44 @@ export function digestCommand(ctx, payload = {}) {
     if (!chronicle.days || typeof chronicle.days !== 'object' || Array.isArray(chronicle.days)) chronicle.days = {};
     const before = writtenOf(chronicle);
     const { from, missing } = daysToWrite(chronicle, today);
-    const plan = ask(query, 'chronicle.dayFacts', { before: today }) ?? { days: [], settle: null };
     const wanted = day => day < today && ((from === null || day >= from) || missing.includes(day));
+    const noted = notedOf(chronicle);
+    const byDay = entriesByDay(chronicle);
+    const dayOfRev = rangeDays(byDay);
+    // Each finished day from its kept entries. A day from before the entries began (a chat older than
+    // them: no `noted`, or a day before the first note) is read from the receipts, as before.
+    let director = null;
+    try { director = typeof ctx.read === 'function' ? ctx.read('director') : null; } catch { director = null; }
+    const state = { domains: { director } };
+    const plan = [];
+    for (const [day, list] of byDay) {
+        if (wanted(day)) plan.push({ day, facts: factsOf(list.map(item => item.entry), { state, day, dayOfRev }) });
+    }
+    const older = day => !noted || (isInt(noted.from) && day < noted.from);
+    if (!noted || (isInt(noted.from) && (from === null || from < noted.from || missing.some(older)))) {
+        const walked = ask(query, 'chronicle.dayFacts', { before: today }) ?? { days: [] };
+        for (const entry of walked.days ?? []) {
+            if (isInt(entry?.day) && wanted(entry.day) && older(entry.day) && !byDay.has(entry.day)) plan.push(entry);
+        }
+    }
+    plan.sort((a, b) => a.day - b.day);
     const calendar = calendarFrom(query);
     const currency = ask(query, 'inventory.currency', {});
     const rev = isInt(ctx.rev) ? ctx.rev : 0;
     const written = [];
     const found = new Set();
-    for (const entry of plan.days ?? []) {
-        if (!isInt(entry?.day) || !wanted(entry.day)) continue;
+    for (const entry of plan) {
+        if (!entry.facts || entry.facts.count <= 0) continue;
         found.add(entry.day);
         let date = '';
         try { date = calendar.format(entry.day * 1440, { time: false }); } catch { date = ''; }
-        chronicle.days[String(entry.day)] = toSlot(makeDigest(entry.day, entry.facts, { date, currency, made: rev, revs: entry.revs }));
+        chronicle.days[String(entry.day)] = toSlot(makeDigest(entry.day, entry.facts, { date, currency, made: rev, revs: entry.revs ?? entry.facts.revs ?? [] }));
         written.push(date || `day ${entry.day}`);
+    }
+    // The entries of every finished day go once it is written (or could not be: a day before the last
+    // write, which the clock went back to, keeps its digest as it was).
+    if (chronicle.dayFacts && typeof chronicle.dayFacts === 'object') {
+        for (const [day, list] of byDay) if (day < today) for (const item of list) delete chronicle.dayFacts[item.key];
     }
     // A day to write that no receipt is left for (the only reply of that day was deleted): it goes.
     for (const key of Object.keys(chronicle.days)) {
@@ -107,7 +202,7 @@ export function digestCommand(ctx, payload = {}) {
     // A time skip: this run follows the day turning (not a rewrite after a delete), and the clock's last
     // jump, as the time part settled it just now, was at least the While away threshold.
     const turned = !before || today > before.through;
-    const settle = plan.settle;
+    const settle = noted?.settle ?? null;
     const skip = Boolean(turned && settle && settle.to === now && isInt(settle.from) && now - settle.from >= settings.skipMinutes);
     chronicle.written = toSlot({ through: today, days: orderedDays(chronicle).map(digest => digest.day), at, skip });
     return {
