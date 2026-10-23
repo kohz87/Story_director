@@ -167,7 +167,7 @@ test('chronicle: the section headings are section labels, the edit fields Story 
     const { el } = draw(worldState());
     const headings = el.querySelectorAll('.ch-h').map(node => squash(node.textContent).replace(/\s\d+.*$/, ''));
     assert.deepEqual(headings, ['Events', 'Resolved', 'Factions']);
-    assert.ok(el.querySelectorAll('.ch-h').every(node => node.classList.contains('ss-label')), 'each heading is the section label');
+    assert.ok(el.querySelectorAll('.ch-h').every(node => node.classList.contains('ss-section-label')), 'each heading is Story Block\'s section label');
     const fields = [...el.querySelectorAll('input'), ...el.querySelectorAll('textarea'), ...el.querySelectorAll('select')];
     assert.ok(fields.length > 0, 'the edit form is drawn');
     assert.ok(fields.every(node => node.classList.contains('ss-input')), 'every field is a Story Block input');

@@ -18,7 +18,7 @@ const STATE_OPTIONS = `<option value="">(as it is)</option><option value="loomin
 const TEMPLATE = `
 <div class="ch">
   <section class="ch-events" aria-label="World events">
-    <h4 class="ss-label ch-h">Events <small data-if="q.board.hasOpen">{{ q.board.openCount }} under way</small></h4>
+    <h4 class="ss-section-label ch-h">Events <small data-if="q.board.hasOpen">{{ q.board.openCount }} under way</small></h4>
     <p class="ch-empty" data-if="!q.board.hasOpen">Nothing is under way in the wider world.</p>
     <ul class="ch-list" data-if="q.board.hasOpen">
       <li class="ss-glass ch-card ch-event" data-each="q.board.open as e" data-event="{{ e.id }}" data-state="{{ e.state }}">
@@ -52,7 +52,7 @@ const TEMPLATE = `
   </section>
 
   <details class="ch-resolved" data-if="q.board.hasResolved">
-    <summary class="ss-label ch-h">Resolved <small>{{ q.board.resolvedCount }}</small></summary>
+    <summary class="ss-section-label ch-h">Resolved <small>{{ q.board.resolvedCount }}</small></summary>
     <ul class="ch-list ch-done-list">
       <li class="ch-done" data-each="q.board.resolved as r" data-event="{{ r.id }}">
         <span class="ch-name">{{ r.name }}</span><small data-if="r.summary"> — {{ r.summary }}</small><small class="ch-when" data-if="r.updatedText"> ({{ r.updatedText }})</small>
@@ -65,7 +65,7 @@ const TEMPLATE = `
   </details>
 
   <section class="ch-factions" aria-label="Factions">
-    <h4 class="ss-label ch-h">Factions <small data-if="q.board.hasFactions">{{ q.board.factionCount }}</small></h4>
+    <h4 class="ss-section-label ch-h">Factions <small data-if="q.board.hasFactions">{{ q.board.factionCount }}</small></h4>
     <p class="ch-empty" data-if="!q.board.hasFactions">No factions recorded yet.</p>
     <ul class="ch-list" data-if="q.board.hasFactions">
       <li class="ss-glass ch-card ch-faction" data-each="q.board.factions as f" data-faction="{{ f.id }}">
@@ -109,8 +109,8 @@ const CSS = `
   font-family: var(--ss-font);
 }
 .ch { display: grid; gap: 14px; padding: 4px 0; }
-.ch-h { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; white-space: nowrap; }
-.ch-h::after { content: ""; flex: 1 1 0; min-width: 0; height: 1px; background: var(--ss-rule, var(--ss-border)); }
+/* Story Block's section label (its rule after the text); the text is the text colour, not the label's muted one, to pass 4.5:1 in light glass. */
+.ch-h { margin: 0 0 6px; color: var(--ss-text); }
 .ch-h small { font-weight: normal; color: var(--ss-text); }
 .ch-list { display: grid; gap: var(--ch-gap); margin: 0; padding: 0; list-style: none; }
 .ch-card { display: grid; gap: 4px; min-width: 0; }
