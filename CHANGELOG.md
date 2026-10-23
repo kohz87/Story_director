@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased (`v2`, UI step 4c: the Director screens on the glass)
+## Unreleased
 
 - **Quests, Director, World, the status card, the HUD and Chronicle are on Story Block's glass.** Rows are list cards (`ss-listcard`), tags are pills, buttons are `ss-button`, progress is `ss.bar`, colours and shapes are Story Block's tokens (Glass, Solid and Follow SillyTavern). Same commands, ids and data attributes; no quest buttons, as before (`screens/quests.js`, `screens/director.js`, `screens/status-card.js`, `screens/hud.js`, `screens/style.js`, `screens/dom.js`, `world/screen.js`, `chronicle/screen.js`, `arc/widget.js`, `screens/behind.js`).
 - **World**: Here is a glass card with the people below it (Delta's cards untouched); Upcoming, News and events and Factions are list cards; every section label goes through one helper and one hairline rule (`.wv-label::after`, Story Block's `--ss-border`).
 - **Map** (`atlas/widget.js`): restyled only. A glass panel and glass controls, the current place in the accent, and the legend as a list card. Its search, layers, zoom and pick are unchanged, and a screen's `--ss-w-*` overrides still win.
 - The Director's problems box keeps its newest-first order; threads keep their open and closed groups.
-- Story Block testkit re-synced to Story Block `v2` 0d2505c.
+- Review fixes: the People here label sits above the people; text under 4.5:1 (pixel-measured) is text colour, with pills or marks for state; long names wrap at 360px; the map keeps a screen's `--ss-w-fg` and `--ss-w-border` overrides (the root's colour and border are set, so Story Block's `.ss-glass` does not beat them); the Chronicle headings, inputs and state pills; the HUD place and layer chips cut with an ellipsis.
+- Story Block testkit re-synced to Story Block `v2` b2116cc ("UI 4b: State inspector and ss.map on glass; ss-button states; phone HUD density (#169)").
 
 ## 2.0.0-beta.1 (`v2` branch)
 

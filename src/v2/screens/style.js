@@ -12,7 +12,7 @@ export const BASE_CSS = `
   --sd-gap: var(--ss-space-2);
   --sd-radius: var(--ss-radius-m);
   --sd-text: var(--ss-text);
-  --sd-muted: var(--ss-muted);
+  --sd-muted: var(--ss-text);
   --sd-accent: var(--ss-accent);
   --sd-border: var(--ss-border);
   --sd-surface: var(--ss-tile);
@@ -22,6 +22,7 @@ export const BASE_CSS = `
   color: var(--sd-text);
   font-family: var(--ss-font);
 }
+.ss-label { color: var(--sd-text); }
 .sd-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; }
 .sd-h small { font-weight: normal; color: var(--sd-text); }
 .sd-list { display: grid; gap: var(--sd-gap); margin: 0; padding: 0; list-style: none; }

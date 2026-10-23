@@ -118,7 +118,6 @@ const CSS = `${BASE_CSS}
 .sd-ready { border-color: var(--sd-good); }
 .sd-closed { padding: 2px 0; }
 .sd-closed > summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; gap: 6px; color: var(--sd-muted); }
-.sd-closed .sd-thread { opacity: 0.8; }
 /* Problems are stored oldest first; the newest is shown on top. */
 .sd-problems { display: flex; flex-direction: column-reverse; max-height: 18em; overflow-y: auto; }
 .sd-problem .ss-listcard-title { font-weight: 400; font-size: 0.9em; }
