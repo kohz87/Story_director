@@ -9,16 +9,16 @@ export const HUD_ID = 'story-director/hud';
 
 const TEMPLATE = `
 <div class="sd-hud" role="status" aria-label="Story time and place">
-  <span class="sd-when" data-if="q.time.text"><i class="fa-solid fa-clock" aria-hidden="true"></i> {{ q.time.text }}</span>
-  <span class="sd-where" data-if="state.scene.place.name"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ state.scene.place.name }}</span>
+  <span class="ss-pill sd-when" data-if="q.time.text"><i class="fa-solid fa-clock" aria-hidden="true"></i> {{ q.time.text }}</span>
+  <span class="ss-pill ss-pill-soft sd-where" data-if="state.scene.place.name"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ state.scene.place.name }}</span>
 </div>
 `;
 
 const CSS = `${BASE_CSS}
-.sd-hud { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 2px 8px; font-size: 0.85em;
+.sd-hud { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 2px 6px; font-size: 0.85em;
   line-height: 1.6; white-space: nowrap; overflow: hidden; }
 .sd-hud:not(:has(span)) { display: none; }
-.sd-hud > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sd-hud > span { min-width: 0; max-width: 100%; }
 .sd-when { flex: 0 1 auto; }
 .sd-where { flex: 1 1 0; }
 .sd-hud i { color: var(--sd-accent); margin-right: 2px; }

@@ -210,7 +210,7 @@ test('status card: time, place, goal and step, progress, with what this reply ch
     // No atlas place and no weather query here: neither is shown.
     assert.equal(el.querySelector('.sd-coords'), null);
     assert.equal(el.querySelector('.sd-weather'), null);
-    assert.equal(squash(el.querySelector('.sd-progress .ss-w-meter-label').textContent), 'Wolves 8/3');
+    assert.equal(squash(el.querySelector('.sd-progress .ss-bar-label').textContent), 'Wolves 8/3');
     assert.ok(el.querySelector('.sd-time').classList.contains('sd-new'));
     assert.ok(el.querySelector('.sd-goal').classList.contains('sd-new'));
     assert.equal(el.querySelector('.sd-place').classList.contains('sd-new'), false);
