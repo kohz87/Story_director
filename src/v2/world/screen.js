@@ -26,14 +26,14 @@ export const WORLD_ID = 'story-director/world';
 export const DAYS_ID = 'story-director/days';
 
 const JOURNAL = `
-  <p class="wv-empty" data-if="!q.journal.on">The day digest is off (Features), so the Journal has nothing to show.</p>
-  <p class="wv-empty" data-if="q.journal.on && !q.journal.hasDays">No story day is written yet. What each day held is kept here as the story's clock moves on.</p>
+  <p class="sd-empty" data-if="!q.journal.on">The day digest is off (Features), so the Journal has nothing to show.</p>
+  <p class="sd-empty" data-if="q.journal.on && !q.journal.hasDays">No story day is written yet. What each day held is kept here as the story's clock moves on.</p>
   <label class="wv-find" data-if="q.journal.hasDays">
     <span class="wv-find-label">Search the journal</span>
     <input type="search" data-draft="find" placeholder="A place, a quest, a name…" maxlength="80" aria-label="Search the journal">
   </label>
   <ol class="wv-days" data-if="q.journal.hasDays" aria-label="Story days, newest first">
-    <li class="wv-day" data-each="q.journal.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
+    <li class="wv-day ss-glass" data-each="q.journal.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
       <details class="wv-fold">
         <summary class="wv-head"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today so far</span> <span class="wv-line">{{ d.short }}</span></summary>
         <div class="wv-body">
@@ -64,45 +64,59 @@ const JOURNAL = `
   </ol>`;
 
 const NOW = `
-  <section class="sd-kind wv-here" data-kind="here" aria-label="Here">
-    <h4 class="sd-h">Here</h4>
-    <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
+  <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
+    <h4 class="ss-label sd-h">Here</h4>
+    <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
     <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
   </section>
-  <section class="sd-kind wv-upcoming" data-kind="upcoming" aria-label="Upcoming">
-    <h4 class="sd-h">Upcoming <small>next {{ q.world.upcomingDays }} days</small></h4>
-    <p class="sd-empty" data-if="!q.world.clockSet">The story's clock is not set, so nothing has a date yet.</p>
-    <p class="sd-empty" data-if="q.world.clockSet && !q.world.hasUpcoming">Nothing you know of is coming up.</p>
-    <ul class="sd-list wv-list" data-if="q.world.hasUpcoming">
-      <li class="wv-item" data-each="q.world.upcoming as u" data-kind="{{ u.kind }}" data-class="wv-overdue: u.overdue">
-        <span class="sd-key">{{ u.name }}</span> <span class="ss-pill">{{ u.label }}</span>
-        <p class="sd-meta"><span>{{ u.when }}</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></p>
-        <p class="sd-line" data-if="u.goal">{{ u.goal }}</p>
+  <section class="sd-kind wv-upcoming ss-listcard ss-glass" data-kind="upcoming" aria-label="Upcoming">
+    <h4 class="ss-label ss-listcard-head sd-h">Upcoming <small>next {{ q.world.upcomingDays }} days</small></h4>
+    <p class="ss-listcard-empty" data-if="!q.world.clockSet">The story's clock is not set, so nothing has a date yet.</p>
+    <p class="ss-listcard-empty" data-if="q.world.clockSet && !q.world.hasUpcoming">Nothing you know of is coming up.</p>
+    <ul class="ss-listcard-rows" data-if="q.world.hasUpcoming">
+      <li class="ss-listcard-row wv-item" data-each="q.world.upcoming as u" data-kind="{{ u.kind }}" data-class="wv-overdue: u.overdue">
+        <div class="ss-listcard-item">
+          <span class="ss-listcard-main">
+            <span class="ss-listcard-title">{{ u.name }}</span>
+            <span class="ss-listcard-sub" data-if="u.goal">{{ u.goal }}</span>
+            <span class="sd-meta"><span>{{ u.when }}</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></span>
+          </span>
+          <span class="ss-listcard-value" data-if="u.label"><span class="ss-pill">{{ u.label }}</span></span>
+        </div>
       </li>
     </ul>
   </section>
-  <section class="sd-kind wv-news" data-kind="news" aria-label="News and events">
-    <h4 class="sd-h">News and events <small data-if="q.world.hasNews">{{ q.world.newsCount }}</small></h4>
-    <p class="sd-empty" data-if="!q.world.hasNews">No news yet.</p>
-    <ul class="sd-list wv-list" data-if="q.world.hasNews">
-      <li class="wv-item" data-each="q.world.news as n" data-kind="{{ n.kind }}" data-state="{{ n.state }}">
-        <span class="sd-key">{{ n.name }}</span> <span class="ss-pill" data-if="n.state">{{ n.state }}</span>
-        <p class="sd-line" data-if="n.summary">{{ n.summary }}</p>
-        <p class="sd-meta"><span data-if="n.place">At {{ n.place }}</span><span data-if="n.factions">{{ n.factions }}</span><span data-if="n.ago">{{ n.ago }}</span></p>
+  <section class="sd-kind wv-news ss-listcard ss-glass" data-kind="news" aria-label="News and events">
+    <h4 class="ss-label ss-listcard-head sd-h">News and events <small data-if="q.world.hasNews">{{ q.world.newsCount }}</small></h4>
+    <p class="ss-listcard-empty" data-if="!q.world.hasNews">No news yet.</p>
+    <ul class="ss-listcard-rows" data-if="q.world.hasNews">
+      <li class="ss-listcard-row wv-item" data-each="q.world.news as n" data-kind="{{ n.kind }}" data-state="{{ n.state }}">
+        <div class="ss-listcard-item">
+          <span class="ss-listcard-main">
+            <span class="ss-listcard-title">{{ n.name }}</span>
+            <span class="ss-listcard-sub" data-if="n.summary">{{ n.summary }}</span>
+            <span class="sd-meta"><span data-if="n.place">At {{ n.place }}</span><span data-if="n.factions">{{ n.factions }}</span><span data-if="n.ago">{{ n.ago }}</span></span>
+          </span>
+          <span class="ss-listcard-value" data-if="n.state"><span class="ss-pill">{{ n.state }}</span></span>
+        </div>
       </li>
     </ul>
   </section>
-  <section class="sd-kind wv-factions" data-kind="factions" aria-label="Factions">
-    <h4 class="sd-h">Factions <small data-if="q.world.hasFactions">{{ q.world.factionCount }}</small></h4>
-    <p class="sd-empty" data-if="!q.world.hasFactions">No factions known yet.</p>
-    <ul class="sd-list wv-list" data-if="q.world.hasFactions">
-      <li class="wv-item" data-each="q.world.factions as f">
-        <span class="sd-key">{{ f.name }}</span>
-        <p class="sd-line" data-if="f.summary">{{ f.summary }}</p>
-        <p class="sd-meta"><span data-if="f.area">Holds {{ f.area }}</span><span data-if="f.stance">Toward you: {{ f.stance }}</span></p>
+  <section class="sd-kind wv-factions ss-listcard ss-glass" data-kind="factions" aria-label="Factions">
+    <h4 class="ss-label ss-listcard-head sd-h">Factions <small data-if="q.world.hasFactions">{{ q.world.factionCount }}</small></h4>
+    <p class="ss-listcard-empty" data-if="!q.world.hasFactions">No factions known yet.</p>
+    <ul class="ss-listcard-rows" data-if="q.world.hasFactions">
+      <li class="ss-listcard-row wv-item" data-each="q.world.factions as f">
+        <div class="ss-listcard-item">
+          <span class="ss-listcard-main">
+            <span class="ss-listcard-title">{{ f.name }}</span>
+            <span class="ss-listcard-sub" data-if="f.summary">{{ f.summary }}</span>
+            <span class="sd-meta"><span data-if="f.area">Holds {{ f.area }}</span><span data-if="f.stance">Toward you: {{ f.stance }}</span></span>
+          </span>
+        </div>
       </li>
     </ul>
   </section>`;
@@ -126,56 +140,61 @@ const TEMPLATE = `
 const CSS = `${BASE_CSS}
 .wv { display: grid; gap: 12px; padding: 4px 0; min-width: 0; }
 .wv-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.wv-views { display: inline-flex; border: 1px solid var(--sd-border); border-radius: 999px; overflow: hidden; }
+.wv-views { display: inline-flex; flex-wrap: wrap; gap: 6px; max-width: 100%; }
 .wv-view { position: relative; display: inline-flex; cursor: pointer; }
 .wv-view input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.wv-view span { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; white-space: nowrap; }
-.wv-view input:checked + span, .wv-views:not(:has(input:checked)) .wv-view:first-child span { background: var(--sd-accent); color: var(--ss-on-accent, var(--SmartThemeBlurTintColor, #fff)); }
-.wv-view input:focus-visible + span { outline: 2px solid var(--sd-accent); outline-offset: -2px; }
-.wv-when { margin: 0; font-size: 0.9em; opacity: 0.85; overflow-wrap: anywhere; }
+.wv-view span { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; white-space: nowrap;
+  border: 1px solid var(--sd-border); border-radius: var(--ss-radius-pill); background: var(--sd-surface); font-weight: 700; }
+.wv-view input:checked + span, .wv-views:not(:has(input:checked)) .wv-view:first-child span { background: var(--ss-accent-soft); border-color: var(--sd-accent); }
+.wv-view input:focus-visible + span { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.wv-when { margin: 0; font-size: 0.9em; color: var(--sd-muted); overflow-wrap: anywhere; }
 .wv-when i { color: var(--sd-accent); }
 .wv-now { display: grid; gap: 14px; min-width: 0; }
-.wv-place { margin: 0 0 6px; overflow-wrap: anywhere; }
+.wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; }
+.wv-here > .sd-h { margin: 0; }
+.wv-place { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
 .wv-place i, .wv-weather i { color: var(--sd-accent); }
-.wv-weather { margin: 0 0 6px; overflow-wrap: anywhere; }
-.wv-list { gap: 6px; }
-.wv-item { padding: 6px 10px; border-left: 3px solid var(--sd-accent); border-radius: 4px; background: var(--sd-surface); overflow-wrap: anywhere; min-width: 0; }
-.wv-item[data-kind="holiday"] { border-left-color: var(--sd-good); }
-.wv-item.wv-overdue { border-left-color: var(--sd-warn); }
-.wv-item[data-state="resolved"] { opacity: 0.75; border-left-color: var(--sd-border); }
-.wv-item .ss-pill { margin-left: 4px; }
-.wv-place.wv-moved { padding-left: 6px; border-left: 3px solid var(--sd-accent); }
+.wv-place .sd-key { font-size: 1.15em; font-weight: 800; }
+.wv-place.wv-moved { padding-left: 8px; border-left: 3px solid var(--sd-accent); }
 .wv-kind { text-transform: capitalize; }
+.wv-weather { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
+.wv-upcoming, .wv-news, .wv-factions { min-width: 0; }
+.wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
+.wv-item .ss-listcard-value { max-width: 45%; min-width: 0; }
+.wv-item .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.wv-item[data-state="resolved"] { opacity: 0.75; }
+.wv-item.wv-overdue .ss-listcard-title { color: var(--sd-warn); }
 .wv-cast { display: block; min-width: 0; margin: 0 0 6px; }
 .wv-cast[hidden], .wv-people[hidden] { display: none; }
-.wv-thought { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0 0; font-size: 0.85em; font-style: italic; opacity: 0.9;
+.wv-thought { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0 0; font-size: 0.85em; font-style: italic; color: var(--sd-text);
   overflow-wrap: anywhere; white-space: normal; text-align: left; }
 .wv-thought i { color: var(--sd-accent); margin-top: 2px; }
 .wv-person { display: grid; gap: 2px; max-width: 100%; }
 .wv-people { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.wv-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 36px; padding: 2px 12px; border: 1px solid var(--sd-border);
-  border-radius: 999px; background: var(--sd-surface); overflow-wrap: anywhere; }
-.wv-chip .wv-stance { font-size: 0.8em; opacity: 0.8; }
-.wv-chip.wv-link { cursor: pointer; font: inherit; color: inherit; margin: 0; width: auto; flex-direction: row; white-space: nowrap; }
+.wv-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 40px; padding: 2px 14px; border: 1px solid var(--sd-border);
+  border-radius: var(--ss-radius-pill); background: var(--sd-surface); color: var(--sd-text); font: inherit; overflow-wrap: anywhere; }
+.wv-chip .wv-stance { font-size: 0.8em; color: var(--sd-muted); }
+.wv-chip.wv-link { cursor: pointer; margin: 0; width: auto; flex-direction: row; white-space: nowrap; }
 .wv-chip .wv-name { white-space: normal; }
-.wv-chip.wv-link:hover, .wv-chip.wv-link:focus-visible { border-color: var(--sd-accent); }
+.wv-chip.wv-link:not(:disabled):hover { border-color: var(--sd-accent); }
+.wv-chip.wv-link:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
 .wv-journal { display: grid; gap: 10px; min-width: 0; }
-.wv-empty { margin: 0; opacity: 0.65; font-style: italic; }
+.wv-empty { margin: 0; color: var(--sd-muted); font-style: italic; }
 .wv-find { display: grid; gap: 2px; font-size: 0.85em; }
-.wv-find-label { opacity: 0.75; }
-.wv-find input { width: 100%; box-sizing: border-box; min-height: 36px; }
-.wv-days { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.wv-day { border: 1px solid var(--sd-border); border-radius: var(--sd-radius); background: var(--sd-surface); min-width: 0; }
+.wv-find-label { color: var(--sd-muted); }
+.wv-find input { width: 100%; box-sizing: border-box; min-height: 40px; }
+.wv-days { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.wv-day { min-width: 0; padding: 0; }
 .wv-day[data-today="true"] { border-color: var(--sd-accent); }
-.wv-head { cursor: pointer; padding: 8px 12px; min-height: 28px; overflow-wrap: anywhere; list-style-position: inside; }
-.wv-date { font-weight: bold; color: var(--sd-accent); }
-.wv-line { opacity: 0.85; }
-.wv-day[data-brief="true"] .wv-line { opacity: 0.7; }
-.wv-body { display: grid; gap: 6px; padding: 0 12px 10px; overflow-wrap: anywhere; }
+.wv-head { cursor: pointer; padding: 10px 14px; min-height: 40px; overflow-wrap: anywhere; list-style-position: inside; }
+.wv-date { font-weight: 800; color: var(--sd-accent); }
+.wv-line { color: var(--sd-muted); }
+.wv-day[data-brief="true"] .wv-line { opacity: 0.8; }
+.wv-body { display: grid; gap: 6px; padding: 0 14px 12px; overflow-wrap: anywhere; }
 .wv-body ul { margin: 0; padding-left: 1.2em; }
 .wv-facts { list-style: none; padding-left: 0 !important; }
-.wv-h { margin: 4px 0 2px; font-size: 0.9em; opacity: 0.8; }
-.wv-note { margin: 0; font-size: 0.85em; opacity: 0.65; }
+.wv-h { margin: 4px 0 2px; font-size: 0.9em; color: var(--sd-muted); }
+.wv-note { margin: 0; font-size: 0.85em; color: var(--sd-muted); }
 @media (min-width: 720px) {
   .wv-now { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
   .wv-here { grid-column: 1 / -1; }
