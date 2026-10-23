@@ -350,4 +350,3 @@ test('status card rows: a row with no value is left out; no box of its own (the 
     assert.match(css, /\.sd-row > dt \{[^}]*font-variant: small-caps;[^}]*color: color-mix\(in srgb, var\(--sd-text\) 80%, transparent\);/);
     assert.match(css, /\.sd-row > dd \{[^}]*color: var\(--sd-text\);/);
 });
-
