@@ -162,8 +162,9 @@ const CSS = `${BASE_CSS}
 .wv-when i { color: var(--sd-accent); }
 .wv-now { display: grid; gap: 14px; min-width: 0; }
 .wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; }
-.wv-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; min-width: 0; }
-.wv-label::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--ss-border); }
+.wv-label { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; min-width: 0; white-space: nowrap; }
+/* The separator: a hairline filling the rest of the row, centred on the label; it shrinks to nothing rather than push the label. */
+.wv-label::after { content: ""; flex: 1 1 0; min-width: 0; height: 1px; background: var(--ss-border); }
 .wv-label small { color: var(--sd-muted); font-weight: normal; }
 .wv-h.wv-label { margin: 4px 0 2px; font-size: 0.9em; color: var(--sd-muted); }
 .wv-label.ss-listcard-head { margin-bottom: 2px; padding: 0 6px; }
