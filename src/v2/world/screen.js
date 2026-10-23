@@ -163,7 +163,7 @@ const CSS = `${BASE_CSS}
 .wv-now { display: grid; gap: 14px; min-width: 0; }
 .wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; }
 .wv-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; min-width: 0; }
-.wv-label::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--sd-border); }
+.wv-label::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--ss-border); }
 .wv-label small { color: var(--sd-muted); font-weight: normal; }
 .wv-h.wv-label { margin: 4px 0 2px; font-size: 0.9em; color: var(--sd-muted); }
 .wv-label.ss-listcard-head { margin-bottom: 2px; padding: 0 6px; }
