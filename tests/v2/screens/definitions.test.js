@@ -5,13 +5,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CSS_LIMIT, resolveData, validateScreen, vendoredScreens } from './helpers/runtime.js';
 import { headState, makeQueries, makeRunner } from './helpers/fixtures.js';
-import { DIRECTOR_ID, HUD_ID, QUESTS_ID, STATUS_CARD_ID, createScreensPart, part, screens } from '../../../src/v2/screens/index.js';
+import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createScreensPart, part, screens } from '../../../src/v2/screens/index.js';
 
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
 const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
-    assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID, HUD_ID]);
+    assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
     assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
@@ -28,7 +28,6 @@ test('each screen mounts where it is meant to', () => {
     assert.deepEqual(byId[QUESTS_ID].mounts, ['tab', 'screen']);
     assert.deepEqual(byId[DIRECTOR_ID].mounts, ['tab', 'screen']);
     assert.deepEqual(byId[STATUS_CARD_ID].mounts, ['card']);
-    assert.deepEqual(byId[HUD_ID].mounts, ['hud']);
     for (const screen of screens) {
         assert.ok(screen.id.startsWith('story-director/'), screen.id);
         assert.equal(typeof screen.title, 'string');
@@ -44,7 +43,7 @@ test('the screens register in Story Block\'s screen registry and list by mount',
     // usual quests place (20); the Director screen gives no order, so it comes after the usual ones.
     assert.deepEqual(registry.list('tab').map(entry => entry.id), [QUESTS_ID, DIRECTOR_ID]);
     assert.deepEqual(registry.list('card').map(entry => entry.id), [STATUS_CARD_ID]);
-    assert.deepEqual(registry.list('hud').map(entry => entry.id), [HUD_ID]);
+    assert.deepEqual(registry.list('hud'), [], 'no HUD strip: the time and place are in the Status fold');
     assert.deepEqual(registry.list('dialog'), []);
 });
 
@@ -61,7 +60,6 @@ test('every data binding names a query the module (or a module it reads) answers
 });
 
 test('the bindings use the Director\'s queries: time, threads by kind and status, progress of the goal', () => {
-    assert.deepEqual(byId[HUD_ID].data, { time: { query: 'director.time' } });
     assert.deepEqual(byId[STATUS_CARD_ID].data.progress, { query: 'quest.progress', args: { id: '$goal.id' } });
     assert.equal(byId[STATUS_CARD_ID].data.time.query, 'director.time');
     const director = byId[DIRECTOR_ID].data;
@@ -78,7 +76,6 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
     assert.ok(Object.values(threads).every(binding => binding.query === 'director.threads'));
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
-    assert.equal(byId[HUD_ID].defaultOn, undefined);
     assert.deepEqual(byId[QUESTS_ID].data, { board: { query: 'quest.board' } });
 });
 

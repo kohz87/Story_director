@@ -43,7 +43,7 @@ test('registered whole: the screens and the Map, no hand-built tabs, the status 
     assert.deepEqual(mine.tabs, []);
     const screens = host.registry.screens().filter(screen => screen.moduleId === MODULE_ID);
     assert.deepEqual(screens.map(screen => screen.id).sort(), [
-        'story-director/chronicle', 'story-director/days', 'story-director/director', 'story-director/hud', 'story-director/map', 'story-director/quests', 'story-director/status-card', 'story-director/world',
+        'story-director/chronicle', 'story-director/days', 'story-director/director', 'story-director/map', 'story-director/quests', 'story-director/status-card', 'story-director/world',
     ]);
     assert.equal(screens.find(screen => screen.id === 'story-director/status-card').defaultOn, true);
     // Every binding of every screen names a query the host answers.

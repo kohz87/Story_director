@@ -25,7 +25,7 @@ const edits = new Map();
 function render(el, props, api, controller) {
     const doc = el.ownerDocument ?? globalThis.document;
     const make = maker(doc);
-    const root = make('section', 'sd-kind sd-arc ss-glass', undefined, { 'data-kind': 'arc', 'aria-label': 'Arc' });
+    const root = make('section', 'sd-kind sd-arc ss-listcard ss-glass', undefined, { 'data-kind': 'arc', 'aria-label': 'Arc' });
     el.replaceChildren(root);
     let value = props?.value ?? null;
 
@@ -33,7 +33,7 @@ function render(el, props, api, controller) {
         const status = controller.status();
         const arc = value && typeof value === 'object' ? value : status.arc ?? {};
         const current = arc?.current ?? null;
-        const parts = [make('h4', 'sd-h', 'Arc')];
+        const parts = [make('h4', 'ss-section-label', 'Arc')];
         if (!status.available) {
             parts.push(make('p', 'sd-arc-needs', status.needs));
             root.replaceChildren(...spaced(parts));

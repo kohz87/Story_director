@@ -95,7 +95,7 @@ ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
       <li class="ss-listcard-row sd-problem" data-each="q.problems as p" data-kind="{{ p.kind }}">
         <div class="ss-listcard-item">
           <span class="ss-listcard-main"><span class="ss-listcard-title">{{ p.text }}</span></span>
-          <span class="ss-pill">{{ p.kind }}</span>
+          <span class="ss-pill sd-ptag" title="{{ p.kind }}">{{ p.kind }}</span>
         </div>
       </li>
     </ol>
@@ -121,6 +121,12 @@ const CSS = `${BASE_CSS}
 /* Problems are stored oldest first; the newest is shown on top. */
 .sd-problems { display: flex; flex-direction: column-reverse; max-height: 18em; overflow-y: auto; }
 .sd-problem .ss-listcard-title { font-weight: 400; font-size: 0.9em; }
+/* The tag sits beside the message when there is room, else on its own line under it. It does not wrap; past about 24
+   characters it is cut with an ellipsis (the full tag is in its title). */
+.sd-problem > .ss-listcard-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 8px; }
+.sd-problem .ss-listcard-main { flex: 1 1 12em; min-width: 0; }
+.sd-problem .sd-ptag { flex: 0 1 auto; max-width: 24ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd-arc.ss-listcard { gap: 8px; }
 /* The arc panel and behind the scenes (widgets drawn into this screen, so this sheet styles them too). */
 .sd-arc { display: grid; gap: 8px; min-width: 0; }
 .sd-arc .sd-h { margin: 0; }

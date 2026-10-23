@@ -40,87 +40,87 @@ const TEMPLATE = `
   <section class="ss-listcard ss-glass sd-active" aria-label="Quests">
     <h4 class="ss-label ss-listcard-head sd-h">Quests <small data-if="q.board.hasActive">{{ len(q.board.active) }}</small></h4>
     <p class="ss-listcard-empty" data-if="!q.board.hasActive">No quests taken on.</p>
-    <ul class="ss-listcard-rows">
-      <li class="ss-listcard-row sd-quest" data-each="q.board.active as a" data-quest="{{ a.id }}"
+    <ul class="sd-cards">
+      <li class="sd-card sd-quest" data-each="q.board.active as a" data-quest="{{ a.id }}"
           data-class="sd-met: a.ready; sd-ready: a.status.state == 'here'">
-        <div class="ss-listcard-item">
-          <span class="ss-listcard-main">
-            <span class="ss-listcard-title">{{ a.key }}</span>
-            <span class="ss-listcard-sub" data-if="a.goal">{{ a.goal }}</span>
-            <span class="sd-meta">
-              <span data-if="a.giver">From {{ a.giver }}</span>
-              <span data-if="a.due">Due {{ a.due }}</span>
-            </span>
+        <div class="sd-head">
+          <span class="sd-title" title="{{ a.key }}">{{ a.key }}</span>
+          <span class="sd-pills">
+            <span class="ss-pill sd-st" data-state="ready" data-if="a.status.state == 'here'" title="{{ a.status.text }}">Ready</span>
+            <span class="ss-pill sd-st" data-state="notyet" data-if="a.status.state == 'notyet'" title="{{ a.status.text }}">Not yet</span>
+            <span class="ss-pill ss-pill-soft sd-reward" data-if="a.reward" title="{{ a.reward }}">Reward {{ a.reward }}</span>
           </span>
-          <span class="ss-listcard-value" data-if="a.reward"><span class="ss-pill ss-pill-soft">Reward {{ a.reward }}</span></span>
         </div>
+        <p class="sd-sum" data-if="a.goal">{{ a.goal }}</p>
+        <p class="sd-from" data-if="a.giver">From {{ a.giver }}</p>
         <div class="sd-bar" data-if="a.meter">
           <ss-widget name="ss.bar" data-props='{"value":{{ a.progress.have }},"max":{{ a.progress.need }},"label":"{{ a.progress.label }}","text":"{{ a.progress.have }} of {{ a.progress.need }}"}'></ss-widget>
         </div>
-        <p class="sd-status" data-state="{{ a.status.state }}" role="note"><span class="ss-listcard-tag">{{ a.status.text }}</span></p>
-        <p class="sd-line sd-step" data-if="a.note"><span class="ss-pill">Now</span> {{ a.note }}</p>${details('a')}
+        <p class="sd-status" data-state="{{ a.status.state }}" role="note">{{ a.status.text }}</p>
+        <p class="sd-now" data-if="a.note"><b>Now:</b> <span>{{ a.note }}</span></p>${details('a')}
       </li>
     </ul>
   </section>
 
   <details class="ss-glass sd-finished" data-if="q.board.hasFinished">
     <summary class="ss-label sd-h">Finished <small>{{ q.board.finishedCount }}</small></summary>
-    <ul class="ss-listcard-rows">
-      <li class="ss-listcard-row sd-done" data-each="q.board.finished as f" data-quest="{{ f.id }}" data-outcome="{{ f.outcome }}">
-        <div class="ss-listcard-item">
-          <span class="ss-listcard-main">
-            <span class="ss-listcard-title">{{ f.key }}</span>
-            <span class="ss-listcard-sub" data-if="f.reason">{{ f.reason }}</span>
-          </span>
-          <span class="ss-listcard-tag sd-outcome">{{ f.outcomeText }}</span>
+    <ul class="sd-cards">
+      <li class="sd-card sd-done" data-each="q.board.finished as f" data-quest="{{ f.id }}" data-outcome="{{ f.outcome }}">
+        <div class="sd-head">
+          <span class="sd-title" title="{{ f.key }}">{{ f.key }}</span>
+          <span class="sd-pills"><span class="ss-pill sd-outcome" title="{{ f.outcomeText }}">{{ f.outcomeText }}</span></span>
         </div>
-        <p class="sd-line sd-owed" data-if="f.details.owed">{{ f.details.owed }}</p>${details('f')}
+        <p class="sd-sum" data-if="f.reason">{{ f.reason }}</p>
+        <p class="sd-now" data-if="f.details.owed"><b>Owed:</b> <span>{{ f.details.owed }}</span></p>${details('f')}
       </li>
     </ul>
   </details>
 </div>
 `;
 
+// Every quest is one card: the header (title, then the pills: status and reward; the pills move under the title when the
+// screen is narrow, 420px or less), the summary, "From" in small text, the progress bar, "Now:" and the Details fold.
+// The same markup in the Story panel and the game view; the game view lays the cards out in columns (320px or more each).
 const CSS = `${BASE_CSS}
-.sd-quests { display: grid; gap: 14px; padding: 4px 0; min-width: 0; }
+.sd-quests { display: grid; gap: 14px; padding: 4px 0; min-width: 0; container-type: inline-size; }
 .sd-active, .sd-finished { min-width: 0; }
 .sd-finished { padding: 8px 12px; }
 .sd-finished > summary { cursor: pointer; list-style-position: inside; min-height: 28px; padding: 4px 0; }
-.sd-quest, .sd-done { min-width: 0; }
-.sd-quest > .ss-listcard-item, .sd-done > .ss-listcard-item { align-items: flex-start; }
-.sd-quest .ss-listcard-main, .sd-done .ss-listcard-main { min-width: 0; }
-.sd-quest .ss-listcard-title, .sd-done .ss-listcard-title, .sd-quest .ss-listcard-sub, .sd-done .ss-listcard-sub {
-  overflow-wrap: anywhere; word-break: break-word; }
-.sd-quest .ss-listcard-value { max-width: 45%; min-width: 0; }
-.sd-quest .ss-pill, .sd-quest .ss-listcard-value .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
-.sd-meta { margin-top: 2px; }
-.sd-bar { padding: 0 6px; margin: 2px 0 6px; }
+.sd-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.sd-quest, .sd-done { display: grid; gap: 8px; margin: 0; padding: 12px 14px; min-width: 0; border: 1px solid var(--sd-border); border-radius: var(--sd-radius); background: var(--sd-surface); }
+.sd-quest.sd-ready { border-color: var(--sd-good); }
+.sd-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.sd-title { flex: 1 1 12em; min-width: 0; font-weight: 800; overflow-wrap: anywhere; word-break: break-word; }
+.sd-pills { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 1 auto; justify-content: flex-end; min-width: 0; max-width: 100%; }
+.sd-pills .ss-pill { white-space: nowrap; flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; margin: 0; }
+.sd-st { font-weight: 700; }
+.sd-st[data-state="ready"] { --ss-ring: var(--sd-good); }
+.sd-st[data-state="notyet"] { --ss-ring: var(--sd-warn); }
+.sd-sum, .sd-now, .sd-from, .sd-status { margin: 0; overflow-wrap: anywhere; }
+.sd-status { font-size: 0.85em; color: var(--sd-muted); }
+.sd-from { font-size: 0.85em; color: var(--sd-muted); }
+.sd-bar { margin: 0; }
 .sd-met .sd-bar .ss-bar { --ss-bar-color: var(--sd-good); }
-.sd-status { margin: 0 6px 4px; min-width: 0; }
-/* The status tag: its tone is the state's (Ready to turn in: good; Not yet: muted), and it wraps. */
-.sd-status .ss-listcard-tag { display: inline-block; max-width: 100%; white-space: normal; overflow-wrap: anywhere;
-  line-height: 1.35; padding: 3px 10px; }
-.sd-status[data-state="here"] .ss-listcard-tag, .sd-status[data-state="ready"] .ss-listcard-tag { --ss-ring: var(--sd-good); }
-.sd-status[data-state="notyet"] .ss-listcard-tag { --ss-ring: var(--sd-warn); }
-.sd-status[data-state="untaken"] .ss-listcard-tag { --ss-ring: var(--sd-muted); }
-.sd-ready > .ss-listcard-item { background: color-mix(in srgb, var(--sd-good) 12%, transparent); border-radius: var(--ss-radius-s); }
-.sd-step { margin: 0 6px 4px; }
-.sd-step .ss-pill { margin-right: 4px; }
-.sd-more { margin: 0 6px 4px; }
+.sd-more { margin: 0; }
 .sd-more > summary { cursor: pointer; min-height: 28px; padding: 4px 0; font-size: 0.85em; color: var(--sd-muted); }
-.sd-more[open] { padding: 6px 10px; border: 1px solid var(--sd-border); border-radius: var(--sd-radius); background: var(--sd-surface); }
-.sd-facts { display: grid; gap: 2px; margin: 4px 0; }
+.sd-more[open] { padding: 8px 10px; border: 1px solid var(--sd-border); border-radius: var(--sd-radius); background: var(--sd-surface); }
+.sd-facts { display: grid; gap: 4px; margin: 4px 0; }
 .sd-facts > div { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 6px; }
 .sd-facts dt { color: var(--sd-muted); }
 .sd-facts dd { margin: 0; overflow-wrap: anywhere; }
 .sd-history { margin: 4px 0 0; padding-left: 1.2em; font-size: 0.85em; color: var(--sd-muted); }
 .sd-history li { overflow-wrap: anywhere; }
-.sd-done { padding-bottom: 4px; }
 .sd-done .sd-outcome { --ss-ring: var(--sd-muted); }
 .sd-done[data-outcome="done"] .sd-outcome { --ss-ring: var(--sd-good); }
 .sd-done[data-outcome="failed"] .sd-outcome, .sd-done[data-outcome="abandoned"] .sd-outcome { --ss-ring: var(--sd-warn); }
-.sd-done .sd-outcome { white-space: normal; max-width: 40%; }
-.sd-owed { margin: 0 6px; color: var(--sd-muted); }
+/* A narrow screen (the Story panel, a phone): the pills take a row of their own under the title. */
+@container (max-width: 420px) {
+  .sd-pills { flex-basis: 100%; justify-content: flex-start; }
+}
+/* The game view's wide screen: at most about three columns, not rows across the whole window. */
+@media (min-width: 900px) {
+  .sd-active .sd-cards, .sd-finished .sd-cards { max-width: 1000px; }
+}
 `;
 
 export const questsScreen = Object.freeze({

@@ -1,7 +1,7 @@
 // Story Director v2, part **screens** (SPEC §13, MODULES §A): the module's default screens, as data
 // Story Block renders: `story-director/quests` (tab, screen), `story-director/director` (tab, screen),
-// `story-director/status-card` (card, under each reply, from that reply's state) and
-// `story-director/hud` (hud: the story time and place). Cards and packs restyle or replace any of
+// `story-director/status-card` (card, under each reply, from that reply's state). The story time and place are
+// in the Status fold, not a HUD strip (Story Block's HUD shows party data only). Cards and packs restyle or replace any of
 // them by id (§13.7).
 //
 // The screens bind to the tracker's and quests' queries (`director.time`, `director.threads`,
@@ -15,14 +15,12 @@
 // on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
 import { directorScreen } from './director.js';
-import { hudScreen } from './hud.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
 import { BEHIND_WIDGET, behindWidget } from './behind.js';
 
 export { DIRECTOR_ID, KIND_GROUPS } from './director.js';
-export { HUD_ID } from './hud.js';
 export { QUESTS_ID } from './quests.js';
 export { STATUS_CARD_ID } from './status-card.js';
 export { BEHIND_WIDGET, behindWidget, createBehindWidget } from './behind.js';
@@ -32,7 +30,7 @@ export { calendarSetting, currentGoal, finishState, nextDue, problemsList, quest
 export const MODULE_ID = 'story-director';
 
 /** The default screens, in the order the tab bar shows them. */
-export const screens = Object.freeze([questsScreen, directorScreen, statusCardScreen, hudScreen]);
+export const screens = Object.freeze([questsScreen, directorScreen, statusCardScreen]);
 
 // The module's settings (its calendar), read when a query runs; Story Block's sdk when it is there.
 function hostSettings() {

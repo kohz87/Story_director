@@ -34,6 +34,7 @@ const EASE_MS = 260;
 const R_VISITED = 12;
 const R_KNOWN_FAR = 4;
 const R_KNOWN = 9;
+const TAP_HALF = 22;               // half of a phone's 44px tap area (a coarse pointer only)
 const ALL = '';
 
 // Remembered views for this page: `${viewKey}|${layer}` → { cx, cy, zoom (× fit) }. Never story state.
@@ -95,6 +96,11 @@ const CSS = `
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
 .sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
+/* A phone (coarse pointer): the dot keeps its size; its tap area is a 44px square (::before, no paint).
+   Where two squares cover one dot, the click picks the place whose dot is nearest (see the click handler). */
+@media (pointer: coarse) {
+  .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+}
 .sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .sd-map .sd-map-label[data-visited="false"] { color: var(--sd-map-muted); font-style: italic; }
 .sd-map .sd-map-label.sd-map-picked { color: var(--sd-map-accent); }
@@ -113,6 +119,9 @@ const CSS = `
 .sd-map .sd-map-sample-known { border-style: dashed; color: var(--sd-map-muted); }
 .sd-map .sd-map-sample-here { border-color: var(--sd-map-accent); }
 `;
+
+/** The widget's stylesheet (tests read it; the page gets it once, from ensureStyle). */
+export const MAP_CSS = CSS;
 
 function ensureStyle(doc) {
     const head = doc.head ?? doc.querySelector?.('head');
@@ -276,6 +285,7 @@ function render(el, props, api) {
     let anim = null;
     let lines = [];                  // [{ line, route }] on the layer
     const nodes = new Map();         // id → place button
+    const placeAt = new Map();       // id → the dot's point in the stage, as drawn last
     const labels = new Map();        // id → label span
     const byId = id => data.places.find(place => place.id === id) ?? null;
 
@@ -453,7 +463,8 @@ function render(el, props, api) {
         stage.setAttribute('data-zoom', String(Math.round(zoom * 100) / 100));
         const far = zoom < KNOWN_ICON_ZOOM;
         const markers = [];
-        const at = new Map();
+        const at = placeAt;
+        at.clear();
         for (const place of shown) {
             const node = nodes.get(place.id);
             const p = toScreen(view, width, height, points.get(place.id));
@@ -649,8 +660,24 @@ function render(el, props, api) {
         return '';
     };
     let dropClick = false;
+    // On a phone the tap went to a button whose 44px square holds the tap; where two squares
+    // cover one dot, the place whose dot is nearest the tap is the one picked (desktop: as is).
+    const coarse = () => Boolean(win?.matchMedia?.('(pointer: coarse)')?.matches);
+    const tapped = event => {
+        const own = placeOf(event.target);
+        if (!coarse() || typeof event.clientX !== 'number') return own;
+        const tap = local(event);
+        let best = '';
+        let bestD = Infinity;
+        for (const [id, dot] of placeAt) {
+            if (Math.abs(dot.x - tap.x) > TAP_HALF || Math.abs(dot.y - tap.y) > TAP_HALF) continue;
+            const d = Math.hypot(dot.x - tap.x, dot.y - tap.y);
+            if (d < bestD) { best = id; bestD = d; }
+        }
+        return best || own;
+    };
     listen(placesLayer, 'click', event => {
-        const id = placeOf(event.target);
+        const id = tapped(event);
         if (!id) return;
         if (dropClick) {
             dropClick = false;
