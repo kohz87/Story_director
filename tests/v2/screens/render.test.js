@@ -71,13 +71,13 @@ test('quests: no Offered list and no buttons (F95); an older chat\'s offer is no
     assert.equal(el.querySelectorAll('button').length, 0, 'no buttons anywhere on the board');
 });
 
-test('quests: active progress is an ss.meter ("Wolves 8/3") with the row\'s status and progress note', { skip }, () => {
+test('quests: active progress is an ss.bar ("Wolves 8/3") with the row\'s status and progress note', { skip }, () => {
     const { el } = draw(QUESTS_ID, headState());
     const [hunt, hides] = el.querySelectorAll('.sd-quest');
     assert.equal(hunt.getAttribute('data-quest'), 'th_wolves01');
-    const meter = hunt.querySelector('.ss-w-meter');
-    assert.ok(meter, 'the meter widget is drawn');
-    assert.equal(squash(meter.querySelector('.ss-w-meter-label').textContent), 'Wolves 8/3');
+    const meter = hunt.querySelector('.sd-bar .ss-bar');
+    assert.ok(meter, 'the bar block is drawn');
+    assert.equal(squash(meter.querySelector('.ss-bar-label').textContent), 'Wolves 8/3');
     assert.equal(meter.getAttribute('aria-valuenow'), '3');
     assert.equal(meter.getAttribute('aria-valuemax'), '3');
     assert.equal(meter.getAttribute('aria-valuetext'), '8 of 3');
@@ -86,7 +86,7 @@ test('quests: active progress is an ss.meter ("Wolves 8/3") with the row\'s stat
     assert.equal(squash(hunt.querySelector('.sd-status').textContent), 'Ready to turn in — 8/3 wolves');
     assert.equal(squash(hunt.querySelector('.sd-step').textContent), 'Now Hunt along the ridge');
 
-    assert.equal(squash(hides.querySelector('.ss-w-meter-label').textContent), 'Wolf pelt 2/5');
+    assert.equal(squash(hides.querySelector('.ss-bar-label').textContent), 'Wolf pelt 2/5');
     assert.equal(hides.classList.contains('sd-met'), false);
     assert.equal(squash(hides.querySelector('.sd-status').textContent), 'Not yet: 2/5 wolf pelt');
 });
@@ -130,11 +130,11 @@ test('quests: finished quests are folded away; an empty board says so', { skip }
     const finished = el.querySelector('details.sd-finished');
     assert.ok(finished);
     assert.equal(finished.hasAttribute('open'), false, 'collapsed');
-    assert.match(squash(finished.textContent), /Finished 1 Lost Ring Done — returned it/);
+    assert.match(squash(finished.textContent), /Finished 1 Lost Ring returned it Done/);
     const { el: empty } = draw(QUESTS_ID, makeState());
     assert.equal(empty.querySelector('.sd-offers'), null);
     assert.equal(empty.querySelector('details.sd-finished'), null);
-    assert.equal(squash(empty.querySelector('.sd-empty').textContent), 'No quests taken on.');
+    assert.equal(squash(empty.querySelector('.ss-listcard-empty').textContent), 'No quests taken on.');
 });
 
 test('quests: rendering again after a turn-in updates the same page', { skip }, () => {
@@ -143,7 +143,7 @@ test('quests: rendering again after a turn-in updates the same page', { skip }, 
     const after = headState({ threads: [wolves({ status: 'resolved', ended: { rev: 21, reason: 'paid 8 coin', outcome: 'done' }, rev: 21 })] });
     view.update({ state: after, q: resolveData(byId[QUESTS_ID].data, (name, args) => run(after, name, args)).q, changes: [], settings: {} });
     assert.equal(el.querySelectorAll('.sd-quest').length, 0);
-    assert.match(squash(el.querySelector('details.sd-finished').textContent), /East Bluff Wolves Done — paid 8 coin/);
+    assert.match(squash(el.querySelector('details.sd-finished').textContent), /East Bluff Wolves paid 8 coin Done/);
 });
 
 test('director: the header shows the story time on the chat\'s calendar and the place; offered and ready tags', { skip }, () => {
