@@ -262,7 +262,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual([...mine.commands].sort(), ['atlas.edit', 'atlas.focus', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.payOwed', 'quest.settle', 'quest.take', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
-        'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card', 'story-director/hud',
+        'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card',
     ]);
     const defs = host.registry.settingsDefs().find(entry => entry.moduleId === MODULE_ID);
     assert.deepEqual(Object.keys(defs.schema).sort(), [

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { atlasMapWidget, forgetViews, onLayer, readView } from '../../../src/v2/atlas/widget.js';
+import { MAP_CSS, atlasMapWidget, forgetViews, onLayer, readView } from '../../../src/v2/atlas/widget.js';
 import { iconFor } from '../../../src/v2/atlas/map.js';
 import { KNOWN_LABEL_ZOOM, labelSize } from '../../../src/v2/atlas/view.js';
 import { installFakeDom } from '../../ui-fake-dom.js';
@@ -448,4 +448,64 @@ test('a huge pack: 2000 places draw, and 50 pans and zooms repaint, in reasonabl
     input.dispatch('input');
     assert.equal($('.sd-map-result-name').textContent, 'Place 1999');
     assert.ok(handle.state.view.k > handle.state.fitK);
+});
+
+// A dense cluster: three places a few pixels apart at the fit zoom, with a far one so the fit stays small.
+const CLUSTER = {
+    places: [
+        { name: 'Alpha', region: 'Dense', kind: 'town', x: 0, y: 0 },
+        { name: 'Bravo', region: 'Dense', kind: 'town', x: 12, y: 0 },
+        { name: 'Charlie', region: 'Dense', kind: 'inn', x: 6, y: 6 },
+        { name: 'Far Away', region: 'Dense', kind: 'city', x: 400, y: 0 },
+    ],
+    routes: [],
+};
+
+function clusterDraw(win) {
+    const state = makeState({ place: 'Alpha', kind: 'town', region: 'Dense' });
+    return draw({ state, win, value: query(state, 'atlas.view', {}, { pack: CLUSTER }) });
+}
+
+test('phone taps: the dot keeps its size, its tap area is 44px (CSS), and in a dense cluster the tap picks the nearest dot', () => {
+    const phone = { matchMedia: q => ({ matches: q === '(pointer: coarse)' }) };
+    const { doc, root, handle } = clusterDraw(phone);
+    const css = MAP_CSS;
+    assert.match(css, /@media \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: 44px; height: 44px;/);
+    // The dots themselves are unchanged on a phone (no size rule inside the coarse block).
+    assert.doesNotMatch(css.slice(css.indexOf('@media (pointer: coarse)')), /\.sd-map-place \{[^}]*width/);
+
+    const dot = name => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
+    const at = node => ({ x: parseFloat(node.style.left), y: parseFloat(node.style.top) });
+    const alpha = dot('Alpha');
+    const bravo = dot('Bravo');
+    const a = at(alpha);
+    const b = at(bravo);
+    const gap = Math.hypot(a.x - b.x, a.y - b.y);
+    assert.ok(gap > 0 && gap < 44, `the fixture is a dense cluster (${gap.toFixed(1)}px apart)`);
+
+    // The browser gave the tap to Alpha's square, but the tap is 3px from Bravo's dot: Bravo.
+    const towardAlpha = { x: b.x + 3 * (a.x - b.x) / gap, y: b.y + 3 * (a.y - b.y) / gap };
+    alpha.dispatch('click', { clientX: towardAlpha.x, clientY: towardAlpha.y });
+    assert.equal(handle.state.picked, bravo.getAttribute('data-id'));
+    // And the reverse: given to Bravo's square, 3px from Alpha's dot: Alpha.
+    const towardBravo = { x: a.x + 3 * (b.x - a.x) / gap, y: a.y + 3 * (b.y - a.y) / gap };
+    bravo.dispatch('click', { clientX: towardBravo.x, clientY: towardBravo.y });
+    assert.equal(handle.state.picked, alpha.getAttribute('data-id'));
+    // A tap on a dot's own centre picks that dot, whichever square got it.
+    bravo.dispatch('click', { clientX: b.x, clientY: b.y });
+    assert.equal(handle.state.picked, bravo.getAttribute('data-id'));
+});
+
+test('desktop: no tap area, a click picks the place it landed on, as before', () => {
+    const fine = { matchMedia: q => ({ matches: false }) };
+    const { root, handle } = clusterDraw(fine);
+    const dot = name => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
+    const alpha = dot('Alpha');
+    const bravo = dot('Bravo');
+    const a = { x: parseFloat(alpha.style.left), y: parseFloat(alpha.style.top) };
+    const b = { x: parseFloat(bravo.style.left), y: parseFloat(bravo.style.top) };
+    const gap = Math.hypot(a.x - b.x, a.y - b.y);
+    const towardBravo = { x: a.x + 3 * (b.x - a.x) / gap, y: a.y + 3 * (b.y - a.y) / gap };
+    alpha.dispatch('click', { clientX: towardBravo.x, clientY: towardBravo.y });
+    assert.equal(handle.state.picked, alpha.getAttribute('data-id'));
 });

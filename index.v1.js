@@ -104,9 +104,13 @@ function context() {
     return globalThis.SillyTavern?.getContext?.() ?? null;
 }
 
+// The v1 host only. Story Block v2 (apiVersion 2) has no blockInText or registerBlock, so it is
+// not taken for a v1 host here: index.js registers the v2 module instead.
+const STORY_BLOCK_V2_API = 2;
 function storyBlock() {
     const api = globalThis.StoryBlock;
-    return api && Number(api.apiVersion) >= MIN_STORY_BLOCK_API ? api : null;
+    const version = Number(api?.apiVersion);
+    return api && version >= MIN_STORY_BLOCK_API && version < STORY_BLOCK_V2_API ? api : null;
 }
 
 function chatIdOf(ctx) {
@@ -278,9 +282,9 @@ function saidBefore(chat, index, isReply = isAssistant) {
 
 function entryFor(message, index, sb, cal, own, reference, said = null) {
     const assistant = isStoryReply(message, sb, own.sceneTag);
-    const block = assistant ? sb.blockInText(message.mes, BLOCK.tag) : null;
+    const block = assistant ? sb?.blockInText?.(message.mes, BLOCK.tag) ?? null : null;
     const parsed = block ? parseChanges(block.text) : { ops: [], errors: [] };
-    const scene = assistant ? sb.blockInText(message.mes, own.sceneTag) : null;
+    const scene = assistant ? sb?.blockInText?.(message.mes, own.sceneTag) ?? null : null;
     const timeText = scene ? sceneTimeText(scene.text) : '';
     const date = timeText ? cal.parse(timeText, { reference }) : null;
     return {
@@ -2256,6 +2260,8 @@ export async function init() {
         setTimeout(() => void init(), 100);
         return;
     }
+    // Story Block v2 is there: this v1 glue stays off (index.js registers the v2 module).
+    if (Number(globalThis.StoryBlock?.apiVersion) >= STORY_BLOCK_V2_API) return;
     initialized = true;
     setNote('');
     registerEvents();

@@ -45,7 +45,7 @@ const JOURNAL = `
   <ol class="wv-days" data-if="q.journal.hasDays" aria-label="Story days, newest first">
     <li class="wv-day ss-glass" data-each="q.journal.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
       <details class="wv-fold">
-        <summary class="wv-head"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today so far</span> <span class="wv-line">{{ d.short }}</span></summary>
+        <summary class="wv-head"><span class="wv-top"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today so far</span></span> <span class="wv-line">{{ d.short }}</span></summary>
         <div class="wv-body">
           <p class="wv-note" data-if="d.brief">Only this line is kept for an older day.</p>
           <ul class="wv-facts" data-if="d.hasFacts">
@@ -203,7 +203,9 @@ const CSS = `${BASE_CSS}
 .wv-day[data-today="true"] { border-color: var(--sd-accent); }
 .wv-head { cursor: pointer; padding: 10px 14px; min-height: 40px; overflow-wrap: anywhere; list-style-position: inside; }
 .wv-date { font-weight: 800; color: var(--sd-text); }
-.wv-line { color: var(--sd-muted); }
+/* The date and the pill on the first line; the summary below it, in body text, wrapping normally (4px between the lines). */
+.wv-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wv-line { display: block; margin-top: 4px; color: var(--sd-text); }
 .wv-body { display: grid; gap: 6px; padding: 0 14px 12px; overflow-wrap: anywhere; }
 .wv-body ul { margin: 0; padding-left: 1.2em; }
 .wv-facts { list-style: none; padding-left: 0 !important; }
