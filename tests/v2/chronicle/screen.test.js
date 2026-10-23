@@ -162,3 +162,18 @@ test('the queries other modules read: chronicle.events, chronicle.event, chronic
     assert.deepEqual(part.queries['chronicle.events'](bare, {}, {}), []);
     assert.deepEqual(part.queries['chronicle.board'](bare, {}, {}).open, []);
 });
+
+test('chronicle: the section headings are section labels, the edit fields Story Block inputs, looming and ongoing read apart', () => {
+    const { el } = draw(worldState());
+    const headings = el.querySelectorAll('.ch-h').map(node => squash(node.textContent).replace(/\s\d+.*$/, ''));
+    assert.deepEqual(headings, ['Events', 'Resolved', 'Factions']);
+    assert.ok(el.querySelectorAll('.ch-h').every(node => node.classList.contains('ss-label')), 'each heading is the section label');
+    const fields = [...el.querySelectorAll('input'), ...el.querySelectorAll('textarea'), ...el.querySelectorAll('select')];
+    assert.ok(fields.length > 0, 'the edit form is drawn');
+    assert.ok(fields.every(node => node.classList.contains('ss-input')), 'every field is a Story Block input');
+    const [looming, ongoing] = el.querySelectorAll('.ch-event').map(node => node.querySelector('.ss-pill'));
+    assert.equal(squash(looming.textContent), 'looming');
+    assert.equal(looming.classList.contains('ss-pill-outline'), true, 'looming is an outline pill');
+    assert.equal(squash(ongoing.textContent), 'ongoing');
+    assert.equal(ongoing.classList.contains('ss-pill-soft'), true, 'ongoing is a soft pill');
+});

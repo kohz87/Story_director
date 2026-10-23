@@ -46,12 +46,12 @@ export const forgetViews = () => views.clear();
 const CSS = `
 :where(.sd-map) {
   --sd-map-fg: var(--ss-w-fg, var(--ss-text));
-  --sd-map-muted: var(--ss-w-muted, var(--ss-muted));
+  --sd-map-muted: var(--ss-w-muted, color-mix(in srgb, var(--sd-map-fg) 85%, transparent));
   --sd-map-bg: var(--ss-w-map-bg, var(--ss-field));
-  --sd-map-raised: var(--ss-w-raised, var(--ss-tile));
+  --sd-map-raised: var(--ss-w-raised, color-mix(in srgb, var(--sd-map-fg) 8%, transparent));
   --sd-map-border: var(--ss-w-border, var(--ss-border));
   --sd-map-accent: var(--ss-w-accent, var(--ss-accent));
-  --sd-map-route: var(--ss-w-map-route, var(--ss-muted));
+  --sd-map-route: var(--ss-w-map-route, color-mix(in srgb, var(--sd-map-fg) 45%, transparent));
   --sd-map-overlay: var(--ss-overlay);
   --sd-map-strong: var(--ss-glass-strong);
   display: flex; flex-direction: column; gap: 0.6em; color: var(--sd-map-fg); min-width: 0; max-width: 100%;
@@ -61,7 +61,8 @@ const CSS = `
 :where(.sd-map [hidden]) { display: none !important; }
 :where(.sd-map button) { font: inherit; color: inherit; cursor: pointer; }
 :where(.sd-map :focus-visible) { outline: 2px solid var(--sd-map-accent); outline-offset: 2px; }
-.sd-map.ss-glass { gap: 0.6em; padding: 12px; }
+.sd-map.ss-glass { gap: 0.6em; padding: 12px; color: var(--sd-map-fg); border-color: var(--sd-map-border); }
+.sd-map .sd-map-search input::placeholder { color: var(--sd-map-muted); opacity: 1; }
 .sd-map .sd-map-bar { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: flex-start; }
 .sd-map .sd-map-search { position: relative; flex: 1 1 14em; min-width: 0; }
 .sd-map .sd-map-search input { width: 100%; min-height: 40px; padding: 0.3em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: inherit; font: inherit; }
@@ -71,11 +72,11 @@ const CSS = `
 .sd-map .sd-map-result-name { overflow-wrap: anywhere; }
 .sd-map .sd-map-result-about { max-width: 100%; color: var(--sd-map-muted); font-size: 0.85em; overflow-wrap: anywhere; }
 .sd-map .sd-map-tools, .sd-map .sd-map-layers { display: flex; flex-wrap: wrap; gap: 0.35em; }
-.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
+.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
 .sd-map .sd-map-btn:not(:disabled):hover, .sd-map .sd-map-layer:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
 .sd-map .sd-map-btn:not(:disabled):active, .sd-map .sd-map-layer:not(:disabled):active { transform: translateY(1px); }
 .sd-map .sd-map-layer { font-size: 0.9em; font-weight: 600; }
-.sd-map .sd-map-layer[aria-pressed="true"] { border-color: var(--sd-map-accent); background: var(--ss-accent-soft); font-weight: 700; }
+.sd-map .sd-map-layer[aria-pressed="true"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: inset 0 0 0 1px var(--sd-map-fg); font-weight: 700; }
 .sd-map .sd-map-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; min-height: 14em; overflow: hidden; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-bg); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 @media (max-width: 600px) {
   .sd-map .sd-map-stage { aspect-ratio: 1 / 1; max-height: 60vh; }
@@ -92,7 +93,7 @@ const CSS = `
 .sd-map .sd-map-place.sd-map-far { width: 8px; height: 8px; border-width: 1px; border-style: solid; background: var(--sd-map-muted); }
 .sd-map .sd-map-place.sd-map-far i { display: none; }
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
-.sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-accent); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent); opacity: 1; z-index: 2; }
+.sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
 .sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .sd-map .sd-map-label[data-visited="false"] { color: var(--sd-map-muted); font-style: italic; }

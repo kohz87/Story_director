@@ -18,11 +18,11 @@ const STATE_OPTIONS = `<option value="">(as it is)</option><option value="loomin
 const TEMPLATE = `
 <div class="ch">
   <section class="ch-events" aria-label="World events">
-    <h4 class="ch-h">Events <small data-if="q.board.hasOpen">{{ q.board.openCount }} under way</small></h4>
+    <h4 class="ss-label ch-h">Events <small data-if="q.board.hasOpen">{{ q.board.openCount }} under way</small></h4>
     <p class="ch-empty" data-if="!q.board.hasOpen">Nothing is under way in the wider world.</p>
     <ul class="ch-list" data-if="q.board.hasOpen">
       <li class="ss-glass ch-card ch-event" data-each="q.board.open as e" data-event="{{ e.id }}" data-state="{{ e.state }}">
-        <div class="ch-top"><span class="ch-name">{{ e.name }}</span> <span class="ss-pill">{{ e.state }}</span></div>
+        <div class="ch-top"><span class="ch-name">{{ e.name }}</span> <span class="ss-pill" data-class="ss-pill-outline: e.state == 'looming'; ss-pill-soft: e.state == 'ongoing'">{{ e.state }}</span></div>
         <p class="ch-line" data-if="e.summary">{{ e.summary }}</p>
         <p class="ch-meta">
           <span data-if="e.place"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ e.place }}</span>
@@ -33,11 +33,11 @@ const TEMPLATE = `
         <details class="ch-edit">
           <summary>Edit</summary>
           <div class="ch-form">
-            <label>Name <input data-draft="ev[e.id].name" data-bind-attr="placeholder: e.name" maxlength="80"></label>
-            <label>What is happening <textarea data-draft="ev[e.id].summary" data-bind-attr="placeholder: e.summary" rows="2" maxlength="300"></textarea></label>
-            <label>State <select data-draft="ev[e.id].state">${STATE_OPTIONS}</select></label>
-            <label>Place <input data-draft="ev[e.id].place" data-bind-attr="placeholder: e.place" maxlength="80"></label>
-            <label>Factions <input data-draft="ev[e.id].factions" data-bind-attr="placeholder: e.factionsText" maxlength="300"></label>
+            <label>Name <input class="ss-input ss-text" data-draft="ev[e.id].name" data-bind-attr="placeholder: e.name" maxlength="80"></label>
+            <label>What is happening <textarea class="ss-input ss-text" data-draft="ev[e.id].summary" data-bind-attr="placeholder: e.summary" rows="2" maxlength="300"></textarea></label>
+            <label>State <select class="ss-input ss-select" data-draft="ev[e.id].state">${STATE_OPTIONS}</select></label>
+            <label>Place <input class="ss-input ss-text" data-draft="ev[e.id].place" data-bind-attr="placeholder: e.place" maxlength="80"></label>
+            <label>Factions <input class="ss-input ss-text" data-draft="ev[e.id].factions" data-bind-attr="placeholder: e.factionsText" maxlength="300"></label>
             <p class="ch-hint">Empty fields stay as they are; write none to clear a place or the factions.</p>
           </div>
           <div class="ch-actions">
@@ -52,7 +52,7 @@ const TEMPLATE = `
   </section>
 
   <details class="ch-resolved" data-if="q.board.hasResolved">
-    <summary class="ch-h">Resolved <small>{{ q.board.resolvedCount }}</small></summary>
+    <summary class="ss-label ch-h">Resolved <small>{{ q.board.resolvedCount }}</small></summary>
     <ul class="ch-list ch-done-list">
       <li class="ch-done" data-each="q.board.resolved as r" data-event="{{ r.id }}">
         <span class="ch-name">{{ r.name }}</span><small data-if="r.summary"> — {{ r.summary }}</small><small class="ch-when" data-if="r.updatedText"> ({{ r.updatedText }})</small>
@@ -65,7 +65,7 @@ const TEMPLATE = `
   </details>
 
   <section class="ch-factions" aria-label="Factions">
-    <h4 class="ch-h">Factions <small data-if="q.board.hasFactions">{{ q.board.factionCount }}</small></h4>
+    <h4 class="ss-label ch-h">Factions <small data-if="q.board.hasFactions">{{ q.board.factionCount }}</small></h4>
     <p class="ch-empty" data-if="!q.board.hasFactions">No factions recorded yet.</p>
     <ul class="ch-list" data-if="q.board.hasFactions">
       <li class="ss-glass ch-card ch-faction" data-each="q.board.factions as f" data-faction="{{ f.id }}">
@@ -78,10 +78,10 @@ const TEMPLATE = `
         <details class="ch-edit">
           <summary>Edit</summary>
           <div class="ch-form">
-            <label>Name <input data-draft="fa[f.id].name" data-bind-attr="placeholder: f.name" maxlength="80"></label>
-            <label>Who they are <textarea data-draft="fa[f.id].summary" data-bind-attr="placeholder: f.summary" rows="2" maxlength="300"></textarea></label>
-            <label>Area <input data-draft="fa[f.id].area" data-bind-attr="placeholder: f.area" maxlength="80"></label>
-            <label>Stance <input data-draft="fa[f.id].stance" data-bind-attr="placeholder: f.stance" maxlength="80"></label>
+            <label>Name <input class="ss-input ss-text" data-draft="fa[f.id].name" data-bind-attr="placeholder: f.name" maxlength="80"></label>
+            <label>Who they are <textarea class="ss-input ss-text" data-draft="fa[f.id].summary" data-bind-attr="placeholder: f.summary" rows="2" maxlength="300"></textarea></label>
+            <label>Area <input class="ss-input ss-text" data-draft="fa[f.id].area" data-bind-attr="placeholder: f.area" maxlength="80"></label>
+            <label>Stance <input class="ss-input ss-text" data-draft="fa[f.id].stance" data-bind-attr="placeholder: f.stance" maxlength="80"></label>
             <p class="ch-hint">Empty fields stay as they are; write none to clear an area or a stance.</p>
           </div>
           <div class="ch-actions">
@@ -109,23 +109,25 @@ const CSS = `
   font-family: var(--ss-font);
 }
 .ch { display: grid; gap: 14px; padding: 4px 0; }
-.ch-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; font-size: 1em; }
-.ch-h small { opacity: 0.65; font-weight: normal; }
+.ch-h { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; white-space: nowrap; }
+.ch-h::after { content: ""; flex: 1 1 0; min-width: 0; height: 1px; background: var(--ss-rule, var(--ss-border)); }
+.ch-h small { font-weight: normal; color: var(--ss-text); }
 .ch-list { display: grid; gap: var(--ch-gap); margin: 0; padding: 0; list-style: none; }
 .ch-card { display: grid; gap: 4px; min-width: 0; }
 .ch-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
-.ch-name { font-weight: bold; color: var(--ch-accent); overflow-wrap: anywhere; }
+.ch-name { font-weight: bold; color: var(--ss-text); overflow-wrap: anywhere; }
+.ch-meta, .ch-meta > * { overflow-wrap: anywhere; }
+.ch-top .ss-pill { white-space: normal; overflow-wrap: anywhere; }
 .ch-line { margin: 0; overflow-wrap: anywhere; }
 .ch-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 0.85em; opacity: 0.8; }
 .ch-meta:not(:has(*)) { display: none; }
 .ch-meta i { color: var(--ch-accent); margin-right: 2px; }
-.ch-event[data-state="looming"] .ss-pill { border-color: var(--ch-warn); }
-.ch-event[data-state="ongoing"] .ss-pill { border-color: var(--ch-accent); }
+.ch-event[data-state="looming"] .ss-pill-outline { border-color: var(--ss-warn); }
 .ch-edit > summary { cursor: pointer; font-size: 0.85em; opacity: 0.8; min-height: 28px; padding: 4px 0; }
 .ch-form { display: grid; gap: 6px; margin: 4px 0; }
 .ch-form label { display: grid; gap: 2px; font-size: 0.85em; }
 .ch-form input, .ch-form textarea, .ch-form select { width: 100%; box-sizing: border-box; min-height: 36px; }
-.ch-hint { margin: 0; font-size: 0.8em; opacity: 0.65; }
+.ch-hint { margin: 0; font-size: 0.8em; color: var(--ss-muted); }
 .ch-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .ch-btn { min-height: 44px; min-width: 44px; margin: 0; padding: 6px 14px; flex: 1 1 auto; cursor: pointer; }
 .ch-btn:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--ss-text) 8%, transparent); }
