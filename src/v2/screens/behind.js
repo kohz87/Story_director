@@ -66,7 +66,7 @@ function render(el, props, _api, reveal) {
         for (const [kind, title] of BEHIND_KINDS) {
             const group = (data.kinds ?? []).find(entry => entry.kind === kind);
             if (!group) continue;
-            const section = make('section', 'sd-kind', undefined, { 'data-kind': kind });
+            const section = make('section', 'sd-kind ss-glass', undefined, { 'data-kind': kind });
             const head = make('h4', 'sd-h', title);
             if (group.open.length) head.append(' ', make('small', '', String(group.open.length)));
             const list = make('ul', 'sd-list sd-threads');
@@ -84,7 +84,7 @@ function render(el, props, _api, reveal) {
             parts.push(section);
         }
         if (data.problems?.length) {
-            const section = make('section', 'sd-kind sd-problems-box', undefined, { 'data-kind': 'behind-problems' });
+            const section = make('section', 'sd-kind ss-glass sd-problems-box', undefined, { 'data-kind': 'behind-problems' });
             section.append(make('h4', 'sd-h', 'Problems behind the scenes'));
             const list = make('ol', 'sd-list sd-problems');
             for (const problem of data.problems) {

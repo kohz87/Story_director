@@ -25,7 +25,7 @@ const edits = new Map();
 function render(el, props, api, controller) {
     const doc = el.ownerDocument ?? globalThis.document;
     const make = maker(doc);
-    const root = make('section', 'sd-kind sd-arc', undefined, { 'data-kind': 'arc', 'aria-label': 'Arc' });
+    const root = make('section', 'sd-kind sd-arc ss-glass', undefined, { 'data-kind': 'arc', 'aria-label': 'Arc' });
     el.replaceChildren(root);
     let value = props?.value ?? null;
 
@@ -55,7 +55,7 @@ function render(el, props, api, controller) {
             const why = REASON_TEXT[draft.reason] ?? '';
             parts.push(make('p', 'sd-arc-desc', `New plan${why ? ` (planned because ${why})` : ''}: edit it if you like, then accept.`));
             if (draft.noteUsed) parts.push(make('p', 'sd-arc-note', 'Your Director\'s note shaped this plan; once it is accepted the note is not used again until you change it.'));
-            const area = make('textarea', 'text_pole sd-arc-text', undefined, { rows: '9', spellcheck: 'false', 'aria-label': 'New arc plan' });
+            const area = make('textarea', 'ss-input ss-text sd-arc-text', undefined, { rows: '9', spellcheck: 'false', 'aria-label': 'New arc plan' });
             const key = draft.text;
             area.value = edits.has(key) ? edits.get(key) : draft.text;
             area.addEventListener('input', () => edits.set(key, area.value));

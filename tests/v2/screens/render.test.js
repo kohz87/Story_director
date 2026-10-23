@@ -164,7 +164,7 @@ test('director: threads by kind, open first and closed folded, secrets by name, 
     // The arc panel, what the reader may see, then behind the scenes (revealed here), then the problems.
     assert.deepEqual(kinds, ['arc', 'quest', 'event', 'agenda', 'clock', 'secret', 'problems']);
     const quests = el.querySelector('section[data-kind="quest"]');
-    const open = quests.querySelectorAll(':scope > ul > li').map(node => squash(node.querySelector('.sd-key').textContent));
+    const open = quests.querySelectorAll(':scope > ul > li').map(node => squash(node.querySelector('.ss-listcard-title').textContent));
     assert.deepEqual(open, ['East Bluff Wolves', 'Tanner Pelts', 'Granary Rats']);
     assert.match(squash(quests.querySelector('[data-thread="th_rats0001"]').textContent), /offered/);
     const closedBox = quests.querySelector('details.sd-closed');

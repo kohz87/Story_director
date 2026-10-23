@@ -8,6 +8,10 @@
 // problems from `director.problems` (their `{{user}}` written out; one about an offer or a missing goal
 // only while that is still so). An older chat's offer, which the Quests tab no longer shows, is tagged
 // "offered" here.
+//
+// Each kind is a list card (Story Block's `ss-listcard`, view/glass.css) drawn from the template: a row
+// holds the key, what the story last said of it, its tags (offered, ready, the outcome) as pills, and the
+// fields on a meta line.
 
 import { BASE_CSS } from './style.js';
 import { BEHIND } from './reveal.js';
@@ -25,26 +29,34 @@ export const KIND_GROUPS = Object.freeze([
 /** The kinds the template itself draws: what the reader may see (the rest is behind the scenes, behind.js). */
 export const OPEN_KIND_GROUPS = Object.freeze(KIND_GROUPS.filter(([kind]) => !BEHIND.has(kind)));
 
-// What a thread line shows: its key, then what the story last said of it. Secrets: the name only.
+// What a thread row shows: its key, then what the story last said of it. Secrets: the name only.
 function threadItem(list, kind) {
     if (kind === 'secret') {
-        return `<li class="sd-thread" data-each="${list} as t" data-thread="{{ t.id }}"><span class="sd-key">{{ t.key }}</span></li>`;
+        return `<li class="ss-listcard-row sd-thread" data-each="${list} as t" data-thread="{{ t.id }}">
+          <div class="ss-listcard-item"><span class="ss-listcard-main"><span class="ss-listcard-title">{{ t.key }}</span></span></div>
+        </li>`;
     }
-    return `<li class="sd-thread" data-each="${list} as t" data-thread="{{ t.id }}">
-          <span class="sd-key">{{ t.key }}</span>
-          <span class="ss-pill" data-if="t.offer">offered</span>
-          <span class="ss-pill sd-ready" data-if="t.ready">ready</span>
-          <span class="ss-pill sd-outcome" data-if="t.ended">{{ t.ended.outcome }}</span>
-          <p class="sd-line" data-if="t.summary">{{ t.summary }}</p>
-          <p class="sd-meta">
-            <span data-if="t.fields.step">Now: {{ t.fields.step }}</span>
-            <span data-if="t.fields.now">At: {{ t.fields.now }}</span>
-            <span data-if="t.fields.then">Next: {{ t.fields.then }}</span>
-            <span data-if="t.fields.giver">From {{ t.fields.giver }}</span>
-            <span data-if="t.fields.due">Due {{ t.fields.due }}</span>
-            <span data-if="t.fields.on">On {{ t.fields.on }}</span>
-            <span data-if="t.fields.arrive">Arrives {{ t.fields.arrive }}</span>
-          </p>
+    return `<li class="ss-listcard-row sd-thread" data-each="${list} as t" data-thread="{{ t.id }}">
+          <div class="ss-listcard-item">
+            <span class="ss-listcard-main">
+              <span class="ss-listcard-title">{{ t.key }}</span>
+              <span class="ss-listcard-sub" data-if="t.summary">{{ t.summary }}</span>
+              <span class="sd-meta">
+                <span data-if="t.fields.step">Now: {{ t.fields.step }}</span>
+                <span data-if="t.fields.now">At: {{ t.fields.now }}</span>
+                <span data-if="t.fields.then">Next: {{ t.fields.then }}</span>
+                <span data-if="t.fields.giver">From {{ t.fields.giver }}</span>
+                <span data-if="t.fields.due">Due {{ t.fields.due }}</span>
+                <span data-if="t.fields.on">On {{ t.fields.on }}</span>
+                <span data-if="t.fields.arrive">Arrives {{ t.fields.arrive }}</span>
+              </span>
+            </span>
+            <span class="sd-tags">
+              <span class="ss-pill ss-pill-soft" data-if="t.offer">offered</span>
+              <span class="ss-pill ss-pill-soft sd-ready" data-if="t.ready">ready</span>
+              <span class="ss-pill sd-outcome" data-if="t.ended">{{ t.ended.outcome }}</span>
+            </span>
+          </div>
         </li>`;
 }
 
@@ -53,14 +65,14 @@ function section(kind, title) {
     const open = `q.${kind}_open`;
     const closed = `q.${kind}_closed`;
     return `
-  <section class="sd-kind" data-kind="${kind}" data-if="len(${every})">
-    <h4 class="sd-h">${title} <small data-if="len(${open})">{{ len(${open}) }}</small></h4>
-    <ul class="sd-list sd-threads">
+  <section class="sd-kind ss-listcard ss-glass" data-kind="${kind}" data-if="len(${every})">
+    <h4 class="ss-label ss-listcard-head sd-h">${title} <small data-if="len(${open})">{{ len(${open}) }}</small></h4>
+    <ul class="ss-listcard-rows sd-threads">
         ${threadItem(open, kind)}
     </ul>
     <details class="sd-closed" data-if="len(${closed})">
       <summary>Closed <small>{{ len(${closed}) }}</small></summary>
-      <ul class="sd-list sd-threads">
+      <ul class="ss-listcard-rows sd-threads">
         ${threadItem(closed, kind)}
       </ul>
     </details>
@@ -77,11 +89,14 @@ const TEMPLATE = `
   <p class="sd-empty" data-if="!len(q.all)">Nothing tracked yet.</p>
 ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
   <ss-widget class="sd-wide" name="${BEHIND_WIDGET}" data-props='{"bind":"q.behind"}' data-if="q.behind.total"></ss-widget>
-  <section class="sd-kind sd-problems-box" data-kind="problems" data-if="len(q.problems)">
-    <h4 class="sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
-    <ol class="sd-list sd-problems">
-      <li class="sd-problem" data-each="q.problems as p" data-kind="{{ p.kind }}">
-        <span class="ss-pill">{{ p.kind }}</span> {{ p.text }}
+  <section class="sd-kind ss-listcard ss-glass sd-problems-box" data-kind="problems" data-if="len(q.problems)">
+    <h4 class="ss-label ss-listcard-head sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
+    <ol class="ss-listcard-rows sd-problems">
+      <li class="ss-listcard-row sd-problem" data-each="q.problems as p" data-kind="{{ p.kind }}">
+        <div class="ss-listcard-item">
+          <span class="ss-listcard-main"><span class="ss-listcard-title">{{ p.text }}</span></span>
+          <span class="ss-pill">{{ p.kind }}</span>
+        </div>
       </li>
     </ol>
   </section>
@@ -89,38 +104,40 @@ ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
 `;
 
 const CSS = `${BASE_CSS}
-.sd-director { display: grid; gap: 14px; padding: 4px 0; }
-.sd-clock { margin: 0; font-size: 0.9em; overflow-wrap: anywhere; }
+.sd-director { display: grid; gap: 14px; padding: 4px 0; min-width: 0; }
+.sd-clock { margin: 0; font-size: 0.9em; overflow-wrap: anywhere; color: var(--sd-text); }
 .sd-clock i { color: var(--sd-accent); margin-right: 2px; }
-.sd-threads { gap: 6px; }
-.sd-thread { padding: 6px 10px; border-left: 3px solid var(--sd-accent); border-radius: 4px;
-  background: var(--sd-surface); overflow-wrap: anywhere; }
-.sd-thread .ss-pill { margin-left: 4px; }
-.sd-closed > summary { cursor: pointer; padding: 6px 0; opacity: 0.75; }
-.sd-closed .sd-thread { border-left-color: var(--sd-border); opacity: 0.75; }
-.sd-kind[data-kind="clock"] .sd-thread { border-left-color: var(--sd-warn); }
-.sd-kind[data-kind="secret"] .sd-thread { border-left-style: dashed; }
+.sd-kind { min-width: 0; }
+.sd-threads { gap: 0; }
+.sd-thread .ss-listcard-title, .sd-thread .ss-listcard-sub { overflow-wrap: anywhere; }
+.sd-thread .sd-meta { margin-top: 2px; }
+.sd-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 42%; min-width: 0; }
+.sd-tags .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.sd-outcome { text-transform: lowercase; }
+.sd-ready { --ss-ring: var(--sd-good); }
+.sd-closed { padding: 2px 0; }
+.sd-closed > summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; gap: 6px; color: var(--sd-muted); }
+.sd-closed .sd-thread { opacity: 0.8; }
 /* Problems are stored oldest first; the newest is shown on top. */
-.sd-problems { display: flex; flex-direction: column-reverse; max-height: 18em; overflow-y: auto; gap: 4px; }
-.sd-problem { padding: 4px 0; border-bottom: 1px solid var(--sd-border); font-size: 0.9em; overflow-wrap: anywhere; }
+.sd-problems { display: flex; flex-direction: column-reverse; max-height: 18em; overflow-y: auto; }
+.sd-problem .ss-listcard-title { font-weight: 400; font-size: 0.9em; }
 /* The arc panel and behind the scenes (widgets drawn into this screen, so this sheet styles them too). */
-.sd-arc { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--sd-border); border-radius: var(--sd-radius);
-  background: var(--sd-surface); min-width: 0; }
+.sd-arc { display: grid; gap: 8px; min-width: 0; }
 .sd-arc .sd-h { margin: 0; }
 .sd-arc-desc, .sd-arc-head, .sd-arc-note, .sd-arc-needs { margin: 0; overflow-wrap: anywhere; }
-.sd-arc-note, .sd-arc-needs, .sd-arc-none { font-size: 0.9em; opacity: 0.85; }
-.sd-arc-text { width: 100%; min-height: 9em; font-family: inherit; font-size: 0.9em; resize: vertical; box-sizing: border-box; }
-.sd-arc-findings { gap: 2px; font-size: 0.85em; opacity: 0.85; }
+.sd-arc-note, .sd-arc-needs, .sd-arc-none { font-size: 0.9em; color: var(--sd-muted); }
+.sd-arc-text { width: 100%; min-height: 9em; font: inherit; font-size: 0.9em; resize: vertical; box-sizing: border-box; }
+.sd-arc-findings { gap: 2px; font-size: 0.85em; color: var(--sd-muted); }
 .sd-arc-finding.sd-warn { color: var(--sd-warn); }
-/* Buttons keep their icon and label on one line (SillyTavern's menu_button is a flex box, which drops the space). */
+/* Buttons keep their icon and label on one line (the block's button is a flex box with a gap). */
 .sd-arc .sd-btn, .sd-behind .sd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .sd-behind { display: grid; gap: 14px; min-width: 0; }
-.sd-lock { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 10px;
-  border: 1px dashed var(--sd-border); border-radius: var(--sd-radius); }
+.sd-lock { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 10px 12px;
+  border: 1px dashed var(--sd-border); border-radius: var(--ss-radius-l); min-width: 0; }
 .sd-lock-icon { margin-top: 3px; color: var(--sd-accent); }
 .sd-lock-text { display: grid; gap: 2px; min-width: 0; }
 .sd-lock .sd-actions { grid-column: 1 / -1; }
-.sd-unlocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.9em; opacity: 0.85; }
+.sd-unlocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.9em; color: var(--sd-muted); }
 .sd-unlocked .sd-btn { flex: 0 0 auto; }
 @media (min-width: 720px) {
   .sd-director { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
