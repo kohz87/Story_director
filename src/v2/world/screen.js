@@ -25,6 +25,16 @@ import { PEOPLE_WIDGET } from './people.js';
 export const WORLD_ID = 'story-director/world';
 export const DAYS_ID = 'story-director/days';
 
+// The one place a World section label is drawn: its words, an optional count (shown when `when` holds), and
+// the rule after it. The separator is `.wv-label::after` in CSS (a 1px hairline in the border token), so
+// changing how labels are set off is a change to that one rule. `card: true` heads a list card.
+const label = (text, { level = 'h4', count = '', when = '', show = '', card = false } = {}) => {
+    const tag = level === 'h5' ? 'h5' : 'h4';
+    const shown = count ? ` <small${when ? ` data-if="${when}"` : ''}>${count}</small>` : '';
+    const classes = ['ss-label', 'wv-label', tag === 'h4' ? 'sd-h' : 'wv-h', card ? 'ss-listcard-head' : ''].filter(Boolean).join(' ');
+    return `<${tag} class="${classes}"${show ? ` data-if="${show}"` : ''}>${text}${shown}</${tag}>`;
+};
+
 const JOURNAL = `
   <p class="sd-empty" data-if="!q.journal.on">The day digest is off (Features), so the Journal has nothing to show.</p>
   <p class="sd-empty" data-if="q.journal.on && !q.journal.hasDays">No story day is written yet. What each day held is kept here as the story's clock moves on.</p>
@@ -42,19 +52,19 @@ const JOURNAL = `
             <li data-each="d.facts as f">{{ f }}</li>
           </ul>
           <section class="wv-part" data-if="d.hasMet">
-            <h5 class="wv-h">Met</h5>
+            ${label('Met', { level: 'h5' })}
             <ul><li data-each="d.met as m">{{ m }}</li></ul>
           </section>
           <section class="wv-part" data-if="d.hasWorld">
-            <h5 class="wv-h">News</h5>
+            ${label('News', { level: 'h5' })}
             <ul><li data-each="d.world as w">{{ w }}</li></ul>
           </section>
           <section class="wv-part" data-if="d.hasNpcs">
-            <h5 class="wv-h">People</h5>
+            ${label('People', { level: 'h5' })}
             <ul><li data-each="d.npcs as n">{{ n }}</li></ul>
           </section>
           <section class="wv-part" data-if="d.hasHappened">
-            <h5 class="wv-h">What happened</h5>
+            ${label('What happened', { level: 'h5' })}
             <ul><li data-each="d.happened as h">{{ h }}</li></ul>
             <p class="wv-note" data-if="d.more">…and {{ d.more }} more.</p>
           </section>
@@ -65,7 +75,8 @@ const JOURNAL = `
 
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
-    <h4 class="ss-label sd-h">Here</h4>
+    ${label('Here')}
+    ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
     <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
     <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
@@ -73,7 +84,7 @@ const NOW = `
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
   </section>
   <section class="sd-kind wv-upcoming ss-listcard ss-glass" data-kind="upcoming" aria-label="Upcoming">
-    <h4 class="ss-label ss-listcard-head sd-h">Upcoming <small>next {{ q.world.upcomingDays }} days</small></h4>
+    ${label('Upcoming', { card: true, count: 'next {{ q.world.upcomingDays }} days' })}
     <p class="ss-listcard-empty" data-if="!q.world.clockSet">The story's clock is not set, so nothing has a date yet.</p>
     <p class="ss-listcard-empty" data-if="q.world.clockSet && !q.world.hasUpcoming">Nothing you know of is coming up.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasUpcoming">
@@ -90,7 +101,7 @@ const NOW = `
     </ul>
   </section>
   <section class="sd-kind wv-news ss-listcard ss-glass" data-kind="news" aria-label="News and events">
-    <h4 class="ss-label ss-listcard-head sd-h">News and events <small data-if="q.world.hasNews">{{ q.world.newsCount }}</small></h4>
+    ${label('News and events', { card: true, count: '{{ q.world.newsCount }}', when: 'q.world.hasNews' })}
     <p class="ss-listcard-empty" data-if="!q.world.hasNews">No news yet.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasNews">
       <li class="ss-listcard-row wv-item" data-each="q.world.news as n" data-kind="{{ n.kind }}" data-state="{{ n.state }}">
@@ -106,7 +117,7 @@ const NOW = `
     </ul>
   </section>
   <section class="sd-kind wv-factions ss-listcard ss-glass" data-kind="factions" aria-label="Factions">
-    <h4 class="ss-label ss-listcard-head sd-h">Factions <small data-if="q.world.hasFactions">{{ q.world.factionCount }}</small></h4>
+    ${label('Factions', { card: true, count: '{{ q.world.factionCount }}', when: 'q.world.hasFactions' })}
     <p class="ss-listcard-empty" data-if="!q.world.hasFactions">No factions known yet.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasFactions">
       <li class="ss-listcard-row wv-item" data-each="q.world.factions as f">
@@ -151,7 +162,11 @@ const CSS = `${BASE_CSS}
 .wv-when i { color: var(--sd-accent); }
 .wv-now { display: grid; gap: 14px; min-width: 0; }
 .wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; }
-.wv-here > .sd-h { margin: 0; }
+.wv-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; min-width: 0; }
+.wv-label::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--sd-border); }
+.wv-label small { color: var(--sd-muted); font-weight: normal; }
+.wv-h.wv-label { margin: 4px 0 2px; font-size: 0.9em; color: var(--sd-muted); }
+.wv-label.ss-listcard-head { margin-bottom: 2px; padding: 0 6px; }
 .wv-place { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
 .wv-place i, .wv-weather i { color: var(--sd-accent); }
 .wv-place .sd-key { font-size: 1.15em; font-weight: 800; }
@@ -193,7 +208,6 @@ const CSS = `${BASE_CSS}
 .wv-body { display: grid; gap: 6px; padding: 0 14px 12px; overflow-wrap: anywhere; }
 .wv-body ul { margin: 0; padding-left: 1.2em; }
 .wv-facts { list-style: none; padding-left: 0 !important; }
-.wv-h { margin: 4px 0 2px; font-size: 0.9em; color: var(--sd-muted); }
 .wv-note { margin: 0; font-size: 0.85em; color: var(--sd-muted); }
 @media (min-width: 720px) {
   .wv-now { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
