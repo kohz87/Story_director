@@ -15,7 +15,7 @@ import { BASE_CSS } from './style.js';
 export const STATUS_CARD_ID = 'story-director/status-card';
 
 const TEMPLATE = `
-<dl class="sd-status">
+<dl class="sd-status ss-glass">
   <div class="sd-row sd-time" data-if="q.time.text" data-class="sd-new: changed('state.director.time')">
     <dt><i class="fa-solid fa-clock" aria-hidden="true"></i> Time</dt>
     <dd>{{ q.time.text }}</dd>
@@ -35,27 +35,26 @@ const TEMPLATE = `
   </div>
   <div class="sd-row sd-progress" data-if="q.progress.need" data-class="sd-met: q.progress.met">
     <dt><i class="fa-solid fa-list-check" aria-hidden="true"></i> Progress</dt>
-    <dd><ss-widget name="ss.meter" data-props='{"value":{{ q.progress.have }},"max":{{ q.progress.need }},"label":"{{ q.progress.label }}","text":"{{ q.progress.have }} of {{ q.progress.need }}","showValue":false,"tone":"accent"}'></ss-widget></dd>
+    <dd><ss-widget name="ss.bar" data-props='{"value":{{ q.progress.have }},"max":{{ q.progress.need }},"label":"{{ q.progress.label }}","text":"{{ q.progress.have }} of {{ q.progress.need }}"}'></ss-widget></dd>
   </div>
 </dl>
 `;
 
 const CSS = `${BASE_CSS}
-.sd-status { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 0;
-  padding: 8px 10px; border-left: 3px solid var(--sd-accent); border-radius: 6px; background: var(--sd-surface);
-  font-size: 0.9em; line-height: 1.5; }
+.sd-status { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; min-width: 0;
+  padding: 10px 12px; font-size: 0.9em; line-height: 1.45; }
 .sd-row { display: contents; }
-.sd-row > dt { margin: 0; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.65; white-space: nowrap; align-self: baseline; }
-.sd-row > dt i { width: 1.1em; text-align: center; }
+.sd-row > dt { margin: 0; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sd-muted); white-space: nowrap; align-self: baseline; }
+.sd-row > dt i { width: 1.1em; text-align: center; color: var(--sd-accent); }
 .sd-row > dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.sd-row > dd small { opacity: 0.75; }
+.sd-row > dd small { color: var(--sd-muted); }
 .sd-step { display: block; }
 .sd-new > dd { color: var(--sd-accent); }
 .sd-new > dt::after { content: " •"; color: var(--sd-accent); }
 .sd-coords { font-variant-numeric: tabular-nums; }
 .sd-progress > dd { align-self: center; }
-.sd-progress .ss-w-meter-label { font-variant-numeric: tabular-nums; }
-.sd-met .ss-w-meter { --ss-w-tone: var(--sd-good); }
+.sd-progress .ss-bar-label { font-variant-numeric: tabular-nums; }
+.sd-met .ss-bar { --ss-bar-color: var(--sd-good); }
 @media (max-width: 360px) {
   .sd-status { grid-template-columns: minmax(0, 1fr); }
   .sd-row > dt { margin-top: 4px; }

@@ -80,7 +80,7 @@ test('the controls: search, zoom in and out, fit, centre on me, layers, a focusa
     const children = stage.children.map(child => child.className);
     assert.deepEqual(children, ['sd-map-svg', 'sd-map-places', 'sd-map-labels', 'sd-map-here']);
     assert.equal($('.sd-map-here').hidden, false);
-    assert.equal(root.querySelector('.sd-map-legend').hidden, false);
+    assert.equal(root.querySelector('.sd-map-legend-card').hidden, false);
 });
 
 test('item 1: unvisited places are drawn, marked and small; their names come as the map comes closer, or on hover and focus', () => {

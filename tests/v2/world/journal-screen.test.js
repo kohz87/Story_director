@@ -113,3 +113,11 @@ test('no day yet: one plain sentence, no search box', () => {
     assert.match(squash(el.textContent), /^Now Journal No story day is written yet\./);
     assert.equal(el.querySelectorAll('input[type="search"]').length, 0);
 });
+
+test('every World section label is drawn by the one label helper (.wv-label, where the separator is set)', () => {
+    for (const screen of [worldScreen, daysScreen]) {
+        const headings = [...screen.template.matchAll(/<h[45]\b[^>]*>/g)].map(match => match[0]);
+        assert.ok(headings.length > 0, `${screen.id} has section labels`);
+        for (const heading of headings) assert.match(heading, /\bwv-label\b/, `${screen.id}: ${heading}`);
+    }
+});

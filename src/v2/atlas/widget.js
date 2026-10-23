@@ -45,31 +45,39 @@ export const forgetViews = () => views.clear();
 // enough for a screen's scoped CSS to restyle. The colour tokens sit in :where() (no specificity).
 const CSS = `
 :where(.sd-map) {
-  --sd-map-fg: var(--ss-w-fg, var(--SmartThemeBodyColor, #dcdcd2));
-  --sd-map-muted: color-mix(in srgb, var(--sd-map-fg) 60%, transparent);
-  --sd-map-bg: var(--ss-w-map-bg, color-mix(in srgb, var(--SmartThemeBlurTintColor, #171717) 85%, transparent));
-  --sd-map-raised: color-mix(in srgb, var(--sd-map-fg) 8%, transparent);
-  --sd-map-border: var(--ss-w-border, var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.2)));
-  --sd-map-accent: var(--ss-w-accent, var(--ss-accent, var(--SmartThemeQuoteColor, #e18a24)));
+  --sd-map-fg: var(--ss-w-fg, var(--ss-text));
+  --sd-map-muted: var(--ss-w-muted, color-mix(in srgb, var(--sd-map-fg) 85%, transparent));
+  --sd-map-bg: var(--ss-w-map-bg, var(--ss-field));
+  --sd-map-raised: var(--ss-w-raised, color-mix(in srgb, var(--sd-map-fg) 8%, transparent));
+  --sd-map-border: var(--ss-w-border, var(--ss-border));
+  --sd-map-accent: var(--ss-w-accent, var(--ss-accent));
   --sd-map-route: var(--ss-w-map-route, color-mix(in srgb, var(--sd-map-fg) 45%, transparent));
-  display: flex; flex-direction: column; gap: 0.4em; color: var(--sd-map-fg); min-width: 0; max-width: 100%;
+  --sd-map-overlay: var(--ss-overlay);
+  --sd-map-strong: var(--ss-glass-strong);
+  display: flex; flex-direction: column; gap: 0.6em; color: var(--sd-map-fg); min-width: 0; max-width: 100%;
+  font-family: var(--ss-font);
 }
 :where(.sd-map *, .sd-map *::before, .sd-map *::after) { box-sizing: border-box; }
 :where(.sd-map [hidden]) { display: none !important; }
 :where(.sd-map button) { font: inherit; color: inherit; cursor: pointer; }
 :where(.sd-map :focus-visible) { outline: 2px solid var(--sd-map-accent); outline-offset: 2px; }
+.sd-map.ss-glass { gap: 0.6em; padding: 12px; color: var(--sd-map-fg); border-color: var(--sd-map-border); }
+.sd-map .sd-map-search input::placeholder { color: var(--sd-map-muted); opacity: 1; }
 .sd-map .sd-map-bar { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: flex-start; }
 .sd-map .sd-map-search { position: relative; flex: 1 1 14em; min-width: 0; }
-.sd-map .sd-map-search input { width: 100%; padding: 0.3em 0.6em; border: 1px solid var(--sd-map-border); border-radius: 6px; background: var(--sd-map-raised); color: inherit; font: inherit; }
-.sd-map .sd-map-results { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 2px); margin: 0; padding: 0.2em; list-style: none; border: 1px solid var(--sd-map-border); border-radius: 6px; background: var(--SmartThemeBlurTintColor, #1b1b1b); max-height: 16em; overflow-y: auto; }
-.sd-map .sd-map-result { display: flex; flex-direction: column; width: 100%; gap: 0; align-items: flex-start; padding: 0.3em 0.5em; border: 0; border-radius: 4px; background: none; text-align: left; }
+.sd-map .sd-map-search input { width: 100%; min-height: 40px; padding: 0.3em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: inherit; font: inherit; }
+.sd-map .sd-map-results { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 0.3em; list-style: none; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-strong); backdrop-filter: var(--ss-blur); -webkit-backdrop-filter: var(--ss-blur); max-height: 16em; overflow-y: auto; box-shadow: var(--ss-shadow); }
+.sd-map .sd-map-result { display: flex; flex-direction: column; width: 100%; gap: 0; align-items: flex-start; min-height: 40px; padding: 0.3em 0.6em; border: 0; border-radius: var(--ss-radius-s); background: none; text-align: left; }
 .sd-map .sd-map-result:hover, .sd-map .sd-map-result:focus-visible { background: var(--sd-map-raised); }
-.sd-map .sd-map-result-about { max-width: 100%; color: var(--sd-map-muted); font-size: 0.85em; }
-.sd-map .sd-map-tools, .sd-map .sd-map-layers { display: flex; flex-wrap: wrap; gap: 0.25em; }
-.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 2.2em; min-height: 2em; padding: 0.15em 0.6em; border: 1px solid var(--sd-map-border); border-radius: 6px; background: var(--sd-map-raised); }
-.sd-map .sd-map-layer { font-size: 0.9em; }
-.sd-map .sd-map-layer[aria-pressed="true"] { border-color: var(--sd-map-accent); background: color-mix(in srgb, var(--sd-map-accent) 25%, transparent); }
-.sd-map .sd-map-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; min-height: 14em; overflow: hidden; border: 1px solid var(--sd-map-border); border-radius: 6px; background: var(--sd-map-bg); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.sd-map .sd-map-result-name { overflow-wrap: anywhere; }
+.sd-map .sd-map-result-about { max-width: 100%; color: var(--sd-map-muted); font-size: 0.85em; overflow-wrap: anywhere; }
+.sd-map .sd-map-tools, .sd-map .sd-map-layers { display: flex; flex-wrap: wrap; gap: 0.35em; }
+.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; max-width: min(100%, 12em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
+.sd-map .sd-map-btn:not(:disabled):hover, .sd-map .sd-map-layer:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
+.sd-map .sd-map-btn:not(:disabled):active, .sd-map .sd-map-layer:not(:disabled):active { transform: translateY(1px); }
+.sd-map .sd-map-layer { font-size: 0.9em; font-weight: 600; }
+.sd-map .sd-map-layer[aria-pressed="true"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: inset 0 0 0 1px var(--sd-map-fg); font-weight: 700; }
+.sd-map .sd-map-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; min-height: 14em; overflow: hidden; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-bg); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 @media (max-width: 600px) {
   .sd-map .sd-map-stage { aspect-ratio: 1 / 1; max-height: 60vh; }
   .sd-map .sd-map-layers { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
@@ -80,26 +88,29 @@ const CSS = `
 .sd-map .sd-map-route { stroke: var(--sd-map-route); stroke-width: 2; fill: none; }
 .sd-map .sd-map-route[data-known="false"] { stroke-dasharray: 4 4; opacity: 0.55; stroke-width: 1.5; }
 .sd-map .sd-map-places, .sd-map .sd-map-labels { position: absolute; inset: 0; pointer-events: none; }
-.sd-map .sd-map-place { position: absolute; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; margin: 0; padding: 0; transform: translate(-50%, -50%); border: 2px solid var(--sd-map-border); border-radius: 50%; background: var(--SmartThemeBlurTintColor, #1b1b1b); font-size: 11px; line-height: 1; pointer-events: auto; }
+.sd-map .sd-map-place { position: absolute; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; margin: 0; padding: 0; transform: translate(-50%, -50%); border: 2px solid var(--sd-map-border); border-radius: 50%; background: var(--sd-map-strong); color: var(--sd-map-fg); font-size: 11px; line-height: 1; pointer-events: auto; }
 .sd-map .sd-map-place[data-visited="false"] { width: 18px; height: 18px; font-size: 9px; border-style: dashed; opacity: 0.7; color: var(--sd-map-muted); }
 .sd-map .sd-map-place.sd-map-far { width: 8px; height: 8px; border-width: 1px; border-style: solid; background: var(--sd-map-muted); }
 .sd-map .sd-map-place.sd-map-far i { display: none; }
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
+.sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
-.sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #171717) 80%, transparent); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
+.sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .sd-map .sd-map-label[data-visited="false"] { color: var(--sd-map-muted); font-style: italic; }
 .sd-map .sd-map-label.sd-map-picked { color: var(--sd-map-accent); }
-.sd-map .sd-map-here { position: absolute; z-index: 3; width: 34px; height: 34px; transform: translate(-50%, -50%); border: 3px solid var(--sd-map-accent); border-radius: 50%; box-shadow: 0 0 0 2px color-mix(in srgb, var(--SmartThemeBlurTintColor, #000) 70%, transparent); pointer-events: none; }
+.sd-map .sd-map-here { position: absolute; z-index: 3; width: 34px; height: 34px; transform: translate(-50%, -50%); border: 3px solid var(--sd-map-accent); border-radius: 50%; box-shadow: 0 0 0 2px var(--sd-map-overlay); pointer-events: none; }
 .sd-map .sd-map-empty { margin: 0.4em 0; color: var(--sd-map-muted); font-style: italic; }
-.sd-map .sd-map-details { position: relative; padding: 0.4em 2.8em 0.4em 0.6em; border: 1px solid var(--sd-map-border); border-radius: 6px; }
-.sd-map .sd-map-details h3 { margin: 0 2em 0.1em 0; font-size: 1.05em; }
-.sd-map .sd-map-details p { margin: 0.15em 0; }
+.sd-map .sd-map-details { position: relative; padding: 0.5em 2.8em 0.5em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-raised); }
+.sd-map .sd-map-details h3 { margin: 0 2em 0.1em 0; font-size: 1.05em; overflow-wrap: anywhere; }
+.sd-map .sd-map-details p { margin: 0.15em 0; overflow-wrap: anywhere; }
 .sd-map .sd-map-about, .sd-map .sd-map-none { color: var(--sd-map-muted); }
 .sd-map .sd-map-close { position: absolute; top: 0.3em; right: 0.3em; }
-.sd-map .sd-map-legend { display: flex; flex-wrap: wrap; gap: 0.3em 0.9em; margin: 0; padding: 0; list-style: none; font-size: 0.85em; color: var(--sd-map-muted); }
-.sd-map .sd-map-legend li { display: inline-flex; align-items: center; gap: 0.35em; }
-.sd-map .sd-map-sample { display: inline-grid; place-items: center; width: 1.3em; height: 1.3em; border: 2px solid var(--sd-map-border); border-radius: 50%; font-size: 0.7em; }
-.sd-map .sd-map-sample-known { border-style: dashed; }
+.sd-map .sd-map-legend-card { padding: 10px 12px; gap: 6px; }
+.sd-map .sd-map-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(12em, 1fr)); gap: 0 1em; margin: 0; padding: 0; list-style: none; font-size: 0.9em; }
+.sd-map .sd-map-legend .ss-listcard-item { padding: 6px 4px; min-height: 40px; }
+.sd-map .sd-map-legend .ss-listcard-title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.sd-map .sd-map-sample { display: inline-grid; flex: none; place-items: center; width: 28px; height: 28px; border: 2px solid var(--sd-map-border); border-radius: 50%; font-size: 0.7em; color: var(--sd-map-fg); }
+.sd-map .sd-map-sample-known { border-style: dashed; color: var(--sd-map-muted); }
 .sd-map .sd-map-sample-here { border-color: var(--sd-map-accent); }
 `;
 
@@ -187,7 +198,7 @@ function render(el, props, api) {
     };
 
     // ---- the DOM --------------------------------------------------------------------------------
-    const root = h(doc, 'div', 'sd-map');
+    const root = h(doc, 'div', 'sd-map ss-glass');
     root.setAttribute('role', 'group');
     const bar = h(doc, 'div', 'sd-map-bar');
     const searchBox = h(doc, 'div', 'sd-map-search');
@@ -240,9 +251,12 @@ function render(el, props, api) {
     const details = h(doc, 'section', 'sd-map-details');
     details.setAttribute('aria-live', 'polite');
     details.hidden = true;
-    const legend = h(doc, 'ul', 'sd-map-legend');
+    const legend = h(doc, 'ul', 'sd-map-legend ss-listcard-rows');
     legend.setAttribute('aria-label', 'Legend');
-    root.append(bar, layersBar, stage, empty, details, legend);
+    const legendCard = h(doc, 'section', 'sd-map-legend-card ss-listcard');
+    legendCard.setAttribute('aria-label', 'Legend');
+    legendCard.append(h(doc, 'h4', 'ss-label ss-listcard-head', 'Legend'), legend);
+    root.append(bar, layersBar, stage, empty, details, legendCard);
     el.appendChild(root);
 
     // ---- state ----------------------------------------------------------------------------------
@@ -402,9 +416,14 @@ function render(el, props, api) {
 
     function drawLegend() {
         const entries = [];
+        // A legend row is a list-card row: the sample, then its words.
         const entry = (sample, words) => {
-            const li = h(doc, 'li');
-            li.append(sample, h(doc, 'span', '', words));
+            const li = h(doc, 'li', 'ss-listcard-row');
+            const item = h(doc, 'div', 'ss-listcard-item');
+            const main = h(doc, 'span', 'ss-listcard-main');
+            main.append(h(doc, 'span', 'ss-listcard-title', words));
+            item.append(sample, main);
+            li.append(item);
             entries.push(li);
         };
         const kinds = [];
@@ -417,7 +436,7 @@ function render(el, props, api) {
         if (shown.some(place => !place.visited)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-known'), 'Not visited yet');
         if (shown.some(place => place.id === data.current)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-here'), 'You are here');
         legend.replaceChildren(...entries);
-        legend.hidden = entries.length === 0;
+        legendCard.hidden = entries.length === 0;
     }
 
     // Everything that follows the view: cheap enough for every pointer move.
