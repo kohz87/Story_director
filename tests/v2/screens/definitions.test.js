@@ -101,9 +101,9 @@ test('css stays within §13.3: under 64 KB, no @import, fixed positions or url()
         assert.doesNotMatch(screen.css, /@import|position\s*:\s*fixed|url\(|expression\(|behavior\s*:|-moz-binding/i, screen.id);
         // Selectors are written for the screen root (Story Block prefixes them); none reaches html/body.
         assert.doesNotMatch(screen.css, /(^|[\s,}])(html|body)\b/, screen.id);
-        // Default look: SillyTavern's theme variables (MODULES §F18).
-        assert.match(screen.css, /--SmartThemeBodyColor/, screen.id);
-        assert.match(screen.css, /--SmartThemeQuoteColor/, screen.id);
+        // The look: Story Block's glass tokens (--ss-*, the Look, light or dark), not a palette of the screen's own.
+        assert.match(screen.css, /var\(--ss-(text|muted|accent|border)\)/, screen.id);
+        assert.doesNotMatch(screen.css, /#[0-9a-f]{3,8}\b/i, screen.id);
     }
 });
 

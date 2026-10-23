@@ -43,13 +43,13 @@ function render(el, props, api, controller) {
         const beats = current?.beats?.total ? `${current.beats.done} of ${current.beats.total} beats played` : '';
         if (status.busy) {
             parts.push(make('p', 'sd-arc-desc', 'Planning the next arc… this can take a minute.', { role: 'status' }));
-            parts.push(row(button(make, 'Cancel', 'sd-quiet sd-arc-cancel', 'fa-xmark', () => controller.cancel())));
+            parts.push(row(button(make, 'Cancel', 'ss-button-quiet sd-arc-cancel', 'fa-xmark', () => controller.cancel())));
         } else if (draft && status.hidden) {
             parts.push(make('p', 'sd-arc-desc', 'A new arc plan is waiting.'));
             parts.push(row(
                 button(make, 'Accept without reading', 'sd-arc-accept', 'fa-check', () => void controller.accept(draft.text)),
                 button(make, 'Review', 'sd-arc-review', 'fa-eye', () => controller.reveal?.(true)),
-                button(make, 'Discard', 'sd-quiet sd-arc-discard', 'fa-xmark', () => controller.discard()),
+                button(make, 'Discard', 'ss-button-quiet sd-arc-discard', 'fa-xmark', () => controller.discard()),
             ));
         } else if (draft) {
             const why = REASON_TEXT[draft.reason] ?? '';
@@ -72,11 +72,11 @@ function render(el, props, api, controller) {
                     edits.delete(key);
                     void controller.accept(text);
                 }),
-                button(make, 'Discard', 'sd-quiet sd-arc-discard', 'fa-xmark', () => {
+                button(make, 'Discard', 'ss-button-quiet sd-arc-discard', 'fa-xmark', () => {
                     edits.delete(key);
                     controller.discard();
                 }),
-                button(make, 'Plan again', 'sd-quiet sd-arc-replan', 'fa-rotate', () => {
+                button(make, 'Plan again', 'ss-button-quiet sd-arc-replan', 'fa-rotate', () => {
                     edits.delete(key);
                     void controller.plan({ reason: 'manual' });
                 }),
@@ -85,7 +85,7 @@ function render(el, props, api, controller) {
             // Accepted by itself (arc.autoAccept): a quiet note, naming nothing while behind the scenes is hidden.
             if (status.began && current?.active) {
                 const note = make('p', 'sd-arc-note sd-arc-began', status.hidden ? 'A new arc began by itself (accepted without review).' : 'This arc began by itself (accepted without review).', { role: 'status' });
-                note.append(' ', button(make, 'OK', 'sd-quiet sd-arc-seen', 'fa-check', () => controller.seen?.()));
+                note.append(' ', button(make, 'OK', 'ss-button-quiet sd-arc-seen', 'fa-check', () => controller.seen?.()));
                 parts.push(note);
             }
             if (!current) parts.push(make('p', 'sd-arc-desc sd-arc-none', 'No arc planned yet.'));
@@ -95,12 +95,12 @@ function render(el, props, api, controller) {
                 const head = make('p', 'sd-arc-head');
                 head.append(make('span', 'sd-key', current.key));
                 if (beats) head.append(' ', make('small', 'sd-arc-beats', `· ${beats}`));
-                if (!current.active) head.append(' ', make('span', 'sd-tag sd-outcome', 'ended'));
+                if (!current.active) head.append(' ', make('span', 'ss-pill sd-outcome', 'ended'));
                 parts.push(head);
                 if (current.desc) parts.push(make('p', 'sd-line', current.desc));
             }
             const buttons = [button(make, current?.active ? 'Plan next arc' : 'Plan arc', 'sd-arc-plan', 'fa-wand-magic-sparkles', () => void controller.plan({ reason: 'manual' }))];
-            if (current?.active) buttons.push(button(make, 'End arc', 'sd-quiet sd-arc-end', 'fa-flag-checkered', () => void controller.end()));
+            if (current?.active) buttons.push(button(make, 'End arc', 'ss-button-quiet sd-arc-end', 'fa-flag-checkered', () => void controller.end()));
             parts.push(row(...buttons));
         }
         if (status.error) parts.push(make('p', 'sd-reason sd-arc-error', status.error, { role: 'alert' }));

@@ -32,9 +32,9 @@ function threadItem(list, kind) {
     }
     return `<li class="sd-thread" data-each="${list} as t" data-thread="{{ t.id }}">
           <span class="sd-key">{{ t.key }}</span>
-          <span class="sd-tag" data-if="t.offer">offered</span>
-          <span class="sd-tag sd-ready" data-if="t.ready">ready</span>
-          <span class="sd-tag sd-outcome" data-if="t.ended">{{ t.ended.outcome }}</span>
+          <span class="ss-pill" data-if="t.offer">offered</span>
+          <span class="ss-pill sd-ready" data-if="t.ready">ready</span>
+          <span class="ss-pill sd-outcome" data-if="t.ended">{{ t.ended.outcome }}</span>
           <p class="sd-line" data-if="t.summary">{{ t.summary }}</p>
           <p class="sd-meta">
             <span data-if="t.fields.step">Now: {{ t.fields.step }}</span>
@@ -81,7 +81,7 @@ ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
     <h4 class="sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
     <ol class="sd-list sd-problems">
       <li class="sd-problem" data-each="q.problems as p" data-kind="{{ p.kind }}">
-        <span class="sd-tag">{{ p.kind }}</span> {{ p.text }}
+        <span class="ss-pill">{{ p.kind }}</span> {{ p.text }}
       </li>
     </ol>
   </section>
@@ -95,7 +95,7 @@ const CSS = `${BASE_CSS}
 .sd-threads { gap: 6px; }
 .sd-thread { padding: 6px 10px; border-left: 3px solid var(--sd-accent); border-radius: 4px;
   background: var(--sd-surface); overflow-wrap: anywhere; }
-.sd-thread .sd-tag { margin-left: 4px; }
+.sd-thread .ss-pill { margin-left: 4px; }
 .sd-closed > summary { cursor: pointer; padding: 6px 0; opacity: 0.75; }
 .sd-closed .sd-thread { border-left-color: var(--sd-border); opacity: 0.75; }
 .sd-kind[data-kind="clock"] .sd-thread { border-left-color: var(--sd-warn); }

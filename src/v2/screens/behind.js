@@ -24,7 +24,7 @@ function render(el, props, _api, reveal) {
         const item = make('li', 'sd-thread', undefined, { 'data-thread': thread.id });
         item.append(make('span', 'sd-key', thread.key));
         if (kind === 'secret') return item;
-        if (thread.ended?.outcome) item.append(' ', make('span', 'sd-tag sd-outcome', thread.ended.outcome));
+        if (thread.ended?.outcome) item.append(' ', make('span', 'ss-pill sd-outcome', thread.ended.outcome));
         if (thread.summary) item.append(' ', make('p', 'sd-line', thread.summary));
         const meta = make('p', 'sd-meta');
         for (const [name, label] of META) {
@@ -60,7 +60,7 @@ function render(el, props, _api, reveal) {
         }
         if (guard) {
             const bar = make('div', 'sd-unlocked');
-            bar.append(make('span', 'sd-line', 'Behind the scenes is showing.'), button(make, 'Hide', 'sd-quiet sd-hide', 'fa-eye-slash', () => reveal.set(false)));
+            bar.append(make('span', 'sd-line', 'Behind the scenes is showing.'), button(make, 'Hide', 'ss-button-quiet sd-hide', 'fa-eye-slash', () => reveal.set(false)));
             parts.push(bar);
         }
         for (const [kind, title] of BEHIND_KINDS) {
@@ -89,7 +89,7 @@ function render(el, props, _api, reveal) {
             const list = make('ol', 'sd-list sd-problems');
             for (const problem of data.problems) {
                 const item = make('li', 'sd-problem', undefined, { 'data-kind': problem.kind });
-                item.append(make('span', 'sd-tag', problem.kind), ` ${problem.text}`);
+                item.append(make('span', 'ss-pill', problem.kind), ` ${problem.text}`);
                 list.append(item);
             }
             section.append(' ', list);

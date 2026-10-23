@@ -12,7 +12,7 @@ export const maker = doc => (tag, className = '', text = undefined, attrs = {}) 
 
 /** A button with a Font Awesome icon and its label; `onClick` runs on a click. */
 export function button(make, label, className, icon, onClick) {
-    const node = make('button', `menu_button sd-btn ${className}`.trim(), undefined, { type: 'button' });
+    const node = make('button', `ss-button sd-btn ${className}`.trim(), undefined, { type: 'button' });
     if (icon) node.append(make('i', `fa-solid ${icon}`, undefined, { 'aria-hidden': 'true' }), ' ');
     node.append(make('span', '', label));
     node.addEventListener('click', event => {

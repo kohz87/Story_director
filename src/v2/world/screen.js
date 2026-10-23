@@ -35,7 +35,7 @@ const JOURNAL = `
   <ol class="wv-days" data-if="q.journal.hasDays" aria-label="Story days, newest first">
     <li class="wv-day" data-each="q.journal.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
       <details class="wv-fold">
-        <summary class="wv-head"><span class="wv-date">{{ d.date }}</span> <span class="sd-tag" data-if="d.today">today so far</span> <span class="wv-line">{{ d.short }}</span></summary>
+        <summary class="wv-head"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today so far</span> <span class="wv-line">{{ d.short }}</span></summary>
         <div class="wv-body">
           <p class="wv-note" data-if="d.brief">Only this line is kept for an older day.</p>
           <ul class="wv-facts" data-if="d.hasFacts">
@@ -66,7 +66,7 @@ const JOURNAL = `
 const NOW = `
   <section class="sd-kind wv-here" data-kind="here" aria-label="Here">
     <h4 class="sd-h">Here</h4>
-    <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="sd-tag wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="sd-tag wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
+    <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
     <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
@@ -78,7 +78,7 @@ const NOW = `
     <p class="sd-empty" data-if="q.world.clockSet && !q.world.hasUpcoming">Nothing you know of is coming up.</p>
     <ul class="sd-list wv-list" data-if="q.world.hasUpcoming">
       <li class="wv-item" data-each="q.world.upcoming as u" data-kind="{{ u.kind }}" data-class="wv-overdue: u.overdue">
-        <span class="sd-key">{{ u.name }}</span> <span class="sd-tag">{{ u.label }}</span>
+        <span class="sd-key">{{ u.name }}</span> <span class="ss-pill">{{ u.label }}</span>
         <p class="sd-meta"><span>{{ u.when }}</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></p>
         <p class="sd-line" data-if="u.goal">{{ u.goal }}</p>
       </li>
@@ -89,7 +89,7 @@ const NOW = `
     <p class="sd-empty" data-if="!q.world.hasNews">No news yet.</p>
     <ul class="sd-list wv-list" data-if="q.world.hasNews">
       <li class="wv-item" data-each="q.world.news as n" data-kind="{{ n.kind }}" data-state="{{ n.state }}">
-        <span class="sd-key">{{ n.name }}</span> <span class="sd-tag" data-if="n.state">{{ n.state }}</span>
+        <span class="sd-key">{{ n.name }}</span> <span class="ss-pill" data-if="n.state">{{ n.state }}</span>
         <p class="sd-line" data-if="n.summary">{{ n.summary }}</p>
         <p class="sd-meta"><span data-if="n.place">At {{ n.place }}</span><span data-if="n.factions">{{ n.factions }}</span><span data-if="n.ago">{{ n.ago }}</span></p>
       </li>
@@ -143,7 +143,7 @@ const CSS = `${BASE_CSS}
 .wv-item[data-kind="holiday"] { border-left-color: var(--sd-good); }
 .wv-item.wv-overdue { border-left-color: var(--sd-warn); }
 .wv-item[data-state="resolved"] { opacity: 0.75; border-left-color: var(--sd-border); }
-.wv-item .sd-tag { margin-left: 4px; }
+.wv-item .ss-pill { margin-left: 4px; }
 .wv-place.wv-moved { padding-left: 6px; border-left: 3px solid var(--sd-accent); }
 .wv-kind { text-transform: capitalize; }
 .wv-cast { display: block; min-width: 0; margin: 0 0 6px; }

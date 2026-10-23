@@ -42,7 +42,7 @@ const TEMPLATE = `
           data-class="sd-met: a.ready; sd-ready: a.status.state == 'here'">
         <span class="sd-key">{{ a.key }}</span>
         <p class="sd-line" data-if="a.goal">{{ a.goal }}</p>
-        <p class="sd-line sd-step" data-if="a.note"><span class="sd-tag">Now</span> {{ a.note }}</p>
+        <p class="sd-line sd-step" data-if="a.note"><span class="ss-pill">Now</span> {{ a.note }}</p>
         <p class="sd-meta">
           <span data-if="a.giver">From {{ a.giver }}</span>
           <span data-if="a.reward">Reward: {{ a.reward }}</span>
@@ -60,7 +60,7 @@ const TEMPLATE = `
     <summary class="sd-h">Finished <small>{{ q.board.finishedCount }}</small></summary>
     <ul class="sd-list">
       <li class="sd-done" data-each="q.board.finished as f" data-quest="{{ f.id }}" data-outcome="{{ f.outcome }}">
-        <span class="sd-key">{{ f.key }}</span> <span class="sd-tag">{{ f.outcomeText }}</span>
+        <span class="sd-key">{{ f.key }}</span> <span class="ss-pill">{{ f.outcomeText }}</span>
         <small data-if="f.reason"> — {{ f.reason }}</small>
         <p class="sd-line sd-owed" data-if="f.details.owed">{{ f.details.owed }}</p>${details('f')}
       </li>
@@ -88,13 +88,13 @@ const CSS = `${BASE_CSS}
 .sd-facts dd { margin: 0; overflow-wrap: anywhere; }
 .sd-history { margin: 4px 0 0; padding-left: 1.2em; font-size: 0.85em; opacity: 0.85; }
 .sd-history li { overflow-wrap: anywhere; }
-.sd-step .sd-tag { margin-right: 4px; }
+.sd-step .ss-pill { margin-right: 4px; }
 .sd-finished > summary { cursor: pointer; list-style-position: inside; padding: 8px 0; min-height: 28px; }
 .sd-finished .sd-list { gap: 4px; }
 .sd-done { padding: 4px 0; border-bottom: 1px solid var(--sd-border); overflow-wrap: anywhere; }
 .sd-done .sd-key { color: inherit; font-weight: normal; }
-.sd-done[data-outcome="done"] .sd-tag { border-color: var(--sd-good); }
-.sd-done[data-outcome="failed"] .sd-tag { border-color: var(--sd-warn); }
+.sd-done[data-outcome="done"] .ss-pill { border-color: var(--sd-good); }
+.sd-done[data-outcome="failed"] .ss-pill { border-color: var(--sd-warn); }
 @media (min-width: 720px) {
   .sd-active .sd-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 }
