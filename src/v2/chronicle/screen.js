@@ -21,8 +21,8 @@ const TEMPLATE = `
     <h4 class="ch-h">Events <small data-if="q.board.hasOpen">{{ q.board.openCount }} under way</small></h4>
     <p class="ch-empty" data-if="!q.board.hasOpen">Nothing is under way in the wider world.</p>
     <ul class="ch-list" data-if="q.board.hasOpen">
-      <li class="ch-card ch-event" data-each="q.board.open as e" data-event="{{ e.id }}" data-state="{{ e.state }}">
-        <div class="ch-top"><span class="ch-name">{{ e.name }}</span> <span class="ch-tag">{{ e.state }}</span></div>
+      <li class="ss-glass ch-card ch-event" data-each="q.board.open as e" data-event="{{ e.id }}" data-state="{{ e.state }}">
+        <div class="ch-top"><span class="ch-name">{{ e.name }}</span> <span class="ss-pill">{{ e.state }}</span></div>
         <p class="ch-line" data-if="e.summary">{{ e.summary }}</p>
         <p class="ch-meta">
           <span data-if="e.place"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ e.place }}</span>
@@ -41,10 +41,10 @@ const TEMPLATE = `
             <p class="ch-hint">Empty fields stay as they are; write none to clear a place or the factions.</p>
           </div>
           <div class="ch-actions">
-            <button class="menu_button ch-btn ch-save" data-command="chronicle.edit" title="Save the changes to {{ e.name }}"
+            <button class="ss-button ch-btn ch-save" data-command="chronicle.edit" title="Save the changes to {{ e.name }}"
                     data-payload='{"id":"{{ e.id }}","name":"{{ draft.ev[e.id].name }}","summary":"{{ draft.ev[e.id].summary }}","state":"{{ draft.ev[e.id].state }}","place":"{{ draft.ev[e.id].place }}","factions":"{{ draft.ev[e.id].factions }}"}'>Save</button>
-            <button class="menu_button ch-btn ch-resolve" data-command="chronicle.edit" data-payload='{"id":"{{ e.id }}","state":"resolved"}' title="{{ e.name }} is over">Resolved</button>
-            <button class="menu_button ch-btn ch-quiet ch-remove" data-command="chronicle.remove" data-payload='{"id":"{{ e.id }}"}' title="Take {{ e.name }} out of the chronicle">Remove</button>
+            <button class="ss-button ch-btn ch-resolve" data-command="chronicle.edit" data-payload='{"id":"{{ e.id }}","state":"resolved"}' title="{{ e.name }} is over">Resolved</button>
+            <button class="ss-button ch-btn ss-button-quiet ch-remove" data-command="chronicle.remove" data-payload='{"id":"{{ e.id }}"}' title="Take {{ e.name }} out of the chronicle">Remove</button>
           </div>
         </details>
       </li>
@@ -57,8 +57,8 @@ const TEMPLATE = `
       <li class="ch-done" data-each="q.board.resolved as r" data-event="{{ r.id }}">
         <span class="ch-name">{{ r.name }}</span><small data-if="r.summary"> — {{ r.summary }}</small><small class="ch-when" data-if="r.updatedText"> ({{ r.updatedText }})</small>
         <span class="ch-actions">
-          <button class="menu_button ch-btn ch-quiet ch-reopen" data-command="chronicle.edit" data-payload='{"id":"{{ r.id }}","state":"ongoing"}' title="{{ r.name }} is under way again">Reopen</button>
-          <button class="menu_button ch-btn ch-quiet ch-remove" data-command="chronicle.remove" data-payload='{"id":"{{ r.id }}"}' title="Take {{ r.name }} out of the chronicle">Remove</button>
+          <button class="ss-button ch-btn ss-button-quiet ch-reopen" data-command="chronicle.edit" data-payload='{"id":"{{ r.id }}","state":"ongoing"}' title="{{ r.name }} is under way again">Reopen</button>
+          <button class="ss-button ch-btn ss-button-quiet ch-remove" data-command="chronicle.remove" data-payload='{"id":"{{ r.id }}"}' title="Take {{ r.name }} out of the chronicle">Remove</button>
         </span>
       </li>
     </ul>
@@ -68,8 +68,8 @@ const TEMPLATE = `
     <h4 class="ch-h">Factions <small data-if="q.board.hasFactions">{{ q.board.factionCount }}</small></h4>
     <p class="ch-empty" data-if="!q.board.hasFactions">No factions recorded yet.</p>
     <ul class="ch-list" data-if="q.board.hasFactions">
-      <li class="ch-card ch-faction" data-each="q.board.factions as f" data-faction="{{ f.id }}">
-        <div class="ch-top"><span class="ch-name">{{ f.name }}</span> <span class="ch-tag" data-if="f.stance">{{ f.stance }}</span></div>
+      <li class="ss-glass ch-card ch-faction" data-each="q.board.factions as f" data-faction="{{ f.id }}">
+        <div class="ch-top"><span class="ch-name">{{ f.name }}</span> <span class="ss-pill" data-if="f.stance">{{ f.stance }}</span></div>
         <p class="ch-line" data-if="f.summary">{{ f.summary }}</p>
         <p class="ch-meta">
           <span data-if="f.area"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ f.area }}</span>
@@ -85,9 +85,9 @@ const TEMPLATE = `
             <p class="ch-hint">Empty fields stay as they are; write none to clear an area or a stance.</p>
           </div>
           <div class="ch-actions">
-            <button class="menu_button ch-btn ch-save" data-command="chronicle.edit" title="Save the changes to {{ f.name }}"
+            <button class="ss-button ch-btn ch-save" data-command="chronicle.edit" title="Save the changes to {{ f.name }}"
                     data-payload='{"id":"{{ f.id }}","name":"{{ draft.fa[f.id].name }}","summary":"{{ draft.fa[f.id].summary }}","area":"{{ draft.fa[f.id].area }}","stance":"{{ draft.fa[f.id].stance }}"}'>Save</button>
-            <button class="menu_button ch-btn ch-quiet ch-remove" data-command="chronicle.remove" data-payload='{"id":"{{ f.id }}"}' title="Take {{ f.name }} out of the chronicle">Remove</button>
+            <button class="ss-button ch-btn ss-button-quiet ch-remove" data-command="chronicle.remove" data-payload='{"id":"{{ f.id }}"}' title="Take {{ f.name }} out of the chronicle">Remove</button>
           </div>
         </details>
       </li>
@@ -98,31 +98,29 @@ const TEMPLATE = `
 
 const CSS = `
 :root {
-  --ch-gap: var(--ss-gap, 8px);
-  --ch-radius: var(--ss-radius, 10px);
-  --ch-accent: var(--ss-accent, var(--SmartThemeQuoteColor, currentColor));
-  --ch-border: var(--ss-border, var(--SmartThemeBorderColor, rgba(127, 127, 127, 0.35)));
-  --ch-surface: var(--ss-chat-surface, var(--SmartThemeBlurTintColor, transparent));
-  --ch-warn: var(--ss-w-warn, #e0a030);
-  --ch-good: var(--ss-w-good, #5cb85c);
-  color: var(--ss-text, var(--SmartThemeBodyColor, inherit));
+  --ch-gap: var(--ss-space-2);
+  --ch-radius: var(--ss-radius-m);
+  --ch-accent: var(--ss-accent);
+  --ch-border: var(--ss-border);
+  --ch-surface: var(--ss-tile);
+  --ch-warn: var(--ss-warn);
+  --ch-good: var(--ss-good);
+  color: var(--ss-text);
+  font-family: var(--ss-font);
 }
 .ch { display: grid; gap: 14px; padding: 4px 0; }
 .ch-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; font-size: 1em; }
 .ch-h small { opacity: 0.65; font-weight: normal; }
 .ch-list { display: grid; gap: var(--ch-gap); margin: 0; padding: 0; list-style: none; }
-.ch-card { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius); background: var(--ch-surface); min-width: 0; }
+.ch-card { display: grid; gap: 4px; min-width: 0; }
 .ch-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .ch-name { font-weight: bold; color: var(--ch-accent); overflow-wrap: anywhere; }
 .ch-line { margin: 0; overflow-wrap: anywhere; }
 .ch-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 0.85em; opacity: 0.8; }
 .ch-meta:not(:has(*)) { display: none; }
 .ch-meta i { color: var(--ch-accent); margin-right: 2px; }
-.ch-tag { display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 0.75em; line-height: 1.6;
-  border: 1px solid var(--ch-border); opacity: 0.85; white-space: nowrap; }
-.ch-event[data-state="looming"] .ch-tag { border-color: var(--ch-warn); }
-.ch-event[data-state="ongoing"] .ch-tag { border-color: var(--ch-accent); }
+.ch-event[data-state="looming"] .ss-pill { border-color: var(--ch-warn); }
+.ch-event[data-state="ongoing"] .ss-pill { border-color: var(--ch-accent); }
 .ch-edit > summary { cursor: pointer; font-size: 0.85em; opacity: 0.8; min-height: 28px; padding: 4px 0; }
 .ch-form { display: grid; gap: 6px; margin: 4px 0; }
 .ch-form label { display: grid; gap: 2px; font-size: 0.85em; }
@@ -130,8 +128,10 @@ const CSS = `
 .ch-hint { margin: 0; font-size: 0.8em; opacity: 0.65; }
 .ch-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .ch-btn { min-height: 44px; min-width: 44px; margin: 0; padding: 6px 14px; flex: 1 1 auto; cursor: pointer; }
+.ch-btn:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--ss-text) 8%, transparent); }
+.ch-btn:not(:disabled):active { transform: translateY(1px); }
+.ch-btn:disabled { opacity: 0.45; cursor: default; }
 .ch-btn.ss-busy { opacity: 0.7; cursor: progress; }
-.ch-quiet { background: transparent; }
 .ch-empty { margin: 0; opacity: 0.65; font-style: italic; }
 .ch-resolved > summary { cursor: pointer; list-style-position: inside; padding: 8px 0; min-height: 28px; }
 .ch-done-list { gap: 4px; }
