@@ -52,7 +52,7 @@ const TEMPLATE = `
               <span data-if="a.due">Due {{ a.due }}</span>
             </span>
           </span>
-          <span class="ss-listcard-value" data-if="a.reward"><span class="ss-pill ss-pill-soft">{{ a.reward }}</span></span>
+          <span class="ss-listcard-value" data-if="a.reward"><span class="ss-pill ss-pill-soft">Reward {{ a.reward }}</span></span>
         </div>
         <div class="sd-bar" data-if="a.meter">
           <ss-widget name="ss.bar" data-props='{"value":{{ a.progress.have }},"max":{{ a.progress.need }},"label":"{{ a.progress.label }}","text":"{{ a.progress.have }} of {{ a.progress.need }}"}'></ss-widget>

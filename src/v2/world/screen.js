@@ -76,10 +76,10 @@ const JOURNAL = `
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
     ${label('Here')}
-    ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
     <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
     <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
+    ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
   </section>
@@ -93,7 +93,7 @@ const NOW = `
           <span class="ss-listcard-main">
             <span class="ss-listcard-title">{{ u.name }}</span>
             <span class="ss-listcard-sub" data-if="u.goal">{{ u.goal }}</span>
-            <span class="sd-meta"><span>{{ u.when }}</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></span>
+            <span class="sd-meta"><span>{{ u.when }}</span><span class="ss-pill" data-if="u.overdue">overdue</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></span>
           </span>
           <span class="ss-listcard-value" data-if="u.label"><span class="ss-pill">{{ u.label }}</span></span>
         </div>
@@ -164,8 +164,8 @@ const CSS = `${BASE_CSS}
 .wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; }
 .wv-label { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; min-width: 0; white-space: nowrap; }
 /* The separator: a hairline filling the rest of the row, centred on the label; it shrinks to nothing rather than push the label. */
-.wv-label::after { content: ""; flex: 1 1 0; min-width: 0; height: 1px; background: var(--ss-border); }
-.wv-label small { color: var(--sd-muted); font-weight: normal; }
+.wv-label::after { content: ""; flex: 1 1 0; min-width: 0; height: 1px; background: var(--ss-rule, var(--ss-border)); }
+.wv-label small { color: var(--sd-text); font-weight: normal; }
 .wv-h.wv-label { margin: 4px 0 2px; font-size: 0.9em; color: var(--sd-muted); }
 .wv-label.ss-listcard-head { margin-bottom: 2px; padding: 0 6px; }
 .wv-place { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
@@ -178,8 +178,7 @@ const CSS = `${BASE_CSS}
 .wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
 .wv-item .ss-listcard-value { max-width: 45%; min-width: 0; }
 .wv-item .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
-.wv-item[data-state="resolved"] { opacity: 0.75; }
-.wv-item.wv-overdue .ss-listcard-title { color: var(--sd-warn); }
+.wv-item[data-state="resolved"] .ss-listcard-sub { color: var(--sd-muted); }
 .wv-cast { display: block; min-width: 0; margin: 0 0 6px; }
 .wv-cast[hidden], .wv-people[hidden] { display: none; }
 .wv-thought { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0 0; font-size: 0.85em; font-style: italic; color: var(--sd-text);
@@ -203,9 +202,8 @@ const CSS = `${BASE_CSS}
 .wv-day { min-width: 0; padding: 0; }
 .wv-day[data-today="true"] { border-color: var(--sd-accent); }
 .wv-head { cursor: pointer; padding: 10px 14px; min-height: 40px; overflow-wrap: anywhere; list-style-position: inside; }
-.wv-date { font-weight: 800; color: var(--sd-accent); }
+.wv-date { font-weight: 800; color: var(--sd-text); }
 .wv-line { color: var(--sd-muted); }
-.wv-day[data-brief="true"] .wv-line { opacity: 0.8; }
 .wv-body { display: grid; gap: 6px; padding: 0 14px 12px; overflow-wrap: anywhere; }
 .wv-body ul { margin: 0; padding-left: 1.2em; }
 .wv-facts { list-style: none; padding-left: 0 !important; }

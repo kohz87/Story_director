@@ -187,10 +187,10 @@ test('hud: date and time and the place on one line, from the head', { skip }, ()
     const { el } = draw(HUD_ID, headState());
     const hud = el.querySelector('.sd-hud');
     assert.equal(squash(hud.textContent), 'June 11, 2025, 09:00 am Bluewatch Village');
-    assert.equal(hud.querySelectorAll('span').length, 2);
-    assert.match(byId[HUD_ID].css, /white-space: nowrap/);
+    // The time and the place are each cut in their own box (the ellipsis): what the reader reads, in order.
+    assert.deepEqual(hud.querySelectorAll('.sd-cut').map(node => squash(node.textContent)), ['June 11, 2025, 09:00 am', 'Bluewatch Village']);
     const { el: bare } = draw(HUD_ID, makeState());
-    assert.equal(bare.querySelectorAll('.sd-hud span').length, 0);
+    assert.equal(bare.querySelectorAll('.sd-hud .sd-cut').length, 0);
 });
 
 test('status card: time, place, goal and step, progress, with what this reply changed marked; no next beat', { skip }, () => {
@@ -312,4 +312,25 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     assert.deepEqual(reader.cards, { [STATUS_CARD_ID]: false });
     assert.ok(messages[1].querySelector('.ss-card') === null && messages[3].querySelector('.ss-card') === null, 'no card once turned off');
     cards.destroy();
+});
+
+test('quests: the reward is a pill that says Reward and the amount, as the reader reads it', { skip }, () => {
+    const { el } = draw(QUESTS_ID, headState());
+    const hunt = el.querySelector('.sd-quest');
+    const reward = hunt.querySelector('.ss-listcard-value .ss-pill');
+    assert.ok(reward, 'the reward pill is drawn');
+    assert.match(squash(reward.textContent), /^Reward \S/);
+});
+
+test('director: a ready thread is an outline pill and an offer a soft one, so the two read apart', { skip }, () => {
+    const state = makeState({ rev: 20, minutes: at('June 11, 2025, 9:00 am'), threads: [wolves({ ready: { rev: 11 } }), rats()] });
+    const { el } = draw(DIRECTOR_ID, state);
+    const ready = el.querySelector('.sd-ready');
+    assert.ok(ready, 'a ready thread is drawn');
+    assert.equal(squash(ready.textContent), 'ready');
+    assert.equal(ready.classList.contains('ss-pill-outline'), true);
+    const offered = el.querySelector('[data-thread="th_rats0001"] .ss-pill');
+    assert.equal(squash(offered.textContent), 'offered');
+    assert.equal(offered.classList.contains('ss-pill-soft'), true);
+    assert.equal(offered.classList.contains('ss-pill-outline'), false, 'the two are different pills');
 });

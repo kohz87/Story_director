@@ -53,7 +53,7 @@ function threadItem(list, kind) {
             </span>
             <span class="sd-tags">
               <span class="ss-pill ss-pill-soft" data-if="t.offer">offered</span>
-              <span class="ss-pill ss-pill-soft sd-ready" data-if="t.ready">ready</span>
+              <span class="ss-pill ss-pill-outline sd-ready" data-if="t.ready">ready</span>
               <span class="ss-pill sd-outcome" data-if="t.ended">{{ t.ended.outcome }}</span>
             </span>
           </div>
@@ -114,7 +114,8 @@ const CSS = `${BASE_CSS}
 .sd-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 42%; min-width: 0; }
 .sd-tags .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .sd-outcome { text-transform: lowercase; }
-.sd-ready { --ss-ring: var(--sd-good); }
+/* Ready: an outline pill with a good-coloured border (offered is the soft pill; .ss-pill does not read --ss-ring). */
+.sd-ready { border-color: var(--sd-good); }
 .sd-closed { padding: 2px 0; }
 .sd-closed > summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; gap: 6px; color: var(--sd-muted); }
 .sd-closed .sd-thread { opacity: 0.8; }
@@ -128,7 +129,7 @@ const CSS = `${BASE_CSS}
 .sd-arc-note, .sd-arc-needs, .sd-arc-none { font-size: 0.9em; color: var(--sd-muted); }
 .sd-arc-text { width: 100%; min-height: 9em; font: inherit; font-size: 0.9em; resize: vertical; box-sizing: border-box; }
 .sd-arc-findings { gap: 2px; font-size: 0.85em; color: var(--sd-muted); }
-.sd-arc-finding.sd-warn { color: var(--sd-warn); }
+.sd-arc-finding.sd-warn { border-left: 3px solid var(--sd-warn); padding-left: 6px; }
 /* Buttons keep their icon and label on one line (the block's button is a flex box with a gap). */
 .sd-arc .sd-btn, .sd-behind .sd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .sd-behind { display: grid; gap: 14px; min-width: 0; }

@@ -9,8 +9,8 @@ export const HUD_ID = 'story-director/hud';
 
 const TEMPLATE = `
 <div class="sd-hud" role="status" aria-label="Story time and place">
-  <span class="ss-pill sd-when" data-if="q.time.text"><i class="fa-solid fa-clock" aria-hidden="true"></i> {{ q.time.text }}</span>
-  <span class="ss-pill ss-pill-soft sd-where" data-if="state.scene.place.name"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ state.scene.place.name }}</span>
+  <span class="ss-pill sd-when" data-if="q.time.text"><i class="fa-solid fa-clock" aria-hidden="true"></i> <span class="sd-cut">{{ q.time.text }}</span></span>
+  <span class="ss-pill ss-pill-soft sd-where" data-if="state.scene.place.name"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-cut">{{ state.scene.place.name }}</span></span>
 </div>
 `;
 
@@ -21,6 +21,8 @@ const CSS = `${BASE_CSS}
 .sd-hud > span { min-width: 0; max-width: 100%; }
 .sd-when { flex: 0 1 auto; }
 .sd-where { flex: 1 1 0; }
+/* The text of a pill is cut with an ellipsis in its own box (text-overflow does not reach a flex pill's text node). */
+.sd-cut { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sd-hud i { color: var(--sd-accent); margin-right: 2px; }
 `;
 

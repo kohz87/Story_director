@@ -23,20 +23,18 @@ export const BASE_CSS = `
   font-family: var(--ss-font);
 }
 .sd-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; }
-.sd-h small { opacity: 0.65; font-weight: normal; }
+.sd-h small { font-weight: normal; color: var(--sd-text); }
 .sd-list { display: grid; gap: var(--sd-gap); margin: 0; padding: 0; list-style: none; }
 .sd-card { display: grid; gap: 4px; padding: 10px 12px; min-width: 0; }
 .sd-key { font-weight: 800; color: var(--sd-text); overflow-wrap: anywhere; }
 .sd-line { margin: 0; overflow-wrap: anywhere; }
-.sd-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 0.85em; color: var(--sd-muted); }
+.sd-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 0.85em; color: var(--sd-muted); overflow-wrap: anywhere; }
+.sd-meta > * { overflow-wrap: anywhere; }
 .sd-meta:not(:has(*)) { display: none; }
 .sd-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .sd-btn { min-height: 44px; min-width: 44px; margin: 0; padding: 6px 16px; flex: 1 1 auto; cursor: pointer; }
-.sd-btn:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--ss-text) 8%, transparent); }
-.sd-btn:not(:disabled):active { transform: translateY(1px); }
-.sd-btn:disabled { opacity: 0.45; cursor: default; }
 .sd-btn.ss-busy { opacity: 0.7; cursor: progress; }
-.sd-reason { margin: 0; font-size: 0.85em; color: var(--sd-warn); }
+.sd-reason { margin: 0; font-size: 0.85em; color: var(--sd-text); border-left: 3px solid var(--sd-warn); padding-left: 6px; }
 .sd-empty { margin: 0; color: var(--sd-muted); font-style: italic; }
 @media (min-width: 600px) {
   .sd-btn { flex: 0 0 auto; min-height: 40px; }
