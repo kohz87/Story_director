@@ -15,12 +15,14 @@ const TEMPLATE = `
 `;
 
 const CSS = `${BASE_CSS}
-.sd-hud { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 2px 6px; font-size: 0.85em;
+.sd-hud { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 100%; box-sizing: border-box; min-width: 0; padding: 2px 6px; font-size: 0.85em;
   line-height: 1.6; white-space: nowrap; overflow: hidden; }
 .sd-hud:not(:has(span)) { display: none; }
-.sd-hud > span { min-width: 0; max-width: 100%; }
-.sd-when { flex: 0 1 auto; }
-.sd-where { flex: 1 1 0; }
+.sd-hud > span { min-width: 0; }
+/* Story Block's HUD strip scrolls sideways and sizes its item to the content, so the two pills are capped in
+   viewport units: the time to 40vw and the place to 52vw (a 412px phone fits both; the cut does the rest). */
+.sd-when { flex: 0 1 auto; max-width: 40vw; }
+.sd-where { flex: 1 1 0; max-width: 52vw; }
 /* The text of a pill is cut with an ellipsis in its own box (text-overflow does not reach a flex pill's text node). */
 .sd-cut { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sd-hud i { color: var(--sd-accent); margin-right: 2px; }

@@ -72,7 +72,7 @@ const CSS = `
 .sd-map .sd-map-result-name { overflow-wrap: anywhere; }
 .sd-map .sd-map-result-about { max-width: 100%; color: var(--sd-map-muted); font-size: 0.85em; overflow-wrap: anywhere; }
 .sd-map .sd-map-tools, .sd-map .sd-map-layers { display: flex; flex-wrap: wrap; gap: 0.35em; }
-.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
+.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; max-width: min(100%, 12em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
 .sd-map .sd-map-btn:not(:disabled):hover, .sd-map .sd-map-layer:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
 .sd-map .sd-map-btn:not(:disabled):active, .sd-map .sd-map-layer:not(:disabled):active { transform: translateY(1px); }
 .sd-map .sd-map-layer { font-size: 0.9em; font-weight: 600; }
