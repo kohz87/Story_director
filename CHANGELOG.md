@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (`v2`, UI step 4c: the Director screens on the glass)
+
+- **Quests, Director, World, the status card, the HUD and Chronicle are on Story Block's glass.** Rows are list cards (`ss-listcard`), tags are pills, buttons are `ss-button`, progress is `ss.bar`, colours and shapes are Story Block's tokens (Glass, Solid and Follow SillyTavern). Same commands, ids and data attributes; no quest buttons, as before (`screens/quests.js`, `screens/director.js`, `screens/status-card.js`, `screens/hud.js`, `screens/style.js`, `screens/dom.js`, `world/screen.js`, `chronicle/screen.js`, `arc/widget.js`, `screens/behind.js`).
+- **World**: Here is a glass card with the people below it (Delta's cards untouched); Upcoming, News and events and Factions are list cards; every section label goes through one helper and one hairline rule (`.wv-label::after`, Story Block's `--ss-border`).
+- **Map** (`atlas/widget.js`): restyled only. A glass panel and glass controls, the current place in the accent, and the legend as a list card. Its search, layers, zoom and pick are unchanged, and a screen's `--ss-w-*` overrides still win.
+- The Director's problems box keeps its newest-first order; threads keep their open and closed groups.
+- Story Block testkit re-synced to Story Block `v2` 0d2505c.
+
 ## 2.0.0-beta.1 (`v2` branch)
 
 Story Suite v2, first beta. What's new, known issues and every module's version: [Story Block docs/v2/RELEASES.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md). Player guide: [Story Block docs/v2/GUIDE.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md).

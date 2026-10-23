@@ -124,7 +124,7 @@ Story Suite settings (the **Settings** button on the Story Suite bar) → the **
 - Story Block's **Changed this reply** card does not yet show a payout made by this same-reply step or the
   calendar's weather change; the Quests row and the wallet are right.
 - In a chat saved before this update, a quest Finish click can still be paid twice on Re-read of that reply.
-- Tall portraits on the World cards and the look of some screens are still to be redesigned.
+- The Story Suite look: Quests, Director, World, the status card, the HUD, the Map and Chronicle are on the glass; the arc prompt editor in the Settings window (`arc/settings.js`) still uses SillyTavern's button, and NPC State Delta draws its own cards.
 
 The full list is in Story Block's [RELEASES](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md).
 
