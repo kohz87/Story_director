@@ -14,51 +14,50 @@ import { BASE_CSS } from './style.js';
 
 export const STATUS_CARD_ID = 'story-director/status-card';
 
+// The rows sit directly in the card's fold (Story Block's card mount draws the fold): no box of their own. A row with
+// no value is left out. Labels are the muted small-caps column; values are body text.
 const TEMPLATE = `
-<dl class="sd-status ss-glass">
+<dl class="sd-status">
   <div class="sd-row sd-time" data-if="q.time.text" data-class="sd-new: changed('state.director.time')">
     <dt><i class="fa-solid fa-clock" aria-hidden="true"></i> Time</dt>
     <dd>{{ q.time.text }}</dd>
-  </div>
-  <div class="sd-row sd-place" data-if="state.scene.place.name" data-class="sd-new: changed('state.scene.place')">
-    <dt><i class="fa-solid fa-location-dot" aria-hidden="true"></i> Place</dt>
-    <dd>{{ state.scene.place.name }}<small class="sd-coords" data-if="q.status.coords"> · {{ q.status.coords }}</small><small data-if="state.scene.place.region"> · {{ state.scene.place.region }}</small></dd>
   </div>
   <div class="sd-row sd-weather" data-if="q.status.weather">
     <dt><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> Weather</dt>
     <dd>{{ q.status.weather }}</dd>
   </div>
+  <div class="sd-row sd-place" data-if="state.scene.place.name" data-class="sd-new: changed('state.scene.place')">
+    <dt><i class="fa-solid fa-location-dot" aria-hidden="true"></i> Place</dt>
+    <dd>{{ state.scene.place.name }}<small data-if="state.scene.place.region"> · {{ state.scene.place.region }}</small></dd>
+  </div>
+  <div class="sd-row sd-coords" data-if="q.status.coords">
+    <dt><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> Coordinates</dt>
+    <dd>{{ q.status.coords }}</dd>
+  </div>
   <div class="sd-row sd-goal" data-if="q.goal" data-class="sd-new: changed(state.director.threads[q.goal.id])">
     <dt><i class="fa-solid fa-flag" aria-hidden="true"></i> Goal</dt>
     <dd><b>{{ q.goal.key }}</b><span data-if="q.goal.goal"> — {{ q.goal.goal }}</span>
-      <small class="sd-step" data-if="q.goal.step">Now: {{ q.goal.step }}</small></dd>
-  </div>
-  <div class="sd-row sd-progress" data-if="q.progress.need" data-class="sd-met: q.progress.met">
-    <dt><i class="fa-solid fa-list-check" aria-hidden="true"></i> Progress</dt>
-    <dd><ss-widget name="ss.bar" data-props='{"value":{{ q.progress.have }},"max":{{ q.progress.need }},"label":"{{ q.progress.label }}","text":"{{ q.progress.have }} of {{ q.progress.need }}"}'></ss-widget></dd>
+      <small class="sd-step" data-if="q.goal.step">Now: {{ q.goal.step }}</small>
+      <span class="sd-progress" data-if="q.progress.need" data-class="sd-met: q.progress.met"><ss-widget name="ss.bar" data-props='{"value":{{ q.progress.have }},"max":{{ q.progress.need }},"label":"{{ q.progress.label }}","text":"{{ q.progress.have }} of {{ q.progress.need }}"}'></ss-widget></span>
+    </dd>
   </div>
 </dl>
 `;
 
 const CSS = `${BASE_CSS}
-.sd-status { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; min-width: 0;
-  padding: 10px 12px; font-size: 0.9em; line-height: 1.45; }
+.sd-status { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; align-items: baseline;
+  margin: 0; padding: 0; min-width: 0; font-size: 0.9em; line-height: 1.45; background: none; border: 0; box-shadow: none; }
 .sd-row { display: contents; }
-.sd-row > dt { margin: 0; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sd-muted); white-space: nowrap; align-self: baseline; }
+.sd-row > dt { margin: 0; font-variant: small-caps; letter-spacing: 0.04em; color: color-mix(in srgb, var(--sd-text) 80%, transparent); white-space: nowrap; align-self: baseline; }
 .sd-row > dt i { width: 1.1em; text-align: center; color: var(--sd-accent); }
-.sd-row > dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.sd-row > dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--sd-text); }
 .sd-row > dd small { color: var(--sd-muted); }
 .sd-step { display: block; }
 .sd-new > dd { color: var(--sd-accent); }
 .sd-new > dt::after { content: " •"; color: var(--sd-accent); }
-.sd-coords { font-variant-numeric: tabular-nums; }
-.sd-progress > dd { align-self: center; }
+.sd-progress { display: block; margin-top: 4px; }
 .sd-progress .ss-bar-label { font-variant-numeric: tabular-nums; }
 .sd-met .ss-bar { --ss-bar-color: var(--sd-good); }
-@media (max-width: 360px) {
-  .sd-status { grid-template-columns: minmax(0, 1fr); }
-  .sd-row > dt { margin-top: 4px; }
-}
 `;
 
 export const statusCardScreen = Object.freeze({
