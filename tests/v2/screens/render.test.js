@@ -187,12 +187,11 @@ test('status card: time, place, goal and step, progress, with what this reply ch
     const changes = ['/domains/director/time/minutes', '/domains/director/threads/th_wolves01/rev'];
     const { el } = draw(STATUS_CARD_ID, headState(), { changes });
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
-    assert.deepEqual(rows.slice(0, 3), [
-        ['Time', 'June 11, 2025, 09:00 am'],
-        ['Place', 'Bluewatch Village · Eastmarch'],
-        ['Goal', 'East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'],
-    ]);
-    assert.equal(rows[3][0], 'Progress');
+    assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Goal']);
+    assert.deepEqual(rows[0], ['Time', 'June 11, 2025, 09:00 am']);
+    assert.deepEqual(rows[1], ['Place', 'Bluewatch Village · Eastmarch']);
+    // The goal row holds the progress bar (its text is the bar's own label, not part of the goal line).
+    assert.ok(rows[2][1].startsWith('East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'), rows[2][1]);
     // What comes next is the Director screen's, behind Reveal: a spoiler under the reply (user, beta).
     assert.equal(el.querySelector('.sd-next'), null);
     assert.equal(byId[STATUS_CARD_ID].data.next, undefined);
@@ -221,10 +220,12 @@ test('status card: the place\'s map coordinates when the atlas knows it, and Sto
     const { el, warnings } = draw(STATUS_CARD_ID, headState(), { queries });
     assert.deepEqual(warnings, []);
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
-    assert.deepEqual(rows.slice(0, 3), [
+    // Time, Weather, Place, Coordinates (its own row; the place does not carry the coordinates any more).
+    assert.deepEqual(rows.slice(0, 4), [
         ['Time', 'June 11, 2025, 09:00 am'],
-        ['Place', 'Bluewatch Village · 59, 110 · Eastmarch'],
         ['Weather', 'Light rain over the sluices'],
+        ['Place', 'Bluewatch Village · Eastmarch'],
+        ['Coordinates', '59, 110'],
     ]);
     // Unknown to the atlas, no position, no weather (null): nothing of either, and no error.
     for (const more of [
@@ -324,3 +325,29 @@ test('director: a ready thread is an outline pill and an offer a soft one, so th
     assert.equal(offered.classList.contains('ss-pill-soft'), true);
     assert.equal(offered.classList.contains('ss-pill-outline'), false, 'the two are different pills');
 });
+
+test('status card rows: a row with no value is left out; no box of its own (the rows sit in the fold)', { skip }, () => {
+    const queries = {
+        ...makeQueries(),
+        'atlas.here': () => null,
+        'scene.weather': () => null,
+    };
+    // Nothing known but the time: one row, no goal, no weather, no coordinates, no place.
+    const { el: timeOnly } = draw(STATUS_CARD_ID, makeState({ minutes: at('June 11, 2025, 9:00 am') }), { queries });
+    assert.deepEqual(timeOnly.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Time']);
+    // The full card: the five fields in order, with the goal's progress inside its row.
+    const { el } = draw(STATUS_CARD_ID, headState());
+    assert.deepEqual(el.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Time', 'Place', 'Goal']);
+    assert.equal(el.querySelector('.sd-row.sd-goal .sd-progress .ss-bar') !== null, true, 'the progress bar is in the goal row');
+    // No box: the list is not a glass or bordered panel; the labels are muted small caps; the values are body text.
+    const dl = el.querySelector('dl.sd-status');
+    assert.ok(dl, 'the card is a definition list');
+    assert.equal(dl.classList.contains('ss-glass'), false, 'no second glass box inside the fold');
+    assert.equal(/ss-glass|ss-tile|ss-card/.test(dl.className), false);
+    const css = byId[STATUS_CARD_ID].css;
+    assert.match(css, /\.sd-status \{[^}]*background: none;[^}]*border: 0;[^}]*box-shadow: none;/);
+    assert.match(css, /\.sd-status \{[^}]*gap: 6px 14px;/, 'six pixels between the rows');
+    assert.match(css, /\.sd-row > dt \{[^}]*font-variant: small-caps;[^}]*color: color-mix\(in srgb, var\(--sd-text\) 80%, transparent\);/);
+    assert.match(css, /\.sd-row > dd \{[^}]*color: var\(--sd-text\);/);
+});
+
