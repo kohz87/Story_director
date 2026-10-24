@@ -1,7 +1,6 @@
 # Story Director 2.0.0-beta.2
 
-> This is the **`v2` branch**: Story Suite v2, first beta. It is for test play, not for your real campaigns yet.
-> Story Director 1 is on the [`main` branch](https://github.com/kohz87/Story_director/tree/main).
+> Story Suite v2, second beta (2.0.0-beta.2). It is for test play, not for your real campaigns yet.
 
 ## What it is
 
@@ -17,14 +16,16 @@ sim), and it shows more with [NPC State Delta](https://github.com/kohz87/npc_sta
 ## Install
 
 1. SillyTavern **1.19 or newer**; try the beta in a separate profile.
-2. Install **Story Block first** from `https://github.com/kohz87/Story_block`, branch **`v2`**.
-3. **Extensions → Install extension**, paste `https://github.com/kohz87/Story_director`, choose the branch
-   **`v2`**, reload.
+2. Install **Story Block first** from `https://github.com/kohz87/Story_block`.
+3. **Extensions → Install extension**, paste `https://github.com/kohz87/Story_director` and install (no branch to
+   pick), reload.
+
+For Story Director 1, install the `v1` branch of the same repo instead: paste the URL and type `v1` as the branch.
 
 Needs (`requires`): Story Block **2.0.0-beta.2 or later** (arc planning's model call needs it too). Works with, but
 does not need, RPG Battle (quest ranks follow its rank ladder; quest fights) and NPC State Delta (the people on the
 World screen). Update Story Block before Story Director. Install help:
-[guide, Installing](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md#installing).
+[guide, Installing](https://github.com/kohz87/Story_block/blob/main/docs/v2/GUIDE.md#installing).
 
 ## What you get
 
@@ -91,8 +92,8 @@ The model writes the story and ends it with a hidden `<Changes>` list. Story Dir
 Code reads each line as a suggestion: it checks the quest's goal and the place, pays the reward once within the
 reply's money budget, moves the clock by a capped step and skips anything that does not fit (listed under
 **Problems**). Swipe, delete, Re-read and reload stay correct because the state is kept with each reply. Details:
-Story Block's [GUIDE](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md) (Quests, The World screen,
-Arc planning) and [SPEC](https://github.com/kohz87/Story_block/blob/v2/docs/v2/SPEC.md).
+Story Block's [GUIDE](https://github.com/kohz87/Story_block/blob/main/docs/v2/GUIDE.md) (Quests, The World screen,
+Arc planning) and [SPEC](https://github.com/kohz87/Story_block/blob/main/docs/v2/SPEC.md).
 
 ## Settings
 
@@ -126,12 +127,12 @@ Story Suite settings (the **Settings** button on the Story Suite bar) → the **
 - In a chat saved before this update, a quest Finish click can still be paid twice on Re-read of that reply.
 - The Story Suite look: Quests, Director, World, the status card, the HUD, the Map and Chronicle are on the glass; the arc prompt editor in the Settings window (`arc/settings.js`) still uses SillyTavern's button, and NPC State Delta draws its own cards.
 
-The full list is in Story Block's [RELEASES](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md).
+The full list is in Story Block's [RELEASES](https://github.com/kohz87/Story_block/blob/main/docs/v2/RELEASES.md).
 
 ## Links
 
-- [Player guide](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md), [Changelog](CHANGELOG.md),
-  [Releases and known issues](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md)
+- [Player guide](https://github.com/kohz87/Story_block/blob/main/docs/v2/GUIDE.md), [Changelog](CHANGELOG.md),
+  [Releases and known issues](https://github.com/kohz87/Story_block/blob/main/docs/v2/RELEASES.md)
 - Developers: [docs/dev](docs/dev/), [DESIGN](docs/DESIGN.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [CLAUDE.md](CLAUDE.md)
 - History, decisions and the after-beta list: `suite-notes/` in
   [kohz87/inventory-block](https://github.com/kohz87/inventory-block/tree/claude/hopeful-babbage-tipaw8/suite-notes)
