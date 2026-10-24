@@ -44,7 +44,7 @@ a stat or `topic:<name>` -> -30..30); `rbActors` is an explicit, one-to-one link
 ## `journal.day({day, snapshot?})` (`world` part)
 
 The visible digest, else the visible facts of the day, else the saved scene of a save point (`savepoint.list`); twelve lines of 240 characters at
-most; secrets and arcs left out as the Journal leaves them; works with the digest and the World view off. A day with none is `missing: true`.
+most; secrets and arcs left out as the Journal leaves them; works with the digest and the World view off. A day with none is `missing: true` and its source is `snapshot` (track C's fixture has it so; the saved scene is the only source left).
 
 ## Differences from the contract, and gaps (written down, not decided)
 

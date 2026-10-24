@@ -53,7 +53,7 @@ test('it works with the digest and the World view off, and the day under way is 
 test('a day with nothing: missing, titled Day <n>, no lines; the saved scene of a save point is its line; bad days are null', async () => {
     const host = await story();
     const empty = day(host, { day: 3 });
-    assert.deepEqual(empty, { day: 3, title: 'Day 3', lines: [], source: 'facts', missing: true });
+    assert.deepEqual(empty, { day: 3, title: 'Day 3', lines: [], source: 'snapshot', missing: true });
     assert.equal(day(host, { day: -1 }), null);
     assert.equal(day(host, { day: 1.5 }), null);
     assert.equal(day(host, { day: 'x' }), null);

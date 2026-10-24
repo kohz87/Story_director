@@ -165,5 +165,5 @@ export function journalDay(state, { day, snapshot = null } = {}, tools) {
     if (saved.length) return { day, title: title(''), lines: saved, source: 'snapshot', missing: false };
     const scene = oneLine(point?.scene?.text);
     const visible = scene && !namesHidden(scene, hidden.words) && !namesHidden(scene, hidden.behind) ? [scene] : [];
-    return { day, title: `Day ${day}`, lines: visible, source: visible.length ? 'snapshot' : 'facts', missing: true };
+    return { day, title: `Day ${day}`, lines: visible, source: 'snapshot', missing: true };
 }
