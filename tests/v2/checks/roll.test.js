@@ -121,6 +121,20 @@ test('who may roll, and what it stands on: the story and the pre-roll, not a cli
     assert.ok(roll(first.state, { dc: 13 }).ok, 'another meaning on the same evidence is another check');
 });
 
+test('S3: the pre-roll stands on the previous reply\'s evidence but is its own check: the reply\'s check of the same meaning does not stop it, and it does not stop the reply\'s', () => {
+    const { state } = withActor();
+    const reply = roll(state, { dc: 12 }, { cause: 'story' });
+    assert.ok(reply.ok, reply.message);
+    const pre = roll(reply.state, { dc: 12 }, { cause: 'system', caller: 'story-block' });
+    assert.ok(pre.ok, pre.message);
+    assert.equal(roll(pre.state, { dc: 12 }, { cause: 'story' }).code, 'REFUSED', 'the reply\'s own check is still once');
+    // The other way round: the pre-roll first, then the reply\'s check on the same evidence and meaning.
+    const first = roll(state, { dc: 12 }, { cause: 'system', caller: 'story-block' });
+    assert.ok(first.ok);
+    assert.ok(roll(first.state, { dc: 12 }, { cause: 'story' }).ok);
+    assert.ok(roll(first.state, { dc: 12 }, { cause: 'system', caller: 'story-block' }).ok, 'a later message\'s pre-roll, whatever the claims; once per message is the assist\'s claim');
+});
+
 test('refusals: no actor, unknown actor, bad payloads, a supplied die or outcome', () => {
     assert.equal(roll(makeState(), {}).code, 'NOT_FOUND');
     const { state } = withActor();

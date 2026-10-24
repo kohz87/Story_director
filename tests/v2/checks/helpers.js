@@ -105,3 +105,6 @@ import { PARTS, createModule } from '../../../src/v2/module.js';
  * (RPG Battle's checks part owns the `checks` domain, the `check` kind and `checks.*` until the flip retires it).
  */
 export const moduleWithChecks = (options = {}) => createModule({ ...options, parts: PARTS.flatMap(([id, partOf]) => (id === 'screens' ? [['checks', part], [id, partOf]] : [[id, partOf]])) });
+
+/** The module as the flip release leaves it: the checks part registered with the `check` kind (contract P09: capture.check is Story Director's). */
+export const moduleAfterFlip = (options = {}) => createModule({ ...options, parts: PARTS.flatMap(([id, partOf]) => (id === 'screens' ? [['checks', { ...part, kinds: { check: checkKind } }], [id, partOf]] : [[id, partOf]])) });

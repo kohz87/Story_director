@@ -88,3 +88,39 @@ test('S1: the shipped module does not claim RPG Battle\'s checks domain, kind or
     assert.deepEqual(host.sdk.query('checks.log', {}), {});
     host.close();
 });
+
+// S3, on the real host: Story Block's assist pre-rolls the reader's message before the reply (a system command that calls capture.check once, claimed
+// as assist:precheck:<key>). Its evidence is the previous reply's, whose own check line may be the very same request.
+function stubAssist(line) {
+    let sent = 0;
+    return {
+        id: 'zz-assist', name: 'Assist', version: '0.0.0',
+        commands: {
+            'zzassist.precheck'(ctx, payload) {
+                if (!ctx.claim(`assist:precheck:${payload.key}`)) ctx.fail('CLAIMED', 'This message has already been turned into a check.');
+                const made = ctx.call('capture.check', { ...payload.line, index: 0, word: 'check' }) ?? {};
+                return { summary: made.summary ?? '', narrate: true, data: { key: payload.key, check: made.data?.v2?.result?.check ?? null } };
+            },
+        },
+        hooks: { beforeGenerate: () => ({ commands: [{ type: 'zzassist.precheck', payload: { key: `${(sent += 1)}-abc`, line } }] }) },
+    };
+}
+
+test('S3: the pre-roll of a message and the previous reply\'s own check of the same meaning both stand; the assist\'s claim keeps it once per message', async () => {
+    const { moduleAfterFlip } = await import('./helpers.js');
+    const line = { kind: 'check', name: 'stealth', text: 'slipping past the gate guard', labels: { dc: 'hard' } };
+    const host = await createHost({ core: false, modules: [moduleAfterFlip(), stubAssist(line)] });
+    const policy = host.sdk.query('checks.policy', {});
+    await ok(host.sdk.command('checks.actor', { write: wr(), name: 'Mara', bonuses: { DEX: 2 }, expectedHash: policy.hash }));
+    const check = '? check stealth — slipping past the gate guard | dc: hard';
+    await host.send('I slip past the gate guard.', `You slip by.\n<Changes>\n${check}\n</Changes>`);
+    assert.deepEqual(host.turn.problems().map(problem => problem.message), []);
+    await host.send('I slip past the gate guard again.', 'You slip by again.');
+    assert.deepEqual(host.turn.problems().map(problem => problem.message), [], 'the second message\'s pre-roll was committed');
+    const receipts = host.ctx.chat.flatMap(message => message.extra?.storySuite?.receipts ?? []).map(receipt => receipt.type);
+    assert.equal(receipts.filter(type => type === 'zzassist.precheck').length, 2, 'one pre-roll per message');
+    assert.equal(receipts.filter(type => type === 'capture.check').length, 1, 'and the reply\'s own check');
+    const claims = Object.keys(host.head().meta.claims).filter(key => key.startsWith('sd:check:'));
+    assert.equal(claims.length, 3, JSON.stringify(claims));
+    host.close();
+});

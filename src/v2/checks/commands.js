@@ -171,7 +171,10 @@ function checksRoll(ctx, payload) {
     const dc = payload.dc ?? (Number.isSafeInteger(settings.defaultDc) ? settings.defaultDc : 15);
     const margin = Number.isSafeInteger(settings.costMargin) ? settings.costMargin : 2;
     const request = hashJson({ actor: actorId, stat, skill: skill.toLowerCase(), targetNpc: payload.targetNpc ?? null, dc });
-    if (!ctx.claim(`sd:check:${payload.evidence}:${request.slice(0, 16)}`)) ctx.fail('REFUSED', 'That evidence already made this check.');
+    // The pre-roll (Story Block's assist, cause 'system') stands on the previous reply's evidence, which that reply's own check may already have used:
+    // it is its own check (once per message, which the assist's claim `assist:precheck:<key>` keeps), so its claim is scoped by the receipt's rev.
+    const scope = ctx.cause === 'system' ? `:r${ctx.rev}` : '';
+    if (!ctx.claim(`sd:check:${payload.evidence}:${request.slice(0, 16)}${scope}`)) ctx.fail('REFUSED', 'That evidence already made this check.');
 
     // The target person: unknown is NOT_FOUND; NPC State Delta absent or off adds nothing.
     let target = null;
