@@ -961,7 +961,7 @@ export function renderSettingsHost(root, { registry, settings, doc = globalThis.
 
     // Versions (compat.js): each module, its version, the Story Block it needs, and what is out of step.
     function versionsFold() {
-        const report = compatReport({ hostVersion: registry.hostVersion?.() ?? '', modules: registry.modules(), refusals: registry.refusals?.() ?? [] });
+        const report = compatReport({ hostVersion: registry.hostVersion?.() ?? '', modules: registry.modules(), refusals: registry.refusals?.() ?? [], lifecycle: id => registry.lifecycle?.(id) ?? null });
         const { details, body } = fold(doc, VERSIONS_FOLD, 'Versions', report.outOfStep ? `${report.outOfStep} out of step` : 'all in step');
         if (report.outOfStep) details.classList.add('story-suite-fold-warn');
         note('panel', VERSIONS_FOLD, { label: 'Versions', help: report.outOfStep ? `${report.outOfStep} out of step` : 'all in step' }, 'Modules', details);

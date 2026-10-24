@@ -25,6 +25,7 @@ import { ACCEPT, END, UPDATE } from './commands.js';
 import { FEATURE, arcQuery, currentArc, threadsWithArc } from './domain.js';
 import { REASON_TEXT, autoPlanReason, noteMark, planText, plannerRequest, readPlan, trackerSummary } from './plan.js';
 import { arcSettings } from './settings.js';
+import { fightsAmong } from '../fights.js';
 
 export const MODULE_ID = 'story-director';
 /** The Story Block that gives modules a model call (`sdk.callModel`). */
@@ -151,7 +152,7 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
         const fights = (() => {
             try {
                 const modules = api.modules?.();
-                return Array.isArray(modules) ? modules.some(entry => entry?.id !== MODULE_ID && (entry?.commands ?? []).some(type => String(type).startsWith('combat.'))) : true;
+                return Array.isArray(modules) ? fightsAmong(modules, MODULE_ID) : true;
             } catch {
                 return true;
             }
