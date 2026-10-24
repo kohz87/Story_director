@@ -14,6 +14,7 @@ export const BASE_CSS = `
   --sd-text: var(--ss-text);
   --sd-muted: var(--ss-text);
   --sd-accent: var(--ss-accent);
+  --sd-accent-text: var(--ss-accent-text, var(--ss-accent));
   --sd-border: var(--ss-border);
   --sd-surface: var(--ss-tile);
   --sd-good: var(--ss-good);
