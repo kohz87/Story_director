@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Licence: MIT (was GPL-3.0), so the module can be a base for other extensions. Releases already published keep the licence they shipped with.
+
 - **Fights only with a ready RPG Battle** (`src/v2/fights.js`, `module.js`, `arc/controller.js`). On a Story Block host with module lifecycle (2.0.0-beta.2 and later, track E), the fight runner counts only when its `sdk.modules()` entry is `ready`: a dormant or restore-pending RPG Battle gets no encounter requests, and the arc planner asks for no fights (one rule, `fightsAmong`, used by both). Older hosts keep the old command probe. Testkit synced to Story Block main cd2e2ec.
 
 ## 2.0.0-beta.2 (`v2` branch)
