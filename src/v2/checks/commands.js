@@ -164,7 +164,7 @@ function checksRoll(ctx, payload) {
     const policy = policyOf(checks);
     const actorId = payload.actor ?? policy.defaultActor;
     const actor = actorId === null ? null : policy.actors[actorId] ?? null;
-    if (!actor) ctx.fail('NOT_FOUND', payload.actor === undefined ? 'There is no actor to roll for: add one in the Checks settings.' : 'That actor is not there.');
+    if (!actor) ctx.fail('NOT_FOUND', payload.actor === undefined ? 'There is no check actor to roll for. Make one with checks.actor { write, name, expectedHash } (the player\'s own setting), or let a character made in RPG Battle make it.' : 'That actor is not there.');
     if (!knownEvidence(ctx, payload.evidence)) ctx.fail('NOT_FOUND', 'No such evidence for this check.');
     // One use per evidence and meaning: the same request twice is the same check, not a second die.
     const stat = statForCheck(skill, payload.stat);
@@ -211,7 +211,8 @@ function checksRoll(ctx, payload) {
     const id = idFrom(ctx, 'ck', log);
     log[id] = { id, actor: actorId, stat, skill, die, modifiers, mod, total, dc, outcome, source, fallback, evidence: payload.evidence };
     for (const key of Object.keys(log).slice(0, Math.max(0, Object.keys(log).length - MAX_LOG))) delete log[key];
-    const result = { check: id, actor: actorId, die, modifiers, mod, total, dc, outcome, source, fallback };
+    // The contract's result and nothing more; where the modifier came from (`source`, `fallback`) is kept on the log record.
+    const result = { check: id, actor: actorId, die, modifiers, mod, total, dc, outcome };
     const sign = mod >= 0 ? `+${mod}` : String(mod);
     return {
         summary: `${actor.name} tries ${skill}: d20 ${die} ${sign} = ${total} against ${dc}, ${{ crit: 'a critical success', critfail: 'a critical fail', success: 'success', cost: 'success at a cost', fail: 'a fail' }[outcome]}.`,

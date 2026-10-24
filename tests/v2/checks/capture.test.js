@@ -57,7 +57,7 @@ test('what is refused is refused whole: a bad difficulty, no skill, no reply, no
         assert.ok(['INVALID'].includes(out.code), raw + out.code);
         assert.deepEqual(out.state.meta.claims, {});
     }
-    assert.equal(run(state, 'check', { op: '?', kind: 'check', name: 'Stealth', labels: { dc: 'easy' } }, { cause: 'story', source: null }).code, 'FAILED');
+    assert.equal(run(state, 'check', { op: '?', kind: 'check', name: 'Stealth', labels: { dc: 'easy' } }, { cause: 'story', source: null }).code, 'REFUSED', 'no reply to hold it: a refusal that says so, not a failure');
     assert.equal(line('? check Stealth — x | dc: easy', makeState()).code, 'NOT_FOUND');
     assert.equal(run(state, 'check', { op: '?', kind: 'check', name: '', labels: { dc: 'easy' } }, { cause: 'story', source: SOURCE }).code, 'INVALID');
 });

@@ -4,7 +4,7 @@
 // alone a check rolls with SD's standalone bonuses; a linked RPG Battle adds its `rules.modifier` in their place, and NPC State Delta's
 // `npc.socialModifier` adds how a person feels about you. The coordinator's src/v2/module.js merges this part with the others.
 //
-// Not here (written in docs/dev/checks.md): the check table and the `? check` line's capture, which RPG Battle still owns until the lead
+// Not here (written in docs/dev/checks-and-danger.md): the check table and the `? check` line's capture, which RPG Battle still owns until the lead
 // retires it; this part is the roll those callers ask for.
 
 import { commands } from './commands.js';

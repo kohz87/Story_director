@@ -16,6 +16,8 @@ function withActor(bonuses = {}, rb = null) {
     if (rb) state = run(state, 'checks.link', { write: write(), actor: id, rbActor: rb, expectedHash: hashOf(state) }, { queries: { 'rules.sheet': () => ({ id: rb, kind: 'pc' }) } }).state;
     return { state, id };
 }
+/** The log record of a roll: where its modifier came from. */
+const how = out => out.state.domains.checks.log[out.result.data.v2.result.check];
 const roll = (state, payload, options = {}) => run(state, 'checks.roll', { skill: 'Stealth', evidence: EVIDENCE, ...payload }, { cause: 'capture', queries: known, ...options });
 
 test('the words: an explicit stat first, then the skill word, unknown is luck; topics are the table\'s', () => {
@@ -34,7 +36,9 @@ test('standalone: bonuses[stat] and each matching topic once; the outcome is the
     const result = out.result.data.v2.result;
     assert.match(result.check, /^ck_[0-9a-z]{8}$/);
     assert.deepEqual(result.modifiers, [{ source: 'standalone', ref: 'DEX', reason: 'DEX bonus', amount: 2 }, { source: 'standalone', ref: 'topic:stealth', reason: 'stealth bonus', amount: 1 }]);
-    assert.deepEqual([result.actor, result.die, result.mod, result.total, result.dc, result.outcome, result.source, result.fallback], [id, 12, 3, 15, 15, 'success', 'standalone', 'no-link']);
+    assert.deepEqual(Object.keys(result), ['check', 'actor', 'die', 'modifiers', 'mod', 'total', 'dc', 'outcome'], 'the contract\'s result, nothing more');
+    assert.deepEqual([result.actor, result.die, result.mod, result.total, result.dc, result.outcome], [id, 12, 3, 15, 15, 'success']);
+    assert.deepEqual([how(out).source, how(out).fallback], ['standalone', 'no-link'], 'where the modifier came from is on the log record');
     assert.deepEqual(out.state.domains.checks.log[result.check].modifiers, result.modifiers);
     assert.equal(out.result.narrate, true);
 });
@@ -60,13 +64,13 @@ test('a linked character\'s rules.modifier replaces the standalone subtotal, nev
     assert.ok(out.ok, out.message);
     assert.deepEqual(asked, { actor: 'ac_00000001', stat: 'DEX', skill: 'Stealth' });
     const result = out.result.data.v2.result;
-    assert.deepEqual([result.mod, result.source, result.fallback], [5, 'rb', null]);
+    assert.deepEqual([result.mod, how(out).source, how(out).fallback], [5, 'rb', null]);
     assert.equal(result.modifiers.reduce((sum, part) => sum + part.amount, 0), result.mod);
 });
 
 test('RB absent, off, throwing, null or malformed: the standalone bonuses and the reason', () => {
     const { state } = withActor({ DEX: 2 }, 'ac_00000001');
-    const reason = (queries, settings) => roll(state, {}, { queries: { ...known, ...queries }, settings }).result.data.v2.result;
+    const reason = (queries, settings) => { const out = roll(state, {}, { queries: { ...known, ...queries }, settings }); return { ...how(out), mod: out.result.data.v2.result.mod }; };
     assert.deepEqual([reason({}).fallback, reason({}).mod], ['rb-unavailable', 2]);
     assert.equal(reason({ 'rules.modifier': () => null }).fallback, 'rb-no-answer');
     assert.equal(reason({ 'rules.modifier': args => ({ actor: args.actor, stat: args.stat, amount: 99, parts: [] }) }).fallback, 'rb-malformed');

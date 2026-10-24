@@ -20,8 +20,13 @@ a stat or `topic:<name>` -> -30..30); `rbActors` is an explicit, one-to-one link
   distinct matching `topic:` bonus. At most one NPC State Delta part (`npc.identity` -> `npc.socialModifier`, `social` setting). Clamped to
   -30..30 with a `cap` part, so the parts add up to `mod`. Natural 20 / 1, `total >= dc` success, within `costMargin` a cost, else fail.
   Settings: `defaultDc` 15, `costMargin` 2, `rbModifiers` true, `social` true (SD's own; no RPG Battle lookup).
-- The result: `{ check, actor, die, modifiers, mod, total, dc, outcome }` plus `source` ('rb' | 'standalone') and `fallback` (why RB's
-  projection was not used: `no-link`, `rb-modifiers-off`, `rb-unavailable`, `rb-no-answer`, `rb-malformed`). The newest 60 are in `checks.log`.
+- The result: `{ check, actor, die, modifiers, mod, total, dc, outcome }` and nothing more. Where the modifier came from is on the log record
+  (`source` 'rb' | 'standalone', and `fallback`, why RB's projection was not used: `no-link`, `rb-modifiers-off`, `rb-unavailable`,
+  `rb-no-answer`, `rb-malformed`). The newest 60 are in `checks.log`.
+- The pre-roll (Story Block's assist, cause `system`) stands on the previous reply's evidence; its one-use claim carries the receipt's rev,
+  so it does not meet that reply's own check of the same meaning (once per message is the assist's own claim, `assist:precheck:<key>`).
+- A `checks` slice RPG Battle's checks part wrote (`{ prepared, log, ... }`, no policy or ledger) is valid as it is; the first write of ours
+  (`draftChecks`) makes it ours: the policy and ledger it lacks are filled, `prepared`, `last` and `pending` dropped, the log kept where it is ours in shape.
 - `checks.policy({}) -> { actors, defaultActor, rbActors, rbModifiers, social, hash }`; `director.contract({}) -> { api: 2, enabled, clock,
   tiers, threads, journal, checks }` (booleans found by asking the queries each capability needs).
 
@@ -44,7 +49,8 @@ a stat or `topic:<name>` -> -30..30); `rbActors` is an explicit, one-to-one link
 ## `journal.day({day, snapshot?})` (`world` part)
 
 The visible digest, else the visible facts of the day, else the saved scene of a save point (`savepoint.list`); twelve lines of 240 characters at
-most; secrets and arcs left out as the Journal leaves them; works with the digest and the World view off. A day with none is `missing: true` and its source is `snapshot` (track C's fixture has it so; the saved scene is the only source left).
+most; secrets and arcs left out as the Journal leaves them; works with the digest and the World view off. A day with none is `missing: true` and its source is `snapshot` (track C's fixture has it so; the saved scene is the only source left). The day is the
+contract's `Day` (floor(minutes / 1440), the clock may be negative): a day before the first is a day.
 
 ## Differences from the contract, and gaps (written down, not decided)
 
@@ -62,6 +68,13 @@ most; secrets and arcs left out as the Journal leaves them; works with the diges
   `track-e/e5-evidence` (5e31419). `assist.precheck` keeps the claim and `capture.check` and drops the `check.roll` probe, `pendingCheckId`
   and `ROLL_COMMAND`; the roll's receipt is read from `data.v2.result`; a missing `check` kind fails the capture call, so the claim is not
   kept. Its tests are updated (a one-die stand-in; a legacy `check.roll` that must never be called).
+- **Registration.** The `checks` part is **not** registered in `module.js`: RPG Battle's checks part owns the `checks` domain, the `check` kind and its own
+  `checks.*` names, and both cannot register on one host. The single flip release (track-b/checks-flip in RPG Battle and here) retires RPG Battle's part,
+  registers this one with `kinds: { check: checkKind }`, applies the E7b patch to Story Block and moves `checks/modifiers.js` and `statForCheck` into RPG Battle's `rules/`.
+- **For track C (not built here):** standalone Story Director has no screen to make the first check actor or to edit actors' bonuses, link a character, set `defaultDc`/`costMargin`/`rbModifiers`/`social`,
+  or the map's regions and danger (`atlas.region`, `atlas.placeRegion`, `atlas.dangerSet`, `atlas.placeBind`). The commands and their `expectedHash` (`checks.policy`, `atlas.policy`) are there; a
+  `checks.roll` with no actor says what to do in its message.
+- A pack place met while Story Block's packs cannot be read is held (no identity recorded); `atlas.canonical` still answers its own `pl_` id from the atlas.
 - `rules.modifier` is RPG Battle's (slice 4 of track B); until a ready RPG Battle answers it SD uses the standalone bonuses and says why.
 - `director.contract.threads` is true only when `director.threads` and `threads.hash` answer: track A's thread writers are theirs.
 - `registration`: `src/v2/module.js` lists the parts (lead-owned); `checks` is added there in its own commit.

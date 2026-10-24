@@ -54,7 +54,9 @@ test('a day with nothing: missing, titled Day <n>, no lines; the saved scene of 
     const host = await story();
     const empty = day(host, { day: 3 });
     assert.deepEqual(empty, { day: 3, title: 'Day 3', lines: [], source: 'snapshot', missing: true });
-    assert.equal(day(host, { day: -1 }), null);
+    assert.deepEqual(day(host, { day: -1 }), { day: -1, title: 'Day -1', lines: [], source: 'snapshot', missing: true }, 'the clock may be negative: a day before the first is a day');
+    assert.equal(day(host, { day: -6254999482461 }), null);
+    assert.equal(day(host, { day: 6254999482460 }), null);
     assert.equal(day(host, { day: 1.5 }), null);
     assert.equal(day(host, { day: 'x' }), null);
     assert.equal(day(host, {}), null);

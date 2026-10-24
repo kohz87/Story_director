@@ -137,10 +137,14 @@ function linesOf(entry) {
  * day digest is on: the visible digest first, else the visible facts of the day (the receipts the digest would be written from), else the
  * saved visible scene of `snapshot`. At most twelve lines of 240 characters; what {{user}} must not know (a secret, an arc) is left
  * out as the Journal leaves it out, and no hidden event is recapped. A day with none of these is `missing: true`, titled `Day <day>`, with
- * the saved scene's line or `[]`. Null for a day that is not a whole number from 0.
+ * the saved scene's line or `[]`. Null for a day that is not a whole number of the contract's `Day` (floor(minutes / 1440); the story clock may be
+ * negative, so a day before the first is a day).
  */
+const DAY_MIN = -6254999482460;
+const DAY_MAX = 6254999482459;
+
 export function journalDay(state, { day, snapshot = null } = {}, tools) {
-    if (!isInt(day) || day < 0) return null;
+    if (!isInt(day) || day < DAY_MIN || day > DAY_MAX) return null;
     const query = queryOf(tools);
     const calendar = calendarFrom(query);
     const now = nowFrom(query, state);

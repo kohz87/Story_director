@@ -32,7 +32,7 @@ export function applyCheck(ctx, line) {
     if (!skill && !statWord) ctx.fail('INVALID', 'A check needs a skill or a stat.');
     const dc = labels.dc === undefined || labels.dc === '' ? undefined : dcOf(labels.dc);
     if (dc === null) ctx.fail('INVALID', 'The difficulty is easy, normal, hard, very hard or a number from 1 to 40.');
-    if (!ctx.source?.evidence) ctx.fail('FAILED', 'There is no reply yet to hold the check.');
+    if (!ctx.source?.evidence) ctx.fail('REFUSED', 'A check is rolled on a reply, and there is none yet: send a message first.');
     const payload = { skill: skill || statWord, evidence: ctx.source.evidence };
     if (statWord) payload.stat = statWord;
     if (dc !== undefined) payload.dc = dc;
