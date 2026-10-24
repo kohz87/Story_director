@@ -83,7 +83,7 @@ export function query(state, name, args, { pack = null } = {}) {
  * Runs `handler(ctx, payload)` as a command on `state`: `{ ok, state, result, ops }`, or
  * `{ ok: false, code, message, state }` with the state untouched.
  */
-export function runCommand(state, handler, payload, { settings = {}, seed = 7, pack = null, owned = ['atlas'] } = {}) {
+export function runCommand(state, handler, payload, { settings = {}, seed = 7, pack = null, owned = ['atlas'], cause = 'ui', caller = null } = {}) {
     const rev = state.meta.rev + 1;
     const drafts = {};
     const random = sfc32(seed);
@@ -91,6 +91,8 @@ export function runCommand(state, handler, payload, { settings = {}, seed = 7, p
     const ask = queryFor(pack);
     const ctx = {
         rev,
+        cause,
+        caller,
         receiptId: `rc_test${String(rev).padStart(4, '0')}`,
         read: domain => deepFreeze(structuredClone(drafts[domain] ?? state.domains[domain])),
         draft: domain => {

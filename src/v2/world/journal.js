@@ -11,7 +11,7 @@
 // the Journal says so and shows nothing.
 
 import { boardDay } from '../chronicle/queries.js';
-import { dayLine, dayOf, digestOut, entriesByDay, factsOf, makeDigest, notedOf, rangeDays } from '../chronicle/days.js';
+import { dayLine, dayOf, digestOut, entriesByDay, factsOf, makeDigest, notedOf, orderedDays, rangeDays } from '../chronicle/days.js';
 import { calendarFrom, hiddenNames, namesHidden, nowFrom, queryOf, tryQuery } from './known.js';
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -113,4 +113,57 @@ export function journalView(state, _args, tools) {
     const open = pending(state, tools, { calendar, now, written: new Set(days.map(day => day.day)) });
     const out = [...open, ...days].sort((a, b) => b.day - a.day).map(day => knownDay(day, hidden));
     return { on: true, days: out, hasDays: out.length > 0, count: out.length, today: String(board.today ?? '') };
+}
+
+// ---- one day, for other modules (contract §3: journal.day) ----------------------------------------------------------------
+
+const LINES = 12;
+const LINE = 240;
+const oneLine = value => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, LINE);
+
+/** The lines a known day gives, newest facts first as the Journal reads them: its line, the facts, what happened, the news, who was met. */
+function linesOf(entry) {
+    const out = [];
+    if (entry.short) out.push(entry.short);
+    out.push(...list(entry.facts), ...list(entry.happened), ...list(entry.world));
+    if (list(entry.met).length) out.push(`Met: ${list(entry.met).join(', ')}`);
+    out.push(...list(entry.npcs));
+    return [...new Set(out.map(oneLine).filter(Boolean))].slice(0, LINES);
+}
+
+/**
+ * `journal.day({ day, snapshot? }) -> { day, title, lines, source: 'digest' | 'facts' | 'snapshot', missing }` (contract §3): one story day
+ * for a module that wants its recap (RPG Battle's save points, the wake after a return). It works whether or not the Journal screen or the
+ * day digest is on: the visible digest first, else the visible facts of the day (the receipts the digest would be written from), else the
+ * saved visible scene of `snapshot`. At most twelve lines of 240 characters; what {{user}} must not know (a secret, an arc) is left
+ * out as the Journal leaves it out, and no hidden event is recapped. A day with none of these is `missing: true`, titled `Day <day>`, with
+ * the saved scene's line or `[]`. Null for a day that is not a whole number from 0.
+ */
+export function journalDay(state, { day, snapshot = null } = {}, tools) {
+    if (!isInt(day) || day < 0) return null;
+    const query = queryOf(tools);
+    const calendar = calendarFrom(query);
+    const now = nowFrom(query, state);
+    const hidden = hiddenNames(state);
+    const currency = tryQuery(query, 'inventory.currency', {}, null);
+    const title = date => (date ? `Day ${day} · ${date}` : `Day ${day}`).slice(0, 80);
+    const digest = orderedDays(state?.domains?.chronicle, { state, currency }).find(item => item.day === day);
+    if (digest) {
+        const entry = knownDay(boardDay(digestOut(digest, { currency, substitute: substituteOf(tools) })), hidden);
+        const lines = linesOf(entry);
+        if (lines.length) return { day, title: title(entry.date), lines, source: 'digest', missing: false };
+    }
+    const facts = pending(state, tools, { calendar, now, written: new Set() }).find(item => item.day === day);
+    if (facts) {
+        const entry = knownDay(facts, hidden);
+        const lines = linesOf(entry);
+        if (lines.length) return { day, title: title(entry.date), lines, source: 'facts', missing: false };
+    }
+    // The saved visible scene of a save point: its own journal for the day, else its scene's line.
+    const point = typeof snapshot === 'string' && snapshot ? (tryQuery(query, 'savepoint.list', {}, []) ?? []).find(item => isRecord(item) && item.id === snapshot) : null;
+    const saved = list(point?.journal?.day === day ? point.journal.lines : []).map(oneLine).filter(line => line && !namesHidden(line, hidden.words) && !namesHidden(line, hidden.behind)).slice(0, LINES);
+    if (saved.length) return { day, title: title(''), lines: saved, source: 'snapshot', missing: false };
+    const scene = oneLine(point?.scene?.text);
+    const visible = scene && !namesHidden(scene, hidden.words) && !namesHidden(scene, hidden.behind) ? [scene] : [];
+    return { day, title: `Day ${day}`, lines: visible, source: visible.length ? 'snapshot' : 'facts', missing: true };
 }

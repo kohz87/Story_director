@@ -20,11 +20,15 @@ const byKeyOnce = (names, own) => {
         return true;
     });
 };
+/** A pack place's content definition id as Story Block normalizes it: `pack.<id>/<slug>`. */
+export const DEFINITION_ID = /^pack\.[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const positive = value => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
 
 /**
  * The enabled packs' places and routes through `query` (ctx.query, tools.query or view.query):
- * `{ places: [{ key, name, region, kind, layer, x, y, aliases, aliasNames, hidden }], routes: [{ from, to, kind, km, hours }] }`.
+ * `{ places: [{ key, name, definition, region, kind, layer, x, y, aliases, aliasNames, hidden }], routes: [{ from, to, kind, km, hours }], candidates }`.
+ * `definition`: Story Block's content id of the place (`pack.<id>/<slug>`), null when the pack gave none; `candidates`: every pack place that
+ * has one, before names are made unique (`[{ id, key, name, region, aliases: [keys] }]`), which canonical resolution reads.
  * `aliases` are name keys, `aliasNames` the same names as written (for search). `hidden`: the pack
  * marks the place `hidden: true` or `secret: true`, so the map keeps it off until the story goes
  * there (Story Block's pack format has no such field yet; a pack that gives one is respected).
@@ -41,11 +45,16 @@ export function packWorld(query) {
         }
     };
     const places = [];
+    const candidates = [];
     const seen = new Set();
     for (const entry of read('places')) {
         if (!isRecord(entry) || typeof entry.name !== 'string') continue;
         const name = cleanName(entry.name);
         const key = keyOf(name);
+        // Every pack's place is a canonical candidate before names are made unique (contract P24: two packs sharing a name are two places).
+        if (key && typeof entry.id === 'string' && DEFINITION_ID.test(entry.id)) {
+            candidates.push({ id: entry.id, key, name, region: cleanWord(entry.region), aliases: (Array.isArray(entry.aliases) ? entry.aliases : []).map(cleanName).map(keyOf).filter(alias => alias && alias !== key) });
+        }
         if (!key || seen.has(key)) continue;
         seen.add(key);
         const x = finite(entry.x);
@@ -54,6 +63,7 @@ export function packWorld(query) {
         places.push({
             key,
             name,
+            definition: typeof entry.id === 'string' && DEFINITION_ID.test(entry.id) ? entry.id : null,
             region: cleanWord(entry.region),
             kind: cleanWord(entry.kind, { lower: true }),
             layer: cleanWord(entry.layer ?? entry.plane),
@@ -72,7 +82,7 @@ export function packWorld(query) {
         if (!keyOf(from) || !keyOf(to) || keyOf(from) === keyOf(to)) continue;
         routes.push({ from, to, kind: cleanWord(entry.kind, { lower: true }), km: positive(entry.km), hours: positive(entry.hours) });
     }
-    return { places, routes };
+    return { places, routes, candidates };
 }
 
 /**
