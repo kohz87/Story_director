@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.0.0-beta.2 (`v2` branch)
+
+Story Suite v2, second beta. What's new for players, known issues and every module's version: [Story Block docs/v2/RELEASES.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md). Player guide: [Story Block docs/v2/GUIDE.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md).
+
+- Version 2.0.0-beta.2. Needs Story Block `>=2.0.0-beta.2` (`requires`). Update Story Block first: a Story Block 2.0.0-beta.1 or older refuses the module with a red notice ("… needs Story Block ≥ 2.0.0-beta.2; this is 2.0.0-beta.1. Update Story Block to use it."). Arc planning's own check (`ARC_NEEDS_STORY_BLOCK`) stays at 2.0.0-beta.1: the feature needs nothing newer.
+- Story Block testkit re-synced to Story Block `release-beta2` 87da9fe (Story Block 2.0.0-beta.2).
+
 - **Status card: a changed value reads in the accent's text tone** (`src/v2/screens/status-card.js`, `style.js`). The value of a row this reply changed (the time, the goal) used the accent itself, under 4.5:1 on Glass and Solid; it now uses Story Block's `--ss-accent-text` (falling back to the accent). The header comment describes the card as it is; a test covers an unset clock.
 - **Status fold** (`screens/status-card.js`): no box of its own (the rows sit in the fold, no border or second background); Time, Weather, Place (with region), Coordinates and Goal (the quest, its Now line and progress), each skipped when it has no value; a label column of muted small caps with the icon, values in body text, 6px between rows.
 - **Story Director fixes and layout.** The v1 glue stays off a Story Block v2 host (`index.v1.js`: `storyBlock()` and `init()` skip v2, the `blockInText` calls are optional). The map's places have 44px tap areas on a phone and a tap picks the nearest dot (`atlas/widget.js`, desktop unchanged). The HUD strip is gone (time and place are in the Status fold; the queries stay). Quest rows are one card each (status and reward pills, Now, Details), the arc card uses the section label and matches the cards, and problem tags sit on their own line when there is no room. The Chronicle day head puts the date and the pill on one line, the summary below.
