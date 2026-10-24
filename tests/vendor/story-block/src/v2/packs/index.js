@@ -32,7 +32,7 @@
 //   `applyStart(state, start, { id })` writes it into an initial State.
 
 import { createInstalled } from './installed.js';
-import { calendarOf, contentOf, craftsOf, economyOf, mergeStart, resolveItemIn, applyStart, weatherOf } from './content.js';
+import { calendarOf, contentOf, craftsOf, economyOf, itemDefsIn, mergeStart, resolveItemIn, applyStart, weatherOf } from './content.js';
 import { renderPacksPanel } from './panel.js';
 import { HOST_VERSION, validatePack, slugify } from './validate.js';
 import { readCharacterLorebook, stCapabilities, stHostVersion, stSettings } from './st-adapter.js';
@@ -93,6 +93,9 @@ export function createPacksPart({ settings, readLorebook = async () => ({ charac
             'packs.list': () => packs.list(),
             'packs.content': (_state, { kind, pack = null } = {}) => contentOf(packs.packs(), kind, { pack }),
             'packs.item': (_state, { name } = {}) => resolveItem(name),
+            // The enabled packs' items as inventory defs by definition ID, ID-sorted (content.js itemDefsIn): what a
+            // rules module freezes with inventory.registerDefinition. `ids` narrows to those IDs.
+            'packs.itemDefs': (_state, args) => itemDefsIn(packs.packs(), args && typeof args === 'object' && Array.isArray(args.ids) ? args.ids : null),
             'packs.start': () => startState(),
             'packs.calendar': () => calendarOf(packs.packs()),
             'packs.weather': () => weatherOf(packs.packs()),

@@ -40,6 +40,7 @@ import { part as world } from './world/index.js';
 import { part as arc } from './arc/index.js';
 import { part as screens } from './screens/index.js';
 import { calendarConfig, packCalendarOf } from './tracker/time.js';
+import { fightsAmong } from './fights.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
@@ -190,10 +191,15 @@ const UNANSWERED = /no module answers|no query called|there is no query/i;
  * `sdk.modules()`), else answers a `combat.*` query through the view (`view.query`). Null when
  * neither can be asked. Story Director stands alone (WAVE rule 11): without a fight runner its prompt
  * asks for no encounters and tells no beat as a fight.
+ *
+ * On a host with a module lifecycle (its `sdk.modules()` entries carry `status`) the module must be
+ * `ready`: a dormant one (its peer is missing or off), or any module while a restore is pending, is
+ * not a fight runner, and nothing falls back to asking a query then. Older hosts have no status; the
+ * command probe is kept as it was.
  */
 export function fightRunner(view = null) {
     const modules = tryLive(() => liveSdk()?.modules?.(), null);
-    if (Array.isArray(modules)) return modules.some(entry => entry?.id !== MODULE_ID && (entry?.commands ?? []).some(type => String(type).startsWith('combat.')));
+    if (Array.isArray(modules)) return fightsAmong(modules, MODULE_ID);
     if (typeof view?.query !== 'function') return null;
     return FIGHT_QUERIES.some(name => {
         try {
@@ -305,7 +311,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // What the parts are told of the module set: `fights`, whether a fight runner is there (true until
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
     // one set of modules).
-    const env = { fights: true };
+    // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
+    const env = { fights: fightRunner() ?? true };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;

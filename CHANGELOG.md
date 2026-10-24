@@ -6,6 +6,7 @@
 
 Story Suite v2, second beta. What's new for players, known issues and every module's version: [Story Block docs/v2/RELEASES.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/RELEASES.md). Player guide: [Story Block docs/v2/GUIDE.md](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md).
 
+- **Fights only with a ready RPG Battle** (`src/v2/fights.js`, `module.js`, `arc/controller.js`). On a Story Block host with module lifecycle (2.0.0-beta.2 and later, track E), the fight runner counts only when its `sdk.modules()` entry is `ready`: a dormant or restore-pending RPG Battle gets no encounter requests, and the arc planner asks for no fights (one rule, `fightsAmong`, used by both). Older hosts keep the old command probe. Testkit synced to Story Block main cd2e2ec.
 - Version 2.0.0-beta.2. Needs Story Block `>=2.0.0-beta.2` (`requires`). Update Story Block first: a Story Block 2.0.0-beta.1 or older refuses the module with a red notice ("… needs Story Block ≥ 2.0.0-beta.2; this is 2.0.0-beta.1. Update Story Block to use it."). Arc planning's own check (`ARC_NEEDS_STORY_BLOCK`) stays at 2.0.0-beta.1: the feature needs nothing newer.
 - Story Block testkit re-synced to Story Block `release-beta2` 87da9fe (Story Block 2.0.0-beta.2).
 

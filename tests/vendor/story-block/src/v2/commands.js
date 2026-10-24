@@ -107,6 +107,10 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
 
     // `again` (a Re-read of a line that made a change before, turn.js): its features are not checked.
     function resolve(type, again = false) {
+        // A module held back (dormant, or a restore is pending; registry.refusal) is refused with its reason, at
+        // the top, through ctx.call and on commit; like UNKNOWN_COMMAND nothing has run, so a caller may catch it.
+        const held = typeof type === 'string' && type && typeof registry.refusal === 'function' ? registry.refusal(type) : null;
+        if (held) fail(held.code, held.message);
         const handler = typeof type === 'string' && type ? registry.command(type) : null;
         const moduleId = typeof handler === 'function' ? registry.commandOwner(type) : null;
         if (typeof handler !== 'function' || !moduleId) fail('UNKNOWN_COMMAND', `There is no command called "${type}".`);

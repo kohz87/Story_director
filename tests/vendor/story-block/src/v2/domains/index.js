@@ -13,7 +13,7 @@ import {
     featureOn, initialInventory, inventoryTail, validateInventory,
 } from './inventory.js';
 import { WEATHER_CHARS, capturePlace, capturePresent, captureWeather, initialScene, sceneCommands, sceneQueries, sceneTail, validateScene } from './scene.js';
-import { DEFAULT_CURRENCY, MAX_COIN_VALUE, coinLine, currencyOf } from './money.js';
+import { DEFAULT_CURRENCY, MAX_COIN_VALUE, coinLine, resolveCurrency } from './money.js';
 import { renderInventoryTab } from '../ui/inventory-tab.js';
 import { renderSceneTab } from '../ui/scene-tab.js';
 import { FEATURE_TEXT, createAssistPart } from '../assist/index.js';
@@ -114,7 +114,7 @@ export const CORE_SETTINGS = Object.freeze({
  * tabs }), for a host that merges parts. `hooks(name) → fn[]` in module-id order (the registry's
  * `hooks`); `settings()` → this module's settings. Without them no hooks run and the currency is gold.
  */
-export function createCorePart({ hooks = () => [], settings = () => ({}), hookEntries = null, problem = null, economy = () => null } = {}) {
+export function createCorePart({ hooks = () => [], settings = () => ({}), hookEntries = null, problem = null, economy = () => null, query = null } = {}) {
     const hookList = name => {
         const fns = hooks(name);
         return Array.isArray(fns) ? fns.filter(fn => typeof fn === 'function') : [];
@@ -133,7 +133,8 @@ export function createCorePart({ hooks = () => [], settings = () => ({}), hookEn
         economy,
         problem: entry => { try { problem?.(entry); } catch { /* the Problems list is not essential */ } },
     };
-    const currency = () => currencyOf(env.settings());
+    // The chat's currency: a ready rules module's (`purse.currency`, when `query` reaches it), else the reader's / pack's / gold.
+    const currency = () => resolveCurrency(env.settings(), typeof query === 'function' ? query : null);
     const kind = (grammar, apply) => ({ grammar, apply });
     return {
         domains: {
@@ -300,7 +301,7 @@ export function readerLadder(hooks) {
 }
 
 export function createCoreModule({ hooks = () => [], settings = () => ({}), version = '2.0.0-alpha.1', packs = livePacks, command, query, assist = null, hookEntries = null, problem = null, extras = null } = {}) {
-    const core = createCorePart({ hooks, settings, hookEntries, problem, economy: () => (typeof packs.economy === 'function' ? packs.economy() : null) });
+    const core = createCorePart({ hooks, settings, hookEntries, problem, query, economy: () => (typeof packs.economy === 'function' ? packs.economy() : null) });
     const events = createEventsPart({
         ...(command ? { command } : {}),
         ...(query ? { query } : {}),
