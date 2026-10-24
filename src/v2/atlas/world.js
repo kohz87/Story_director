@@ -35,12 +35,15 @@ const positive = value => (typeof value === 'number' && Number.isFinite(value) &
  * A missing query, or one that throws, gives an empty pack world.
  */
 export function packWorld(query) {
+    // `readable`: whether the packs could be asked at all (a missing or throwing query is no answer; an installed-pack list that is empty is one).
+    let readable = typeof query === 'function';
     const read = kind => {
         if (typeof query !== 'function') return [];
         try {
             const out = query('packs.content', { kind });
             return Array.isArray(out) ? out : [];
         } catch {
+            readable = false;
             return [];
         }
     };
@@ -82,7 +85,7 @@ export function packWorld(query) {
         if (!keyOf(from) || !keyOf(to) || keyOf(from) === keyOf(to)) continue;
         routes.push({ from, to, kind: cleanWord(entry.kind, { lower: true }), km: positive(entry.km), hours: positive(entry.hours) });
     }
-    return { places, routes, candidates };
+    return { places, routes, candidates, readable };
 }
 
 /**

@@ -49,7 +49,7 @@ test('canonical: a pack place is its content id before and after it is on the ma
 });
 
 test('canonical: a place no pack has is its own pl_ id, and stays so when a pack later names it; omitted means the scene\'s place; id wins', () => {
-    let state = ok(command(makeState(), 'atlas.visit', { name: 'Wren Hollow' })).state;
+    let state = ok(command(makeState(), 'atlas.visit', { name: 'Wren Hollow' }, { pack: { places: [], routes: [] } })).state;
     const own = placeNamed(state, 'wren hollow');
     assert.equal(state.domains.atlas.placeRefs[own.id], own.id);
     const later = { places: [{ id: 'pack.late/hollow', name: 'Wren Hollow', region: '', kind: '', aliases: [] }], routes: [] };
@@ -58,6 +58,28 @@ test('canonical: a place no pack has is its own pl_ id, and stays so when a pack
     assert.equal(canon(state, {}, later).id, own.id, 'the scene\'s place');
     assert.equal(canon(state, { id: HAVEN, name: 'Wren Hollow' }).id, HAVEN, 'id wins');
     assert.equal(canon(at(state, ''), {}), null, 'a scene nowhere');
+});
+
+test('a place met while the packs cannot be read is held, not pinned to its pl_ id: a pack that fits may be only unread; the canonical answer is still its own id', () => {
+    const unread = ok(command(makeState(), 'atlas.visit', { name: 'Wren Hollow' })).state;
+    const own = placeNamed(unread, 'wren hollow');
+    assert.equal(unread.domains.atlas.placeRefs[own.id], undefined, 'nothing recorded');
+    assert.equal(canon(unread, { id: own.id }).id, own.id, 'answered, not recorded');
+    assert.equal(canon(unread, { id: own.id }).source, 'atlas');
+    // The pack comes back and names it: the place is the pack's, as if it had been read the first time.
+    const pack = { places: [{ id: 'pack.late/hollow', name: 'Wren Hollow', region: '', kind: '', aliases: [] }], routes: [] };
+    const again = ok(command(unread, 'atlas.visit', { name: 'Wren Hollow' }, { pack })).state;
+    assert.equal(again.domains.atlas.placeRefs[own.id], 'pack.late/hollow');
+    // Read and empty is an answer: the place is its own.
+    const empty = ok(command(unread, 'atlas.visit', { name: 'Wren Hollow' }, { pack: { places: [], routes: [] } })).state;
+    assert.equal(empty.domains.atlas.placeRefs[own.id], own.id);
+});
+
+test('canonical: the source says where an identity comes from, a pack\'s content id or the atlas\'s own place, also when the pack is gone', () => {
+    const state = ok(command(makeState(), 'atlas.visit', { name: 'Wren Hollow' }, { pack: { places: [], routes: [] } })).state;
+    const own = placeNamed(state, 'wren hollow');
+    assert.equal(canon(state, { id: own.id }).source, 'atlas');
+    assert.equal(canon(state, { id: own.id }, { places: [], routes: [] }).source, 'atlas', 'a pl_ id kept in placeRefs is the atlas\'s');
 });
 
 test('an own place that fits two packs is held: no identity, null canonical, the candidates to choose from, and placeBind settles it', () => {

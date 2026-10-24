@@ -36,6 +36,9 @@ export function placeOfDefinition(atlas, pack, definition) {
     return fit.length === 1 ? fit[0] : null;
 }
 
+/** Where an identity comes from: a pack's content id, or the atlas's own `pl_` place. */
+const sourceOf = id => (String(id).startsWith('pack.') ? 'pack' : 'atlas');
+
 function out(atlas, id, name, own, source) {
     return { id, name, atlasId: own?.id ?? null, regionId: regionOf(atlas, id), source };
 }
@@ -53,7 +56,7 @@ export function canonicalOf(atlas, pack, ref) {
     if (definition) return out(atlas, definition.id, definition.name, placeOfDefinition(atlas, pack, definition.id), 'pack');
     // A pack that is gone leaves its mapping: the place still answers to the definition it was bound to.
     const kept = Object.entries(refsOf(atlas)).find(([place, target]) => target === text && Object.hasOwn(atlas?.places ?? {}, place))?.[0];
-    if (kept) return out(atlas, text, atlas.places[kept].name, atlas.places[kept], 'pack');
+    if (kept) return out(atlas, text, atlas.places[kept].name, atlas.places[kept], sourceOf(text));
     if (text.startsWith(PACK_NODE)) {
         const found = byKey(candidates, text.slice(PACK_NODE.length));
         const unique = [...new Set(found.map(candidate => candidate.id))];
@@ -63,7 +66,7 @@ export function canonicalOf(atlas, pack, ref) {
     if (own) {
         const ref = refsOf(atlas)[own.id];
         if (ref) {
-            return out(atlas, ref, own.name, own, ref.startsWith('pack.') ? 'pack' : 'atlas');
+            return out(atlas, ref, own.name, own, sourceOf(ref));
         }
         const fits = candidatesOf(atlas, pack, own);
         if (fits.length === 0) return out(atlas, own.id, own.name, own, 'atlas');
@@ -93,7 +96,8 @@ export function recordRef(atlas, pack, place) {
     if (atlas.placeRefs[place.id]) return false;
     const fits = candidatesOf(atlas, pack, place);
     let target = null;
-    if (fits.length === 0) target = place.id;
+    // No pack place fits: the place is its own, unless the packs could not be read at all (then it is held: a pack that fits may be only unread).
+    if (fits.length === 0) target = pack?.readable === false ? null : place.id;
     else if (fits.length === 1 && !Object.values(atlas.placeRefs).includes(fits[0].id)) target = fits[0].id;
     if (!target) return false;
     atlas.placeRefs[place.id] = target;
