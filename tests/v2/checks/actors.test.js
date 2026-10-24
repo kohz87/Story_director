@@ -93,6 +93,10 @@ test('checks.link: the PC or a durable companion, one to one, null unlinks, the 
     assert.equal(link(mara, 'ac_00000002').ok, true, 'the player relinks');
     assert.equal(link(mara, 'ac_00000002', { caller: 'rpg-battle' }).code, 'CONFLICT', 'creation does not relink silently');
     assert.equal(link(mara, 'ac_00000001', { caller: 'rpg-battle' }).ok, true, 'the same link again is fine');
+    // A link whose character RPG Battle no longer has is stale: its creation may take the actor for the new one; with RPG Battle silent it cannot tell and does not.
+    const gone = { 'rules.sheet': ({ actor }) => (actor === 'ac_00000002' ? { id: actor, kind: 'companion' } : null) };
+    assert.equal(link(mara, 'ac_00000002', { caller: 'rpg-battle', queries: gone }).ok, true, 'the old character is gone');
+    assert.equal(link(mara, 'ac_00000002', { caller: 'rpg-battle', queries: { 'rules.sheet': ({ actor }) => (actor === 'ac_00000001' ? { id: actor, kind: 'pc' } : { id: actor, kind: 'companion' }) } }).code, 'CONFLICT', 'a living one stays');
     const none = link(mara, null);
     assert.ok(none.ok);
     assert.deepEqual(none.state.domains.checks.policy.rbActors, {});

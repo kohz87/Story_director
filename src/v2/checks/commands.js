@@ -6,7 +6,7 @@
 //   checks.link  { write, actor, rbActor|null, expectedHash }                 -> { actor, rbActor, hash }
 //       The player, or RPG Battle's creation. A character must resolve through `rules.sheet` and be the PC or a durable companion; one actor
 //       to one character and back; null unlinks. Nothing is linked by a same name. RB's creation never relinks an actor that already has
-//       another character (CONFLICT); the player may.
+//       another living character (CONFLICT; a link whose character `rules.sheet` no longer knows is stale and may be taken); the player may.
 //   checks.roll  { actor?, stat?, skill, targetNpc?, dc?, evidence }         -> { check, actor, die, modifiers, mod, total, dc, outcome, ... }
 //       Capture, the pre-roll and the system only: nobody supplies a die or an outcome. One d20 from the receipt's seed.
 //
@@ -100,6 +100,13 @@ function characterOf(ctx, rbActor) {
     return sheet;
 }
 
+/** Whether the character an actor is linked to is still there: false only when RPG Battle answers and does not know it (or it is no longer the PC or a companion). */
+function linkedIsLive(ctx, rbActor) {
+    const sheet = ask(ctx, 'rules.sheet', { actor: rbActor });
+    if (!sheet.ok) return true;
+    return isRecord(sheet.value) && (sheet.value.kind === 'pc' || sheet.value.kind === 'companion');
+}
+
 function checksLink(ctx, payload) {
     shape(ctx, 'checks.link', payload, ['write', 'actor', 'rbActor', 'expectedHash']);
     if (!ACTOR_ID.test(payload.actor ?? '')) ctx.fail('INVALID', 'An actor id looks like ca_k3f9a2qz.');
@@ -116,8 +123,8 @@ function checksLink(ctx, payload) {
     else {
         const owner = Object.entries(policy.rbActors).find(([, target]) => target === payload.rbActor)?.[0] ?? null;
         if (owner !== null && owner !== payload.actor) ctx.fail('CONFLICT', 'That character is already linked to another actor.');
-        // The creation never silently relinks; the player may choose another character.
-        if (have !== null && have !== payload.rbActor && isRb(ctx) && !isPlayer(ctx)) ctx.fail('CONFLICT', 'That actor is already linked to another character.');
+        // The creation never silently relinks a living character; the player may choose another. A link whose character RPG Battle no longer has (stale) is not one.
+        if (have !== null && have !== payload.rbActor && isRb(ctx) && !isPlayer(ctx) && linkedIsLive(ctx, have)) ctx.fail('CONFLICT', 'That actor is already linked to another character.');
         draft.rbActors[payload.actor] = payload.rbActor;
     }
     const result = { actor: payload.actor, rbActor: payload.rbActor, hash: projection({ policy: draft }, ctx.settings()).hash };
