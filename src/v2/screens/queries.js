@@ -449,7 +449,6 @@ export function screenQueries({ settings = null } = {}) {
         'director.behind': (state, args, tools) => behindView(state, args, tools),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'director.next': (state, args, tools) => nextDue(state, args, tools, { settings }),
-        'quest.board': (state, args, tools) => questBoard(state, args, tools, { settings }),
         'director.problems': (state, args, tools) => problemsList(state, args, tools),
         'director.status': (state, args, tools) => statusExtras(state, args, tools),
     };
