@@ -349,4 +349,9 @@ test('status card rows: a row with no value is left out; no box of its own (the 
     assert.match(css, /\.sd-status \{[^}]*gap: 6px 14px;/, 'six pixels between the rows');
     assert.match(css, /\.sd-row > dt \{[^}]*font-variant: small-caps;[^}]*color: color-mix\(in srgb, var\(--sd-text\) 80%, transparent\);/);
     assert.match(css, /\.sd-row > dd \{[^}]*color: var\(--sd-text\);/);
+    // A changed value reads in the accent's text tone (4.5:1 or more), not the accent itself.
+    assert.match(css, /\.sd-new > dd \{ color: var\(--sd-accent-text\); \}/);
+    // An unset clock: no Time row, the place and goal still shown.
+    const { el: noClock } = draw(STATUS_CARD_ID, headState({ minutes: null }));
+    assert.deepEqual(noClock.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place', 'Goal']);
 });
