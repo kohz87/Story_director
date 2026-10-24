@@ -1,4 +1,4 @@
-# Story Director 2.0.0-beta.1
+# Story Director 2.0.0-beta.2
 
 > This is the **`v2` branch**: Story Suite v2, first beta. It is for test play, not for your real campaigns yet.
 > Story Director 1 is on the [`main` branch](https://github.com/kohz87/Story_director/tree/main).
@@ -21,7 +21,7 @@ sim), and it shows more with [NPC State Delta](https://github.com/kohz87/npc_sta
 3. **Extensions → Install extension**, paste `https://github.com/kohz87/Story_director`, choose the branch
    **`v2`**, reload.
 
-Needs (`requires`): Story Block **2.0.0-beta.1 or later** (arc planning's model call needs it too). Works with, but
+Needs (`requires`): Story Block **2.0.0-beta.2 or later** (arc planning's model call needs it too). Works with, but
 does not need, RPG Battle (quest ranks follow its rank ladder; quest fights) and NPC State Delta (the people on the
 World screen). Update Story Block before Story Director. Install help:
 [guide, Installing](https://github.com/kohz87/Story_block/blob/v2/docs/v2/GUIDE.md#installing).

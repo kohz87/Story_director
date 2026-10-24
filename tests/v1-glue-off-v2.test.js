@@ -20,7 +20,7 @@ globalThis.SillyTavern = {
 // A v2 host as index.js sees it: apiVersion 2, no v1 methods.
 globalThis.StoryBlock = Object.freeze({
     apiVersion: 2,
-    version: '2.0.0-beta.1',
+    version: '2.0.0-beta.2',
     ready: new Promise(() => {}),
     sdk: Object.freeze({ registerBlock: v1Only('registerBlock'), registerTab: v1Only('registerTab'), onReply: v1Only('onReply') }),
 });

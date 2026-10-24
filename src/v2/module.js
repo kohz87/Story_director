@@ -43,10 +43,10 @@ import { calendarConfig, packCalendarOf } from './tracker/time.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.0.0-beta.1';
+export const VERSION = '2.0.0-beta.2';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-export const STORY_BLOCK_RANGE = '>=2.0.0-beta.1';
+export const STORY_BLOCK_RANGE = '>=2.0.0-beta.2';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['screens', screens]]);
