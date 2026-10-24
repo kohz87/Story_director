@@ -259,7 +259,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.equal(mine.version, '2.0.0-beta.2');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
     assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'clock', 'event', 'faction', 'hook', 'landmark', 'quest', 'route', 'secret', 'time', 'world']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.payOwed', 'quest.settle', 'quest.take', 'time.settle']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'checks.actor', 'checks.link', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'quest.abandon', 'quest.finish', 'quest.payOwed', 'quest.settle', 'quest.take', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
         'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card',
@@ -268,6 +268,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual(Object.keys(defs.schema).sort(), [
         'arc.autoAccept', 'arc.genre', 'arc.keepNote', 'arc.lowThreads', 'arc.maxTokens', 'arc.note', 'arc.profile', 'arc.recent', 'arc.stallDays', 'arc.trigger',
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
+        'checks.costMargin', 'checks.defaultDc', 'checks.rbModifiers', 'checks.social',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail',
         'quests.followLadder', 'quests.wordTurnIns', 'screens.hideBehind', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',

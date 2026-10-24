@@ -1,7 +1,7 @@
 // A command context for the checks part (SPEC §3.2) in outline: the handler runs on drafts, the drafts are diffed with Story Block's own
 // ops.js (vendored), the validators run, claims are a real set (a second claim of a key is false), `roll` is the host's seeded die, and the
 // queries other modules answer (rules.sheet, rules.modifier, npc.identity, npc.socialModifier, story.evidence) are given by the test.
-import { part } from '../../../src/v2/checks/index.js';
+import { checkKind, part } from '../../../src/v2/checks/index.js';
 import { apply, checkOps, diff } from '../../vendor/story-block/src/v2/ops.js';
 import { projection } from '../../../src/v2/checks/domain.js';
 
@@ -44,7 +44,11 @@ export const makeState = () => deepFreeze({ v: 2, meta: { rev: 0, claims: {} }, 
  * `caller` (a module id), `settings`, `queries` (a map of name -> (args) => answer, or a function that throws), `source`, `die`
  * (the d20 the host rolls), `seed`.
  */
-export function run(state, type, payload, { cause = 'ui', caller = null, settings = {}, queries = {}, source = null, die = 10, seed = 7 } = {}) {
+export function run(state, type, payload, options = {}) {
+    return execute(state, payload, options, ctx => (type === 'check' ? checkKind.apply(ctx, payload) : part.commands[type](ctx, deepFreeze(structuredClone(payload)))));
+}
+
+function execute(state, payload, { cause = 'ui', caller = null, settings = {}, queries = {}, source = null, die = 10, seed = 7 } = {}, handler) {
     const rev = state.meta.rev + 1;
     const drafts = {};
     const random = sfc32(seed + rev);
@@ -54,7 +58,10 @@ export function run(state, type, payload, { cause = 'ui', caller = null, setting
         receiptId: `rc_test${String(rev).padStart(4, '0')}`,
         read: domain => deepFreeze(structuredClone(drafts[domain] ?? state.domains[domain])),
         draft: domain => { drafts[domain] ??= structuredClone(state.domains[domain]); return drafts[domain]; },
-        call: name => { throw new Rejected('UNKNOWN_COMMAND', `No command ${name} in this test.`); },
+        call: (name, args) => {
+            if (!part.commands[name]) throw new Rejected('UNKNOWN_COMMAND', `No command ${name} in this test.`);
+            return part.commands[name]({ ...ctx, caller: 'story-director' }, deepFreeze(structuredClone(args)));
+        },
         claim: key => { if (Object.hasOwn(claims, key)) return false; claims[key] = true; return true; },
         rng: random,
         roll: () => ({ total: die, dice: [die] }),
@@ -70,7 +77,7 @@ export function run(state, type, payload, { cause = 'ui', caller = null, setting
     };
     let result;
     try {
-        result = part.commands[type](ctx, deepFreeze(structuredClone(payload)));
+        result = handler(ctx);
     } catch (error) {
         return { ok: false, code: error.code ?? 'FAILED', message: error.message, state };
     }

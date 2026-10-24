@@ -53,9 +53,15 @@ most; secrets and arcs left out as the Journal leaves them; works with the diges
   "inactive" is NOT_FOUND). "Used" is one claim per evidence **and request** (`sd:check:<evidence>:<hash of actor, stat, skill, target, dc>`),
   because a reply may hold two checks (F32). Story Block gives Story Director no proof kind for a check yet; if the lead wants a `check`
   proof, that is an E5 owner-table change.
-- Not moved: the check **table** (`checks.prepare`, the two d20s per reply, the `? check` line's capture and card) stays in RPG Battle until the
-  lead retires it; this part is the roll they ask for. SB's `capture.check` goes to `checks.roll` once (the E7b patch, `e7b-assist-checks.patch`
-  in the track B notes): `src/v2/assist/` is Story Block's.
+- The `? check` line: `src/v2/checks/capture.js` is the `check` kind as **one** `checks.roll` (the line's `dc` word to its number, `who` an SD
+  actor by name, `vs` a person NSD knows, the model's `result:` never read). It is exported as `checkKind` and **not** in `part.kinds`:
+  RPG Battle's checks part still keeps the `check` kind and only one module may. The lead flips them together (add `kinds: { check: checkKind }`
+  here, drop RPG Battle's). Not moved: the check **table** (`checks.prepare`, the two d20s per reply, the table in the tail, the reply card)
+  stays in RPG Battle's checks part until the lead retires it.
+- E7b, Story Block's `src/v2/assist/` (not edited here): the patch file `e7b-assist-checks.patch` (handed to the lead with the PR; it has context lines with trailing blanks, so it is not kept in the tree), a `git apply`-able patch against
+  `track-e/e5-evidence` (5e31419). `assist.precheck` keeps the claim and `capture.check` and drops the `check.roll` probe, `pendingCheckId`
+  and `ROLL_COMMAND`; the roll's receipt is read from `data.v2.result`; a missing `check` kind fails the capture call, so the claim is not
+  kept. Its tests are updated (a one-die stand-in; a legacy `check.roll` that must never be called).
 - `rules.modifier` is RPG Battle's (slice 4 of track B); until a ready RPG Battle answers it SD uses the standalone bonuses and says why.
 - `director.contract.threads` is true only when `director.threads` and `threads.hash` answer: track A's thread writers are theirs.
 - `registration`: `src/v2/module.js` lists the parts (lead-owned); `checks` is added there in its own commit.

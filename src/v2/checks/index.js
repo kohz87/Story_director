@@ -9,9 +9,11 @@
 
 import { commands } from './commands.js';
 import { initialChecks, validateChecks } from './domain.js';
+import { kind as checkKind } from './capture.js';
 import { queries } from './queries.js';
 import { TOPIC_NAMES } from './words.js';
 
+export { checkKind };
 export const DEFAULTS = Object.freeze({ defaultDc: 15, costMargin: 2, rbModifiers: true, social: true });
 
 export const part = {
