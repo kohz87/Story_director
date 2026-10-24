@@ -62,15 +62,19 @@ export function questDifficulty(value) {
 // mood), free text the planner writes; the note shows it once the beat is due.
 export const FIELDS = ['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'reach', ...QUEST_FIELDS];
 // A comma or semicolon before one of the format's fields ("…, giver: Nelke"), for runs written without "|".
-const FIELD_RUN = new RegExp(`\\s*[,;]\\s*(?=(?:${FIELDS.join('|')})\\s*:)`, 'i');
+// Read at each comma or semicolon with a sticky regex (see splitFieldRun), so a long run of spaces
+// is walked once, not once per space.
+const FIELD_AFTER = new RegExp(`\\s*(?:${FIELDS.join('|')})\\s*:`, 'iy');
 
 // Only a spaced hyphen ends a key, so `Jean-Luc` and `Hall-Warden` stay whole; em and en
-// dashes never appear inside names, so they count with or without spaces.
-const KEY_DASH = /\s*[—–]\s*|\s+-(?:\s+|$)/;
+// dashes never appear inside names, so they count with or without spaces. Found by keyDash in one
+// pass (it was `/\s*[—–]\s*|\s+-(?:\s+|$)/`, quadratic on a long run of spaces).
+const isSpace = ch => /\s/.test(ch);
 
 // `label: value`: the label is words (so the `09` of `09:00` is not one) and the colon is
-// followed by a space or the end (so `09:00` and `a:b` stay inside values).
-const LABELLED = /^(\p{L}[\p{L}\p{N}'’ -]*?)\s*:(?:\s+|$)(.*)$/su;
+// followed by a space or the end (so `09:00` and `a:b` stay inside values). Read by labelled in
+// one pass (it was `/^(\p{L}[\p{L}\p{N}'’ -]*?)\s*:(?:\s+|$)(.*)$/su`, quadratic on spaces).
+const LABEL_WORDS = /^\p{L}[\p{L}\p{N}'’ -]*$/u;
 // A known field may skip the space (`on:Haywane 13`); an arbitrary label may not.
 const TIGHT_FIELD = /^(\p{L}+):(.*)$/su;
 
@@ -120,12 +124,57 @@ function inferKind(fields) {
 // The format's own words (CHANGE_INSTRUCTION, the capture prompt), copied as if they were text.
 const PLACEHOLDER = /^(?:part|summary|reason|what happened|(?:label|field):\s*value)$/i;
 
+// The first spaced dash in `text` as `{ index, length }` (the spaces around it included), or null.
+function keyDash(text) {
+    for (let i = 0; i < text.length; i += 1) {
+        const ch = text[i];
+        const long = ch === '—' || ch === '–';
+        const spaced = ch === '-' && i > 0 && isSpace(text[i - 1]) && (i + 1 === text.length || isSpace(text[i + 1]));
+        if (!long && !spaced) continue;
+        let start = i;
+        while (start > 0 && isSpace(text[start - 1])) start -= 1;
+        let end = i + 1;
+        while (end < text.length && isSpace(text[end])) end += 1;
+        return { index: start, length: end - start };
+    }
+    return null;
+}
+
+// `[label, value]` for `label: value` (the label untrimmed of inner spaces), or null. The label can
+// hold no colon, so only the first colon can end it.
+function labelled(part) {
+    const colon = part.indexOf(':');
+    if (colon < 1) return null;
+    const after = part.slice(colon + 1);
+    if (after && !isSpace(after[0])) return null;
+    const label = part.slice(0, colon).trimEnd();
+    if (!LABEL_WORDS.test(label)) return null;
+    return [label, after.trimStart()];
+}
+
+// `text` split at each comma or semicolon that comes before one of the format's fields.
+function splitFieldRun(text) {
+    const pieces = [];
+    let from = 0;
+    for (let i = 0; i < text.length; i += 1) {
+        if (text[i] !== ',' && text[i] !== ';') continue;
+        FIELD_AFTER.lastIndex = i + 1;
+        if (!FIELD_AFTER.test(text)) continue;
+        pieces.push(text.slice(from, i).trimEnd());
+        from = i + 1;
+        while (from < text.length && isSpace(text[from])) from += 1;
+        i = from - 1;
+    }
+    pieces.push(text.slice(from));
+    return pieces;
+}
+
 /** `{ field, value }`, `{ label, value }` (extra) or null for an unlabeled part. */
 function splitLabel(part) {
-    const match = part.match(LABELLED);
+    const match = labelled(part);
     if (match) {
-        const label = match[1].trim().toLowerCase();
-        const value = match[2].trim();
+        const label = match[0].trim().toLowerCase();
+        const value = match[1].trim();
         if (FIELDS.includes(label)) return { field: label, value };
         if (wordCount(label) <= MAX_EXTRA_LABEL_WORDS) return { label, value };
         return null;
@@ -139,9 +188,9 @@ function splitLabel(part) {
 
 /** Splits the first part into the key and whatever follows it. */
 function splitKey(first) {
-    const dash = first.match(KEY_DASH);
+    const dash = keyDash(first);
     if (dash) {
-        return { key: first.slice(0, dash.index), head: first.slice(dash.index + dash[0].length) };
+        return { key: first.slice(0, dash.index), head: first.slice(dash.index + dash.length) };
     }
     const colon = first.search(/:(?:\s|$)/);
     if (colon > 0 && wordCount(first.slice(0, colon)) <= MAX_COLON_KEY_WORDS) {
@@ -194,7 +243,8 @@ function parseLine(raw) {
         }
     }
 
-    const parts = body.split(/\s*\|\s*/);
+    // Split at "|" and trimmed (as `/\s*\|\s*/` did, without its quadratic walk over spaces).
+    const parts = body.split('|').map(part => part.trim());
     const { key: rawKey, head } = splitKey(parts.shift());
     // (0.9.10) "~ Hook: Sheepfold Wolves — …": a kind and a colon in front of the key name the
     // kind, they are not part of the key. On a + with no kind yet, they set it.
@@ -213,7 +263,7 @@ function parseLine(raw) {
     // (0.9.8) Fields run together with commas or semicolons, "type: contract, giver: Nelke, reward:
     // 2 silver", are split as if written with "|": only before a field the format knows, so a
     // comma inside a value ("Nelke, the clerk") stays.
-    const expanded = parts.flatMap(part => part.split(FIELD_RUN));
+    const expanded = parts.flatMap(splitFieldRun);
 
     const closing = op === '-' || op === '!';
     const fields = {};

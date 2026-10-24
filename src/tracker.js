@@ -462,7 +462,10 @@ function aliasIndexOf(records, indexById) {
  * as its own key would be, with no further finding.
  * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
  */
-export function applyOps(tracker, ops, { message, time = null, said, chosen = [], taken = [], contractContext = null, settlements = [] } = {}) {
+// `direct` (Story Director v2): the story's `+ quest` is the reader's acceptance, so a job is never
+// held as an offer; a hook or event becomes a quest only by `+ quest` (or a `-` that says it was taken
+// on), never by a `~` that gives it a giver or a reward, and closing a hook never makes it a quest.
+export function applyOps(tracker, ops, { message, time = null, said, chosen = [], taken = [], contractContext = null, settlements = [], direct = false } = {}) {
     const records = [...tracker.records];
     // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.
     const gated = said !== undefined;
@@ -478,7 +481,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
     };
     // (0.9.33) `taken`: offers the reader took on with the Take on button (ids stamped on the reply).
     const tookOn = new Set((taken ?? []).map(key => lineKey(key)));
-    const accepts = (record, op = null) => !gated
+    const accepts = (record, op = null) => direct || !gated
         || tookOn.has(record.id) || tookOn.has(lineKey(record.key))
         || lineKey(op?.fields?.type ?? record.fields?.type ?? '') === 'main'
         || saidAbout(said, record, ACCEPT_WORDS, { alone: alone(op), among: among(record) })
@@ -495,7 +498,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
     // they have spoken of it, it closes as their quest finished. Failed, given up or lapsed, it
     // stays the offer it was.
     const doneOffer = (record, reason, op) => {
-        if (!isOffer(record) || !QUEST_OVER_TEXT.test(reason) && !LOOKS_OVER.test(reason)) return;
+        if (direct || !isOffer(record) || !QUEST_OVER_TEXT.test(reason) && !LOOKS_OVER.test(reason)) return;
         if (FAILED.test(reason) || CHOSEN_END.test(reason) || !spokenOf(record)) return;
         record.kind = 'quest';
         problems.push(finding('done-offer', 'info', op, `"${record.key}" was offered and the story says it is done: it is a quest {{user}} finished.`));
@@ -713,7 +716,9 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             const moving = ['step', 'now'].some(name => String(op.fields?.[name] ?? '').trim() && !NOT_STARTED.test(String(op.fields[name])));
             // (0.9.33) An offer taken on with the button: any ~ on it in that reply makes it the quest.
             const button = BECOMES_QUEST.has(record.kind) && (tookOn.has(record.id) || tookOn.has(lineKey(record.key)));
-            if (takesOnQuest(record, op) && gated && !moving && !accepts(record)) {
+            if (direct) {
+                // A hook stays a hook until the story writes `+ quest` for it.
+            } else if (takesOnQuest(record, op) && gated && !moving && !accepts(record)) {
                 offered(op, record);
             } else if (takesOnQuest(record, op) || button) {
                 problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));

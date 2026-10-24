@@ -358,7 +358,7 @@ function resolveDates(fields, { calendar, now }) {
 
 // A relative date written as a calendar date, or null when the text is not one (an absolute
 // date, or something unreadable, which then stays as written).
-function resolveRelative(value, { calendar, now }) {
+export function resolveRelative(value, { calendar, now }) {
     const text = String(value)
         .toLowerCase()
         .replace(/["“”]/g, '')

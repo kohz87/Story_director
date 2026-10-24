@@ -361,6 +361,9 @@ function header(selection, calendar) {
     return `[${parts.join(ITEM_SEPARATOR)}]`;
 }
 
+/** The note's header for a selection ("[Story Director · date · place]"), for a note with no other part (v2's tail). */
+export const noteHeader = header;
+
 // (0.9.22) The places the story or the reader just named, by the world pack's roads: about 12
 // tokens a place, and a few more when the reply said a time far off the map.
 export const DISTANCES_OFF = 'Keep to these when the trip comes up again.';
