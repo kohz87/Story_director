@@ -415,6 +415,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         domains,
         commands,
         queries,
+        replayQueries: ['director.thread'],
         context: {
             // The same bytes every reply: each part's static is fixed text.
             static: () => statics.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n'),
