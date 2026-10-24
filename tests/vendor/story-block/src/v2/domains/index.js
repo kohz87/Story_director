@@ -19,6 +19,7 @@ import { renderSceneTab } from '../ui/scene-tab.js';
 import { FEATURE_TEXT, createAssistPart } from '../assist/index.js';
 import { CORE_FEATURE } from '../features.js';
 import { EXTRA_KINDS, answeredReply, chatterTail, headChatter, sceneChatter } from '../extras.js';
+import { createEvidenceQuery } from '../evidence.js';
 import { STRINGS } from '../strings.js';
 import { createEventsPart } from '../events/index.js';
 import { standardWidgets } from '../view/widgets/index.js';
@@ -341,6 +342,8 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
                 return world ? [] : sceneChatter(state?.domains?.scene?.present, headChatter(extras?.chat?.(), extras?.display));
             }, { feature: CORE_FEATURE.chatter }),
             'scene.moved': (_state, _args, tools) => headMoved(tools, extras?.headIndex),
+            // The active, visible, code-validated proof (contract §6, docs/v2/EVIDENCE.md); the stored proof comes from the store.
+            'story.evidence': createEvidenceQuery({ stored: () => extras?.proofs?.() ?? [] }),
         },
         capture: {
             kinds: CORE_KINDS,

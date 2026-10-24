@@ -5,7 +5,13 @@
 //   routes: { [id]: { id, from, to, kind, days?, hours?, made? } },
 //   keys:   { [keyOf(name or alias)]: placeId },
 //   focus:  null | placeId | 'pack:<key>',        // the place the reader picked on the map
+//   regions:      { [rg_ id]: { id, name, aliases } },              // the reader's regions (policy.js); never made from a place's text
+//   placeRegions: { [canonical place id]: rg_ id },                 // explicit membership only
+//   placeRefs:    { [pl_ id]: canonical place id },                 // pl_ -> the pack's content id, or itself for a place no pack has (canonical.js)
+//   danger:       { world: AreaPolicy|null, regions: {rg_: AreaPolicy}, places: {canonical id: AreaPolicy} }
+//   writes:       { [write id]: { fingerprint, result } }           // the retry ledger of the new writers (../writes.js)
 // }
+// The last five arrived with contract P24; an older save has none of them and reads them as empty.
 // Places and routes from enabled packs (`packs.content`) are not copied in: they are read live
 // (world.js) and show as known but undiscovered until the story goes there, when `atlas.visit`
 // adds the place here.
@@ -17,6 +23,8 @@
 // route (its record ID, Story Block's ctx.carrier.sid): a reply's new ones are counted from it
 // (capture.js NEW_PER_REPLY), so no count is kept that a deleted reply could leave wrong (B-b1r2-7).
 
+import { ledgerProblems } from '../writes.js';
+
 export const PLACE_ID = /^pl_[0-9a-z]{8}$/;
 export const ROUTE_ID = /^rt_[0-9a-z]{8}$/;
 export const MAX_NAME = 80;
@@ -25,8 +33,12 @@ export const PACK_NODE = 'pack:';
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 export function initialAtlas() {
-    return { places: {}, routes: {}, keys: {}, focus: null };
+    return { places: {}, routes: {}, keys: {}, focus: null, regions: {}, placeRegions: {}, placeRefs: {}, danger: { world: null, regions: {}, places: {} }, writes: {} };
 }
+
+export const REGION_ID = /^rg_[0-9a-z]{8}$/;
+export const MAX_REGIONS = 64;
+export const MAX_ALIASES = 16;
 
 // Invisible format marks (zero-width spaces and joiners, bidi overrides): "Ro\u200Bpe" and "\u202ERope"
 // are "Rope", as Story Block reads its own names (names.js).
@@ -137,6 +149,66 @@ function routeErrors(id, route, places) {
     return errors;
 }
 
+// ---- the policy parts (contract P24) -----------------------------------------------------------------------------------------
+
+/** A canonical place id: a pack's content id (`pack.<id>/<slug>`) or the place's own pl_ id. */
+export const CANONICAL_ID = /^(?:pl_[0-9a-z]{8}|pack\.[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/;
+const textOk = (value, max) => typeof value === 'string' && value.length <= max;
+
+/** The problems of an AreaPolicy `{ tier: 0..9, allowedFoes: Ref[] (1000), allowedTags: text[] (32, 1..40), lore: text[] (16, 240) }`. */
+export function areaPolicyProblems(policy, where) {
+    if (!isRecord(policy)) return [`${where} is not a policy.`];
+    const errors = [];
+    if (!Number.isSafeInteger(policy.tier) || policy.tier < 0 || policy.tier > 9) errors.push(`${where}.tier is a whole number from 0 to 9.`);
+    if (!Array.isArray(policy.allowedFoes) || policy.allowedFoes.length > 1000 || !policy.allowedFoes.every(ref => textOk(ref, 160) && ref)) errors.push(`${where}.allowedFoes is a list of at most 1000 refs.`);
+    if (!Array.isArray(policy.allowedTags) || policy.allowedTags.length > 32 || !policy.allowedTags.every(tag => textOk(tag, 40) && tag)) errors.push(`${where}.allowedTags is a list of at most 32 tags of 1 to 40 characters.`);
+    if (!Array.isArray(policy.lore) || policy.lore.length > 16 || !policy.lore.every(line => textOk(line, 240))) errors.push(`${where}.lore is a list of at most 16 lines of 240 characters.`);
+    for (const key of Object.keys(policy)) if (!['tier', 'allowedFoes', 'allowedTags', 'lore'].includes(key)) errors.push(`${where} has an unknown field "${key}".`);
+    return errors;
+}
+
+function policyErrors(slice, places) {
+    const errors = [];
+    const regions = slice.regions ?? {};
+    if (!isRecord(regions) || Object.keys(regions).length > MAX_REGIONS) errors.push(`atlas.regions is a record of at most ${MAX_REGIONS}.`);
+    else {
+        const names = new Set();
+        for (const [id, region] of Object.entries(regions)) {
+            const at = `atlas.regions.${id}`;
+            if (!REGION_ID.test(id) || !isRecord(region) || region.id !== id || !textOk(region.name, MAX_NAME) || !keyOf(region.name)) errors.push(`${at} is not a region.`);
+            else if (!Array.isArray(region.aliases) || region.aliases.length > MAX_ALIASES || !region.aliases.every(alias => textOk(alias, MAX_NAME) && keyOf(alias))) errors.push(`${at}.aliases is a list of at most ${MAX_ALIASES} names.`);
+            else for (const key of [region.name, ...region.aliases].map(keyOf)) {
+                if (names.has(key)) errors.push(`${at}: the name "${key}" belongs to two regions.`);
+                names.add(key);
+            }
+        }
+    }
+    const known = isRecord(regions) ? regions : {};
+    const placeRegions = slice.placeRegions ?? {};
+    if (!isRecord(placeRegions)) errors.push('atlas.placeRegions is not an object.');
+    else for (const [place, region] of Object.entries(placeRegions)) if (!CANONICAL_ID.test(place) || !Object.hasOwn(known, region)) errors.push(`atlas.placeRegions["${place}"] names a place and a region the atlas has.`);
+    const placeRefs = slice.placeRefs ?? {};
+    if (!isRecord(placeRefs)) errors.push('atlas.placeRefs is not an object.');
+    else {
+        const targets = new Set();
+        for (const [place, target] of Object.entries(placeRefs)) {
+            if (!PLACE_ID.test(place) || (places && !Object.hasOwn(places, place)) || typeof target !== 'string' || !CANONICAL_ID.test(target) || (!target.startsWith('pack.') && target !== place)) errors.push(`atlas.placeRefs["${place}"] maps a place to its pack's content id, or to itself.`);
+            else if (targets.has(target)) errors.push(`atlas.placeRefs: ${target} is two places.`);
+            targets.add(target);
+        }
+    }
+    const danger = slice.danger ?? { world: null, regions: {}, places: {} };
+    if (!isRecord(danger) || !isRecord(danger.regions) || !isRecord(danger.places) || !(danger.world === null || isRecord(danger.world))) errors.push('atlas.danger is { world, regions, places }.');
+    else {
+        if (danger.world !== null) errors.push(...areaPolicyProblems(danger.world, 'atlas.danger.world'));
+        for (const [id, policy] of Object.entries(danger.regions)) errors.push(...(Object.hasOwn(known, id) ? areaPolicyProblems(policy, `atlas.danger.regions.${id}`) : [`atlas.danger.regions.${id} names no region.`]));
+        for (const [id, policy] of Object.entries(danger.places)) errors.push(...(CANONICAL_ID.test(id) ? areaPolicyProblems(policy, `atlas.danger.places.${id}`) : [`atlas.danger.places["${id}"] names no place.`]));
+        for (const key of Object.keys(danger)) if (!['world', 'regions', 'places'].includes(key)) errors.push(`atlas.danger has an unknown field "${key}".`);
+    }
+    if (slice.writes !== undefined) errors.push(...ledgerProblems(slice.writes, 'atlas.writes'));
+    return errors;
+}
+
 /** `validate(slice, state) → string[]` (SPEC §2.5). */
 export function validateAtlas(slice) {
     if (!isRecord(slice)) return ['atlas is not an object.'];
@@ -159,8 +231,9 @@ export function validateAtlas(slice) {
     const focus = slice.focus;
     const packFocus = typeof focus === 'string' && focus.startsWith(PACK_NODE) && keyOf(focus.slice(PACK_NODE.length)) === focus.slice(PACK_NODE.length) && focus.length > PACK_NODE.length;
     if (focus !== null && !packFocus && !(typeof focus === 'string' && places && Object.hasOwn(places, focus))) errors.push('atlas.focus must be null or a place on the map.');
+    errors.push(...policyErrors(slice, places));
     for (const key of Object.keys(slice)) {
-        if (!['places', 'routes', 'keys', 'focus'].includes(key)) errors.push(`atlas has an unknown field "${key}".`);
+        if (!['places', 'routes', 'keys', 'focus', 'regions', 'placeRegions', 'placeRefs', 'danger', 'writes'].includes(key)) errors.push(`atlas has an unknown field "${key}".`);
     }
     return errors;
 }

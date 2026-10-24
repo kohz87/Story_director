@@ -187,17 +187,20 @@ export function createSettings({ root, registry, save = () => {} }) {
 /**
  * Runs a registered query on `state`; the answer is a plain copy. Throws for an unknown query.
  * A query is called (state, args, tools) with tools.query(name, args) over the same state,
- * tools.receipts() → [{ index, receipt }], the stored receipts in chat order (`receipts` option), and
+ * tools.receipts() → [{ index, receipt }], the stored receipts in chat order (`receipts` option),
+ * tools.pendingProofs() → [{ proof }], a Re-read's planned proof (`pendingProofs` option, story.evidence), and
  * tools.reply ({ index, sid } or null, the `reply` option): the reply the state is the head of, as a
  * command's ctx.reply (commands.js).
  */
-export function runQuery(registry, state, name, args, { receipts = () => [], reply = null } = {}) {
+export function runQuery(registry, state, name, args, { receipts = () => [], reply = null, pendingProofs = null } = {}) {
     const query = registry.query(name);
     if (!query) throw new Error(`Story Suite: no module answers the query "${name}".`);
     const tools = Object.freeze({
         reply,
-        query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply }),
+        query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply, pendingProofs }),
         receipts: () => receipts() ?? [],
+        // The proof a Re-read has planned but not stored (evidence.js), for story.evidence; none otherwise.
+        ...(typeof pendingProofs === 'function' ? { pendingProofs } : {}),
     });
     const answer = query(state, args === undefined ? undefined : structuredClone(args), tools);
     return answer === undefined ? undefined : structuredClone(answer);
@@ -217,12 +220,12 @@ export const mountQuery = (registry, receipts = () => []) => (name, args, state)
  * (optional): another state than the head and the reply it stands for (`tools.reply`), for a Re-read's
  * afterCapture hook, which reads the reply's state after its new story lines (turn.js).
  */
-export function makeView({ store, registry, settings, chat = [], state = store.head(), reply = headReply(store) }) {
+export function makeView({ store, registry, settings, chat = [], state = store.head(), reply = headReply(store), pendingProofs = null }) {
     const messages = Array.isArray(chat) ? chat : [];
     const lastUser = [...messages].reverse().find(message => message?.is_user);
     return Object.freeze({
         state,
-        query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [], reply }),
+        query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [], reply, pendingProofs }),
         settings,
         feature: id => featureOn(registry, id),
         chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? '') }),

@@ -11,6 +11,7 @@ import { parseLocation } from '../../places.js';
 import {
     MAX_NAME, PACK_NODE, cleanName, cleanWord, findPlace, isRecord, keyOf, newId, revOf, routesBetween,
 } from './domain.js';
+import { recordRef } from './canonical.js';
 import { packPlace, packWorld, worldOf } from './world.js';
 
 /** New places, and new routes, one reply's lines may add; a line that would add more is not used (B-b1r2-7). */
@@ -141,6 +142,8 @@ export function ensurePlace(atlas, ctx, pack, name, { discovered = true, region,
             changed = true;
         }
     }
+    // The place's canonical identity (contract P24): its pack's content id, or itself; written once, never told to the model.
+    recordRef(atlas, pack, place);
     return { place, created, changed };
 }
 
