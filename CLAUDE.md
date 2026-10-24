@@ -11,7 +11,7 @@ modules are RPG Battle (kohz87/rpg_battle) and NPC State Delta (kohz87/npc_state
 Story Director must work **without RPG Battle** (a dating sim or mystery: no fights, stats or levels)
 and without NSD: read other modules only through guarded queries with a fallback (`tryQuery` in
 `src/v2/world/known.js`; no level → lowest rank, no fights → asks for no encounters) and test every
-change with each other module absent. Work is on the `v2` branch (`main` is v1).
+change with each other module absent. Work is on `main`, the development branch (v1 is on branch `v1`).
 
 ## Directory map
 
@@ -43,7 +43,7 @@ npm run test:dot                                 # same files, one dot per test,
 npm run check                                    # syntax check of index.js and src/
 node --test --test-reporter=dot tests/v2/tracker/time.test.js   # one file
 node ../Story_block/scripts/sync-testkit.mjs --to .             # re-vendor the testkit (no npm script here)
-git diff --check origin/v2                       # CI fails on trailing whitespace in what the PR adds
+git diff --check origin/main                     # CI fails on trailing whitespace in what the PR adds
 ```
 
 Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-tests`, `sync-testkit`.
@@ -71,7 +71,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 ## Conventions
 
 - No model names anywhere in the repo. Commit trailers and PR attribution: the lines the session gives.
-- Branch off `v2`, PR into `v2`; agents never merge their own PR. Rebase on `origin/v2` before pushing.
+- Branch off `main`, PR into `main`; agents never merge their own PR. Rebase on `origin/main` before pushing.
 - Re-sync the Story Block testkit before the final push of a PR that needs host changes; name the commit.
 - Parts never import each other; they talk through commands and queries (`ctx.call`, `ctx.query`).
 - World / Journal views are derived on read: never store what can be worked out (so replay cannot drift).
