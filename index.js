@@ -1,6 +1,6 @@
 // Story Director v2: SillyTavern entry point.
 //
-// v2 Story Director is a module of Story Block v2 (docs/v2/SPEC.md on Story Block's v2 branch):
+// v2 Story Director is a module of Story Block v2 (docs/v2/SPEC.md on Story Block's main branch):
 // Story Block keeps the state, reads the replies' <Changes> blocks, builds the prompt and hosts
 // the tabs and settings; this file only registers module `story-director` (src/v2/module.js)
 // once `globalThis.StoryBlock.ready` resolves. Without a v2 host it shows one line in the
