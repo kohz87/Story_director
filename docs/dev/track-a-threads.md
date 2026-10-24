@@ -1,36 +1,25 @@
 # Thread ownership and quest retirement
 
-Story Director owns `director.threads`, `director.keys` and `director.writes`.
-The five P23 writers and `threads.hash` are registered. Writer retries return their
-saved result before stale checks; changed meaning conflicts. Quest extensions require
-the host-authenticated RPG Battle caller. Neutral acceptance records a surviving
-`story.evidence` proof and its Source, cursor and story minute.
+Story Director owns director.threads, director.keys and director.writes. All five P23 writers
+and threads.hash are registered. Hashing includes every public field, including acceptance,
+rpg and rev, excluding only private track. Retry results precede stale checks; reuse with
+changed meaning is CONFLICT. Quest fields require the authenticated ready RB caller.
 
-`threads.accept` supports the reader's selected UI action. Validated capture also
-accepts an existing offered hook from a complete sentence of the reader's message.
-A refusal of the job cannot accept it; “I'll help, no problem” can. Generic accepted
-hooks retain their kind, progress, closure, journal entry and World deadline view.
-They need no party, quest or rules query. The journal remains independent of RPG rewards.
+threads.accept supports the reader's selected UI action and validated complete reader
+sentences. Its surviving story.evidence proof supplies Source/cursor/minute/proof. Refusal
+of the job rejects; “I'll help, no problem” accepts. Generic accepted hooks keep their kind,
+progress, closure and journal without party, quest or rules dependencies.
 
-SD no longer registers quest commands, quest capture, the quest board or the old
-settlement/payout hooks. Its quest mechanics and parser files have been removed.
-The Quests view reads `director.threads` directly and retains old quests and owed text
-as history. Legacy quests have no new acceptance stamp and cannot enter the writers.
-Their old owed rewards are never paid.
+RB quest.take delegates to atomic accept or links an already accepted neutral thread while
+retaining its original acceptance. Neutral annotations preserve an existing RPG extension;
+terminal RPG transitions route through RB capture and its guarded settlement. Every failure
+rolls back thread, proof, retry entry and nested owner changes together.
 
-The retired automatic-payout test suites were replaced by registered-writer,
-neutral standalone and retirement fixtures. Pure parser and reader-rank fixtures
-move with their implementation to RB. Tests for generic capture, time, map, arc,
-World, journal, swipes, deletion and storage limits remain in SD with neutral fixtures.
-The narrowed refusal fix was removed alone: its runtime fixture failed, then passed
-again with the fix restored.
+SD no longer registers quest capture/commands, the quest board, settlement or payout hooks.
+The quest-only mechanics/parser files are removed. Quests reads director.threads directly,
+showing legacy quests and owed text as history. Their old rewards are never paid.
 
-Integration gates:
-
-- D1: the host supplies `ctx.cursor()` and `ctx.epoch`. Tests use a small explicit shim;
-  production refuses acceptance when those facilities are absent.
-- The current host invokes afterCapture only after a kept change line and gives its
-  system steps no reader capture context. Acceptance therefore runs on the validated
-  player-intent capture context, or the reader's UI action. An empty narration does
-  not synthesize consent. Extending capture to replies without lines requires host work.
-- RPG requirements, proof schemas and settlement guards remain their RB owners' work.
+The sole host seams for acceptance are cursor()/epoch, supplied explicitly by D1 tests until
+host integration. Reader intent runs in validated capture context or UI, never from empty
+narration or an afterCapture system context without reader words. Latest validation, file
+inventory and integration gates are in track-a.md and track-a-files.md.

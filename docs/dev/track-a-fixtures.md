@@ -1,31 +1,21 @@
-# Track A real-host evidence fixtures
+# Track A thread fixtures
 
-A6 adds eight component tests over the real SB createHost and one real SD module definition.
-The fixture extends that definition with a test-only proof command and capture adapter; it
-registers no duplicate owner, second quest store or payout engine. The adapters call the
-production thread retry/intent helpers and host ctx.proof/story.evidence transport.
+Tests under tests/v2/tracker cover the retry/hash/intent helpers, actual registered P23 writers
+and real-host evidence transport. Coverage includes initializer/validator, same-write retry
+before stale, conflict, unknown/invalid/limited/refused writes, reader words versus narration
+or refusal, UI selection and same-root pending proofs.
 
-Coverage: SD-only neutral hook capture, pending same-root acceptance evidence, reader words
-versus narration/fragments/refusals, player selection, root rollback of proof/pin/retry entry,
-same-write-before-stale/conflict, proof retention through unchanged Re-read/reload, swipe
-removal/restoration and deletion. These are evidence/retry components, not implemented P23
-writers or a complete C15 goal lifecycle. The fixture's saved result exercises the retry map;
-it does not install an accepted cursor or claim that a runtime thread was accepted.
+The standalone C15 trace offers a hook, records reader acceptance, updates generic progress
+and closes into the journal with no RPG dependency. Old ready/owed records exercise actual
+beforeGenerate/afterCapture cycles and direct retired commands without paying anything.
+Forged extension fixtures use UI, SD capture and a third module, both with real RB ready
+and with RB absent. Thread state, ledger, proof and wallet remain unchanged on refusal.
 
-Eight focused tests pass with no skips. Reverting only SD refusal precedence causes the
-real-host refusal assertion to fail; the production fix was restored. The requested writer
-could not execute its shell harness because its agent script directory was read-only.
-The monitor reviewed/corrected import paths, host APIs and proof capture/replay setup, then
-ran the actual tests. Unverified writer pass-count claims were replaced by these results.
+The sibling RB fixtures cover real quest.take/finish aliases, atomic accept/link and failure,
+fresh repeat/chain offers, cooldown, guarded settlement rollback and replay. Each destructive
+replay scenario reopens the chat; Re-reading away story-backed acceptance removes the proof
+and retracts the later wallet/XP/closure/journal/claim together.
 
-Required A6 integration rows still left:
-
-- Retire every SD payout path and prove each pays nothing. Those registrations/hooks are
-  still active; no test in this slice claims otherwise.
-- Settle wallet/stacks/XP/SD extension/closure/journal in one guarded root transaction with
-  one settlement claim across swipe/delete/Re-read/reload.
-- Complete C15 neutral offer -> reader accept -> generic progress/close and RPG upgrade,
-  including original acceptance cursor/proof, fresh repeat/chain IDs and cross-owner failures.
-
-These rows require the runtime P23 writers, host persisted write/cursor/epoch adapter and
-final B3/B5 handoffs described in docs/dev/track-a.md. No substitute API was invented.
+D1 supplies exactly cursor()/epoch. B3 semantics and E6 remain integration gates. The older
+component fixtures remain useful evidence/retry tests; their test-only commands do not claim
+to be a second production writer or payout engine. Latest full counts are in track-a.md.
