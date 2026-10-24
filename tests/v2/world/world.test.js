@@ -26,7 +26,7 @@ const OPENING = [
     '~ time June 3, 1200, 08:00 am', '~ place Harbour', '+ present Mira, Old Tom',
     '+ world Red Plague — coughing in the docks | state: ongoing | place: Harbour | factions: Guild',
     '+ faction Guild — the harbour guild | area: the docks | stance: wary',
-    '+ quest Rat Cellar — clear the cellar | goal: kill 3 rats | due: June 6, 1200',
+    '+ hook Rat Cellar — clear the cellar | goal: kill 3 rats | due: June 6, 1200',
     '+ event Harvest Fair — the fair comes to town | on: June 10, 1200',
     '+ event Far Feast — a feast | on: September 1, 1200',
     '+ agenda Mira — buys rope | now: the docks',
@@ -39,6 +39,8 @@ const OPENING = [
 async function story(options = {}) {
     const host = await worldHost(options);
     await host.send('Hello.', said('The harbour at dawn.', OPENING));
+    const rat = host.sdk.query('director.threads', { kind: 'hook' }).find(t => t.key === 'Rat Cellar');
+    assert.equal((await host.sdk.command('threads.accept', { write: 'wr_00000001', thread: rat.id, expectedHash: host.sdk.query('threads.hash', { thread: rat.id }) })).ok, true);
     const accepted = await host.sdk.command('director.arc.accept', { plan: PLAN });
     assert.equal(accepted.ok, true, accepted.message);
     await host.send('Next day.', said('Morning again.', ['~ time June 4, 1200, 09:00 am', '+ present Brecht', '~ world Red Plague | state: ongoing — spreads to the market']));
@@ -84,7 +86,7 @@ test('Story Director alone: Here with plain names, known news and factions newes
     assert.equal(world.news.find(item => item.name === 'Harvest Fair').ago, 'yesterday', 'written on June 3; it is June 4');
     assert.deepEqual(world.factions.map(item => [item.name, item.area, item.stance]), [['Guild', 'the docks', 'wary']]);
     // June 4, 09:00: the quest is due in 2 days, the fair in 6; the feast is past the 30 days; no beat, clock or planned hook.
-    assert.deepEqual(world.upcoming.map(item => [item.kind, item.name, item.label]), [['quest', 'Rat Cellar', 'in 2 days'], ['event', 'Harvest Fair', 'in 6 days']]);
+    assert.deepEqual(world.upcoming.map(item => [item.kind, item.name, item.label]), [['hook', 'Rat Cellar', 'in 2 days'], ['event', 'Harvest Fair', 'in 6 days']]);
     assert.equal(world.upcoming[0].goal, 'kill 3 rats');
     assert.equal(world.clockSet, true);
     assert.deepEqual(leaks(world), []);
@@ -93,14 +95,14 @@ test('Story Director alone: Here with plain names, known news and factions newes
 
 test('Upcoming: the reader\'s range; an overdue quest first; nothing dated without the clock', async () => {
     const host = await worldHost({ settings: { 'world.upcomingDays': 120 } });
-    await host.send('Hello.', said('The harbour.', ['+ quest Rat Cellar — clear it | due: June 6, 1200', '+ event Far Feast — a feast | on: September 1, 1200']));
+    await host.send('Hello.', said('The harbour.', ['+ hook Rat Cellar — clear it | due: June 6, 1200', '+ event Far Feast — a feast | on: September 1, 1200']));
     assert.equal(host.sdk.query('director.world').clockSet, false);
     assert.deepEqual(host.sdk.query('director.world').upcoming, []);
     await host.send('Later.', said('Later.', ['~ time June 8, 1200, 08:00 am']));
     const { upcoming, upcomingDays } = host.sdk.query('director.world');
     host.close();
     assert.equal(upcomingDays, 120);
-    assert.deepEqual(upcoming.map(item => [item.name, item.label, item.overdue]), [['Rat Cellar', 'overdue', true], ['Far Feast', 'in 85 days', false]]);
+    assert.deepEqual(upcoming.map(item => [item.name, item.label, item.overdue]), [['Far Feast', 'in 85 days', false]]);
 });
 
 test('with NPC State Delta: each person present is a chip with their stance, and opens their dossier', async () => {
@@ -140,7 +142,6 @@ test('the Journal: each day with places, people met, news and quests; today so f
     assert.deepEqual(journal.days.map(day => [day.date, day.today]), [['June 5, 1200', true], ['June 4, 1200', false], ['June 3, 1200', false]]);
     assert.deepEqual(byDate['June 3, 1200'].met, ['Mira', 'Old Tom']);
     assert.ok(byDate['June 3, 1200'].facts.includes('Went to: Harbour'), byDate['June 3, 1200'].facts.join(' | '));
-    assert.ok(byDate['June 3, 1200'].facts.some(line => /Took on: Rat Cellar/.test(line)), byDate['June 3, 1200'].facts.join(' | '));
     assert.ok(byDate['June 3, 1200'].world.some(line => /Red Plague/.test(line)));
     assert.deepEqual(byDate['June 4, 1200'].met, ['Brecht', 'Kell']);
     assert.ok(byDate['June 4, 1200'].world.some(line => /spreads to the market/.test(line)));

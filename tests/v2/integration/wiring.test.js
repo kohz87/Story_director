@@ -53,58 +53,6 @@ test('registered whole: the screens and the Map, no hand-built tabs, the status 
     host.close();
 });
 
-test('a place visit through beforeGenerate, routes captured, Finish by quest.progress\'s finish; one static prompt', async () => {
-    const host = await newHost();
-    await host.send('Where are we?', reply('The village of Bluewatch, by the weir.', [
-        '~ place Bluewatch Village | kind: settlement | region: Lakeshore',
-        '+ present Fenna',
-        '+ route Bluewatch Village — Old Weir | hours: 2 | kind: road',
-        '+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 cellar rats | reward: 2 gold each',
-    ]));
-    // The route is the atlas's at once; the place goes on the map before the next reply is written.
-    const routes = host.sdk.query('atlas.routes', { place: 'Bluewatch Village' });
-    assert.deepEqual(routes.map(route => [route.otherName, route.kind, route.hours]), [['Old Weir', 'road', 2]]);
-    assert.equal(routes[0].text, '2 h');
-    await host.send('I look around.', reply('Sacks and dust.'));
-    const visit = receipts(host).find(receipt => receipt.type === 'atlas.visit');
-    assert.ok(visit, 'atlas.visit was committed by the hook');
-    assert.equal(visit.cause, 'system');
-    const bluewatch = host.sdk.query('atlas.place', { name: 'Bluewatch Village' });
-    assert.deepEqual([bluewatch.discovered, bluewatch.kind, bluewatch.region], [true, 'settlement', 'Lakeshore']);
-    assert.ok(host.sdk.query('atlas.map').nodes.some(node => node.label === 'Bluewatch Village' || node.name === 'Bluewatch Village'));
-    // A second reply in the same place commits no second visit.
-    await host.send('And now?', reply('Still dust.'));
-    assert.equal(receipts(host).filter(receipt => receipt.type === 'atlas.visit').length, 1);
-
-    // Finish: off until the target is met, then quest.progress says it can be turned in here (the + quest
-    // took it on at its reply).
-    assert.deepEqual(host.sdk.query('quest.progress', { key: 'Granary Rats' }).finish, { ok: false, reason: 'Need 3 more cellar rats.' });
-    await ok(host.sdk.command('combat.win', { foes: [{ name: 'Cellar Rat', count: 3 }] }));
-    const progress = host.sdk.query('quest.progress', { key: 'Granary Rats' });
-    assert.deepEqual(progress.finish, { ok: true, reason: '' });
-    const board = host.sdk.query('quest.board');
-    assert.deepEqual(board.active[0].finish, { show: true, blocked: false, reason: '', title: 'Turn in Granary Rats' });
-    const finish = await ok(host.sdk.command('quest.finish', { key: 'Granary Rats' }));
-    assert.match(finish.receipt.summary, /6 gold paid/);
-    assert.equal(host.sdk.query('quest.progress', { key: 'Granary Rats' }).finish.ok, false, 'over now');
-
-    // Away from the settlement and the giver, the board and quest.finish agree on why.
-    await host.send('Next job.', reply('A second notice.', ['+ quest Weir Eels — the weir | giver: Ola | goal: Kill 2 eels | reward: 1 gold each']));
-    await host.send('We walk to the weir.', reply('Reeds and cold water.', ['~ place Old Weir | kind: wild', '- present Fenna']));
-    await ok(host.sdk.command('combat.win', { foes: [{ name: 'Eel', count: 2 }] }));
-    const eels = host.sdk.query('quest.board').active.find(quest => quest.key === 'Weir Eels');
-    assert.deepEqual(eels.finish, { show: true, blocked: true, reason: 'Turn it in at a settlement or where Ola is.', title: 'Turn it in at a settlement or where Ola is.' });
-    const refused = await host.sdk.command('quest.finish', { key: 'Weir Eels' });
-    assert.equal(refused.code, 'REFUSED');
-    assert.match(refused.message, /Turn it in at a settlement or where Ola is\./);
-
-    // The static part never changed, whatever the replies did.
-    const statics = sent(host, STATIC_KEY);
-    assert.ok(statics.length >= 5);
-    assert.equal(new Set(statics).size, 1);
-    host.close();
-});
-
 test('the Ersveil pack: its calendar, the clock seeded from its start at the first reply, its places on the map', async () => {
     const host = await newHost();
     const installed = await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' });
@@ -192,9 +140,9 @@ test('a custom calendar and a time jump: the deadline lapses and the recap tells
 
 test('the Director screen\'s problems name the reader, not {{user}}', async () => {
     const host = await newHost({ st: { user: 'Astra' } });
-    await host.send('Any work?', reply('Fenna has a job.', ['+ quest Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 rats']));
+    await host.send('Any work?', reply('Fenna has a job.', ['+ hook Granary Rats — Fenna wants the cellar cleared | giver: Fenna | goal: Kill 3 rats']));
     // Giving a quest up is the reader's choice: a story line that does it alone is a Problem naming them.
-    await host.send('I look at the sacks.', reply('You seem to give up.', ['- quest Granary Rats — abandoned']));
+    await host.send('I look at the sacks.', reply('You seem to give up.', ['- hook Granary Rats — abandoned']));
     const raw = problemList(host.head().domains.director).map(problem => problem.text);
     assert.ok(raw.some(text => text.includes('{{user}}')), 'the stored text keeps v1\'s macro');
     const shown = host.sdk.query('director.problems').map(problem => problem.text);

@@ -32,6 +32,9 @@
 // removed (Story Block 2.0.0-alpha.2 passes over the removal of a key a deleted reply had made). Readers
 // order problems by rev and number.
 
+import { threadProjection } from './thread-writes.js';
+import { hashJson } from './hash.js';
+import { closed, cursor, hash, map, minute, recordId, source, validQuest } from './quest-shape.js';
 import { lineKey } from '../../changes.js';
 import { slotIn, slotValue, toSlot } from '../slot.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
@@ -52,6 +55,7 @@ export function initialDirector() {
         time: { minutes: null },
         threads: {},
         keys: {},
+        writes: {},
         problems: {},
         turn: { n: 0, now: null },
         // The time part's last settle and its While away recap (slots, time/settle.js).
@@ -201,6 +205,11 @@ function threadErrors(id, thread) {
             errors.push(`${at}.owed must be { text, rev, units?, credit?, total?, paid? }.`);
         }
     }
+    if (thread.acceptance !== undefined && thread.acceptance !== null) {
+        const a = thread.acceptance;
+        if (!closed(a, ['source', 'cursor', 'minute', 'proof']) || !source(a.source) || !cursor(a.cursor) || !minute(a.minute) || !recordId(a.proof)) errors.push(`${at}.acceptance is invalid.`);
+    }
+    if (thread.rpg !== undefined && !validQuest(thread.rpg)) errors.push(`${at}.rpg is invalid.`);
     return errors;
 }
 
@@ -218,9 +227,11 @@ export function validateDirector(slice) {
             if (!Object.hasOwn(slice.threads ?? {}, id)) errors.push(`director.keys["${name}"] points at no thread.`);
         }
         for (const thread of Object.values(slice.threads ?? {})) {
-            if (thread?.key && slice.keys[lineKey(thread.key)] !== thread.id) errors.push(`"${thread.key}" is missing from director.keys.`);
+            if (thread?.key && thread.status === 'active' && slice.keys[lineKey(thread.key)] !== thread.id) errors.push(`"${thread.key}" is missing from director.keys.`);
         }
     }
+    if (slice.writes !== undefined && (!map(slice.writes) || Object.entries(slice.writes).some(([id, entry]) => !recordId(id)
+        || !closed(entry, ['fingerprint', 'result']) || !hash(entry.fingerprint) || !map(entry.result)))) errors.push('director.writes is invalid.');
     const problems = slice.problems;
     const badProblem = problem => !isRecord(problem) || typeof problem.kind !== 'string' || typeof problem.text !== 'string' || !isInt(problem.rev);
     if (Array.isArray(problems)) {
@@ -259,6 +270,10 @@ function queryCalendar(tools) {
 }
 
 export const queries = {
+    'threads.hash': (state, { thread } = {}) => {
+        const found = state?.domains?.director?.threads?.[thread];
+        return found ? hashJson(threadProjection(found)) : null;
+    },
     /**
      * `{ minutes, text }`: the story time (null until the story sets it) and that time written on the
      * chat's calendar ("Goldwane 12, 611, 06:40 am"; '' while unset).
@@ -279,16 +294,6 @@ export const queries = {
     'director.calendar': (_state, _args, tools) => {
         const { settings, pack } = queryCalendar(tools);
         return calendarConfig(settings, pack);
-    },
-    /**
-     * The quests whose story turn-in the place alone refused at the end of the reply the query is asked
-     * for (`tools.reply`, the head reply), which a Continue of that reply may still pay: thread ids. Empty
-     * for any other reply, so a later reply never pays a turn-in an earlier one wrote (quest-lines.js).
-     */
-    'director.retriable': (state, _args, tools) => {
-        const turn = replyTurn(state?.domains?.director);
-        const sid = tools?.reply?.sid;
-        return typeof sid === 'string' && sid && turn.reply === sid ? turn.refused.map(entry => entry.id) : [];
     },
     /** Threads in tracker order, filtered by `kind`, `status` and `offer` when given. */
     'director.threads': (state, { kind = null, status = null, offer = null } = {}) => orderedThreads(state?.domains?.director)

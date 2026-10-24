@@ -8,12 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { makeCalendar } from '../../../src/calendar.js';
-import { part as quests, packQuestOf } from '../../../src/v2/quests/index.js';
-import { DEFAULT_RANKS, defaultRank, questRank } from '../../../src/v2/quests/ranks.js';
 import { KEY_CHARS } from '../../../src/v2/tracker/capture.js';
 import { directorTail } from '../../../src/v2/tracker/note.js';
 import { MAX_JUMP_DAYS, maxJumpMinutes, settingsDefaults, timeAfter } from '../../../src/v2/tracker/time.js';
-import { fakeQueries, makeHost, makeState as questState, quest, xpCommand, fakeCommands } from '../quests/helpers/fake-ctx.js';
 import { lastProblems, makeState, reply, thread } from '../tracker/helpers/fake-ctx.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
@@ -25,6 +22,7 @@ const minutes = state => state.domains.director.time.minutes;
 const line = (op, name, text = '') => ({ op, kind: 'time', name, text, labels: {} });
 
 // ---- B-b1-capture-15: the longest time jump --------------------------------------------------------
+
 
 test('maxJump: 30 days by default, a setting in story days; a longer move is held to it with a Problem', () => {
     assert.equal(settingsDefaults().maxJump, MAX_JUMP_DAYS);
@@ -67,7 +65,7 @@ test('a time line with a clock time no clock shows, or a year past 999999, leave
 // ---- B-b1-capture-17, B-b3-19: labels the Director does not keep -------------------------------------
 
 test('qty, id, *_id, constructor and xp labels are left out of the thread with one Problem; the line is used', () => {
-    const state = reply(makeState(), '+ quest Pelts — bring pelts | giver: Fenna | goal: Bring 3 pelts | qty: 3 | owner_id: x | constructor: y | xp: 250000').state;
+    const state = reply(makeState(), '+ hook Pelts — bring pelts | giver: Fenna | goal: Bring 3 pelts | qty: 3 | owner_id: x | constructor: y | xp: 250000').state;
     const pelts = thread(state, 'Pelts');
     assert.ok(pelts);
     assert.deepEqual(Object.keys(pelts.fields).sort(), ['giver', 'goal']);
@@ -75,19 +73,6 @@ test('qty, id, *_id, constructor and xp labels are left out of the thread with o
     assert.match(problem.text, /"xp:" is ignored: quest XP comes from the quest's difficulty/);
     assert.match(problem.text, /"qty:", "owner_id:", "constructor:" are names the Director does not keep/);
 });
-
-test('quest.finish never sends a written XP amount to party.grantXp, only the quest and its difficulty', () => {
-    const host = makeHost(questState({
-        threads: [quest('th_wolves01', 'Wolves', { giver: 'Orsa', goal: 'Kill 3 wolves', reward: '10 gold', difficulty: 'hard', xp: '250000' }, { offer: true })],
-        scene: { place: { kind: 'settlement' } },
-    }), { commands: { ...fakeCommands, ...xpCommand } });
-    assert.equal(host.run(quests.commands['quest.take'], { id: 'th_wolves01' }).ok, true);
-    host.state.domains.combat.beaten = [{ rev: 12, foes: [{ name: 'Wolf', count: 3 }], won: true }];
-    assert.equal(host.run(quests.commands['quest.finish'], { id: 'th_wolves01' }).ok, true);
-    assert.deepEqual(host.state.domains.party.xpLog, [{ quest: 'th_wolves01', difficulty: 'hard' }]);
-});
-
-// ---- B-b1-capture-13: names and the tail's cost ------------------------------------------------------
 
 test('a long name is cut to 120 characters at a space, with a Problem; the same name finds the same thread', () => {
     const name = `The ${'very '.repeat(40)}long rumour`;
@@ -159,56 +144,3 @@ test('the tail lists only the most relevant threads, and stays cheap with 600 (c
 });
 
 // ---- B-b4-10 / B-b3-18: the rank every quest is held to -----------------------------------------------
-
-test('defaultRank: the party\'s rank by level, moved by difficulty, held to the ends of the ladder', () => {
-    const at = (difficulty, level) => defaultRank(DEFAULT_RANKS, difficulty, level).id;
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 1)), ['F', 'F', 'F', 'F'], 'RX-E-1: no step above the party\'s rank');
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 25)), ['D', 'C', 'C', 'C']);
-    assert.deepEqual(['easy', 'normal', 'hard', 'nightmare'].map(word => at(word, 99)), ['A', 'S', 'S', 'S']);
-    assert.equal(at('normal', null), 'F', 'no level known: the lowest rank');
-    assert.equal(defaultRank([], 'normal', 1), null);
-    // A pack quest's rank, then the quest's own, then the difficulty's.
-    const thread = { fields: { rank: 'D', difficulty: 'easy' } };
-    assert.deepEqual(questRank(thread, DEFAULT_RANKS, { pack: { letter: 'F' } }).by, 'pack');
-    assert.deepEqual(questRank(thread, DEFAULT_RANKS, { level: 13 }).rank.id, 'D');
-    assert.deepEqual(questRank({ fields: {} }, DEFAULT_RANKS, { difficulty: 'hard', level: 1 }), { rank: DEFAULT_RANKS[0], by: 'difficulty' });
-});
-
-test('a pack quest pays the pack\'s reward, also for a quest taken on before (its stored reward is the story\'s)', () => {
-    const PACK_QUESTS = [{ pack: 'p', name: 'Granary Rats', aliases: ['GranaryRats'], letter: 'F', reward: '50 gold' }];
-    const queries = { ...fakeQueries, 'packs.content': (_state, { kind } = {}) => (kind === 'quests' ? PACK_QUESTS : []) };
-    assert.equal(packQuestOf(name => queries[name]?.(null, { kind: 'quests' }), { key: 'granary-rats' }).name, 'Granary Rats');
-    const host = makeHost(questState({
-        threads: [quest('th_rats0001', 'Granary Rats', { giver: 'Fenna', goal: 'Kill 2 cellar rats', reward: '5000000 gold' }, {
-            taken: { rev: 9 }, reward: { amount: 5000000, each: false, unit: '', text: '5000000 gold' },
-        })],
-        scene: { place: { kind: 'settlement' } },
-    }), { queries });
-    host.state.domains.combat.beaten = [{ rev: 12, foes: [{ name: 'Cellar Rat', count: 2 }], won: true }];
-    const done = host.run(quests.commands['quest.finish'], { id: 'th_rats0001' });
-    assert.equal(done.ok, true, done.message);
-    assert.deepEqual(host.state.domains.inventory.wallets.party, { coin: 50 });
-    assert.match(done.receipt.summary, /50 gold paid \(the pack's reward for Granary Rats; the story said 5000000 gold\)\.$/);
-});
-
-// ---- the place rule reads the atlas's kind (atlas.here) ----------------------------------------------
-
-test('a scene move without | kind: back to a known settlement still lets a quest be turned in there', async () => {
-    const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
-    const said = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
-    try {
-        await host.send('Work?', said('A notice.', ['~ place Bluewatch | kind: settlement', '+ present Fenna',
-            '+ quest Lone Wolf — a wolf | giver: Fenna | goal: Kill 1 wolf | reward: 20 gold']));
-        assert.ok(host.sdk.query('director.thread', { key: 'Lone Wolf' }).taken, 'taken on by its + quest');
-        await host.send('Out we go.', said('The ridge.', ['~ place East Ridge | kind: wild']));
-        await host.send('Back.', said('Back in town.', ['~ place Bluewatch']));
-        // Story Block leaves the scene's kind empty (before 2.0.0-alpha.2) or keeps the ridge's.
-        assert.ok(['', 'wild'].includes(host.head().domains.scene.place.kind), 'the move did not say the kind');
-        assert.equal(host.sdk.query('atlas.here').placeKind, 'settlement');
-        assert.equal((await host.sdk.command('combat.win', { foes: [{ name: 'Wolf', count: 1 }] })).ok, true);
-        const done = await host.sdk.command('quest.finish', { key: 'Lone Wolf' });
-        assert.equal(done.ok, true, done.message);
-    } finally {
-        host.close();
-    }
-});

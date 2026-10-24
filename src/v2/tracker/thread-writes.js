@@ -1,5 +1,4 @@
-// P23's pure retry/hash and acceptance checks. The director remains the only thread/ledger
-// owner. Runtime writers still need the host's persisted write/cursor handoff before dispatch.
+// P23 retry/hash and acceptance checks. The director alone owns threads and their retry ledger.
 import { offersChosenIn } from '../../tracker.js';
 
 const copy = value => structuredClone(value);
@@ -69,10 +68,16 @@ export function neutralAcceptance(thread, proofs, proofId, { cause, caller = nul
             fields: { ...thread.fields, type: 'quest' }, aliases: thread.aliases ?? [] };
         const tracker = { records: [offered] };
         const declined = offersChosenIn(tracker, payload.words, 'refuse').includes(thread.key);
-        const negated = /\b(?:no|not|nothing|neither|never|won['’]?t|don['’]?t|cannot|can['’]?t|refus\w*|declin\w*)\b/iu.test(payload.words);
+        const negated = /\b(?:(?:will\s+not|would\s+not|do\s+not|won['’]?t|don['’]?t|can['’]?t|cannot|never|not)\s+(?:\w+\s+){0,2}(?:accept|take|help|join|do|agree)|accept\s+(?:nothing|neither)|no\s+(?:thanks|deal))\b/iu.test(payload.words);
         if (declined || negated || !offersChosenIn(tracker, payload.words, 'accept').includes(thread.key)) {
             return failure('REFUSED', 'The reader\'s words do not accept this goal.');
         }
     } else return failure('REFUSED', 'Acceptance requires a reader selection or explicit words.');
     return { ok: true, proof: copy(proof) };
+}
+
+/** A stable writer key on the caller's Source, kept by the writes ledger across retry/reload. */
+export function threadWriteId(ctx, key) {
+    if (!ctx.source || typeof ctx.hash !== 'function') return ctx.fail('DEPENDENCY_UNAVAILABLE', 'Thread writes need a host Source.');
+    return `wr_${ctx.hash({ source: ctx.source, writer: key }).slice(0, 8)}`;
 }

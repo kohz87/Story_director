@@ -67,7 +67,8 @@ const isOffer = thread => isOpen(thread) && Boolean(thread.offer) && !thread.tak
  * a tie), not an open offer: `{ id, key, goal, step, giver, due, taken }`, or null.
  */
 export function currentGoal(state, args, tools) {
-    const quests = threadsOf(state, queryFrom(tools), { kind: 'quest', status: 'active' }).filter(thread => isOpen(thread) && !isOffer(thread));
+    const quests = threadsOf(state, queryFrom(tools), { status: 'active' }).filter(thread => isOpen(thread) && !isOffer(thread)
+        && (thread.kind === 'quest' || thread.rpg || thread.acceptance));
     let best = null;
     for (const thread of quests) if (!best || (thread.rev ?? 0) > (best.rev ?? 0)) best = thread;
     if (!best) return null;

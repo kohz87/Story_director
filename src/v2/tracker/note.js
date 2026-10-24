@@ -41,12 +41,12 @@ const DATED = ['due', 'on', 'arrive'];
 const V1_LINES = CHANGE_INSTRUCTION.split('\n');
 // v1's Fields line without its offers (one deliberate change, 2.0.0-alpha.1): the story's `+ quest` is the
 // acceptance, so a job only offered is no hook with a giver and reward; it stays in the story.
-const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:')).replace('; a job only offered: + hook with giver, reward', '');
+const FIELDS_LINE = 'Fields: desc, now, then, on, due, shown, leg, arrive, place, people, encounter, reach, goal, step, progress, giver. Hooks are offers; only the reader can accept a goal.';
 const WRITE_ONLY_LINE = V1_LINES.find(line => line.startsWith('Write only changes'));
 
 // Story Director alone (WAVE rule 11, B-rxui-7): with no module that runs fights, the fields name no
 // encounter. A written `encounter:` is still kept on its thread as plain data; it is just not told.
-const FIELDS_ALONE = FIELDS_LINE.replace(', encounter;', ';');
+const FIELDS_ALONE = FIELDS_LINE.replace(', encounter,', ',');
 
 /**
  * The Director's part of the static prompt: no names, counts, times or dice. The same bytes for one
@@ -68,8 +68,7 @@ export const STATIC_TEXT = staticText();
 export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
-    hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
-    quest: '+ quest Name — a job {{user}} accepted | giver: | goal: what counts as done | reward: | due: | rank: or difficulty: easy|normal|hard|nightmare; ~ quest Name | progress: … | met: yes|no; - quest Name — turned in|failed|abandoned',
+    hook: '+ hook Name — an offered goal or lead | goal: what counts as done; ~ hook Name | progress: …; - hook Name — outcome',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',
@@ -89,16 +88,8 @@ export function withoutEncounters(tracker) {
     return { ...tracker, records: tracker.records.map(record => (record.fields?.encounter ? { ...record, fields: { ...record.fields, encounter: '' } } : record)) };
 }
 
-// v1's quest checks name a record bare ("- Key — outcome"); every v2 line names its kind.
-function v2Lines(text) {
-    return text.replace(/close it with - Key — /g, 'close it with - quest Key — ')
-        // v2 has no offers (#99): a hook the reader may be taking on becomes the quest when they accept.
-        .replace(TAKING_V1, TAKING_V2);
-}
-
-// v1's quest check for a hook the reader's message may take on ends "leave it an offer"; v2 keeps no offers.
-const TAKING_V1 = 'If they do, write + quest Key with its parts (no - line for the hook); if not, leave it an offer.';
-const TAKING_V2 = 'Write + quest Key with its parts when {{user}} accepts (no - line for the hook); if not, leave it.';
+// All neutral instructions keep hook identity; RPG capture belongs to RB.
+const v2Lines = value => value.replace(/\bquest Key\b/g, 'hook Key');
 
 // The thread ids the time part's recap for this reply tells (empty without the time part).
 function recappedIds(view) {
@@ -202,8 +193,8 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
         corrections,
         instruction,
         givenUp: givenUpIn(tracker, said),
-        taking: offersChosenIn(tracker, said, 'accept'),
-        declining: offersChosenIn(tracker, said, 'refuse'),
+        taking: [],
+        declining: [],
     });
     // The rest {{user}} knows of, by name, at most `elsewhere` of them, while the budget has room.
     const others = split.elsewhere.filter(entry => knownToUser(entry.record)).slice(0, elsewhereCap(settings)).map(entry => elsewhereItem(entry.record));

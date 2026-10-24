@@ -64,7 +64,7 @@ export function toRecord(thread, aliases = [], { contracts = false } = {}) {
     // by its type, so it is read with `type: quest` (never written back).
     if (track.typed && !fields.type) fields.type = 'quest';
     // A job taken on (SD-quests' Take on) is a quest whatever it was offered as.
-    const kind = thread.taken ? (OFFER_KINDS.has(thread.kind) ? 'quest' : thread.kind)
+    const kind = thread.taken && !thread.acceptance ? (OFFER_KINDS.has(thread.kind) ? 'quest' : thread.kind)
         : thread.offer && thread.kind === 'quest' ? track.was || 'hook' : thread.kind;
     const superseded = thread.status !== 'active' && thread.ended?.outcome === 'superseded';
     const status = thread.status === 'active' ? 'active' : superseded ? 'superseded' : 'resolved';

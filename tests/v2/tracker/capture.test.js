@@ -58,7 +58,7 @@ test('~ changes only what it names; text after the dash reads its labels as v1 d
     // An empty label clears the field.
     state = reply(state, '~ agenda Senior Listener Geva | then:').state;
     assert.equal(thread(state, 'Senior Listener Geva').fields.then, undefined);
-    assert.equal(toV1Op(readLine('~ quest Wolves — step: done — the pack is dead | reward: 2 silver')).op.fields.step, 'done — the pack is dead');
+    assert.equal(toV1Op(readLine('~ hook Wolves — step: done — the pack is dead | reward: 2 silver')).op.fields.step, 'done — the pack is dead');
 });
 
 test('near keys: a ~ on a name close to one thread changes it, and the name is remembered', () => {
@@ -111,9 +111,9 @@ test('a ~ on a name not tracked adds a thread of its kind; one that reads as ove
     state = story([{ lines: '~ hook Odd lights | now: over the marsh' }]);
     assert.equal(thread(state, 'Odd lights').kind, 'hook');
     // With a giver or reward it is a job (v1 0.9.4).
-    state = story([{ lines: '~ quest Kettle Jack bounty | giver: Warden Hale | reward: 40 crowns' }]);
-    assert.equal(thread(state, 'Kettle Jack bounty').kind, 'quest');
-    state = story([{ lines: '~ quest North Levee Vipers | step: completed, voucher paid' }], makeState());
+    state = story([{ lines: '~ hook Kettle Jack bounty | giver: Warden Hale | reward: 40 crowns' }]);
+    assert.equal(thread(state, 'Kettle Jack bounty').kind, 'hook');
+    state = story([{ lines: '~ hook North Levee Vipers | step: completed, voucher paid' }], makeState());
     assert.deepEqual(threads(state), []);
     assert.deepEqual(kinds(state), ['unknown-key']);
     // ! with nothing tracked changes nothing and is corrected; a - is only a note.
@@ -123,69 +123,23 @@ test('a ~ on a name not tracked adds a thread of its kind; one that reads as ove
 });
 
 test('a line under a label ("! event Encounter — …") is skipped quietly', () => {
-    const state = story([{ lines: '+ hook Sheepfold Wolves — wolves at the east fold' }, { lines: '! event Encounter — 4 wolves attack\n~ quest Quest | step: fight' }]);
+    const state = story([{ lines: '+ hook Sheepfold Wolves — wolves at the east fold' }, { lines: '! event Encounter — 4 wolves attack\n~ hook Quest | step: fight' }]);
     assert.equal(threads(state).length, 1);
     assert.deepEqual(kinds(state), ['label-key', 'label-key']);
 });
 
-const QUEST = '+ quest Sheep-killer — kill the wolf | giver: Garrow | step: track it to the den | reward: 2 silver';
+const QUEST = '+ hook Sheep-killer — kill the wolf | giver: Garrow | step: track it to the den | reward: 2 silver';
 const TAKEN = { lines: QUEST, said: 'I take the Sheep-killer job.' };
 
-test('a quest closed without a - line: step done, status completed, a ! that says so (v1 0.9.1)', () => {
-    for (const line of [
-        '~ quest Sheep-killer | step: done',
-        '~ quest Sheep-killer | status: completed',
-        '~ quest Sheep-killer — step: completed — the wolf is dead, Garrow paid',
-        '! quest Sheep-killer — the wolf is slain and the reward paid',
-        '! quest Sheep-killer — quest completed',
-    ]) {
-        const state = story([TAKEN, { lines: line }]);
-        const quest = thread(state, 'Sheep-killer');
-        assert.equal(quest.status, 'resolved', line);
-        assert.equal(quest.ended.outcome, 'done', line);
-        assert.equal(quest.ended.rev, 2, line);
-        assert.equal(kinds(state)[0], 'closed-by-change', line);
-        valid(state);
-    }
-    const failed = thread(story([TAKEN, { lines: '~ quest Sheep-killer | outcome: failed — the flock is lost' }]), 'Sheep-killer');
-    assert.equal(failed.status, 'resolved');
-    assert.equal(failed.ended.outcome, 'failed');
-    for (const line of ['~ quest Sheep-killer | step: complete the hunt at dawn', '~ quest Sheep-killer | step: done tracking, now the den', '! quest Sheep-killer — tracks found by the river']) {
-        assert.equal(thread(story([TAKEN, { lines: line }]), 'Sheep-killer').status, 'active', line);
-    }
-    // Other kinds close on a status, not on their now.
-    assert.equal(thread(story([{ lines: '+ hook River stranger — who' }, { lines: '~ hook River stranger | status: resolved' }]), 'River stranger').status, 'resolved');
-    assert.equal(thread(story([{ lines: '+ agenda Geva — plots | now: waiting' }, { lines: '~ agenda Geva | now: done.' }]), 'Geva').status, 'active');
-});
-
-test('a step that opens with the ending and confirms it closes the quest (v1 0.9.42)', () => {
-    const start = { lines: '+ quest EastBluffWolves — hunt the crag wolves | giver: Fenna | step: find the pack | reward: 2 gold', said: 'I accept the EastBluffWolves job.' };
-    for (const line of [
-        '~ quest EastBluffWolves | step: Completed and turned in to Fenna',
-        '~ quest EastBluffWolves | step: Done — bounty paid by Fenna',
-        '~ quest EastBluffWolves | step: Completed and reported | reward: Claimed 2 gold',
-        '~ quest EastBluffWolves | step: cleared and turned in for 60 copper',
-    ]) {
-        assert.equal(thread(story([start, { lines: line }]), 'EastBluffWolves').ended?.outcome, 'done', line);
-    }
-    for (const line of [
-        '~ quest EastBluffWolves | step: Completed and heading back to Fenna',
-        '~ quest EastBluffWolves | step: Completed and heading back | reward: 2 gold, paid on return',
-        '~ quest EastBluffWolves | step: Finished the hunt, pelts to skin',
-    ]) {
-        assert.equal(thread(story([start, { lines: line }]), 'EastBluffWolves').status, 'active', line);
-    }
-});
-
 test('closing a closed thread again changes nothing; a + reopens it (v1 0.9.7)', () => {
-    const closed = story([TAKEN, { lines: '- quest Sheep-killer — the wolf is dead' }]);
+    const closed = story([TAKEN, { lines: '- hook Sheep-killer — the wolf is dead' }]);
     const ended = thread(closed, 'Sheep-killer').ended;
-    for (const line of ['- quest Sheep-killer — the wolf is dead', '~ quest Sheep-killer | status: completed', '! quest Sheep-killer — reward paid']) {
+    for (const line of ['- hook Sheep-killer — the wolf is dead', '~ hook Sheep-killer | status: completed', '! hook Sheep-killer — reward paid']) {
         const again = reply(closed, line).state;
         assert.deepEqual(thread(again, 'Sheep-killer').ended, ended, line);
         assert.deepEqual(kinds(again), ['already-closed'], line);
     }
-    const reopened = story([{ lines: '+ quest Sheep-killer — a second wolf | giver: Garrow | reward: 2 silver', said: 'I take the Sheep-killer job again.' }], closed);
+    const reopened = story([{ lines: '+ hook Sheep-killer — a second wolf | giver: Garrow | reward: 2 silver', said: 'I take the Sheep-killer job again.' }], closed);
     assert.equal(thread(reopened, 'Sheep-killer').status, 'active');
     assert.equal(thread(reopened, 'Sheep-killer').ended, null);
     assert.equal(thread(reopened, 'Sheep-killer').summary, 'a second wolf');
@@ -198,41 +152,19 @@ function withOldOffer(state, key) {
     const next = structuredClone(state);
     const id = next.domains.director.keys[key.toLowerCase()];
     const old = next.domains.director.threads[id];
-    next.domains.director.threads[id] = { ...old, kind: 'quest', offer: true, track: { ...old.track, was: old.kind } };
+    next.domains.director.threads[id] = { ...old, kind: 'hook', offer: true, track: { ...old.track, was: old.kind } };
     return next;
 }
-
-test('+ quest is active and taken on at once, whatever the reader\'s message said', () => {
-    const offers = '+ quest Rat Culling — Kill granary rats | type: side | giver: Danique | reward: 8 copper a sack\n+ quest Wolf Hunt — Kill ridge wolves | type: side | giver: Danique | reward: 4 silver';
-    const state = story([{ lines: offers, said: 'I pay the fee and ask what work there is.' }]);
-    assert.deepEqual(threads(state).map(entry => [entry.key, entry.kind, entry.offer, entry.taken]), [['Rat Culling', 'quest', false, { rev: 1 }], ['Wolf Hunt', 'quest', false, { rev: 2 }]]);
-    // Neither names a goal code can read (F82): kept, and flagged. Nothing is "offered".
-    assert.deepEqual(kinds(state), ['no-goal', 'no-goal']);
-    assert.equal(threads(state, { offer: true }).length, 0);
-    valid(state);
-    const single = '+ quest Wolf Hunt — Kill ridge wolves | giver: Danique | reward: 4 silver';
-    for (const said of [null, '', 'Yes.', 'I won\'t take it.', 'What does it pay?']) {
-        const wolf = thread(story([{ lines: single, said }]), 'Wolf Hunt');
-        assert.deepEqual([wolf.kind, wolf.offer, wolf.status, wolf.taken], ['quest', false, 'active', { rev: 1 }], String(said));
-    }
-    assert.deepEqual(thread(story([{ lines: '+ quest The bond — pay it off | type: main' }]), 'The bond').taken, { rev: 1 });
-    // A quest with nothing but its name is a quest too, and no type is stored for it.
-    const cat = thread(story([{ lines: '+ quest Find the cat — the widow\'s cat is lost', said: 'I listen.' }]), 'Find the cat');
-    assert.deepEqual([cat.kind, cat.offer, cat.fields, cat.taken], ['quest', false, {}, { rev: 1 }]);
-    // A quest already taken is not taken again by a later + quest line.
-    const again = story([{ lines: '+ quest Wolf Hunt — Kill 3 ridge wolves', said: 'Yes, the wolves.' }], story([{ lines: single }]));
-    assert.deepEqual(thread(again, 'Wolf Hunt').taken, { rev: 1 });
-});
 
 test('+ hook makes no quest: a job the story only mentions stays an open thread, whatever it pays', () => {
     const hook = { lines: '+ hook Watch Granary Rats — Minke wants the cellar cleared | giver: Minke | reward: 5 copper per dozen tails (up to 40)', said: 'I ask Minke for work.' };
     let state = story([hook]);
     const rats = thread(state, 'Watch Granary Rats');
     assert.deepEqual([rats.kind, rats.offer, rats.taken, rats.status], ['hook', false, null, 'active']);
-    assert.deepEqual(threads(state, { kind: 'quest' }), []);
-    assert.deepEqual(kinds(state), []);
+    assert.equal(threads(state, { kind: 'hook' }).length, 1);
+    assert.deepEqual(kinds(state), ['label']);
     valid(state);
-    // The story moving it on, or the reader saying yes, does not make it a quest: only + quest does.
+    // The story moving it on, or the reader saying yes, does not make it a quest: only + hook does.
     state = story([{ lines: '~ hook Watch Granary Rats | step: in the cellar | reward: 6 copper a dozen', said: 'Yes, I\'ll take it.' }], state);
     assert.equal(thread(state, 'Watch Granary Rats').kind, 'hook');
     assert.equal(thread(story([{ lines: '~ hook Ferry Run | giver: Ola | reward: 2 silver' }]), 'Ferry Run').kind, 'hook', 'a ~ hook on a name not tracked');
@@ -240,78 +172,19 @@ test('+ hook makes no quest: a job the story only mentions stays an open thread,
     // Closed as done, it stays a hook that closed: no quest {{user}} finished, nothing to pay.
     const done = thread(story([{ lines: '! hook Watch Granary Rats — tails turned in to Minke', said: 'I hand Minke the tails.' }], state), 'Watch Granary Rats');
     assert.deepEqual([done.kind, done.status], ['hook', 'resolved']);
-    // + quest when {{user}} accepts it: the hook is the quest, active and taken on from that reply.
-    state = story([{ lines: '+ quest Watch Granary Rats | giver: Minke | goal: collect 12 to 40 rat tails | reward: 5 copper per 12 tails (up to 40) | difficulty: easy' }], state);
+    // + hook when {{user}} accepts it: the hook is the quest, active and taken on from that reply.
+    state = story([{ lines: '+ hook Watch Granary Rats | giver: Minke | goal: collect 12 to 40 rat tails | reward: 5 copper per 12 tails (up to 40) | difficulty: easy' }], state);
     const quest = thread(state, 'Watch Granary Rats');
-    assert.deepEqual([quest.kind, quest.offer, quest.status, quest.taken], ['quest', false, 'active', { rev: 3 }]);
-    assert.ok(kinds(state).includes('became-quest'));
+    assert.deepEqual([quest.kind, quest.offer, quest.status, quest.taken], ['hook', false, 'active', null]);
+    assert.ok(!kinds(state).includes('became-quest'));
     valid(state);
     // The user's card: both lines in one reply give one quest, active at once.
-    const card = story([{ lines: '+ hook Watch Granary Rats | giver: Minke | reward: 5 copper per dozen tails (up to 40)\n+ quest Watch Granary Rats | giver: Minke | goal: collect 12 to 40 rat tails from the Watch Granary cellar | reward: 5 copper per 12 tails (up to 40) | difficulty: easy', said: 'Sure.' }]);
-    assert.deepEqual(threads(card).map(entry => [entry.kind, entry.offer, entry.taken]), [['quest', false, { rev: 2 }]]);
+    const card = story([{ lines: '+ hook Watch Granary Rats | giver: Minke | reward: 5 copper per dozen tails (up to 40)\n+ hook Watch Granary Rats | giver: Minke | goal: collect 12 to 40 rat tails from the Watch Granary cellar | reward: 5 copper per 12 tails (up to 40) | difficulty: easy', said: 'Sure.' }]);
+    assert.deepEqual(threads(card).map(entry => [entry.kind, entry.offer, entry.taken]), [['hook', false, null]]);
     // Beats and agendas stay what they are.
     const start = { lines: '+ agenda Marrit — now: unloading' };
-    assert.equal(thread(story([start, { lines: '+ quest Marrit — follow her', said: 'I follow Marrit.' }]), 'Marrit').kind, 'agenda');
+    assert.equal(thread(story([start, { lines: '+ hook Marrit — follow her', said: 'I follow Marrit.' }]), 'Marrit').kind, 'agenda');
     assert.equal(thread(story([start, { lines: '~ agenda Marrit | reward: a cut of the cargo' }]), 'Marrit').kind, 'agenda');
-});
-
-test('"- … taken on" makes a hook the quest; "- hook Key" beside the reply\'s "+ quest Key" does not end it (v1 0.9.13, 0.9.20)', () => {
-    const hook = { lines: '+ hook Lone Grey Wolf — Hunt the lone wolf killing sheep | giver: Verna' };
-    const pair = "+ quest Lone Grey Wolf — Hunt the wolf pack | type: bounty | giver: Verna | reward: 1 gold\n- hook Lone Grey Wolf — Hunt the lone wolf killing sheep";
-    for (const said of ["I'll take the wolf bounty.", 'I look around the square.']) {
-        const state = story([hook, { lines: pair, said }]);
-        const wolf = thread(state, 'Lone Grey Wolf');
-        assert.deepEqual([wolf.kind, wolf.status, wolf.offer, wolf.taken], ['quest', 'active', false, { rev: 2 }], said);
-        // A quest with no goal code can read is flagged once (F82).
-        assert.deepEqual(kinds(state), ['became-quest', 'no-goal', 'taken-on'], said);
-    }
-    const state = story([hook, { lines: pair }]);
-    // With nothing tracked before, the same pair leaves the quest open.
-    assert.equal(thread(story([{ lines: pair }]), 'Lone Grey Wolf').status, 'active');
-    // A reason that says the job is over ends it, in the same reply or a later one.
-    assert.equal(thread(story([hook, { lines: "+ quest Lone Grey Wolf — hunt it | giver: Verna\n- quest Lone Grey Wolf — done, Verna paid" }]), 'Lone Grey Wolf').status, 'resolved');
-    assert.equal(thread(story([{ lines: '- quest Lone Grey Wolf — cleared' }], state), 'Lone Grey Wolf').status, 'resolved');
-    // A later reply's plain "- hook Key — …" is an ending: the + quest was another reply's.
-    assert.equal(thread(story([{ lines: '- hook Lone Grey Wolf — Hunt the lone wolf killing sheep' }], state), 'Lone Grey Wolf').status, 'resolved');
-    // "- … taken on by" on the hook alone: the story says it was accepted, so it is the quest, taken on.
-    const accepted = thread(story([hook, { lines: '- hook Lone Grey Wolf — taken on by Wessel' }]), 'Lone Grey Wolf');
-    assert.deepEqual([accepted.kind, accepted.status, accepted.offer, accepted.taken], ['quest', 'active', false, { rev: 2 }]);
-});
-
-test('an older chat\'s offer loads, stays as it is, and becomes the quest when the story writes + quest', () => {
-    const old = withOldOffer(story([{ lines: '+ hook Herb run — moonleaf for the healer | giver: Mother Ysolde | reward: 5 copper', said: 'Hello.' }]), 'Herb run');
-    valid(old);
-    assert.deepEqual([thread(old, 'Herb run').kind, thread(old, 'Herb run').offer], ['quest', true]);
-    // A ~ on it changes its parts and nothing else: it is no quest of {{user}}'s yet.
-    const touched = story([{ lines: '~ hook Herb run | now: the healer waits', said: 'I take it.' }], old);
-    assert.deepEqual([thread(touched, 'Herb run').kind, thread(touched, 'Herb run').offer, thread(touched, 'Herb run').taken], ['quest', true, null]);
-    valid(touched);
-    // + quest: taken on from that reply.
-    const taken = story([{ lines: '+ quest Herb run — moonleaf | goal: bring 5 moonleaf', said: 'Hm.' }], old);
-    assert.deepEqual([thread(taken, 'Herb run').kind, thread(taken, 'Herb run').offer, thread(taken, 'Herb run').taken], ['quest', false, { rev: 2 }]);
-    valid(taken);
-    // Turned down in the reader's words, it closes as before.
-    const declined = thread(story([{ lines: '- quest Herb run — declined', said: 'No thanks, I am not picking herbs.' }], old), 'Herb run');
-    assert.deepEqual([declined.kind, declined.status, declined.ended.outcome], ['quest', 'resolved', 'declined']);
-    // An older chat's quest nothing took on (no reader message then) is taken on by a later + quest.
-    const untaken = structuredClone(story([{ lines: '+ quest Wolf Hunt — Kill 3 ridge wolves | giver: Danique' }]));
-    untaken.domains.director.threads[thread(untaken, 'Wolf Hunt').id].taken = null;
-    assert.deepEqual(thread(story([{ lines: '+ quest Wolf Hunt — Kill 3 ridge wolves' }], untaken), 'Wolf Hunt').taken, { rev: 2 });
-});
-
-test('+ quest asks part quests to take it on (quest.take) when the module has it, with or without a message', () => {
-    for (const said of ['I\'ll take it.', null]) {
-        const calls = [];
-        const call = (type, payload) => { calls.push({ type, payload }); };
-        const run = runCommand(makeState(), part.kinds.quest.apply, readLine('+ quest Wolf Hunt — Kill 3 wolves | giver: Danique'), { said, call });
-        assert.equal(run.ok, true, run.message);
-        assert.deepEqual(calls.map(entry => entry.type), ['quest.take']);
-        assert.equal(calls[0].payload.id, run.result.data.thread);
-    }
-    // A + hook asks nothing.
-    const calls = [];
-    runCommand(makeState(), part.kinds.hook.apply, readLine('+ hook Wolf Hunt — Kill 3 wolves | giver: Danique | reward: 1 gold'), { said: 'Yes.', call: type => calls.push(type) });
-    assert.deepEqual(calls, []);
 });
 
 test('the carrier the host gives ({ index, swipe, key }) tells replies apart, a swipe too', () => {
@@ -347,64 +220,6 @@ test('the reply a line belongs to: the host\'s carrier when given, else the line
     assert.equal(run('+ hook F — f', { index: 2 }).n, 4, 'a line before the last one read starts another reply');
 });
 
-test('giving up and turning down are the reader\'s; failing is the story\'s (v1 0.9.6, 0.9.15)', () => {
-    const start = { lines: '+ quest Wolf Hunt — Kill ridge wolves | giver: Danique | reward: 4 silver', said: 'I take the wolf hunt.' };
-    let state = story([start, { lines: '- quest Wolf Hunt — abandoned', said: 'I look around the fold.' }]);
-    assert.equal(thread(state, 'Wolf Hunt').status, 'active');
-    assert.deepEqual(kinds(state), ['not-chosen']);
-    assert.equal(thread(story([start, { lines: '~ quest Wolf Hunt | status: abandoned', said: 'Onward.' }]), 'Wolf Hunt').status, 'active');
-    for (const [said, line] of [
-        ['I give up on the wolf hunt, it is hopeless.', '- quest Wolf Hunt — abandoned'],
-        ['Tell Danique I quit.', '~ quest Wolf Hunt | outcome: forfeit'],
-        ['I walk away from the wolf hunt.', '! quest Wolf Hunt — Ren walked away from the hunt'],
-    ]) {
-        const ended = thread(story([start, { lines: line, said }]), 'Wolf Hunt').ended;
-        assert.equal(ended?.outcome, 'abandoned', line);
-    }
-    for (const reason of ['failed, the wolves scattered the flock', 'expired at sundown', 'called off after the flood']) {
-        assert.equal(thread(story([start, { lines: `- quest Wolf Hunt — ${reason}`, said: 'Hm.' }]), 'Wolf Hunt').ended?.outcome, 'failed', reason);
-    }
-    assert.equal(thread(story([start, { lines: '- quest Wolf Hunt — turned in, quite a haul', said: 'Hm.' }]), 'Wolf Hunt').ended.outcome, 'done', '"quite" is not "quit"');
-});
-
-test('a quest with only its pay left is not failed for the hour passing (v1 0.9.28)', () => {
-    const start = { lines: '+ quest Lone Grey Wolf — hunt the pack | giver: Verna | reward: 1 gold\n~ quest Lone Grey Wolf | step: turn in voucher at bailiff hatch on Friday noon | due: Goldwane 14, 12:00 pm', said: 'I take the Lone Grey Wolf job.' };
-    for (const line of ['- quest Lone Grey Wolf — failed: deadline passed', '- quest Lone Grey Wolf — voucher expired, too late', '~ quest Lone Grey Wolf | status: failed (missed the window)']) {
-        const state = story([start, { lines: line, said: 'I wait.' }]);
-        assert.equal(thread(state, 'Lone Grey Wolf').status, 'active', line);
-        assert.ok(kinds(state).includes('pay-waiting'), line);
-    }
-    assert.equal(thread(story([start, { lines: '- quest Lone Grey Wolf — voucher cashed, 1 gold paid' }]), 'Lone Grey Wolf').ended.outcome, 'done');
-    assert.equal(thread(story([start, { lines: '- quest Lone Grey Wolf — failed: the bailiff tore up the voucher' }]), 'Lone Grey Wolf').ended.outcome, 'failed');
-    // While the work is still to do, a passed deadline fails it.
-    const hunting = { lines: '+ quest Wolves — hunt the pack | giver: Verna | step: track the pack | due: Goldwane 14', said: 'I take the wolves job.' };
-    const failed = thread(story([hunting, { lines: '- quest Wolves — failed: deadline passed' }]), 'Wolves');
-    assert.deepEqual([failed.ended.outcome, failed.ended.reason], ['failed', 'failed: deadline passed']);
-});
-
-test('taken, target and reward (part quests) stay as they are; a code-checked target is not closed by the story', () => {
-    const offered = story([{ lines: '+ quest Rat Culling — Kill granary rats | giver: Danique | reward: 8 copper', said: 'Hm.' }]);
-    const id = thread(offered, 'Rat Culling').id;
-    // What SD-quests' quest.take would write.
-    const director = structuredClone(offered.domains.director);
-    Object.assign(director.threads[id], { kind: 'quest', offer: false, taken: { rev: 2 }, target: { noun: 'rat', count: 5, kind: 'foes' }, reward: { amount: 8, each: false, unit: 'copper', text: '8 copper' } });
-    let state = { ...offered, domains: { ...offered.domains, director } };
-    state = story([{ lines: '~ quest Rat Culling | step: two sacks so far' }], state);
-    const quest = thread(state, 'Rat Culling');
-    assert.deepEqual([quest.kind, quest.offer, quest.fields.step], ['quest', false, 'two sacks so far']);
-    assert.deepEqual(quest.taken, { rev: 2 });
-    assert.deepEqual(quest.target, { noun: 'rat', count: 5, kind: 'foes' });
-    assert.deepEqual(quest.reward, { amount: 8, each: false, unit: 'copper', text: '8 copper' });
-    // "Done" is the Finish's to say; a failure is still the story's.
-    const done = story([{ lines: '- quest Rat Culling — all rats dead, Danique paid' }], state);
-    assert.equal(thread(done, 'Rat Culling').status, 'active');
-    assert.deepEqual(kinds(done), ['unverified-completion']);
-    const failed = story([{ lines: '- quest Rat Culling — failed, the granary burned' }], state);
-    assert.deepEqual(thread(failed, 'Rat Culling').ended, { rev: 3, reason: 'failed, the granary burned', outcome: 'failed' });
-    assert.deepEqual(thread(failed, 'Rat Culling').taken, { rev: 2 });
-    valid(failed);
-});
-
 test('lines the Director cannot use are Problems, not errors, and change nothing else', () => {
     const start = story([{ lines: START }]);
     const asked = runCommand(start, part.kinds.hook.apply, readLine('? hook River stranger — who is she'));
@@ -426,9 +241,9 @@ test('lines the Director cannot use are Problems, not errors, and change nothing
 
 test('a swipe reads from the state before the reply: nothing of the swiped reply is left', () => {
     const before = story([{ lines: START }]);
-    const first = reply(before, '+ quest Wolf Hunt — Kill ridge wolves | giver: Danique\n- hook River stranger — left', { said: 'I take the wolf hunt.', carrier: 4 }).state;
+    const first = reply(before, '+ hook Wolf Hunt — Kill ridge wolves | giver: Danique\n- hook River stranger — left', { said: 'I take the wolf hunt.', carrier: 4 }).state;
     const swipe = reply(before, '~ hook River stranger | now: at the inn', { said: 'I take the wolf hunt.', carrier: 4 }).state;
-    assert.equal(thread(first, 'Wolf Hunt').kind, 'quest');
+    assert.equal(thread(first, 'Wolf Hunt').kind, 'hook');
     assert.equal(thread(swipe, 'Wolf Hunt'), null);
     assert.equal(thread(swipe, 'River stranger').status, 'active');
     assert.deepEqual(replyTurn(swipe.domains.director).quests, []);

@@ -45,12 +45,12 @@ async function deleteExchange(host, index) {
 test('deleting an early reply keeps every later reply\'s threads, problems, settles and picks', async t => {
     const host = await fresh(t, ['~ time June 3, 1200, 08:00 am']);
     await host.send('Any work? I take it.', said('A.', [
-        '+ hook Alpha — x', '? hook Bad A — asks', '+ quest Rats — cellar | giver: Fenna | goal: Kill 3 rats | reward: 5 gold',
+        '+ hook Alpha — x', '? hook Bad A — asks', '+ hook Rats — cellar | giver: Fenna | goal: Kill 3 rats | reward: 5 gold',
         '+ world Plague — fever | state: ongoing', '+ world Drought — dry | state: ongoing', '! time +3d',
     ]));
     const a = host.store.headIndex();
     await host.send('More work? I take it.', said('B.', [
-        '+ hook Bravo — y', '? hook Bad B — asks', '+ quest Wolves — ridge | giver: Fenna | goal: Kill 2 wolves | reward: 5 gold',
+        '+ hook Bravo — y', '? hook Bad B — asks', '+ hook Wolves — ridge | giver: Fenna | goal: Kill 2 wolves | reward: 5 gold',
         '+ world War — north | state: ongoing', '+ world Riots — south | state: ongoing', '+ world Flood — east | state: ongoing', '! time +3d',
     ]));
     await host.send('And?', said('C.', ['+ hook Charlie — z', '- hook Bravo — gone', '? hook Bad C — asks', '~ world War | state: resolved', '! time +2h']));
@@ -225,27 +225,3 @@ test('the module needs Story Block 2.0.0-beta.2 or later', async t => {
 });
 
 // ---- the story-vouched payout on Story Block's per-reply budget (SD-r2fix follow-up) --------------------
-
-test('on Story Block 2.0.0-alpha.2, a quest the story alone vouched for is paid from the reply\'s story money', async t => {
-    t.mock.method(console, 'warn', () => {});
-    const host = await createHost({ modules: [fakeRpgBattle(), createModule()], settings: { modules: { 'story-block': { storyCoinPerReply: 100 } } } });
-    t.after(() => host.close());
-    const wallet = () => host.sdk.query('inventory.wallet', { owner: 'party' }).coin ?? 0;
-    await host.send('We arrive.', said('Bluewatch.', ['~ place Bluewatch Village | kind: settlement']));
-    await host.send('I take the errand.', said('Fenna has one.', ['+ quest Errand — a parcel | giver: Fenna | goal: carry the parcel to the mill | reward: 40 gold']));
-    if (!host.sdk.query('director.thread', { key: 'Errand' }).taken) assert.equal((await host.sdk.command('quest.take', { key: 'Errand' })).ok, true);
-    // The story's own coin takes 70 of the reply's 100; the turn-in is paid the 30 left, not its 40.
-    const before = wallet();
-    await host.send('Delivered.', said('Fenna pays.', ['+ coin 70', '- quest Errand — done']));
-    assert.equal(host.sdk.query('director.thread', { key: 'Errand' }).status, 'resolved', 'turned in, never refused');
-    assert.equal(wallet() - before, 100, 'the reply gave no more than its story money');
-    const line = host.sdk.receipts().map(entry => entry.receipt).find(receipt => receipt?.data?.turnIn);
-    assert.deepEqual(line.data.turnIn.paid, { amount: 30, owed: 40 });
-    assert.match(line.summary, /30 gold paid \(40 gold was owed; one reply may give no more\)/);
-    // The next reply has its own budget: a second errand pays in full.
-    await host.send('Another?', said('One more.', ['+ quest Second — a letter | giver: Fenna | goal: carry the letter | reward: 30 gold']));
-    if (!host.sdk.query('director.thread', { key: 'Second' }).taken) assert.equal((await host.sdk.command('quest.take', { key: 'Second' })).ok, true);
-    const next = wallet();
-    await host.send('Done.', said('Paid.', ['- quest Second — done']));
-    assert.equal(wallet() - next, 30);
-});

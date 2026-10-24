@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 
 import { createModule, namespaced, partSettings, PARTS, storyDirectorModule } from '../../../src/v2/module.js';
 import { STATIC_TEXT } from '../../../src/v2/tracker/note.js';
-import { QUEST_STATIC } from '../../../src/v2/quests/index.js';
 import { STATIC_TEXT as ATLAS_STATIC, TAIL_BUDGET as ATLAS_BUDGET } from '../../../src/v2/atlas/note.js';
 import { RECAP_BUDGET } from '../../../src/v2/time/recap.js';
 import { screens as SCREENS } from '../../../src/v2/screens/index.js';
@@ -20,10 +19,10 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     const def = storyDirectorModule;
     // The time, atlas and screens parts add nothing to the static part.
     assert.equal(ATLAS_STATIC, '');
-    assert.equal(def.context.static(), `${STATIC_TEXT}\n${QUEST_STATIC}\n${CHRONICLE_STATIC}`);
-    assert.equal(def.context.budget, 500 + 250 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'quests', 'time', 'atlas', 'chronicle', 'world', 'arc', 'screens']);
-    assert.ok(def.capture.kinds.quest.grammar.startsWith('+ quest Name'));
+    assert.equal(def.context.static(), `${STATIC_TEXT}\n${CHRONICLE_STATIC}`);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'arc', 'screens']);
+    assert.equal(def.capture.kinds.quest, undefined);
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;
     const ctx = { fail: (code, message) => { failed = { code, message }; throw new Error(message); } };

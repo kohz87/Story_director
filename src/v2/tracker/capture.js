@@ -1,21 +1,11 @@
-// Story Director v2, tracker part: Director change lines applied as story commands (pure).
-//
-// Story Block hands each `<Changes>` line of a Director kind to `apply(ctx, line)` as a command
-// of cause `story` (SPEC §4.2), the line parsed by the shared grammar (§4.4) as
-// `{ op, kind, name, text, labels }`. The line is turned into the op v1's parser makes of
-// `op Name — text | label: value` and run through v1's `applyOps` on the domain read as a v1
-// tracker (convert.js), so every v1 rule holds: near keys, a quest closed by its step, giving up
-// only on the reader's word, pay waiting, closing twice changing nothing. One v1 rule is left out
-// (`direct`): the story writes `+ quest` when {{user}} accepts a job, so the quest is active and
-// taken on at once; there are no offers to accept, and a `+ hook` stays an open thread of the story
-// whatever it pays. A line the rules cannot use is a Problem on the Director tab, never an error for
-// the reader.
+// Genre-neutral Director capture. Reader acceptance uses typed evidence; RPG capture belongs to RB.
 
 import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps } from '../../tracker.js';
 import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toTracker } from './convert.js';
 import { addProblem, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
-import { TURN_IN_WORDS, lineWords, applyMet, capNote, noGoalProblem, onlyOwnLabels, questHasGoal, settleTurnIns, splitQuestLine, storyTurnIn, withSettled } from './quest-lines.js';
+import { acceptIntent } from './acceptance.js';
+import { threadWriteId } from './thread-writes.js';
 import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } from './time.js';
 
 /** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
@@ -33,7 +23,7 @@ const QUOTE_CHARS = 300;
 // the whole line refused. They mean nothing to the Director, so they are left out with a Problem.
 const RESERVED_LABEL = /^(?:qty|id|.+_id|.+Id|__proto__|constructor|prototype)$/;
 // `xp:` on a quest: quest XP is RPG Battle's, scaled by difficulty (MODULES §F5); never a written amount.
-const IGNORED_LABELS = new Set(['xp', 'exp', 'experience']);
+const IGNORED_LABELS = new Set(['xp', 'exp', 'experience', 'reward', 'target', 'met', 'ready', 'difficulty']);
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
@@ -108,17 +98,6 @@ function turnOf(director, ctx, line) {
         : reply !== null ? reply !== turn.reply || (index >= 0 && index <= turn.index)
             : index <= 0 || index <= turn.index;
     return { fresh, place: sid ? -1 : index };
-}
-
-/*
- * The turn-ins waiting for the reply's scene (quest-lines.js settleTurnIns), checked before a Director
- * line runs: within the same reply, the ones the place rule now allows are paid (the reply's place lines
- * came in between); when the line starts another reply, the last reply's are settled for good (the step
- * before the reply, `quest.settle`, normally did that already).
- */
-function settleBefore(ctx, director, line) {
-    if (!replyTurn(director).pending.length) return [];
-    return settleTurnIns(ctx, director, { addProblem, final: turnOf(director, ctx, line).fresh });
 }
 
 // `Hook: Sheepfold Wolves`, a kind and a colon written in front of the name (v1 0.9.10). Invisible
@@ -202,6 +181,10 @@ export function toV1Op(line) {
     const stand = `${op}${op === '+' ? ` ${line.kind}` : ''} x${text ? ` — ${text}` : ''}${labels}`;
     const parsed = parseChanges(stand).ops[0];
     if (!parsed) return { error: `"${lineText(line)}" could not be read.` };
+    for (const key of ['type', 'reward', 'target', 'difficulty', 'rank', 'met', 'ready', 'xp', 'exp', 'experience']) {
+        delete parsed.fields?.[key];
+        delete parsed.extra?.[key];
+    }
     return {
         op: {
             ...parsed,
@@ -256,19 +239,16 @@ function writeBack(director, records, ctx, read = new Map()) {
         if (!sameValue(thread, prev)) director.threads[id] = thread;
     }
     const keys = keysOf(records, record => idOf.get(record.id));
-    for (const name of Object.keys(director.keys)) if (!Object.hasOwn(keys, name)) delete director.keys[name];
+    for (const name of Object.keys(director.keys)) if (!Object.hasOwn(keys, name) && idOf.has(lineKey(director.threads[director.keys[name]]?.key ?? ''))) delete director.keys[name];
     for (const [name, id] of Object.entries(keys)) if (director.keys[name] !== id) director.keys[name] = id;
     return idOf;
 }
 
-// v1's rules as v2 runs them: `direct` (the story's `+ quest` is the acceptance), the reader's message
-// for giving up.
-const rulesOn = (tracker, ops, director, said) => applyOps(tracker, ops, { message: turnNumber(director), time: director.time.minutes, said, direct: true });
+// Genre-neutral thread progress still uses the retained tracker; RPG transitions use RB.
+const rulesOn = (tracker, ops, director, said) => applyOps(tracker, ops, { message: turnNumber(director), time: director.time.minutes, said: null, direct: false });
 
-/** `apply(ctx, line)` for agenda, event, hook, quest, clock, beat and secret lines. */
 export function applyThreadLine(ctx, given) {
-    const settled = settleBefore(ctx, ctx.draft('director'), given);
-    return withSettled(settled, threadLine(ctx, given));
+    return threadLine(ctx, given);
 }
 
 function threadLine(ctx, given) {
@@ -279,8 +259,7 @@ function threadLine(ctx, given) {
     const { line: kept, dropped } = withoutDroppedLabels(given);
     if (dropped.length) addProblem(director, ctx, droppedProblem(given, dropped));
     // A quest line's own labels (F83 `met:`, F85 `progress:`) are taken out before v1 reads it.
-    const { line, met, metText } = splitQuestLine(kept);
-    if (met !== null && onlyOwnLabels(line)) return metOnly(ctx, director, line, met, metText, raw);
+    const line = kept;
     const read = toV1Op(line);
     if (read.error) {
         addProblem(director, ctx, { kind: 'unread', severity: 'warn', key: String(line?.name ?? ''), op: line?.op, text: read.error });
@@ -289,35 +268,31 @@ function threadLine(ctx, given) {
     const op = read.op;
     if (read.cut) addProblem(director, ctx, { kind: 'long-name', severity: 'info', key: op.key, op: op.op, text: `A name ${read.cut} characters long was cut to "${op.key}" (names are at most ${KEY_CHARS}).` });
     const said = readerSaid(ctx);
-    const tracker = toTracker(director, { contracts: true });
+    const tracker = toTracker(director);
+    tracker.records = tracker.records.filter(record => {
+        const thread = director.threads[director.keys[record.id]];
+        return thread && !thread.rpg && thread.kind !== 'quest';
+    });
     // Each record as read (the same objects come back from the rules, changed or not: so plain JSON).
     const asRead = new Map(tracker.records.map(record => [record.id, JSON.stringify(record)]));
     const ops = [op];
     const named = director.threads[director.keys[op.id]];
-    // v1 0.9.20: "+ quest Key" then "- hook Key — <what the hook was>" in one reply leaves the job
-    // open. Lines come one at a time here, so the reply's `+ quest` is put back in front of the
-    // `-` (an active record named again changes nothing) and its own finding is dropped.
-    const again = op.op === '-' && named?.status === 'active' && turn.quests.includes(named.id);
-    if (again) ops.unshift({ op: '+', kind: 'quest', key: named.key, id: lineKey(named.key), fields: {}, extra: {}, reason: '', raw: '' });
-    const newQuest = op.op === '+' && op.kind === 'quest';
-    // A line about a taken quest in turn-in words that does not close it ("~ quest X — Elula pays you"):
-    // the reply's intent, which the afterCapture step may act on (quests/index.js quest.autoTurnIns).
-    if (named && named.kind === 'quest' && named.status === 'active' && named.taken && (op.op === '~' || op.op === '!') && TURN_IN_WORDS.test(lineWords(given))) {
-        if (!turn.intent?.includes(named.id)) turn.intent = [...(Array.isArray(turn.intent) ? turn.intent : []), named.id];
+    // A legacy quest is history. Generic edits never mutate its RPG extension or close it.
+    if (named?.kind === 'quest' && !named.rpg) return { summary: 'Quest from an earlier version (read only).', narrate: false, data: { thread: named.id } };
+    if (named?.rpg) return ctx.fail('DEPENDENCY_UNAVAILABLE', 'RPG quest changes require their owner.');
+    if (!named && line.op === '+' && line.kind === 'hook' && line.labels?.goal) {
+        const id = newId(ctx, new Set(Object.keys(director.threads)));
+        ctx.call('threads.offer', { write: threadWriteId(ctx, `offer:${id}`), thread: id, kind: 'hook', key: op.key,
+            summary: capSummary(line.text ?? ''), fields: Object.fromEntries(Object.entries(line.labels ?? {}).filter(([key]) => ['goal', 'giver', 'step', 'progress', 'due', 'place', 'people', 'now', 'then', 'on'].includes(key))), expectedHash: null });
+        return { summary: `Director: ${raw}`, narrate: false, data: { thread: id } };
     }
-    // F94: a taken quest the story closes as done is turned in by code, or kept open with the reason.
-    if (named && named.kind === 'quest' && named.status === 'active' && named.taken && op.op !== '+') {
-        const trial = rulesOn(toTracker(director), ops, director, said);
-        const record = trial.tracker.records.find(entry => entry.id === lineKey(named.key));
-        if (record && record.status !== 'active' && outcomeOf(record) === 'done') {
-            if (met !== null) applyMet(ctx, director.threads[named.id], met, metText, revOf(ctx));
-            const out = storyTurnIn(ctx, director, named, { addProblem, raw });
-            if (out) return out;
-        }
-    }
+    if (named?.offer) acceptIntent(ctx, named);
     const result = rulesOn(tracker, ops, director, said);
-    const findings = again ? result.problems.slice(1) : result.problems;
+    const findings = result.problems;
     const records = result.tracker.records;
+    for (const record of records) {
+        if (record.kind === 'quest') record.kind = director.threads[director.keys[record.id]]?.kind ?? line.kind;
+    }
     // One reply adds at most NEW_THREADS_PER_REPLY threads, and at most MAX_OPEN_THREADS are open at
     // once: past either, a line that would add one is not used.
     const known = new Set(orderedThreads(director).map(thread => lineKey(thread.key)));
@@ -361,70 +336,15 @@ function threadLine(ctx, given) {
         });
     }
     const current = thread ? director.threads[thread] : null;
-    if (current?.kind === 'quest') {
-        capNote(current);
-        // F82: a quest the story starts with no goal is kept and flagged once.
-        if (op.op === '+' && current.status === 'active' && !(named?.kind === 'quest') && !questHasGoal(ctx, current)) addProblem(director, ctx, noGoalProblem(current));
-        if (met !== null) {
-            const { problem, changed } = applyMet(ctx, current, met, metText, revOf(ctx));
-            if (problem) addProblem(director, ctx, problem);
-            noteMet(director, current, met, changed);
-        }
+    if (named?.acceptance && named.status === 'active' && current?.status === 'resolved') {
+        ctx.call('chronicle.threadOutcome', { thread, text: `${current.key}: ${current.ended.outcome}.` });
     }
-    // The story's `+ quest` (or a line that made a quest of a hook) is {{user}} accepting it: taken on
-    // from now, whatever the reader's message said.
-    const madeQuest = current?.kind === 'quest' && (newQuest || !named || named.kind !== 'quest' || named.offer);
-    const took = madeQuest ? takeOn(ctx, director, thread) : false;
-    if (newQuest && thread && !turn.quests.includes(thread)) turn.quests = [...turn.quests, thread];
-    return { summary: `Director: ${raw}`, narrate: false, data: { thread, problems: findings.map(finding => finding.kind), ...(took ? { taken: true } : {}) } };
-}
-
-/*
- * A quest the story started (or made of a hook, or of an older chat's offer) is taken on from now:
- * fights count from this receipt's rev. Part `quests` owns `taken`, `target` and `reward`, so this asks
- * it with `quest.take`; without that command only `taken` is set. True when it was taken.
- */
-function takeOn(ctx, director, id) {
-    const thread = director.threads[id];
-    if (!thread || thread.kind !== 'quest' || thread.offer || thread.taken || thread.status !== 'active') return false;
-    try {
-        ctx.call('quest.take', { id });
-    } catch (error) {
-        if (error?.code !== 'UNKNOWN_COMMAND') throw error;
-        thread.taken = { rev: revOf(ctx) };
-        thread.rev = revOf(ctx);
-    }
-    return Boolean(director.threads[id]?.taken);
-}
-
-// `~ quest Name | met: yes` and nothing else (F83): read without v1's rules, which would count a bare
-// `~` as the story touching the thread or add a name it does not know.
-function metOnly(ctx, director, line, met, metText, raw) {
-    const id = director.keys[lineKey(bareName(line.name))];
-    const thread = id ? director.threads[id] : null;
-    if (!thread) {
-        addProblem(director, ctx, { kind: 'met', severity: 'warn', key: String(line.name ?? ''), op: '~', text: `"${String(line.name ?? '').trim()}" is not a tracked quest; met: changed nothing.` });
-        return { summary: `Director: ${raw} (not used)`, narrate: false, data: { thread: null, problems: ['met'] } };
-    }
-    const { problem, changed } = applyMet(ctx, thread, met, metText, revOf(ctx));
-    if (problem) addProblem(director, ctx, problem);
-    noteMet(director, thread, met, changed);
-    return { summary: `Director: ${raw}`, narrate: false, data: { thread: thread.id, problems: problem ? [problem.kind] : [] } };
-}
-
-// A quest the story says is met in this reply (F83 `met: yes` that set `ready`): kept in the reply's `met`
-// (thread ids), which the afterCapture step reads for a delivery goal handed over at the giver
-// (quests/index.js quest.autoTurnIns).
-function noteMet(director, thread, met, changed) {
-    if (met !== true || !changed || !thread?.id) return;
-    const now = replyDraft(director);
-    if (now && !(Array.isArray(now.met) && now.met.includes(thread.id))) now.met = [...(Array.isArray(now.met) ? now.met : []), thread.id];
+    return { summary: `Director: ${raw}`, narrate: false, data: { thread, problems: findings.map(finding => finding.kind) } };
 }
 
 /** `apply(ctx, line)` for `time` lines: `~ time <date, clock time>`, `! time +2h`. */
 export function applyTimeLine(ctx, line) {
-    const settled = settleBefore(ctx, ctx.draft('director'), line);
-    return withSettled(settled, timeLine(ctx, line));
+    return timeLine(ctx, line);
 }
 
 function timeLine(ctx, line) {
