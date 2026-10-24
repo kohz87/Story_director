@@ -67,9 +67,13 @@ export function neutralAcceptance(thread, proofs, proofId, { cause, caller = nul
         const offered = { id: thread.id, key: thread.key, kind: 'hook', status: 'active',
             fields: { ...thread.fields, type: 'quest' }, aliases: thread.aliases ?? [] };
         const tracker = { records: [offered] };
-        const declined = offersChosenIn(tracker, payload.words, 'refuse').includes(thread.key);
-        const negated = /\b(?:(?:will\s+not|would\s+not|do\s+not|won['’]?t|don['’]?t|can['’]?t|cannot|never|not)\s+(?:\w+\s+){0,2}(?:accept|take|help|join|do|agree)|accept\s+(?:nothing|neither)|no\s+(?:thanks|deal))\b/iu.test(payload.words);
-        if (declined || negated || !offersChosenIn(tracker, payload.words, 'accept').includes(thread.key)) {
+        // Positive idioms negate waiting/hesitation, rather than taking the offer.
+        const intent = payload.words.replace(/\bcan['’]?t\s+wait\s+to\b/giu, 'will')
+            .replace(/\bwould\s+not\s+hesitate\s+to\b/giu, 'will');
+        const declined = offersChosenIn(tracker, intent, 'refuse').includes(thread.key);
+        const negated = /\b(?:(?:will\s+not|would\s+not|do\s+not|won['’]?t|don['’]?t|can['’]?t|cannot|never|not)\s+(?:\w+\s+){0,2}(?:accept|take|help|join|do|agree)|accept\s+(?:nothing|neither)|no\s+(?:thanks|deal))\b/iu.test(intent)
+            || /\bnot\s+sure\s+(?:(?:that\s+)?(?:i|we)\s+)?(?:can|could|will|should)\s+(?:accept|take|help|join|do|agree)\b/iu.test(intent);
+        if (declined || negated || !offersChosenIn(tracker, intent, 'accept').includes(thread.key)) {
             return failure('REFUSED', 'The reader\'s words do not accept this goal.');
         }
     } else return failure('REFUSED', 'Acceptance requires a reader selection or explicit words.');

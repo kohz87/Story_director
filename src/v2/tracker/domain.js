@@ -6,7 +6,7 @@
 //   keys:    { [lineKey(key) or alias]: id },
 //   problems:{ ["<rev>.<n>"]: { rev, turn, kind, text, … } }, // the newest 100 kept, 50 shown
 //   (a quest thread may also carry `ready: { rev }`, F83, an older chat's offer `shown: { turn }`, F88, and a
-//   reward owed `owed: { text, rev, units?, credit?, total?, paid?: { [rev]: amount } }`, quests/index.js payOwed)
+//   legacy reward owed `owed: { text, rev, units?, credit?, total?, paid?: { [rev]: amount } }`, read-only history)
 //   turn:    { n, now: null | [{ reply, index, from, quests, lone, added, vouched, words?, paid, pending?, refused?, intent?, met? }] },
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
@@ -196,7 +196,7 @@ function threadErrors(id, thread) {
     if (thread.ready !== undefined && thread.ready !== null && !(isRecord(thread.ready) && isInt(thread.ready.rev))) errors.push(`${at}.ready must be null or { rev }.`);
     if (thread.shown !== undefined && !(isRecord(thread.shown) && isInt(thread.shown.turn) && thread.shown.turn >= 0)) errors.push(`${at}.shown must be { turn }.`);
     if (thread.track !== undefined && !isRecord(thread.track)) errors.push(`${at}.track must be an object.`);
-    // A reward owed (quests/index.js payOwed): the story's words, and what was credited and paid so far.
+    // Legacy reward history: retained bytes, never an SD payout path.
     const owed = thread.owed;
     if (owed !== undefined) {
         const amount = value => value === undefined || (isInt(value) && value >= 0);

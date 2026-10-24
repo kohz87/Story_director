@@ -68,3 +68,14 @@ test('selection proof requires the reader action; narration cannot manufacture a
     assert.equal(neutralAcceptance(thread(), [selected], selected.id, { cause: 'story' }).code, 'REFUSED');
     assert.equal(neutralAcceptance(thread(), [selected], selected.id, { cause: 'ui', caller: 'third-module' }).code, 'REFUSED');
 });
+
+for (const [words, accepts] of [
+    ["Yes, I'll help, no problem", true],
+    ["I can't wait to take the mill job", true],
+    ["I would not hesitate to take it", true],
+    ["I'm not sure I can take the mill job", false],
+    ["No, I won't take it", false],
+]) test(`neutral intent scopes negation: ${words}`, () => {
+    const given = proof(words);
+    assert.equal(neutralAcceptance(thread(), [given], given.id, { cause: 'story' }).ok, accepts);
+});

@@ -3,10 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/host.js';
 import { createModule } from '../../../src/v2/module.js';
-import { createModule as battle } from '../../../../rpg_battle/src/v2/module.js';
+import { existsSync } from 'node:fs';
+const battlePath = new URL('../../../../rpg_battle/src/v2/module.js', import.meta.url);
+const battle = existsSync(battlePath) ? (await import(battlePath.href)).createModule : null;
 import { withD1 } from '../helpers/d1.js';
 
-for (const rb of [false, true]) test(`forged quest in offer/accept refuses from UI, SD capture and third module (RB ${rb ? 'ready' : 'absent'})`, async t => {
+for (const rb of [false, true]) test(`forged quest in offer/accept refuses from UI, SD capture and third module (RB ${rb ? 'ready' : 'absent'})`, { skip: rb && !battle ? 'Sibling RPG Battle checkout is absent.' : false }, async t => {
     const id = 'th_00000001';
     let writer;
     let payload;

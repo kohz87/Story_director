@@ -23,3 +23,9 @@ The sole host seams for acceptance are cursor()/epoch, supplied explicitly by D1
 host integration. Reader intent runs in validated capture context or UI, never from empty
 narration or an afterCapture system context without reader words. Latest validation, file
 inventory and integration gates are in track-a.md and track-a-files.md.
+
+Contract addition: `threads.intent({thread:RecordId})` is SD's internal neutral acceptance
+adapter, called only by SD/RB with story/system cause and the host-provided reader message.
+It matches a complete accepting sentence, publishes acceptance proof, then calls neutral
+threads.accept or RB quest.take. It returns `{thread}`; absent offer or reader acceptance
+is REFUSED. This command is additional to the frozen P23 writer table for lead review.

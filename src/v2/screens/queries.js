@@ -253,65 +253,6 @@ function detailsOf(thread, given, calendar) {
     };
 }
 
-/**
- * `quest.board` → the Quests screen's lists (no buttons: giving up follows the reader's words, taking on and
- * turning in the story, F95):
- * `{ active: [{ id, key, goal, note, step, giver, reward, due, taken, ready, progress, meter, status: { state, text },
- *               finish: { show, blocked, reason, title }, details }],
- *    finished: [{ id, key, outcome, outcomeText, reason, details }]  (latest first, at most FINISHED_SHOWN),
- *    finishedCount, hasActive, hasFinished }`.
- * `status` is the row's words ("Ready to turn in — 3/3 wolves", "Not yet: 2/3 wolves"); `progress` is
- * `quest.progress` or null; `meter` is true when it has a target to draw. There are no offers: the story's
- * `+ quest` makes a quest active at once, and an older chat's offers are left out.
- */
-export function questBoard(state, args, tools, { settings = null } = {}) {
-    const query = queryFrom(tools);
-    const quests = threadsOf(state, query, { kind: 'quest' });
-    const calendar = calendarFrom(settings, query);
-    const byKey = (a, b) => text(a.key).localeCompare(text(b.key)) || (a.id < b.id ? -1 : 1);
-    const detailsFor = thread => {
-        const given = ask(query, 'quest.details', { id: thread.id }, null);
-        return { given: isRecord(given) ? given : null, details: detailsOf(thread, given, calendar) };
-    };
-    const active = quests.filter(thread => isOpen(thread) && !isOffer(thread)).sort(byKey).map(thread => {
-        const progress = progressOf(query, thread);
-        const finish = finishState(thread, progress);
-        const { given, details } = detailsFor(thread);
-        return {
-            id: thread.id,
-            key: text(thread.key),
-            goal: details.goal,
-            note: details.note,
-            step: details.note,
-            giver: details.giver,
-            // The reward as the terms count it, in the chat's money words (quest.details), so the row and the
-            // terms agree; the story's own words when code does not count it.
-            reward: text(given?.terms?.reward) || rewardOf(thread),
-            due: details.due,
-            taken: Boolean(thread.taken),
-            ready: Boolean(progress?.met && thread.taken),
-            progress,
-            meter: Boolean(progress && progress.need > 0),
-            status: isRecord(given?.status) ? given.status : plainStatus(thread, progress),
-            finish: { ...finish, title: finish.reason || `Turn in ${text(thread.key)}` },
-            details,
-        };
-    });
-    const closed = quests.filter(thread => !isOpen(thread))
-        .sort((a, b) => (b.ended?.rev ?? b.rev ?? 0) - (a.ended?.rev ?? a.rev ?? 0) || byKey(a, b));
-    const finished = closed.slice(0, FINISHED_SHOWN).map(thread => {
-        const outcome = thread.ended?.outcome ?? 'done';
-        return { id: thread.id, key: text(thread.key), outcome, outcomeText: OUTCOME_TEXT[outcome] ?? 'Closed', reason: text(thread.ended?.reason), details: detailsFor(thread).details };
-    });
-    return {
-        active,
-        finished,
-        finishedCount: closed.length,
-        hasActive: active.length > 0,
-        hasFinished: closed.length > 0,
-    };
-}
-
 // ---------------------------------------------------------------------------------------------------
 // Problems, in the reader's words
 
