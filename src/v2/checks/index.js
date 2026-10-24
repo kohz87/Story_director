@@ -22,6 +22,8 @@ export const part = {
     },
     commands,
     queries,
+    // The `check` change line is one checks.roll (contract P09): after the flip this module keeps the kind, and RPG Battle's checks part is gone.
+    kinds: { check: checkKind },
     settings: {
         section: 'Checks',
         defaults: { ...DEFAULTS },

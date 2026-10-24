@@ -68,9 +68,9 @@ contract's `Day` (floor(minutes / 1440), the clock may be negative): a day befor
   `track-e/e5-evidence` (5e31419). `assist.precheck` keeps the claim and `capture.check` and drops the `check.roll` probe, `pendingCheckId`
   and `ROLL_COMMAND`; the roll's receipt is read from `data.v2.result`; a missing `check` kind fails the capture call, so the claim is not
   kept. Its tests are updated (a one-die stand-in; a legacy `check.roll` that must never be called).
-- **Registration.** The `checks` part is **not** registered in `module.js`: RPG Battle's checks part owns the `checks` domain, the `check` kind and its own
-  `checks.*` names, and both cannot register on one host. The single flip release (track-b/checks-flip in RPG Battle and here) retires RPG Battle's part,
-  registers this one with `kinds: { check: checkKind }`, applies the E7b patch to Story Block and moves `checks/modifiers.js` and `statForCheck` into RPG Battle's `rules/`.
+- **Registration (this is the flip branch).** `module.js` registers the `checks` part and the part keeps the `check` kind (`kinds: { check: checkKind }`). RPG Battle's checks
+  part must be retired in the same release (`track-b/checks-flip` in RPG Battle), Story Block's assist takes the E7b patch (`e7b-assist-checks.patch`), and
+  `checks/modifiers.js` and `statForCheck` live in RPG Battle's `rules/`. Merged alone, this branch cannot register beside RPG Battle's checks part.
 - **For track C (not built here):** standalone Story Director has no screen to make the first check actor or to edit actors' bonuses, link a character, set `defaultDc`/`costMargin`/`rbModifiers`/`social`,
   or the map's regions and danger (`atlas.region`, `atlas.placeRegion`, `atlas.dangerSet`, `atlas.placeBind`). The commands and their `expectedHash` (`checks.policy`, `atlas.policy`) are there; a
   `checks.roll` with no actor says what to do in its message.
