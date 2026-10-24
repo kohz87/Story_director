@@ -84,8 +84,33 @@ function logProblems(log) {
     return bad ? [`checks.log.${bad} is not a check.`] : [];
 }
 
-/** The validator (SPEC §2.5). `topics`: the topic names of the table. */
+/** The fields RPG Battle's own checks part keeps in the same domain (pending rolls, the last result): not ours, dropped at our first write. */
+const LEGACY_FIELDS = ['prepared', 'last', 'pending'];
+
+/**
+ * The `checks` draft of a command, made ours: a slice RPG Battle's checks part wrote ({ prepared, log, ... } with no policy or ledger) gets
+ * the policy and the ledger it lacks, loses the fields only that part reads, and keeps the checks of its log that are ours in shape. The one
+ * place every writer takes its draft from.
+ */
+export function draftChecks(ctx) {
+    const draft = ctx.draft('checks');
+    for (const key of LEGACY_FIELDS) delete draft[key];
+    if (!isRecord(draft.policy)) draft.policy = {};
+    if (!isRecord(draft.policy.actors)) draft.policy.actors = {};
+    if (typeof draft.policy.defaultActor !== 'string') draft.policy.defaultActor = null;
+    if (!isRecord(draft.policy.rbActors)) draft.policy.rbActors = {};
+    if (!isRecord(draft.writes)) draft.writes = {};
+    if (!isRecord(draft.log)) draft.log = {};
+    for (const id of Object.keys(draft.log)) if (logProblems({ [id]: draft.log[id] }).length) delete draft.log[id];
+    return draft;
+}
+
+/**
+ * The validator (SPEC §2.5). `topics`: the topic names of the table. A slice with no policy is not ours yet (empty, or RPG Battle's checks
+ * part's { prepared, log, ... } before the flip release): nothing of ours to check, and our first write makes it ours (draftChecks).
+ */
 export function validateChecks(slice, topics) {
+    if (isRecord(slice) && !Object.hasOwn(slice, 'policy')) return Object.keys(slice).every(key => ['prepared', 'log', 'last', 'pending', 'writes'].includes(key)) ? [] : ['checks has fields that are neither ours nor RPG Battle\'s.'];
     if (!isRecord(slice) || !isRecord(slice.policy)) return ['checks is not { policy, writes, log }.'];
     const errors = [];
     const { actors, defaultActor, rbActors } = slice.policy;
@@ -104,6 +129,6 @@ export function validateChecks(slice, topics) {
     for (const key of Object.keys(slice.policy)) if (!['actors', 'defaultActor', 'rbActors'].includes(key)) errors.push(`checks.policy has an unknown field "${key}".`);
     errors.push(...ledgerProblems(slice.writes, 'checks.writes'));
     errors.push(...logProblems(slice.log));
-    for (const key of Object.keys(slice)) if (!['policy', 'writes', 'log'].includes(key)) errors.push(`checks has an unknown field "${key}".`);
+    for (const key of Object.keys(slice)) if (![...LEGACY_FIELDS, 'policy', 'writes', 'log'].includes(key)) errors.push(`checks has an unknown field "${key}".`);
     return errors.slice(0, 10);
 }

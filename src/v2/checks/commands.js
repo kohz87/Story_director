@@ -13,7 +13,7 @@
 // Every writer is idempotent by `write` (writes.js), checks its issuer, then retries, then references, then the stale hash, in that
 // order: INVALID, REFUSED, (a retry), NOT_FOUND, STALE, CONFLICT.
 
-import { ACTOR_ID, BONUS_LIMIT, MAX_ACTORS, MAX_BONUSES, MAX_LOG, MAX_NAME, RB_ACTOR_ID, bonusKeyOk, isRecord, policyOf, projection } from './domain.js';
+import { ACTOR_ID, BONUS_LIMIT, MAX_ACTORS, MAX_BONUSES, MAX_LOG, MAX_NAME, RB_ACTOR_ID, bonusKeyOk, draftChecks, isRecord, policyOf, projection } from './domain.js';
 import { TOPIC_NAMES, outcomeOf, statForCheck } from './words.js';
 import { combine, rbParts, socialParts, standaloneParts } from './roll.js';
 import { hashJson } from '../hash.js';
@@ -50,7 +50,7 @@ function opened(ctx, type, payload, issuer) {
 const answered = (ctx, type, result, data) => ({ summary: '', narrate: false, data: { v2: { key: `${type}:${data}`, result } } });
 
 function finish(ctx, type, payload, fingerprint, result, key) {
-    remember(ctx.draft('checks').writes, payload.write, fingerprint, result);
+    remember(draftChecks(ctx).writes, payload.write, fingerprint, result);
     return answered(ctx, type, result, key);
 }
 
@@ -83,7 +83,7 @@ function checksActor(ctx, payload) {
     if (payload.id !== undefined && !known && !isRb(ctx)) ctx.fail('NOT_FOUND', 'That actor is not there.');
     stale(ctx, payload);
     if (!known && Object.keys(policy.actors).length >= MAX_ACTORS) ctx.fail('LIMITED', `There are at most ${MAX_ACTORS} actors.`);
-    const draft = ctx.draft('checks').policy;
+    const draft = draftChecks(ctx).policy;
     const id = known ? payload.id : payload.id ?? idFrom(ctx, 'ca', draft.actors);
     draft.actors[id] = { id, name, bonuses: bonuses ?? (known ? { ...policy.actors[id].bonuses } : {}) };
     if (payload.makeDefault === true || draft.defaultActor === null) draft.defaultActor = id;
@@ -117,7 +117,7 @@ function checksLink(ctx, payload) {
     if (!Object.hasOwn(policy.actors, payload.actor)) ctx.fail('NOT_FOUND', 'That actor is not there.');
     if (payload.rbActor !== null) characterOf(ctx, payload.rbActor);
     stale(ctx, payload);
-    const draft = ctx.draft('checks').policy;
+    const draft = draftChecks(ctx).policy;
     const have = policy.rbActors[payload.actor] ?? null;
     if (payload.rbActor === null) delete draft.rbActors[payload.actor];
     else {
@@ -204,7 +204,7 @@ function checksRoll(ctx, payload) {
     const die = ctx.roll('1d20').total;
     const total = die + mod;
     const outcome = outcomeOf(die, mod, dc, margin);
-    const log = ctx.draft('checks').log;
+    const log = draftChecks(ctx).log;
     const id = idFrom(ctx, 'ck', log);
     log[id] = { id, actor: actorId, stat, skill, die, modifiers, mod, total, dc, outcome, source, fallback, evidence: payload.evidence };
     for (const key of Object.keys(log).slice(0, Math.max(0, Object.keys(log).length - MAX_LOG))) delete log[key];
