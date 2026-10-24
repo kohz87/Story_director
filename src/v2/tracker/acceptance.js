@@ -19,7 +19,7 @@ export function acceptIntent(ctx, thread) {
 }
 
 export function intentCommand(ctx, { thread } = {}) {
-    if (ctx.cause !== 'story' && ctx.cause !== 'system' || ctx.caller && ctx.caller !== 'story-director') return ctx.fail('REFUSED', 'Intent capture belongs to Story Director.');
+    if (ctx.cause !== 'story' && ctx.cause !== 'system' || ctx.caller && !['story-director', 'rpg-battle'].includes(ctx.caller)) return ctx.fail('REFUSED', 'Intent capture belongs to Story Director.');
     const found = ctx.query('director.thread', { id: thread });
     if (!found || !found.offer) return ctx.fail('REFUSED', 'There is no offered goal to accept.');
     if (!acceptIntent(ctx, found)) return ctx.fail('REFUSED', 'The reader did not accept this offer.');

@@ -279,7 +279,17 @@ function threadLine(ctx, given) {
     const named = director.threads[director.keys[op.id]];
     // A legacy quest is history. Generic edits never mutate its RPG extension or close it.
     if (named?.kind === 'quest' && !named.rpg) return { summary: 'Quest from an earlier version (read only).', narrate: false, data: { thread: named.id } };
-    if (named?.rpg) return ctx.fail('DEPENDENCY_UNAVAILABLE', 'RPG quest changes require their owner.');
+    if (named?.rpg) {
+        if (line.op === '-' || line.op === '!') return ctx.call('capture.quest', { ...given, kind: 'quest' });
+        if (named.offer) acceptIntent(ctx, named);
+        // Neutral annotations remain SD-owned and never replace mechanics or compatibility projections.
+        for (const key of ['goal', 'step', 'progress', 'giver', 'due', 'place', 'people', 'now', 'then', 'on']) {
+            if (typeof line.labels?.[key] === 'string') named.fields[key] = capSummary(line.labels[key]);
+        }
+        if (line.text) named.summary = capSummary(line.text);
+        named.rev = ctx.rev;
+        return { summary: `Director: ${raw}`, narrate: false, data: { thread: named.id } };
+    }
     if (!named && line.op === '+' && line.kind === 'hook' && line.labels?.goal) {
         const id = newId(ctx, new Set(Object.keys(director.threads)));
         ctx.call('threads.offer', { write: threadWriteId(ctx, `offer:${id}`), thread: id, kind: 'hook', key: op.key,
