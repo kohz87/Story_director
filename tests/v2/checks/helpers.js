@@ -97,3 +97,11 @@ export const hashOf = (state, settings = {}) => projection(state.domains.checks,
 export const replay = (initial, runs) => runs.reduce((state, one) => apply(state, one.ops), initial);
 let writes = 0;
 export const write = () => `wr_${(writes += 1).toString(36).padStart(8, '0')}`;
+
+import { PARTS, createModule } from '../../../src/v2/module.js';
+
+/**
+ * Story Director's module with the checks part registered, as the flip release will register it. The module as shipped does not register it
+ * (RPG Battle's checks part owns the `checks` domain, the `check` kind and `checks.*` until the flip retires it).
+ */
+export const moduleWithChecks = (options = {}) => createModule({ ...options, parts: PARTS.flatMap(([id, partOf]) => (id === 'screens' ? [['checks', part], [id, partOf]] : [[id, partOf]])) });
