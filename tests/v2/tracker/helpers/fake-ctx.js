@@ -2,6 +2,7 @@
 // part's tests. Commit works as Story Block's does in outline: the handler runs on drafts, the
 // touched domains are validated, and a throw or a validation error keeps the state as it was.
 
+import { hashJson } from '../../../vendor/story-block/src/v2/replay.js';
 import { part } from '../../../../src/v2/tracker/index.js';
 import { problemList } from '../../../../src/v2/tracker/domain.js';
 
@@ -61,6 +62,9 @@ export function runCommand(state, handler, payload, { said = null, settings = {}
     const random = sfc32(seed);
     const ctx = {
         rev,
+        hash: hashJson,
+        source: { sid: 'sr_00000001', swipeKey: 'sw_00000001', evidence: 'ev_00000001', ordinal: rev },
+        id: prefix => `${prefix}_${Math.floor(random() * 36 ** 8).toString(36).padStart(8, '0')}`,
         receiptId: `rc_test${String(rev).padStart(4, '0')}`,
         chat: { length: 0, lastUser: said },
         ...(carrier === undefined ? {} : { carrier }),
@@ -72,7 +76,11 @@ export function runCommand(state, handler, payload, { said = null, settings = {}
         },
         cause: 'story',
         // A test's `call(type, payload, ctx)` runs sub-commands in this same transaction.
-        call: call ? (type, payload) => call(type, payload, ctx) : (type => { throw new Rejected('UNKNOWN_COMMAND', `No command ${type} in this test.`); }),
+        call: (type, payload) => {
+            if (type.startsWith('threads.') && part.commands[type]) return part.commands[type]({ ...ctx, caller: 'story-director' }, payload);
+            if (call) return call(type, payload, ctx);
+            throw new Rejected('UNKNOWN_COMMAND', `No command ${type} in this test.`);
+        },
         claim: key => (claims[key] ? false : (claims[key] = true)),
         rng: random,
         roll: () => ({ total: 0, dice: [] }),

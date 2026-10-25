@@ -32,7 +32,6 @@
 // Parts never import each other; they talk through commands and queries (ctx.call, ctx.query).
 
 import { part as tracker } from './tracker/index.js';
-import { part as quests } from './quests/index.js';
 import { part as time } from './time/index.js';
 import { part as atlas } from './atlas/index.js';
 import { part as chronicle } from './chronicle/index.js';
@@ -51,7 +50,7 @@ export const VERSION = '2.0.0-beta.2';
 export const STORY_BLOCK_RANGE = '>=2.0.0-beta.2';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['quests', quests], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {
@@ -417,6 +416,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         domains,
         commands,
         queries,
+        replayQueries: ['director.thread'],
         context: {
             // The same bytes every reply: each part's static is fixed text.
             static: () => statics.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n'),

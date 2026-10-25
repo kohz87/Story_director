@@ -69,7 +69,6 @@ export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
     hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
-    quest: '+ quest Name — a job {{user}} accepted | giver: | goal: what counts as done | reward: | due: | rank: or difficulty: easy|normal|hard|nightmare; ~ quest Name | progress: … | met: yes|no; - quest Name — turned in|failed|abandoned',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',
@@ -89,16 +88,8 @@ export function withoutEncounters(tracker) {
     return { ...tracker, records: tracker.records.map(record => (record.fields?.encounter ? { ...record, fields: { ...record.fields, encounter: '' } } : record)) };
 }
 
-// v1's quest checks name a record bare ("- Key — outcome"); every v2 line names its kind.
-function v2Lines(text) {
-    return text.replace(/close it with - Key — /g, 'close it with - quest Key — ')
-        // v2 has no offers (#99): a hook the reader may be taking on becomes the quest when they accept.
-        .replace(TAKING_V1, TAKING_V2);
-}
-
-// v1's quest check for a hook the reader's message may take on ends "leave it an offer"; v2 keeps no offers.
-const TAKING_V1 = 'If they do, write + quest Key with its parts (no - line for the hook); if not, leave it an offer.';
-const TAKING_V2 = 'Write + quest Key with its parts when {{user}} accepts (no - line for the hook); if not, leave it.';
+// All neutral instructions keep hook identity; RPG capture belongs to RB.
+const v2Lines = value => value.replace(/\bquest Key\b/g, 'hook Key');
 
 // The thread ids the time part's recap for this reply tells (empty without the time part).
 function recappedIds(view) {
@@ -202,8 +193,8 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
         corrections,
         instruction,
         givenUp: givenUpIn(tracker, said),
-        taking: offersChosenIn(tracker, said, 'accept'),
-        declining: offersChosenIn(tracker, said, 'refuse'),
+        taking: [],
+        declining: [],
     });
     // The rest {{user}} knows of, by name, at most `elsewhere` of them, while the budget has room.
     const others = split.elsewhere.filter(entry => knownToUser(entry.record)).slice(0, elsewhereCap(settings)).map(entry => elsewhereItem(entry.record));

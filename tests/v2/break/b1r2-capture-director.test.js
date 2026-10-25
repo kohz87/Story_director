@@ -33,7 +33,7 @@ test('one reply cannot add 150 routes', async t => {
 test('40 replies of new quests do not leave 640 threads in every later state and tail build', async t => {
     const host = await fresh(t, ['~ time June 3, 1200, 08:00 am']);
     for (let r = 0; r < 40; r += 1) {
-        await host.send('More work?', reply('Notices.', Array.from({ length: 16 }, (_, i) => `+ quest Q${r}x${i} — job | giver: G | goal: Kill 3 rats | reward: 5 gold`)));
+        await host.send('More work?', reply('Notices.', Array.from({ length: 16 }, (_, i) => `+ hook Q${r}x${i} — job | giver: G | goal: Kill 3 rats | reward: 5 gold`)));
     }
     const started = performance.now();
     await host.send('And then?', 'Quiet.');
@@ -43,29 +43,14 @@ test('40 replies of new quests do not leave 640 threads in every later state and
     assert.ok(count <= 300, `${count} threads kept; a plain reply took ${Math.round(ms)} ms`);
 });
 
-// B-b1r2-9: a quest whose goal code cannot count is paid on the story's word alone (`~ quest | met:
-// yes`, then `- quest — turned in`), and the payout is code's own, so it is not held to the story
+// B-b1r2-9: a quest whose goal code cannot count is paid on the story's word alone (`~ hook | met:
+// yes`, then `- hook — turned in`), and the payout is code's own, so it is not held to the story
 // coin budget: 16 quests offered and accepted in one reply, all turned in the next, pay 16 rewards.
-test('quests the story makes and calls met in two replies pay no more than one reply\'s story money', async t => {
-    const host = await fresh(t, ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch | kind: settlement']);
-    await host.send('Any work? I accept all of them.', reply('Fenna has errands.', Array.from({ length: 16 }, (_, i) => `+ quest Errand ${i} — small job | giver: Fenna | goal: Find the ring ${i} | reward: 5000 gold`)));
-    const lines = [];
-    for (let i = 0; i < 16; i += 1) lines.push(`~ quest Errand ${i} | met: yes`, `- quest Errand ${i} — turned in`);
-    const before = host.sdk.query('inventory.wallet', { owner: 'party' }).coin ?? 0;
-    await host.send('I turn them all in.', reply('Fenna pays for each.', lines));
-    const paid = (host.sdk.query('inventory.wallet', { owner: 'party' }).coin ?? 0) - before;
-    assert.ok(paid <= 100, `the story's turn-ins paid ${paid}`);
-});
-
-// B-b1r2-12: the per-reply thread cap counts in director.turn.added, which the first Director reply
-// adds to the state and every later one `replace`s. Deleting that first reply makes every later
-// reply's Director lines fail on replay ("…/director/turn/added does not exist"): their hooks and
-// quests are gone (here Rats and Charlie).
 test('deleting an early reply keeps the threads later replies made', async t => {
     const host = await fresh(t, ['~ time June 3, 1200, 08:00 am']);
     await host.send('a', reply('A.', ['+ hook Alpha — x']));
     const a = host.store.headIndex();
-    await host.send('b', reply('B.', ['+ hook Bravo — y', '+ quest Rats — cellar | giver: Fenna | goal: Kill 3 rats | reward: 5 gold']));
+    await host.send('b', reply('B.', ['+ hook Bravo — y', '+ hook Rats — cellar | giver: Fenna | goal: Kill 3 rats | reward: 5 gold']));
     await host.send('c', reply('C.', ['+ hook Charlie — z']));
     await host.st.deleteMessage(a);
     await host.st.deleteMessage(a - 1);

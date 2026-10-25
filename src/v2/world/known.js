@@ -338,18 +338,19 @@ export function knownUpcoming(state, tools, { calendar, now, days }) {
     for (const thread of threadsOf(state)) {
         const open = thread.status === 'active' && !thread.ended && !thread.offer;
         if (!open || !['quest', 'event', 'hook'].includes(thread.kind) || (thread.kind !== 'quest' && planned(thread))) continue;
-        const field = thread.kind === 'quest' ? 'due' : 'on';
+        const goal = thread.kind === 'quest' || Boolean(thread.acceptance);
+        const field = goal ? 'due' : 'on';
         const when = text(thread.fields?.[field]);
         if (!when) continue;
         const date = dateOf(calendar, when, now);
         if (!date || date.inDays > days) continue;
         // A past event or hook date is over; a quest past its due day is overdue.
-        if (date.inDays < 0 && thread.kind !== 'quest') continue;
+        if (date.inDays < 0 && !goal) continue;
         const overdue = date.inDays < 0;
         out.push({
             kind: thread.kind, name: cut(thread.key, 80), field, when: dateText(calendar, date.at, { time: false }) || cut(when, 80),
             inDays: date.inDays, label: overdue ? 'overdue' : daysText(date.inDays), overdue,
-            goal: thread.kind === 'quest' ? cut(thread.fields?.goal, SUMMARY_POINTS) : '', at: date.at,
+            goal: goal ? cut(thread.fields?.goal, SUMMARY_POINTS) : '', at: date.at,
         });
     }
     for (const holiday of holidays(query, calendar, now, days)) {

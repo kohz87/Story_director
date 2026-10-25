@@ -25,7 +25,7 @@ export { QUESTS_ID } from './quests.js';
 export { STATUS_CARD_ID } from './status-card.js';
 export { BEHIND_WIDGET, behindWidget, createBehindWidget } from './behind.js';
 export { BEHIND, BEHIND_KINDS, HIDE_SETTING, browserStore, createReveal, reveal } from './reveal.js';
-export { calendarSetting, currentGoal, finishState, nextDue, problemsList, questBoard, readerWords, screenQueries } from './queries.js';
+export { calendarSetting, currentGoal, finishState, nextDue, problemsList, readerWords, screenQueries } from './queries.js';
 
 export const MODULE_ID = 'story-director';
 

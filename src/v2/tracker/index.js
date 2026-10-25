@@ -11,21 +11,22 @@ import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
 import { initialDirector, queries, validateDirector } from './domain.js';
 import { GRAMMAR, GRAMMAR_ALONE, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
-import { SETTLE, afterCaptureHook, settleCommand, settleHook } from './quest-lines.js';
+import { threadCommands, threadReplayGuard } from './writers.js';
+import { intentCommand } from './acceptance.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
 import { DEFAULT_COOLDOWN, FEATURE as INITIATIVE_FEATURE, INITIATIVE, INITIATIVE_STATIC, MAX_COOLDOWN, initiativeCommand, initiativeHook } from './initiative.js';
 import { DEFAULT_ELSEWHERE, MAX_ELSEWHERE } from './scene.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
 // A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set.
-const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
+const kinds = Object.fromEntries(THREAD_KINDS.filter(kind => kind !== 'quest').map(kind => [kind, {
     grammar: Object.hasOwn(GRAMMAR_ALONE, kind) ? env => grammarOf(kind, env) : GRAMMAR[kind],
     apply: applyThreadLine,
 }]));
 kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
 
 function beforeGenerate(view) {
-    const outs = [seedHook(view), settleHook(view), initiativeHook(view)].filter(Boolean);
+    const outs = [seedHook(view), initiativeHook(view)].filter(Boolean);
     if (!outs.length) return undefined;
     return { lines: [], commands: outs.flatMap(out => out.commands ?? []) };
 }
@@ -44,7 +45,7 @@ export const part = {
         describe: 'Before each reply, code picks at most one person present or nearby with an open thread to take the first step (approach, interrupt or ask); the Director note names them in one line.',
         default: true,
     }],
-    commands: { [SEED]: seedCommand, [SETTLE]: settleCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
+    commands: { [SEED]: seedCommand, ...threadCommands, 'threads.intent': intentCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
     queries,
     kinds,
     context: {
@@ -58,7 +59,7 @@ export const part = {
     // from a pack's start, and (on an older Story Block, which never calls afterCapture) the same turn-ins,
     // which the step before the next reply then settles (quest-lines.js). A Continue's afterCapture also
     // pays a turn-in the place refused at the end of the reply's first part, once the party is there.
-    hooks: { beforeGenerate: beforeGenerate, afterCapture: afterCaptureHook },
+    hooks: { beforeGenerate, replayGuard: threadReplayGuard },
     settings: {
         section: 'Calendar',
         defaults: settingsDefaults(),

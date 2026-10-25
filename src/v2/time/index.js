@@ -47,7 +47,7 @@ function tryQuery(query, name, args, fallback) {
 }
 
 // A quest whose target is met waits only for its turn-in: like v1's pay waiting, the hour fails nothing.
-const targetMet = query => id => tryQuery(query, 'quest.progress', { id }, null)?.met === true;
+const targetMet = () => () => false;
 
 /*
  * The meta.rev this receipt will carry (SPEC §2.4, MODULES §F2 `ctx.rev`). Without `ctx.rev`,

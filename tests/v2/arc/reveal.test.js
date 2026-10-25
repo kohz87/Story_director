@@ -27,7 +27,7 @@ async function setUp({ settings = {}, script = [PLAN] } = {}) {
     const reveal = createReveal({ store, chatId: () => chat.id, settings: () => host.sdk.settings('story-director') });
     const arc = createArcController({ sdk: () => host.sdk, chat: () => host.ctx.chat, chatId: () => chat.id, store, reveal, notify: () => {} });
     await host.send('Hello.', said('The harbour.', [
-        '~ time June 3, 1200, 08:00 am', '+ quest Lost Net — find the net | giver: Tom | goal: Find the net',
+        '~ time June 3, 1200, 08:00 am', '+ hook Lost Net — find the net | giver: Tom | goal: Find the net',
         '+ agenda Smuggler Vane — moving crates | now: the docks | then: meet the reeve | on: June 3, 1200, 10:00 am',
         '+ clock Raid — bandits come | due: June 3, 1200, 09:00 am', '+ secret Reeve Bought — paid off',
         '+ event Harvest Fair — the fair | on: June 4, 1200',
@@ -86,7 +86,7 @@ test('the status card names no agenda, beat or clock while hidden; the Director 
     host.settings.set('story-director', 'screens.hideBehind', false);
     assert.equal(host.sdk.query('director.next', { shown: true }).key, 'Raid');
     // A problem about an agenda is behind the scenes; one about a quest is not.
-    await host.send('Hm.', said('Odd.', ['+ agenda Smuggler Vane — again | qty: 3', '+ quest Lost Net — again | qty: 2']));
+    await host.send('Hm.', said('Odd.', ['+ agenda Smuggler Vane — again | qty: 3', '+ hook Lost Net — again | qty: 2']));
     const behind = host.sdk.query('director.problems', { behind: true }).map(problem => problem.text);
     const open = host.sdk.query('director.problems', { behind: false }).map(problem => problem.text);
     assert.ok(behind.length && behind.every(text => !/Lost Net/.test(text)));

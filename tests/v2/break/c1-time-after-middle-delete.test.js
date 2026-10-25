@@ -65,8 +65,8 @@ test('a settle that lapsed a thread made by a deleted reply keeps the rest of it
     const host = await createHost({ modules: [createModule()] });
     t.after(() => host.close());
     const director = () => host.head().domains.director;
-    await host.send('Hello.', reply('The road.', ['~ time June 3, 1200, 08:00 am', '+ quest Wells — mind the wells | giver: Brom | due: June 6, 1200']));
-    await host.send('A job.', reply('Fenna has work.', ['+ quest Rats — clear the cellar | giver: Fenna | due: June 4, 1200']));
+    await host.send('Hello.', reply('The road.', ['~ time June 3, 1200, 08:00 am', '+ hook Wells — mind the wells | giver: Brom | due: June 6, 1200']));
+    await host.send('A job.', reply('Fenna has work.', ['+ hook Rats — clear the cellar | giver: Fenna | due: June 4, 1200']));
     const a = host.ctx.chat.length - 1;
     await host.send('We wait.', reply('Days pass.', ['! time +9d']));
     await host.send('Then?', reply('Later.', ['! time +1h']));

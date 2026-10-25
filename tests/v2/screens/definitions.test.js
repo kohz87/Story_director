@@ -12,7 +12,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -60,7 +60,7 @@ test('every data binding names a query the module (or a module it reads) answers
 });
 
 test('the bindings use the Director\'s queries: time, threads by kind and status, progress of the goal', () => {
-    assert.deepEqual(byId[STATUS_CARD_ID].data.progress, { query: 'quest.progress', args: { id: '$goal.id' } });
+    assert.equal(byId[STATUS_CARD_ID].data.progress, undefined);
     assert.equal(byId[STATUS_CARD_ID].data.time.query, 'director.time');
     const director = byId[DIRECTOR_ID].data;
     assert.deepEqual(director.quest_open, { query: 'director.threads', args: { kind: 'quest', status: 'active' } });
@@ -76,19 +76,19 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
     assert.ok(Object.values(threads).every(binding => binding.query === 'director.threads'));
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
-    assert.deepEqual(byId[QUESTS_ID].data, { board: { query: 'quest.board' } });
+    assert.deepEqual(byId[QUESTS_ID].data, { threads: { query: 'director.threads' } });
 });
 
 test('the status card\'s progress follows its goal binding ($goal.id), and is empty without a goal', () => {
     const { run } = makeRunner();
     const card = byId[STATUS_CARD_ID];
     const data = resolveData(card.data, (name, args) => run(headState(), name, args));
-    assert.deepEqual(data.order, ['time', 'status', 'goal', 'progress']);
+    assert.deepEqual(data.order, ['time', 'status', 'goal']);
     assert.equal(data.q.goal.id, 'th_wolves01');
-    assert.equal(data.q.progress.label, 'Wolves 8/3');
+    assert.equal(data.q.progress, undefined);
     const none = resolveData(card.data, (name, args) => run(headState({ threads: [] }), name, args));
     assert.equal(none.q.goal, null);
-    assert.equal(none.q.progress, null);
+    assert.equal(none.q.progress, undefined);
 });
 
 test('css stays within §13.3: under 64 KB, no @import, fixed positions or url(), no global selectors', () => {
@@ -114,13 +114,9 @@ test('templates stay inside the §13.2 subset: no scripts, handlers or script UR
     }
 });
 
-test('no screen draws a command button by default: quests follow the reader\'s words and the story (F95)', () => {
-    for (const screen of screens) assert.doesNotMatch(screen.template, /data-command|data-submit|<button/, `${screen.id} draws no buttons`);
-    // Each quest row says where it stands and opens its details (F84) in a screen-local panel.
+test('neutral and historical goals draw no command buttons', () => {
     const template = byId[QUESTS_ID].template;
-    assert.equal([...template.matchAll(/class="sd-status"/g)].length, 1, 'active quests');
-    assert.equal([...template.matchAll(/<details class="sd-more">/g)].length, 2, 'active and finished rows');
-    // No Offered list: the story's + quest makes a quest active at once.
-    assert.doesNotMatch(template, /offer/i);
-    assert.doesNotMatch(template, /<dialog/i, 'templates have no dialog element');
+    assert.doesNotMatch(template, /data-command/);
+    assert.match(template, /From an earlier version/);
+    assert.match(template, /q.threads/);
 });

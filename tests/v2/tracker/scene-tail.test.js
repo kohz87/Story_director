@@ -15,7 +15,7 @@ import { makeState, story } from './helpers/fake-ctx.js';
 const START = '~ time March 3, 2026, 08:00 am';
 const WORLD = [
     { lines: [START,
-        '+ quest Wolf Contract — wolves at the fold | giver: Elula | goal: Kill 3 wolves | reward: 4 silver',
+        '+ hook Wolf Contract — wolves at the fold | giver: Elula | goal: Kill 3 wolves | reward: 4 silver',
         '+ hook Old Mill — the wheel creaks | now: Harrow, by the river',
         '+ event Salt Fair — traders gather | now: Vale market',
         '+ hook Dawn Ferry — the ferry leaves early | on: March 4, 2026, 06:00 am',
@@ -29,7 +29,7 @@ const WORLD = [
         '+ hook Herb run — moonleaf for the healer | giver: Mother Ysolde',
         '+ hook Lost Ring — a ring in the well | giver: Old Tam',
         '+ hook Grain Tax — the reeve wants more | giver: Reeve Hollis',
-        '+ quest Far Bounty — a bandit in the hills | giver: Warden Hale | goal: Bring him in | reward: 9 silver | due: March 25, 2026',
+        '+ hook Far Bounty — a bandit in the hills | giver: Warden Hale | goal: Bring him in | reward: 9 silver | due: March 25, 2026',
     ].join('\n') },
 ];
 
@@ -50,7 +50,7 @@ test('the kind lines keep what fits the scene: place, region, people present, du
     const lines = tailOf(state, {}, { feature: () => false });
     const all = lines.join('\n');
     // Elula is present: her quest; the beat whose reach names her.
-    assert.match(lineOf(lines, 'Quests'), /^Quests: Wolf Contract — Kill 3 wolves · for Elula · 4 silver$/);
+    assert.match(lineOf(lines, 'Hooks'), /Wolf Contract — wolves at the fold/);
     assert.match(lineOf(lines, 'Beats'), /Storm/);
     // The beat that waits on an open beat cannot happen now: not told at all.
     assert.doesNotMatch(all, /Bell Tolls/);
@@ -64,7 +64,7 @@ test('the kind lines keep what fits the scene: place, region, people present, du
     const elsewhere = lineOf(lines, 'Elsewhere');
     assert.match(elsewhere, /^Elsewhere, not in this scene: /);
     assert.equal(elsewhere.split(' · ').length, DEFAULT_ELSEWHERE);
-    for (const name of ['Herb run', 'Lost Ring', 'Grain Tax', 'Far Bounty']) assert.doesNotMatch(lineOf(lines, 'Hooks') + lineOf(lines, 'Quests'), new RegExp(name));
+    for (const name of ['Herb run', 'Lost Ring', 'Grain Tax', 'Far Bounty']) assert.doesNotMatch(lineOf(lines, 'Hooks') + lineOf(lines, 'Hooks'), new RegExp(name));
     // The Elsewhere line comes after the kind lines, before Do not reveal.
     assert.ok(lines.indexOf(elsewhere) > lines.indexOf(lineOf(lines, 'Beats')));
     assert.ok(lines.indexOf(elsewhere) < lines.indexOf('Do not reveal: The Heir'));
@@ -78,7 +78,7 @@ test('the Elsewhere cap is a setting: 0 names none, a larger one names every kno
     assert.equal(one.split(' · ').length, 1);
     const many = lineOf(tailOf(state, { elsewhere: 10 }, off), 'Elsewhere');
     assert.deepEqual(many.replace('Elsewhere, not in this scene: ', '').split(' · ').sort(),
-        ['Far Bounty (quest)', 'Grain Tax (hook)', 'Herb run (hook)', 'Lost Ring (hook)']);
+        ['Far Bounty (hook)', 'Grain Tax (hook)', 'Herb run (hook)', 'Lost Ring (hook)']);
     assert.equal(elsewhereCap({}), 2);
     assert.equal(elsewhereCap({ elsewhere: 99 }), 10);
     assert.equal(elsewhereCap({ elsewhere: -1 }), 2);
@@ -116,7 +116,7 @@ test('a beat whose prerequisite ended fits; people go by their NPC State Delta n
     const query = (name, args) => { if (!queries[name]) throw new Error(`no module answers ${name}`); return queries[name](args); };
     const lines = tailOf(state, {}, { query, feature: () => false });
     assert.match(lineOf(lines, 'Beats'), /Bell Tolls/, 'its after: beat has ended');
-    assert.match(lineOf(lines, 'Quests'), /Wolf Contract/, 'the alias names Elula');
+    assert.match(lineOf(lines, 'Hooks'), /Wolf Contract/, 'the alias names Elula');
     const scene = sceneOf(query, state);
     assert.deepEqual(scene.people.map(person => [person.name, person.names]), [['Elula', ['Elula', 'the ferrywoman']]]);
     assert.equal(scene.nsd, true);
@@ -132,14 +132,6 @@ test('no scene known (no place, nobody present): every thread is told as before,
     for (const name of ['Herb run', 'Lost Ring', 'Grain Tax', 'Old Mill']) assert.match(lineOf(lines, 'Hooks'), new RegExp(name));
     const split = splitByScene([{ record: { kind: 'hook', key: 'X', fields: {} } }], { scene: { known: false } });
     assert.equal(split.here.length, 1);
-});
-
-test('a ready quest keeps its line wherever the scene is', () => {
-    let state = story([...WORLD, { lines: '~ quest Far Bounty | met: yes' }], makeState());
-    state = withScene(state, { place: 'Harrow', region: 'Vale', present: [] });
-    const lines = tailOf(state, {}, { feature: () => false });
-    assert.match(lineOf(lines, 'Quests'), /Far Bounty/);
-    assert.doesNotMatch(lineOf(lines, 'Elsewhere'), /Far Bounty/);
 });
 
 test('the tail stays within its budget with many threads; Elsewhere goes first when room is short', () => {

@@ -38,7 +38,6 @@ const TEMPLATE = `
     <dt><i class="fa-solid fa-flag" aria-hidden="true"></i> Goal</dt>
     <dd><b>{{ q.goal.key }}</b><span data-if="q.goal.goal"> — {{ q.goal.goal }}</span>
       <small class="sd-step" data-if="q.goal.step">Now: {{ q.goal.step }}</small>
-      <span class="sd-progress" data-if="q.progress.need" data-class="sd-met: q.progress.met"><ss-widget name="ss.bar" data-props='{"value":{{ q.progress.have }},"max":{{ q.progress.need }},"label":"{{ q.progress.label }}","text":"{{ q.progress.have }} of {{ q.progress.need }}"}'></ss-widget></span>
     </dd>
   </div>
 </dl>
@@ -71,7 +70,6 @@ export const statusCardScreen = Object.freeze({
         // The place's map coordinates and the weather (screens/queries.js statusExtras).
         status: { query: 'director.status' },
         goal: { query: 'director.goal' },
-        progress: { query: 'quest.progress', args: { id: '$goal.id' } },
     },
     template: TEMPLATE,
     css: CSS,

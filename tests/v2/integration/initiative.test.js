@@ -42,7 +42,7 @@ async function newHost(modules = []) {
 }
 
 const OPENING = ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Elula',
-    '+ quest Wolf Contract — wolves at the fold | giver: Elula | goal: Kill 3 wolves | reward: 4 gold',
+    '+ hook Wolf Contract — wolves at the fold | giver: Elula | goal: Kill 3 wolves | reward: 4 gold',
     '+ hook Herb Run — moonleaf for the healer | giver: Mother Ysolde',
     '+ agenda Bram — moves salt | now: Kesh'];
 
@@ -59,7 +59,7 @@ for (const withNsd of [false, true]) {
             assert.equal(line, 'Initiative: Elula may approach You about Wolf Contract.', '{{user}} filled in');
             const tail = sent(host, TAIL_KEY).at(-1);
             // The scene first: the quest of the person present; the hook elsewhere by name; the agenda at Kesh not at all.
-            assert.match(tail, /Quests: Wolf Contract/);
+            assert.match(tail, /Hooks: Wolf Contract/);
             assert.match(tail, /Elsewhere, not in this scene: Herb Run \(hook\)/);
             assert.doesNotMatch(tail, /Bram/);
             const count = picks(host).length;

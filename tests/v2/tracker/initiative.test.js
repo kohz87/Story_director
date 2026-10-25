@@ -15,7 +15,7 @@ import { rng } from '../../vendor/story-block/src/v2/rng.js';
 
 const WORLD = [{ lines: [
     '~ time March 3, 2026, 08:00 am',
-    '+ quest Wolf Contract — wolves at the fold | giver: Elula | goal: Kill 3 wolves | reward: 4 silver | due: March 4, 2026',
+    '+ hook Wolf Contract — wolves at the fold | giver: Elula | goal: Kill 3 wolves | reward: 4 silver | due: March 4, 2026',
     '+ agenda Bram — moves salt at night | now: the docks',
     '+ hook Ferry Fee — the toll went up | giver: Orsa',
     '+ secret Elula Debt — Elula owes the smugglers',
