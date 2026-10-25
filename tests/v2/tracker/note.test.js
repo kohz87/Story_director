@@ -30,14 +30,15 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     const alone = part.context.static({ fights: false });
     assert.equal(part.context.static({ fights: false }), alone);
     assert.doesNotMatch(alone, /encounter/);
-    assert.equal(alone, empty.replace(', encounter,', ','));
+    assert.equal(alone, empty.replace(', encounter;', ';'));
     assert.equal(empty, STATIC_TEXT);
     for (const word of ['Geva', 'Wolf', 'March', 'Bluewatch', '2026']) assert.ok(!empty.includes(word), word);
     // v1's own rules, word for word, but for the Fields line's offers (one deliberate change: a job is a
     // quest once {{user}} accepts it, and a job only offered stays in the story).
     const v1Fields = CHANGE_INSTRUCTION.split('\n').find(line => line.startsWith('Fields:'));
 
-    assert.match(empty, /only the reader can accept/);
+    assert.ok(empty.includes(v1Fields.replace('; a job only offered: + hook with giver, reward', '')));
+    assert.doesNotMatch(empty, /offer/);
     assert.ok(empty.includes(PACING));
 });
 
@@ -56,7 +57,7 @@ test('each kind has one grammar line for the change instruction', () => {
     assert.match(part.kinds.beat.grammar({ fights: true }), /encounter: the foes, for a fight/);
     // A hook is an open thread, no job offer with a giver and a reward; + hook is written once {{user}} accepts.
     assert.doesNotMatch(part.kinds.hook.grammar, /giver|reward/);
-    assert.match(part.kinds.hook.grammar, /offered goal/);
+    assert.match(part.kinds.hook.grammar, /\+ quest once \{\{user\}\} accepts/);
     assert.doesNotMatch(part.kinds.beat.grammar({ fights: false }), /encounter|fight|foe/);
 });
 
