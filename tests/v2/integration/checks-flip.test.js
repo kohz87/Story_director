@@ -1,10 +1,19 @@
 // The complete Stage 5 path: real SB + SD + RB, including the replay boundary.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHost } from '../../../../Story_block/testkit/index.js';
-import { createModule as director } from '../../../../Story_director/src/v2/module.js';
-import { createModule as battle } from '../../../../rpg_battle/src/v2/module.js';
-import { pinFor, smallRulesPack } from '../../../../rpg_battle/tests/v2/progress/helpers/fixture.js';
+import { createHost } from '../../vendor/story-block/testkit/index.js';
+import { createModule as director } from '../../../src/v2/module.js';
+import { existsSync } from 'node:fs';
+
+// The sibling checkouts are found at run time (a lone checkout, as CI has it, skips these tests).
+const sibling = async path => {
+    const url = new URL(`../../../../${path}`, import.meta.url);
+    return existsSync(url) ? import(url.href) : null;
+};
+const [rb, fixture] = [await sibling('rpg_battle/src/v2/module.js'), await sibling('rpg_battle/tests/v2/progress/helpers/fixture.js')];
+const siblings = Boolean(rb && fixture);
+const { createModule: battle } = rb ?? {};
+const { pinFor, smallRulesPack } = fixture ?? {};
 
 const reply = lines => `The attempt.\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 const check = (skill = 'Stealth', dc = 20) => `? check ${skill} — an attempt | dc: ${dc} | result: impossible`;
@@ -36,6 +45,7 @@ async function replay(host) {
 }
 
 test('real modules: a skill check has one die, one practice attempt, receipts only; reread, swipe and delete retract it', async t => {
+    if (!siblings) return t.skip('needs sibling checkouts');
     const host = await setup(t);
     assert.equal(host.registry.captureOwner('check'), 'story-director');
     await host.send('I try.', reply([check()]));
@@ -69,6 +79,7 @@ test('real modules: a skill check has one die, one practice attempt, receipts on
 });
 
 test('real modules: skill practice shares the two-per-skill, six-per-reply and thirty-per-day caps', async t => {
+    if (!siblings) return t.skip('needs sibling checkouts');
     const host = await setup(t);
     for (let n = 0; n < 6; n += 1) {
         await host.send(`Practice ${n}.`, reply(['Stealth', 's01', 's02'].flatMap(skill => [1, 20, 40].map(dc => check(skill, dc)))));
@@ -78,6 +89,7 @@ test('real modules: skill practice shares the two-per-skill, six-per-reply and t
 });
 
 test('real modules: Assist capture pre-roll calls SD once, and the generation sees the outcome', async t => {
+    if (!siblings) return t.skip('needs sibling checkouts');
     const host = await setup(t, { assist: true });
     const { request } = await host.send('I attempt the risky task.', 'The story follows the roll.');
     const log = Object.values(host.head().domains.checks.log);
