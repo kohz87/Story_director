@@ -162,13 +162,27 @@ export function writeThread(type, ctx, payload) {
 export const threadCommands = Object.fromEntries(['offer', 'accept', 'link', 'questWrite', 'close']
     .map(name => [`threads.${name}`, (ctx, payload) => writeThread(`threads.${name}`, ctx, payload)]));
 
-/** Neutral accept keeps its original offer and any separately committed acceptance proof. */
-export function threadReplayGuard({ query }, { guard, recorded }) {
+/** Neutral accept binds the offer and proof bytes, independent of transport revision/ordinal. */
+export function threadReplayGuard({ state, query }, { guard, recorded }) {
     if (guard?.predicate?.kind !== 'threads.accept') return undefined;
+    const off = () => ({ ok: false, reason: 'The offer or reader acceptance evidence changed.' });
+    if (guard.version !== 2 || guard.epoch !== (state?.domains?.savepoints?.epoch ?? 'ep_00000000')) return off();
     const inputs = guard.predicate.inputs;
+    const savedProof = recorded?.proof;
+    if (!inputs?.thread || !Array.isArray(savedProof) || hashJson({ inputs, proof: savedProof }) !== guard.inputHash) return off();
     const thread = query('director.thread', { id: inputs.thread.id });
     const proof = inputs.proof ? query('story.evidence', { ids: [inputs.proof] }) : [];
-    return hashJson({ inputs: { thread, proof: inputs.proof }, proof }) === guard.inputHash
-        && (!inputs.proof || hashJson(proof) === hashJson(recorded.proof))
-        ? { ok: true } : { ok: false, reason: 'The offer or reader acceptance evidence changed.' };
+    const semanticThread = value => {
+        if (!value) return null;
+        const { rev: _rev, ...rest } = value;
+        return rest;
+    };
+    const semanticProofs = list => list.map(value => {
+        const item = copy(value);
+        if (item.source) delete item.source.ordinal;
+        return item;
+    });
+    return hashJson(semanticThread(thread)) === hashJson(semanticThread(inputs.thread))
+        && hashJson(semanticProofs(proof)) === hashJson(semanticProofs(savedProof))
+        ? { ok: true } : off();
 }
