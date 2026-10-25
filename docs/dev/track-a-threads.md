@@ -29,3 +29,8 @@ adapter, called only by SD/RB with story/system cause and the host-provided read
 It matches a complete accepting sentence, publishes acceptance proof, then calls neutral
 threads.accept or RB quest.take. It returns `{thread}`; absent offer or reader acceptance
 is REFUSED. This command is additional to the frozen P23 writer table for lead review.
+
+Objective evidence (B3): `threads.questWrite` keeps `rpg.evidence` append-only. A new row needs an active proof (`story.evidence`, a pending
+proof of the same root counts) whose payload names this thread, this instance and the row's objective; a proof counts once across every thread
+(`CLAIMED`); a stored row is never changed or removed (`REFUSED`; taking its block back is how it goes); no row rides with a terminal write; a quest
+is offered, accepted and linked with empty evidence. What the proof means for the objective stays RPG Battle's. The checks refuse the whole root.

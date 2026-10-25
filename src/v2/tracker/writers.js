@@ -65,6 +65,31 @@ function compatible(thread) {
     thread.ready = null;
 }
 
+/**
+ * Objective evidence is append-only and each row stands on a surviving proof that names this thread, this instance and this objective
+ * (docs/v2/EVIDENCE.md, B3): a stored row is never changed or removed here (taking its block back is how it goes), a new one may not ride with
+ * a terminal write, its proof must be active and bound to exactly this objective, and no proof counts twice, in this quest or any other.
+ * Whether the proof means what the objective says is RPG Battle's (its payload); the binding is the thread's.
+ */
+function evidenceRows(ctx, director, thread, next) {
+    const before = thread.rpg.evidence;
+    for (const [key, row] of Object.entries(before)) if (!Object.hasOwn(next.evidence, key) || !same(ctx, next.evidence[key], row)) fail(ctx, 'REFUSED', 'Stored objective evidence cannot be changed or removed.');
+    const added = Object.entries(next.evidence).filter(([key]) => !Object.hasOwn(before, key));
+    if (!added.length) return;
+    if (next.settlement !== null || next.state !== 'active') fail(ctx, 'REFUSED', 'Objective evidence is added only to an active quest.');
+    const counted = new Set(Object.values(director.threads).flatMap(other => Object.values(other.rpg?.evidence ?? {}).map(row => row.proof)));
+    for (const [, row] of added) {
+        if (counted.has(row.proof)) fail(ctx, 'CLAIMED', 'That proof already counted for an objective.');
+        counted.add(row.proof);
+        const proof = ctx.query('story.evidence', { ids: [row.proof] }).find(item => item.id === row.proof);
+        if (!proof) fail(ctx, 'NOT_FOUND', 'No active proof stands behind that evidence.');
+        const said = proof.payload ?? {};
+        if (said.thread !== next.id) fail(ctx, 'REFUSED', 'That proof is bound to another thread.');
+        if (said.instance !== next.instance) fail(ctx, 'REFUSED', 'That proof is bound to another instance of the quest.');
+        if (said.objective !== row.objective) fail(ctx, 'REFUSED', 'That proof is bound to another objective.');
+    }
+}
+
 export function writeThread(type, ctx, payload) {
     authority(ctx, payload, ['threads.link', 'threads.questWrite', 'threads.close'].includes(type));
     shape(ctx, type, payload);
@@ -83,7 +108,7 @@ export function writeThread(type, ctx, payload) {
         if (occupied?.status === 'active') fail(ctx, 'CONFLICT', 'This display key is already active.');
         if (Object.values(director.threads).filter(t => t.status === 'active').length >= 300
             || replyTurn(director).added >= 16) fail(ctx, 'LIMITED', 'The thread limit was reached.');
-        if (payload.quest && (payload.quest.state !== 'offered' || payload.quest.acceptedAt !== null || payload.quest.acceptedCursor !== null)) fail(ctx, 'REFUSED', 'A new quest must be offered without acceptance.');
+        if (payload.quest && (payload.quest.state !== 'offered' || payload.quest.acceptedAt !== null || payload.quest.acceptedCursor !== null || Object.keys(payload.quest.evidence).length)) fail(ctx, 'REFUSED', 'A new quest must be offered without acceptance or evidence.');
         thread = { id: payload.thread, kind: payload.kind, key: payload.key, summary: payload.summary, fields: copy(payload.fields),
             status: 'active', offer: true, taken: null, ended: null, target: null, reward: null, acceptance: null, rev: ctx.rev,
             track: { order: Math.max(-1, ...Object.values(director.threads).map(t => t.track?.order ?? 0)) + 1,
@@ -110,6 +135,7 @@ export function writeThread(type, ctx, payload) {
         }
         if (payload.quest) {
             activeQuest(ctx, payload.quest, accepted);
+            if (Object.keys(payload.quest.evidence).length) fail(ctx, 'REFUSED', 'A quest is taken on without objective evidence.');
             if (thread.rpg && (payload.quest.template !== thread.rpg.template || payload.quest.instance !== thread.rpg.instance)) fail(ctx, 'CONFLICT', 'Quest identity changed.');
             thread.rpg = copy(payload.quest);
             compatible(thread);
@@ -123,6 +149,7 @@ export function writeThread(type, ctx, payload) {
         if (thread.status !== 'active' || thread.offer || !thread.taken || thread.rpg) fail(ctx, 'REFUSED', 'Only an accepted neutral thread can be linked.');
         survivingAcceptance(ctx, thread);
         activeQuest(ctx, payload.quest, thread.acceptance);
+        if (Object.keys(payload.quest.evidence).length) fail(ctx, 'REFUSED', 'A quest is taken on without objective evidence.');
         thread.rpg = copy(payload.quest);
         thread.rev = ctx.rev;
         compatible(thread);
@@ -132,6 +159,7 @@ export function writeThread(type, ctx, payload) {
         if (['id', 'template', 'instance'].some(k => thread.rpg[k] !== payload.quest[k])) fail(ctx, 'CONFLICT', 'Quest identity changed.');
         if (!same(ctx, thread.rpg.acceptedCursor, payload.quest.acceptedCursor) || thread.rpg.acceptedAt !== payload.quest.acceptedAt) fail(ctx, 'CONFLICT', 'Quest acceptance changed.');
         if (thread.rpg.state === 'offered' && payload.quest.state !== 'offered' || thread.rpg.state === 'active' && payload.quest.state === 'offered') fail(ctx, 'REFUSED', 'Use acceptance for that transition.');
+        evidenceRows(ctx, director, thread, payload.quest);
         thread.rpg = copy(payload.quest);
         thread.rev = ctx.rev;
         compatible(thread);
