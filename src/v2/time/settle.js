@@ -65,6 +65,7 @@ export function standing(director, { calendar, now, met = () => false, claimed =
     const lapsed = new Set(lapsedOffers(tracker, options));
     for (const record of tracker.records) {
         const thread = threadOf.get(record);
+        if (thread.rpg || thread.kind === 'quest') continue;
         const id = thread.id;
         const closes = reason => {
             if (lapse && !claimed(claimKey(id))) out.lapses.push({ id, reason });
@@ -80,7 +81,7 @@ export function standing(director, { calendar, now, met = () => false, claimed =
             closes(LAPSED_REASON);
             continue;
         }
-        const job = thread.kind === 'quest' || (thread.offer && !thread.taken);
+        const job = Boolean(thread.taken || thread.offer);
         if (!job) {
             if (isDue(record, { calendar, now })) out.due.push(id);
             continue;

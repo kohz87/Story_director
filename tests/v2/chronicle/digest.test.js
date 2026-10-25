@@ -1,3 +1,4 @@
+import { withD1 } from '../helpers/d1.js';
 // Chronicle part, day digest on the real Story Block v2 host (the vendored runtime and testkit), merged
 // into the module by src/v2/module.js: a day the clock leaves is written once, before the next reply,
 // from the receipts; a swipe keeps it; deleting the reply that crossed the day (or the one that wrote a
@@ -281,22 +282,17 @@ function trimAll(host) {
     }
 }
 
-test('RX-TL-3: the quest history and the day digest outlive the receipts\' data', async t => {
-    t.mock.method(console, 'warn', () => {});
-    const host = await newHost();
-    await host.send('Hello.', reply('Harrow.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Orsa', '+ coin 9']));
-    await host.send("I'll take it, I'll find your letter.", reply('Orsa nods.', ['+ quest Lost Letter — Orsa lost a letter | giver: Orsa | goal: Find the letter | reward: 30 gold']));
-    await host.send('Found it.', reply('Under a bench.', ['~ quest Lost Letter | met: yes | progress: found under a bench']));
-    await host.send('Here.', reply('Orsa reads it.'));
-    const id = host.sdk.query('director.threads', { kind: 'quest' })[0].id;
-    const before = host.sdk.query('quest.details', { id }).history;
-    assert.ok(before.length >= 2, JSON.stringify(before));
+test('neutral outcome journal entries survive receipt-data trimming', async t => {
+    const host = await createHost({ modules: [withD1(createModule())] });
+    t.after(() => host.close());
+    await host.send('Hello.', reply('Harrow.', ['~ time June 3, 1200, 08:00 am']));
+    const id = 'th_00000001';
+    assert.equal((await host.sdk.command('threads.offer', { write: 'wr_00000001', thread: id, kind: 'hook', key: 'Letter', summary: 'Find the letter', fields: { goal: 'find the letter' }, expectedHash: null })).ok, true);
+    assert.equal((await host.sdk.command('threads.accept', { write: 'wr_00000002', thread: id, expectedHash: host.sdk.query('threads.hash', { thread: id }) })).ok, true);
+    await host.send('Delivered.', reply('Thanks.', ['- hook Letter — done']));
+    const before = host.sdk.query('chronicle.questLog', { id });
+    assert.ok(before.some(entry => /Letter: done/.test(entry.text)), JSON.stringify(before));
     trimAll(host);
-    assert.deepEqual(host.sdk.query('quest.details', { id }).history, before, 'kept by the note, not read from receipts');
-    await host.send('Sleep.', reply('Morning.', ['! time +1d']));
-    await host.send('Up.', reply('A new day.'));
-    const [day] = host.sdk.query('chronicle.days');
-    assert.equal(day.line, 'June 3, 1200: to Harrow; took on Lost Letter; 9 gold in.');
-    sameOnReload(host, 'after the trim');
-    host.close();
+    assert.deepEqual(host.sdk.query('chronicle.questLog', { id }), before);
+    sameOnReload(host, 'neutral journal after trim');
 });

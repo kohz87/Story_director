@@ -140,18 +140,6 @@ test('a jump that brings too much is cut to about 200 tokens, the rest counted',
     assert.equal(slotValue(director(chat.head()).recap).threads.length, shown);
 });
 
-test('a quest deadline that passed in the gap asks the story in v2\'s lines', () => {
-    const chat = new Chat();
-    chat.send();
-    chat.answer('~ time Goldwane 12, 08:00 pm\n+ quest Bounty on Kettle Jack — bring him in alive | giver: Warden Hale | goal: bring him in alive | due: Goldwane 14', { said: 'I take the bounty on Kettle Jack.' });
-    chat.send();
-    chat.answer('~ time Goldwane 15, 07:00 am');
-    const [line] = chat.send().tail.lines;
-    assert.match(line, /: Bounty on Kettle Jack — deadline Goldwane 14, 11:59 pm passed \(bring him in alive\)\./);
-    assert.ok(line.endsWith(`${AWAY_RECORD_V2} ${AWAY_DEADLINE_V2}`));
-    assert.equal(thread(chat.head(), 'Bounty on Kettle Jack').status, 'active', 'overdue, within its grace');
-});
-
 test('the static part is byte-identical whatever the state; only the tail changes', () => {
     const before = part.context.static();
     assert.equal(before, '');

@@ -4,64 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { part as quests } from '../../../src/v2/quests/index.js';
-import { DEFAULT_RANKS, WRITTEN_RANKS_ABOVE, questRank } from '../../../src/v2/quests/ranks.js';
 import { SUMMARY_CHARS, capSummary } from '../../../src/v2/tracker/capture.js';
-import { fakeQueries, makeHost, makeState as questState, quest } from '../quests/helpers/fake-ctx.js';
 import { lastProblems, makeState, reply, thread } from '../tracker/helpers/fake-ctx.js';
 import { problemList } from '../../../src/v2/tracker/domain.js';
-
-const take = quests.commands['quest.take'];
-const finish = quests.commands['quest.finish'];
-
-// A taken-on wolf quest with `fields`, a party at `level`, three wolves beaten after it was taken.
-function wolves(fields, { level = 1, queries = fakeQueries } = {}) {
-    const state = questState({ threads: [quest('th_wolves01', 'Wolves', { giver: 'Orsa', goal: 'Kill 3 wolves', ...fields }, { offer: true })], scene: { place: { kind: 'settlement' } } });
-    state.domains.party.actors.ac_astra001.level = level;
-    const host = makeHost(state, { queries });
-    const taken = host.run(take, { id: 'th_wolves01' });
-    assert.equal(taken.ok, true, taken.message);
-    host.state.domains.combat.beaten = [{ rev: 20, foes: [{ name: 'Wolf', count: 3 }], won: true }];
-    return { host, taken };
-}
-
-const rankProblems = host => problemList(host.state.domains.director).filter(problem => problem.kind === 'rank-held');
-
-test('questRank: a written rank is held to the party\'s own; a pack\'s rank is not', () => {
-    assert.equal(WRITTEN_RANKS_ABOVE, 0);
-    const S = { fields: { rank: 'S' } };
-    // Level 12: the party is E (6–12), so a written rank is at most E.
-    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written', said: DEFAULT_RANKS[6] });
-    assert.deepEqual(questRank({ fields: { rank: 'D' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written', said: DEFAULT_RANKS[2] });
-    assert.deepEqual(questRank({ fields: { rank: 'E' } }, DEFAULT_RANKS, { level: 12 }), { rank: DEFAULT_RANKS[1], by: 'written' });
-    assert.equal(questRank(S, DEFAULT_RANKS, { level: null }).rank.id, 'F', 'level not known: the lowest rank');
-    assert.equal(questRank(S, DEFAULT_RANKS, { level: 55 }).rank.id, 'S');
-    assert.deepEqual(questRank(S, DEFAULT_RANKS, { level: 1, pack: { letter: 'S' } }), { rank: DEFAULT_RANKS[6], by: 'pack' });
-});
-
-test('a quest written S-rank for a level-12 party is paid as E, with a receipt note and one Problem', () => {
-    const { host, taken } = wolves({ reward: '9999999 gold', rank: 'S' }, { level: 12 });
-    const note = 'the story said S-rank; held to E-rank for a level-12 party';
-    assert.match(taken.receipt.summary, new RegExp(`E-rank; ${note}\\.$`));
-    assert.deepEqual(rankProblems(host).map(problem => [problem.key, problem.text]), [['Wolves', `Wolves: ${note}.`]]);
-    const done = host.run(finish, { id: 'th_wolves01' });
-    assert.equal(done.ok, true, done.message);
-    assert.deepEqual(done.receipt.data.paid, { amount: 230, said: 9999999, rank: 'E', range: [50, 230] });
-    assert.match(done.receipt.summary, new RegExp(`230 gold paid \\(reward clamped to E-rank range: 50–230 gold \\(clamped from 9999999 gold\\)\\) \\(${note}\\)\\.$`));
-    assert.equal(rankProblems(host).length, 1, 'the Problem is not repeated at turn-in');
-});
-
-test('a written rank the party may take, and a pack quest\'s own rank, are paid as they are', () => {
-    const own = wolves({ reward: '9999999 gold', rank: 'F' }, { level: 1 });
-    assert.doesNotMatch(own.taken.receipt.summary, /the story said/);
-    assert.deepEqual(rankProblems(own.host), []);
-    const queries = { ...fakeQueries, 'packs.content': (_state, { kind } = {}) => (kind === 'quests' ? [{ pack: 'p', name: 'Wolves', letter: 'S', reward: '9999999 gold' }] : []) };
-    const pack = wolves({ reward: '9999999 gold' }, { level: 1, queries });
-    const done = pack.host.run(finish, { id: 'th_wolves01' });
-    assert.equal(done.ok, true, done.message);
-    assert.equal(done.receipt.data.paid.rank, 'S');
-    assert.deepEqual(rankProblems(pack.host), []);
-});
 
 test('a thread summary is cut to 600 characters at a space, with a Problem', () => {
     const long = Array.from({ length: 300 }, (_, i) => `word${i}`).join(' ');

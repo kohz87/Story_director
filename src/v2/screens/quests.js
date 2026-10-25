@@ -1,82 +1,25 @@
-// Story Director v2, part screens: `story-director/quests` (SPEC §13.1), the Quests tab and game-view
-// screen. Active quests with their progress as a glass bar ("Wolves 8/3") and the rolling progress note,
-// finished quests folded away. There is no Offered list: the story's `+ quest` makes a quest active at
-// once. No buttons (F95, README "There are no quest buttons"): giving up comes from the reader's own words,
-// turning in from the story (code checks and pays); each row says where the quest stands instead ("Ready to
-// turn in — 3/3 wolves", "Not yet: 2/3 wolves"). Every row opens its details (F84: goal, progress note,
-// terms, giver, due, taken and ended dates, history) in a screen-local `<details>` panel: templates have no
-// dialog to open with a quest's data. The commands stay in the SDK for a card's or pack's own buttons.
-// Everything comes from `quest.board` (queries.js), on the head state.
-//
-// The rows are Story Block's list card (`ss-listcard`, view/glass.css) drawn from the template: the status
-// tag sits on a line of its own under the row, so a long line wraps on a phone instead of pushing the name out.
+// Neutral goals and old quest history, read through SD threads without an RPG dependency.
 
 import { BASE_CSS } from './style.js';
 
 export const QUESTS_ID = 'story-director/quests';
 
-// The details panel of one row: `x` is the row's loop name.
-const details = x => `
-        <details class="sd-more">
-          <summary>Details</summary>
-          <dl class="sd-facts">
-            <div data-if="${x}.details.goal"><dt>Goal</dt><dd>{{ ${x}.details.goal }}</dd></div>
-            <div data-if="${x}.details.note"><dt>Progress</dt><dd>{{ ${x}.details.note }}</dd></div>
-            <div data-if="${x}.details.terms"><dt>Terms</dt><dd>{{ ${x}.details.terms }}</dd></div>
-            <div data-if="${x}.details.owed"><dt>Owed</dt><dd>{{ ${x}.details.owed }}</dd></div>
-            <div data-if="${x}.details.rank"><dt>Rank</dt><dd>{{ ${x}.details.rank }}</dd></div>
-            <div data-if="${x}.details.giver"><dt>Giver</dt><dd>{{ ${x}.details.giver }}</dd></div>
-            <div data-if="${x}.details.due"><dt>Due</dt><dd>{{ ${x}.details.due }}</dd></div>
-            <div data-if="${x}.details.taken"><dt>Taken on</dt><dd>{{ ${x}.details.taken }}</dd></div>
-            <div data-if="${x}.details.ended"><dt>Ended</dt><dd>{{ ${x}.details.ended }}</dd></div>
-          </dl>
-          <ol class="sd-history" data-if="${x}.details.hasHistory" aria-label="History">
-            <li data-each="${x}.details.history as h">{{ h.text }}</li>
-          </ol>
-        </details>`;
-
+// SD's neutral/read-only view uses only its own retained projection, including old quests.
 const TEMPLATE = `
 <div class="sd-quests">
-  <section class="ss-listcard ss-glass sd-active" aria-label="Quests">
-    <h4 class="ss-label ss-listcard-head sd-h">Quests <small data-if="q.board.hasActive">{{ len(q.board.active) }}</small></h4>
-    <p class="ss-listcard-empty" data-if="!q.board.hasActive">No quests taken on.</p>
+  <section class="ss-listcard ss-glass" aria-label="Goals and quest history">
+    <h4>Goals and quest history</h4>
     <ul class="sd-cards">
-      <li class="sd-card sd-quest" data-each="q.board.active as a" data-quest="{{ a.id }}"
-          data-class="sd-met: a.ready; sd-ready: a.status.state == 'here'">
-        <div class="sd-head">
-          <span class="sd-title" title="{{ a.key }}">{{ a.key }}</span>
-          <span class="sd-pills">
-            <span class="ss-pill sd-st" data-state="ready" data-if="a.status.state == 'here'" title="{{ a.status.text }}">Ready</span>
-            <span class="ss-pill sd-st" data-state="notyet" data-if="a.status.state == 'notyet'" title="{{ a.status.text }}">Not yet</span>
-            <span class="ss-pill ss-pill-soft sd-reward" data-if="a.reward" title="{{ a.reward }}">Reward {{ a.reward }}</span>
-          </span>
-        </div>
-        <p class="sd-sum" data-if="a.goal">{{ a.goal }}</p>
-        <p class="sd-from" data-if="a.giver">From {{ a.giver }}</p>
-        <div class="sd-bar" data-if="a.meter">
-          <ss-widget name="ss.bar" data-props='{"value":{{ a.progress.have }},"max":{{ a.progress.need }},"label":"{{ a.progress.label }}","text":"{{ a.progress.have }} of {{ a.progress.need }}"}'></ss-widget>
-        </div>
-        <p class="sd-status" data-state="{{ a.status.state }}" role="note">{{ a.status.text }}</p>
-        <p class="sd-now" data-if="a.note"><b>Now:</b> <span>{{ a.note }}</span></p>${details('a')}
+      <li class="sd-card" data-each="q.threads as t" data-if="t.kind == 'quest' || t.rpg != null || t.fields.goal != null">
+        <b>{{ t.key }}</b><p>{{ t.summary }}</p>
+        <p>{{ t.fields.goal }}</p><p>{{ t.fields.progress }}</p><p>{{ t.fields.step }}</p>
+        <p>{{ t.status }}</p><p data-if="t.offer">Offered</p>
+        <p data-if="t.kind == 'quest' && t.rpg == null">From an earlier version (read only)</p>
+        <p data-if="t.owed != null && t.rpg == null">Reward from an earlier version: {{ t.owed.text }}</p>
       </li>
     </ul>
   </section>
-
-  <details class="ss-glass sd-finished" data-if="q.board.hasFinished">
-    <summary class="ss-label sd-h">Finished <small>{{ q.board.finishedCount }}</small></summary>
-    <ul class="sd-cards">
-      <li class="sd-card sd-done" data-each="q.board.finished as f" data-quest="{{ f.id }}" data-outcome="{{ f.outcome }}">
-        <div class="sd-head">
-          <span class="sd-title" title="{{ f.key }}">{{ f.key }}</span>
-          <span class="sd-pills"><span class="ss-pill sd-outcome" title="{{ f.outcomeText }}">{{ f.outcomeText }}</span></span>
-        </div>
-        <p class="sd-sum" data-if="f.reason">{{ f.reason }}</p>
-        <p class="sd-now" data-if="f.details.owed"><b>Owed:</b> <span>{{ f.details.owed }}</span></p>${details('f')}
-      </li>
-    </ul>
-  </details>
-</div>
-`;
+</div>`;
 
 // Every quest is one card: the header (title, then the pills: status and reward; the pills move under the title when the
 // screen is narrow, 420px or less), the summary, "From" in small text, the progress bar, "Now:" and the Details fold.
@@ -128,7 +71,7 @@ export const questsScreen = Object.freeze({
     title: 'Quests',
     icon: 'fa-scroll',
     mounts: ['tab', 'screen'],
-    data: { board: { query: 'quest.board' } },
+    data: { threads: { query: 'director.threads' } },
     template: TEMPLATE,
     css: CSS,
 });

@@ -18,6 +18,7 @@
 // commands `chronicle.edit` and `chronicle.remove` (the reader's, cause `ui`), `chronicle.surface`
 // and `chronicle.digest` (the hook's, cause `system`).
 
+import { threadOutcome } from './thread-outcome.js';
 import { applyFactionLine, applyWorldLine, edit, remove } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
 import { DIGEST_TAIL_BUDGET, NOTE, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
@@ -63,6 +64,7 @@ export const part = {
         chronicle: { initial: initialChronicle, validate: validateChronicle, scratch: ['dayFacts', 'questLog', 'seenAt'], counters: ['round'] },
     },
     commands: {
+        'chronicle.threadOutcome': threadOutcome,
         'chronicle.edit': edit,
         'chronicle.remove': remove,
         [SURFACE]: surface,

@@ -1,6 +1,7 @@
 // World part tests: a real Story Block host (the testkit) with Story Director, and small stand-ins for
 // NPC State Delta (its queries `npc.known`, `npc.dossier`, `npc.meters`) and RPG Battle.
 import { createHost } from '../../vendor/story-block/testkit/index.js';
+import { withD1 } from '../helpers/d1.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
 import { worldScreen } from '../../../src/v2/world/index.js';
@@ -38,7 +39,7 @@ export function fakeDelta(people = {}) {
 /** A host with Story Director (and `rpg` / `delta` stand-ins); `settings`: Story Director's. */
 export async function worldHost({ rpg = false, delta = null, settings = {}, extra = [], features = {} } = {}) {
     let host = null;
-    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    const module = withD1(createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } }));
     host = await createHost({
         modules: [...(rpg ? [fakeRpgBattle()] : []), ...(delta ? [fakeDelta(delta)] : []), module, ...extra],
         settings: { modules: { 'story-director': settings }, features },

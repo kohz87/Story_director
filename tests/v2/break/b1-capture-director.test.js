@@ -73,7 +73,7 @@ test('~ time with an impossible clock time leaves the clock alone and is a Probl
 test('a quest line with a "qty" or "id" label is still taken', async t => {
     const host = await fresh(t);
     await host.send('Work?', reply('Fenna wants pelts.', [
-        '+ quest Pelts — bring pelts | giver: Fenna | goal: Bring 3 pelts | reward: 10 gold | qty: 3',
+        '+ hook Pelts — bring pelts | giver: Fenna | goal: Bring 3 pelts | reward: 10 gold | qty: 3',
         '+ hook Wolves — on the ridge | id: wolves-1',
     ]));
     const keys = Object.values(director(host).threads).map(thread => thread.key).sort();
