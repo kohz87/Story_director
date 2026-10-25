@@ -59,22 +59,7 @@ contract's `Day` (floor(minutes / 1440), the clock may be negative): a day befor
   "inactive" is NOT_FOUND). "Used" is one claim per evidence **and request** (`sd:check:<evidence>:<hash of actor, stat, skill, target, dc>`),
   because a reply may hold two checks (F32). Story Block gives Story Director no proof kind for a check yet; if the lead wants a `check`
   proof, that is an E5 owner-table change.
-- The `? check` line: `src/v2/checks/capture.js` is the `check` kind as **one** `checks.roll` (the line's `dc` word to its number, `who` an SD
-  actor by name, `vs` a person NSD knows, the model's `result:` never read). It is exported as `checkKind` and **not** in `part.kinds`:
-  RPG Battle's checks part still keeps the `check` kind and only one module may. The lead flips them together (add `kinds: { check: checkKind }`
-  here, drop RPG Battle's). Not moved: the check **table** (`checks.prepare`, the two d20s per reply, the table in the tail, the reply card)
-  stays in RPG Battle's checks part until the lead retires it.
-- E7b, Story Block's `src/v2/assist/` (not edited here): the patch file `e7b-assist-checks.patch` (handed to the lead with the PR; it has context lines with trailing blanks, so it is not kept in the tree), a `git apply`-able patch against
-  `track-e/e5-evidence` (5e31419). `assist.precheck` keeps the claim and `capture.check` and drops the `check.roll` probe, `pendingCheckId`
-  and `ROLL_COMMAND`; the roll's receipt is read from `data.v2.result`; a missing `check` kind fails the capture call, so the claim is not
-  kept. Its tests are updated (a one-die stand-in; a legacy `check.roll` that must never be called).
-- **Registration (this is the flip branch).** `module.js` registers the `checks` part and the part keeps the `check` kind (`kinds: { check: checkKind }`). RPG Battle's checks
-  part must be retired in the same release (`track-b/checks-flip` in RPG Battle), Story Block's assist takes the E7b patch (`e7b-assist-checks.patch`), and
-  `checks/modifiers.js` and `statForCheck` live in RPG Battle's `rules/`. Merged alone, this branch cannot register beside RPG Battle's checks part.
-- **For track C (not built here):** standalone Story Director has no screen to make the first check actor or to edit actors' bonuses, link a character, set `defaultDc`/`costMargin`/`rbModifiers`/`social`,
-  or the map's regions and danger (`atlas.region`, `atlas.placeRegion`, `atlas.dangerSet`, `atlas.placeBind`). The commands and their `expectedHash` (`checks.policy`, `atlas.policy`) are there; a
-  `checks.roll` with no actor says what to do in its message.
-- A pack place met while Story Block's packs cannot be read is held (no identity recorded); `atlas.canonical` still answers its own `pl_` id from the atlas.
-- `rules.modifier` is RPG Battle's (slice 4 of track B); until a ready RPG Battle answers it SD uses the standalone bonuses and says why.
-- `director.contract.threads` is true only when `director.threads` and `threads.hash` answer: track A's thread writers are theirs.
-- `registration`: `src/v2/module.js` lists the parts (lead-owned); `checks` is added there in its own commit.
+- **Stage 5 flip complete.** This module alone registers domain `checks`, `checks.roll` and `? check`. There is no prepared table. The narrator omits `result`; legacy labels are ignored with no flag or Problem. The receipt tells the next tail what happened. SB Assist captures once and reads `data.v2.result`, with no legacy roll probe.
+- RB crafting may call `checks.roll` with `{ craft: { recipe, at?: 'campfire' } }`, actor, recipe DC and evidence. This extension accepts only RB as caller, never a supplied die or modifier. SD asks `rules.modifier` with that recipe context; missing or disabled RB modifiers refuse the whole craft. RB decides quality from the returned die and total.
+- A linked RB character's held skill records a practice attempt through `rules.practiceCheck` in the same root transaction, on success or failure. A stat-only check records none. RB's settlement owns the existing caps and replay guard; SD never reads external settings from a guard. Re-read/swipe/delete retract the attempt with its roll.
+- Real SB+SD+RB tests cover skill checks, practice caps, Assist, reload and rebuild with no Problems. The modifier projection remains available for legacy crafting without turning on rules-v2 state.
