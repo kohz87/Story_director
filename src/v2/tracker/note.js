@@ -41,12 +41,12 @@ const DATED = ['due', 'on', 'arrive'];
 const V1_LINES = CHANGE_INSTRUCTION.split('\n');
 // v1's Fields line without its offers (one deliberate change, 2.0.0-alpha.1): the story's `+ quest` is the
 // acceptance, so a job only offered is no hook with a giver and reward; it stays in the story.
-const FIELDS_LINE = 'Fields: desc, now, then, on, due, shown, leg, arrive, place, people, encounter, reach, goal, step, progress, giver. Hooks are offers; only the reader can accept a goal.';
+const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:')).replace('; a job only offered: + hook with giver, reward', '');
 const WRITE_ONLY_LINE = V1_LINES.find(line => line.startsWith('Write only changes'));
 
 // Story Director alone (WAVE rule 11, B-rxui-7): with no module that runs fights, the fields name no
 // encounter. A written `encounter:` is still kept on its thread as plain data; it is just not told.
-const FIELDS_ALONE = FIELDS_LINE.replace(', encounter,', ',');
+const FIELDS_ALONE = FIELDS_LINE.replace(', encounter;', ';');
 
 /**
  * The Director's part of the static prompt: no names, counts, times or dice. The same bytes for one
@@ -68,7 +68,7 @@ export const STATIC_TEXT = staticText();
 export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
-    hook: '+ hook Name — an offered goal or lead | goal: what counts as done; ~ hook Name | progress: …; - hook Name — outcome',
+    hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',
