@@ -4,8 +4,8 @@
 // alone a check rolls with SD's standalone bonuses; a linked RPG Battle adds its `rules.modifier` in their place, and NPC State Delta's
 // `npc.socialModifier` adds how a person feels about you. The coordinator's src/v2/module.js merges this part with the others.
 //
-// Not here (written in docs/dev/checks-and-danger.md): the check table and the `? check` line's capture, which RPG Battle still owns until the lead
-// retires it; this part is the roll those callers ask for.
+// This part alone owns the `check` capture and its dice. Crafting calls checks.roll with a recipe
+// reference; RPG Battle supplies the modifier and decides the item quality.
 
 import { commands } from './commands.js';
 import { initialChecks, validateChecks } from './domain.js';
@@ -19,6 +19,11 @@ export const DEFAULTS = Object.freeze({ defaultDc: 15, costMargin: 2, rbModifier
 export const part = {
     domains: {
         checks: { initial: initialChecks, validate: slice => validateChecks(slice, TOPIC_NAMES) },
+    },
+    context: {
+        static: () => 'Checks: write ? check skill — attempt | dc: hard (optionally who: Name or vs: Name), without a result. Story Director rolls once; narrate the outcome told by the tail. A pre-rolled check already told under [Happened] is not rolled again.',
+        tail: () => ({ lines: [], optional: [] }),
+        budget: 1,
     },
     commands,
     queries,

@@ -30,7 +30,7 @@ test('a line rolls once: the default actor, the difficulty word as its number, t
     assert.ok(out.ok, out.message);
     const result = out.result.data.v2.result;
     assert.deepEqual([result.die, result.dc, result.mod, result.total, result.outcome], [3, 20, 2, 5, 'fail'], 'the story said success; the die said otherwise');
-    assert.equal(out.result.narrate, false);
+    assert.equal(out.result.narrate, true);
     assert.equal(Object.keys(out.state.domains.checks.log).length, 1);
     const again = line('? check Stealth — slip past the guard | dc: hard', out.state);
     assert.equal(again.code, 'REFUSED', 'one claim for one line on one reply');

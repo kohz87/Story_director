@@ -13,14 +13,15 @@ import { chronicleScreen } from '../../../src/v2/chronicle/screen.js';
 import { daysScreen, worldScreen } from '../../../src/v2/world/index.js';
 import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
 import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
+import { part as checksPart } from '../../../src/v2/checks/index.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 
 test('statics in part order, budgets summed, kinds dispatched to their part', () => {
     const def = storyDirectorModule;
     // The time, atlas and screens parts add nothing to the static part.
     assert.equal(ATLAS_STATIC, '');
-    assert.equal(def.context.static(), `${STATIC_TEXT}\n${CHRONICLE_STATIC}`);
-    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET);
+    assert.equal(def.context.static(), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
     assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'arc', 'checks', 'screens']);
     assert.equal(def.capture.kinds.quest, undefined);
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
