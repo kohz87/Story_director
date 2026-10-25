@@ -3,12 +3,14 @@
 // corrections, travel times by v1's maths, the map as Story Block's `ss.map` widget draws it,
 // the atlas's own Map widget `story-director.map` (pan, zoom, search, details) and the Map screen. The coordinator's src/v2/module.js merges this part with the others into
 // module `story-director`. The enabled packs' places and routes (Story Block's optional query
-// `packs.content`) are read live and joined in; without them the atlas is the story's alone.
+// `packs.content`) are read live and joined in; without them the atlas is the story's alone. It also answers for other modules (policy.js,
+// canonical.js): the canonical place, regions, danger and `world.areaTier` (docs/dev/checks-and-danger.md).
 
 import { applyLandmarkLine, applyRouteLine, edit, focus, visit } from './capture.js';
 import { initialAtlas, validateAtlas } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, atlasTail } from './note.js';
-import { beforeGenerate, queries } from './queries.js';
+import { beforeGenerate, queries as atlasQueries } from './queries.js';
+import { commands as policyCommands, queries as policyQueries } from './policy.js';
 import { mapScreen } from './screen.js';
 import { MAP_WIDGET, atlasMapWidget } from './widget.js';
 import { DEFAULT_MAP } from '../../places.js';
@@ -21,8 +23,9 @@ export const part = {
         'atlas.visit': visit,
         'atlas.edit': edit,
         'atlas.focus': focus,
+        ...policyCommands,
     },
-    queries,
+    queries: { ...atlasQueries, ...policyQueries },
     kinds: {
         route: { grammar: GRAMMAR.route, apply: applyRouteLine },
         landmark: { grammar: GRAMMAR.landmark, apply: applyLandmarkLine },
