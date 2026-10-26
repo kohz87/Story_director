@@ -19,9 +19,9 @@ const line = (raw, state, options = {}) => {
     return run(state, 'check', { op: '?', kind: 'check', name, text: text.join(' — '), labels, raw }, { cause: 'story', source: SOURCE, ...options });
 };
 
-test('the grammar is the old one and the kind is exported, not registered: only one module may keep `check`', () => {
+test('the grammar is the old one and, after the flip, this part keeps the `check` kind (RPG Battle\'s part is gone)', () => {
     assert.match(checkKind.grammar, /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name$/);
-    assert.equal(part.kinds, undefined);
+    assert.equal(part.kinds.check, checkKind);
 });
 
 test('a line rolls once: the default actor, the difficulty word as its number, the model\'s result ignored; the same line again is refused', () => {
@@ -30,7 +30,7 @@ test('a line rolls once: the default actor, the difficulty word as its number, t
     assert.ok(out.ok, out.message);
     const result = out.result.data.v2.result;
     assert.deepEqual([result.die, result.dc, result.mod, result.total, result.outcome], [3, 20, 2, 5, 'fail'], 'the story said success; the die said otherwise');
-    assert.equal(out.result.narrate, false);
+    assert.equal(out.result.narrate, true);
     assert.equal(Object.keys(out.state.domains.checks.log).length, 1);
     const again = line('? check Stealth — slip past the guard | dc: hard', out.state);
     assert.equal(again.code, 'REFUSED', 'one claim for one line on one reply');

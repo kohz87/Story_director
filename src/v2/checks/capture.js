@@ -6,8 +6,7 @@
 // same reply cannot roll twice (swipe, Continue and Re-read keep the claim of the block they stand on).
 //
 // `who` names one of Story Director's own actors by its name (exact, any case); `vs` names a person NPC State Delta knows. Neither is
-// guessed. This kind is exported, not yet part of `part.kinds`: RPG Battle's checks part still keeps the `check` kind, and only one
-// module may. The lead flips them together (docs/dev/checks-and-danger.md).
+// guessed. Story Director alone registers this kind (contract P09).
 
 import { policyOf } from './domain.js';
 import { dcOf } from './words.js';
@@ -48,7 +47,7 @@ export function applyCheck(ctx, line) {
         else if (identity.ok) ctx.fail('NOT_FOUND', `Nobody is known as ${labels.vs.slice(0, 40)}.`);
     }
     const rolled = ctx.call('checks.roll', payload);
-    return { ...rolled, narrate: false };
+    return { ...rolled, narrate: true };
 }
 
 export const kind = { grammar: GRAMMAR, apply: applyCheck };

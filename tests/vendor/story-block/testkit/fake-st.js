@@ -89,7 +89,7 @@ export function sharedPrefix(a, b) {
 /**
  * The fake. `options`: { chat?: Message[] (default: one greeting), greeting?, chatId?,
  * mainApi? ('openai' = chat completion, anything else = text completion), mainPrompt? (false:
- * the preset has no Main Prompt), interceptorName?, extensionSettings?, user?, char?, contextSize? (what the
+ * the preset has no Main Prompt), interceptorName?, extensionSettings?, chatMetadata?, user?, char?, contextSize? (what the
  * interceptor is handed: SillyTavern's context size less the reply's length; default 8192) }.
  * Returns the fake (see the returned object's comments); `fake.ctx` is what getContext() gives.
  */
@@ -118,6 +118,8 @@ export function createFakeContext(options = {}) {
         rendered: [],
         settingsSaves: 0,
         failSaves: 0,
+        /** Prompt-only regex rules ([{ find: RegExp | string, replace? }]), run over every message's text in the chat the interceptors get; the chat itself is not changed. */
+        promptRegex: [],
         /** Set to use this function as the interceptor (else globalThis[interceptorName]). */
         interceptor: null,
         /** The context size the interceptor is handed (set it to try a small context). */
@@ -131,7 +133,7 @@ export function createFakeContext(options = {}) {
         name1: user,
         name2: char,
         mainApi,
-        chatMetadata: {},
+        chatMetadata: clone(options.chatMetadata ?? {}),
         extensionSettings,
         extension_settings: extensionSettings,
         eventSource,
@@ -178,8 +180,16 @@ export function createFakeContext(options = {}) {
         .filter(key => prompts[key].value && prompts[key].position === (place === 'in-prompt' ? EXTENSION_PROMPT_TYPES.IN_PROMPT : EXTENSION_PROMPT_TYPES.IN_CHAT))
         .map(key => ctx.substituteParams(prompts[key].value));
 
-    function buildRequest(type) {
-        const history = ctx.chat.filter(message => !(type === 'swipe' && message === ctx.chat.at(-1)));
+    // The chat as SillyTavern hands it to the generation interceptors: a copy of the messages without the hidden ones (`is_system`, the
+    // ghost: SillyTavern leaves them out of every prompt, and out of quiet and nested generations too), a swipe leaving out the one being
+    // swiped, with the prompt-only regexes (`fake.promptRegex`: [{ find, replace }]) already run over each one's text. The interceptors
+    // change this list, and the request is built from what is left.
+    function interceptorChat(type) {
+        const messages = (type === 'swipe' ? ctx.chat.slice(0, -1) : ctx.chat).filter(message => !message.is_system);
+        return messages.map(message => ({ ...message, mes: fake.promptRegex.reduce((text, rule) => text.replace(rule.find, rule.replace ?? ''), String(message.mes ?? '')) }));
+    }
+
+    function buildRequest(history, type) {
         if (ctx.mainApi === 'openai') {
             const chat = [];
             // In-prompt extension prompts sit next to the Main Prompt; a preset without it drops them.
@@ -242,12 +252,13 @@ export function createFakeContext(options = {}) {
             // An interceptor may stop the generation (SillyTavern's abort argument): nothing is sent.
             // A dry run runs none (SillyTavern 1.19's Generate: `if (!dryRun) runGenerationInterceptors`).
             let aborted = false;
-            if (typeof interceptor === 'function' && !dryRun) await interceptor(clone(ctx.chat), fake.contextSize, () => { aborted = true; }, type);
+            const coreChat = interceptorChat(type);
+            if (typeof interceptor === 'function' && !dryRun) await interceptor(coreChat, fake.contextSize, () => { aborted = true; }, type);
             if (aborted) {
                 await emit(EVENT_TYPES.GENERATION_STOPPED);
                 return { request: null, reply: '', index: -1, aborted: true };
             }
-            const request = buildRequest(type);
+            const request = buildRequest(coreChat, type);
             request.dryRun = dryRun;
             await emit(ctx.mainApi === 'openai' ? EVENT_TYPES.CHAT_COMPLETION_PROMPT_READY : EVENT_TYPES.GENERATE_AFTER_COMBINE_PROMPTS, request);
             fake.requests.push({ type, ...clone(request) });
