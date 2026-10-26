@@ -34,3 +34,39 @@ Objective evidence (B3): `threads.questWrite` keeps `rpg.evidence` append-only. 
 proof of the same root counts) whose payload names this thread, this instance and the row's objective; a proof counts once across every thread
 (`CLAIMED`); a stored row is never changed or removed (`REFUSED`; taking its block back is how it goes); no row rides with a terminal write; a quest
 is offered, accepted and linked with empty evidence. What the proof means for the objective stays RPG Battle's. The checks refuse the whole root.
+
+## Attaching a module to a thread
+
+A thread is the story's neutral goal: its identity, name, text, giver, place, state and deadline
+belong to Story Director. A game module adds its own extension to that same thread; it does
+not create a second goal identity or take ownership of the thread. An attachment starts with
+an explicit reader choice or an explicit binding in a narrator offer. Names that happen to
+resemble a template are not a binding.
+
+RPG Battle is the example. `+ quest Name | like: <open template slug> | text: <objective text>`
+(and explicit `foe`, `place` or `item` targets) requests a checked RPG extension. The Quests tab's
+“Make this a quest” form selects an open template explicitly and reports any refusal beside its
+button. RB checks the frozen template's objective kinds, requirements and real target identities,
+then fixes the reward from the recorded area tier. A refusal leaves the neutral SD goal usable.
+SD stores only the complete numeric Quest transport; it never chooses a template, calculates a
+reward, scales a monster or decides whether an RPG objective was met.
+
+`threads.link` now accepts either an already accepted neutral thread with an active extension
+inheriting its original acceptance, or a neutral offer with an offered extension and null
+acceptance/deadline/settlement. The latter does not accept the goal. Both require the authenticated
+ready RB caller, an expected thread hash, a retry write ID, matching thread identity and empty
+objective evidence. Existing RPG extensions cannot be replaced by linking again.
+
+Closing is the module's proof-based transaction: RB validates surviving sealed-fight, inventory,
+scene or explicit story-objective evidence, settles once, and calls the SD writers for closure
+and journal. Story Block owns evidence, claims and replay, so retracting a prerequisite removes
+the dependent result, rewards and closure together. An unchanged replay uses recorded evidence
+and code-owned numbers; it does not query live policy or infer replacement targets.
+
+Other game modules should follow the same ownership pattern: define a closed extension transport
+and an authorized owner seam, require explicit binding, validate opening before attachment, keep
+neutral acceptance independent, and close only through surviving owner-validated proofs. The RPG
+writer authorization is not permission for another module to write `rpg`.
+
+Stage 5 transport addition: kill objective `foe` may be a canonical `<base-ref>~<variant-slug>`;
+optional `allowVariants:boolean` is carried verbatim. Its meaning and eligibility are RB's.
