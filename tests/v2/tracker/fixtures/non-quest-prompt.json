@@ -1,0 +1,15 @@
+{
+  "grammar": {
+    "agenda": "+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>",
+    "event": "+ event Name — what is happening in the world | then: what next | on: <date, clock time>",
+    "hook": "+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)",
+    "clock": "+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning",
+    "beat": "+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}",
+    "secret": "+ secret Name — what must not be revealed yet",
+    "time": "~ time <date, clock time> (the scene's time) · ! time +2h (time passes)"
+  },
+  "text": [
+    "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nPacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath. Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later).",
+    "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nPacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath. Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later)."
+  ]
+}

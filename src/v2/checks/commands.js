@@ -25,7 +25,7 @@ const text = value => String(value ?? '').normalize('NFC').replace(/\p{Cf}+/gu, 
 const FIELDS = {
     'checks.actor': ['write', 'id', 'name', 'bonuses', 'makeDefault', 'expectedHash'],
     'checks.link': ['write', 'actor', 'rbActor', 'expectedHash'],
-    'checks.roll': ['actor', 'stat', 'skill', 'targetNpc', 'dc', 'evidence'],
+    'checks.roll': ['actor', 'stat', 'skill', 'targetNpc', 'dc', 'evidence', 'craft'],
 };
 const HASH = /^[0-9a-f]{64}$/;
 
@@ -94,7 +94,10 @@ function checksActor(ctx, payload) {
 /** What the linked character is for a link: `rules.sheet`'s answer when it is the PC or a durable companion, else why not. */
 function characterOf(ctx, rbActor) {
     let sheet;
-    try { sheet = ctx.query('rules.sheet', { actor: rbActor }); } catch { ctx.fail('DEPENDENCY_UNAVAILABLE', 'RPG Battle is not ready, so no character can be linked now.'); }
+    const found = ask(ctx, 'rules.sheet', { actor: rbActor });
+    const legacy = !found.ok || found.value === null ? ask(ctx, 'party.actor', { id: rbActor }) : found;
+    if (!legacy.ok && !found.ok) ctx.fail('DEPENDENCY_UNAVAILABLE', 'RPG Battle is not ready, so no character can be linked now.');
+    sheet = legacy.value;
     if (!isRecord(sheet)) ctx.fail('NOT_FOUND', 'RPG Battle has no such character.');
     if (sheet.kind !== 'pc' && sheet.kind !== 'companion') ctx.fail('REFUSED', 'Only the player character or a durable companion is linked.');
     return sheet;
@@ -102,7 +105,11 @@ function characterOf(ctx, rbActor) {
 
 /** Whether the character an actor is linked to is still there: false only when RPG Battle answers and does not know it (or it is no longer the PC or a companion). */
 function linkedIsLive(ctx, rbActor) {
-    const sheet = ask(ctx, 'rules.sheet', { actor: rbActor });
+    let sheet = ask(ctx, 'rules.sheet', { actor: rbActor });
+    if (!sheet.ok || sheet.value === null) {
+        const legacy = ask(ctx, 'party.actor', { id: rbActor });
+        if (legacy.ok) sheet = legacy;
+    }
     if (!sheet.ok) return true;
     return isRecord(sheet.value) && (sheet.value.kind === 'pc' || sheet.value.kind === 'companion');
 }
@@ -151,7 +158,10 @@ function knownEvidence(ctx, id) {
 function checksRoll(ctx, payload) {
     shape(ctx, 'checks.roll', payload, ['skill', 'evidence']);
     // Capture, the pre-roll (Story Block's assist) and the system; never a click, never a module supplying a die.
-    if (ctx.cause === 'ui' || (ctx.caller && ctx.caller !== 'story-block' && ctx.caller !== 'story-director')) ctx.fail('REFUSED', 'A check is rolled by the story\'s capture, not asked for.');
+    if (ctx.cause === 'ui' || (ctx.caller && ctx.caller !== 'story-block' && ctx.caller !== 'story-director' && ctx.caller !== 'rpg-battle')) ctx.fail('REFUSED', 'A check is rolled by the story\'s capture, not asked for.');
+    if (payload.craft !== undefined && !isRb(ctx)) ctx.fail('REFUSED', 'Only RPG Battle supplies a craft recipe.');
+    if (payload.craft !== undefined && (!isRecord(payload.craft) || typeof payload.craft.recipe !== 'string' || !payload.craft.recipe || payload.craft.recipe.length > 120 || Object.keys(payload.craft).some(key => !['recipe', 'at'].includes(key)) || (payload.craft.at !== undefined && payload.craft.at !== 'campfire'))) ctx.fail('INVALID', 'A craft check names its recipe and optionally a campfire.');
+    if (isRb(ctx) && payload.craft === undefined) ctx.fail('REFUSED', 'RPG Battle only asks for crafting checks.');
     const skill = text(payload.skill);
     if (!skill || skill.length > 80) ctx.fail('INVALID', 'A check has a skill of at most 80 characters.');
     if (payload.stat !== undefined && !['STR', 'VIT', 'AGI', 'DEX', 'INT', 'LUK', 'CHA'].includes(payload.stat)) ctx.fail('INVALID', 'stat is one of STR VIT AGI DEX INT LUK CHA.');
@@ -170,10 +180,11 @@ function checksRoll(ctx, payload) {
     const stat = statForCheck(skill, payload.stat);
     const dc = payload.dc ?? (Number.isSafeInteger(settings.defaultDc) ? settings.defaultDc : 15);
     const margin = Number.isSafeInteger(settings.costMargin) ? settings.costMargin : 2;
-    const request = hashJson({ actor: actorId, stat, skill: skill.toLowerCase(), targetNpc: payload.targetNpc ?? null, dc });
-    // The pre-roll (Story Block's assist, cause 'system') stands on the previous reply's evidence, which that reply's own check may already have used:
-    // it is its own check (once per message, which the assist's claim `assist:precheck:<key>` keeps), so its claim is scoped by the receipt's rev.
-    const scope = ctx.cause === 'system' ? `:r${ctx.rev}` : '';
+    const request = hashJson({ actor: actorId, stat, skill: skill.toLowerCase(), targetNpc: payload.targetNpc ?? null, dc, ...(payload.craft ? { craft: payload.craft } : {}) });
+    // Assist previews the seed for the prompt and commits on the generated reply before its story lines.
+    // Its message claim belongs to that reply too; a swipe retracts it and rolls once on the new source.
+    // System requests and crafts keep receipt scope: two crafts of one recipe are separate attempts, capped by RB.
+    const scope = payload.craft || ctx.cause === 'system' ? `:r${ctx.rev}` : '';
     if (!ctx.claim(`sd:check:${payload.evidence}:${request.slice(0, 16)}${scope}`)) ctx.fail('REFUSED', 'That evidence already made this check.');
 
     // The target person: unknown is NOT_FOUND; NPC State Delta absent or off adds nothing.
@@ -191,13 +202,14 @@ function checksRoll(ctx, payload) {
     if (settings.rbModifiers === false) fallback = 'rb-modifiers-off';
     else if (rbActor === null) fallback = 'no-link';
     else {
-        const answer = ask(ctx, 'rules.modifier', { actor: rbActor, stat, skill });
+        const answer = ask(ctx, 'rules.modifier', { actor: rbActor, stat, skill, ...(payload.craft !== undefined ? { craft: payload.craft } : {}) });
         const given = answer.ok ? rbParts(answer.value, rbActor, stat) : null;
         if (given) {
             parts = given;
             source = 'rb';
         } else fallback = !answer.ok ? 'rb-unavailable' : answer.value === null ? 'rb-no-answer' : 'rb-malformed';
     }
+    if (payload.craft !== undefined && !parts) ctx.fail('REFUSED', 'No craft modifier is available from RPG Battle.');
     if (!parts) parts = standaloneParts(actor, stat, skill);
     if (target !== null && settings.social !== false) {
         const social = ask(ctx, 'npc.socialModifier', { name: target, skill });
@@ -212,6 +224,9 @@ function checksRoll(ctx, payload) {
     log[id] = { id, actor: actorId, stat, skill, die, modifiers, mod, total, dc, outcome, source, fallback, evidence: payload.evidence };
     for (const key of Object.keys(log).slice(0, Math.max(0, Object.keys(log).length - MAX_LOG))) delete log[key];
     // The contract's result and nothing more; where the modifier came from (`source`, `fallback`) is kept on the log record.
+    if (rbActor !== null) {
+        try { ctx.call('rules.practiceCheck', { actor: rbActor, skill, check: id }); } catch (error) { if (error?.code !== 'UNKNOWN_COMMAND') throw error; }
+    }
     const result = { check: id, actor: actorId, die, modifiers, mod, total, dc, outcome };
     const sign = mod >= 0 ? `+${mod}` : String(mod);
     return {

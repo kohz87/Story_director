@@ -65,27 +65,15 @@ test('director.contract: SD alone answers true for what it owns, and not for the
     host.close();
 });
 
-// S1: RPG Battle's checks part owns the `checks` domain, the `check` kind and its own `checks.*` names until the flip release retires it.
-// Story Director as shipped registers none of them, so the two modules sit on one host.
-test('S1: the shipped module does not claim RPG Battle\'s checks domain, kind or commands: both register on one host', async () => {
+// After the flip RPG Battle's checks part is gone and this module owns the `checks` domain, the `check` kind and the `checks.*` names.
+test('flip: the module registers the checks domain, the check kind, the commands and the settings', async () => {
     const { createModule } = await import('../../../src/v2/module.js');
     const def = createModule();
-    assert.equal(Object.hasOwn(def.domains, 'checks'), false);
-    assert.equal(Object.keys(def.commands).some(name => name.startsWith('checks.')), false);
-    assert.equal(Object.keys(def.queries).some(name => name.startsWith('checks.')), false);
-    assert.equal(Object.hasOwn(def.capture.kinds, 'check'), false);
-    const rb = {
-        id: 'rpg-battle', name: 'RPG Battle', version: '2.0.0-test',
-        domains: { checks: { initial: () => ({ prepared: {}, log: {} }), validate: () => [] } },
-        commands: { 'checks.prepare'(ctx) { ctx.draft('checks').prepared.k = { for: 1 }; return { summary: 'Prepared.', narrate: false }; } },
-        queries: { 'checks.log': state => state.domains.checks.log },
-        capture: { kinds: { check: { grammar: '? check <skill> — what', apply: () => ({ summary: 'A check waits.', narrate: false }) } }, apply: () => ({ summary: 'A check waits.', narrate: false }) },
-    };
-    const host = await createHost({ modules: [createModule(), rb] });
-    const prepared = await host.sdk.command('checks.prepare', {});
-    assert.equal(prepared.ok, true, prepared.message);
-    assert.deepEqual(Object.keys(host.head().domains.checks), ['prepared', 'log'], 'the domain is RPG Battle\'s alone');
-    assert.deepEqual(host.sdk.query('checks.log', {}), {});
+    assert.equal(Object.hasOwn(def.domains, 'checks'), true);
+    assert.deepEqual(Object.keys(def.commands).filter(name => name.startsWith('checks.')).sort(), ['checks.actor', 'checks.link', 'checks.roll']);
+    assert.equal(Object.hasOwn(def.capture.kinds, 'check'), true);
+    const host = await createHost({ modules: [def] });
+    assert.deepEqual(Object.keys(host.head().domains.checks), ['policy', 'writes', 'log']);
     host.close();
 });
 
