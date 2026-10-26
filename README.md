@@ -1,6 +1,6 @@
-# Story Director 2.0.0-beta.2
+# Story Director 2.0.0
 
-> Story Suite v2, second beta (2.0.0-beta.2). It is for test play, not for your real campaigns yet.
+> Story Suite 2.0.0.
 
 ## What it is
 
@@ -15,10 +15,17 @@ sim), and it shows more with [NPC State Delta](https://github.com/kohz87/npc_sta
 
 ## Install
 
-1. SillyTavern **1.19 or newer**; try the beta in a separate profile.
-2. Install **Story Block first** from `https://github.com/kohz87/Story_block`.
-3. **Extensions → Install extension**, paste `https://github.com/kohz87/Story_director` and install (no branch to
-   pick), reload.
+Tested with **SillyTavern 1.19**. In **Extensions → Install extension**, install in this order, then reload:
+
+1. [Story Block](https://github.com/kohz87/Story_block)
+2. [Story Director](https://github.com/kohz87/Story_director)
+3. [RPG Battle](https://github.com/kohz87/rpg_battle)
+4. [NPC State Delta](https://github.com/kohz87/npc_state_delta)
+
+To start with the bundled **Ersveil** rules pack, open a fresh chat and follow **Setup → Pin Ersveil Rules → Create**,
+then choose your character's options. Existing chats load and rebuild unchanged; legacy chats stay unpinned.
+
+Report bugs in [this repo's Issues](https://github.com/kohz87/Story_director/issues), with steps to reproduce.
 
 For Story Director 1, install the `v1` branch of the same repo instead: paste the URL and type `v1` as the branch.
 
