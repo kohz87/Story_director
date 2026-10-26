@@ -1,6 +1,6 @@
-# Story Director 2.0.0
+# Story Director 2.1.0
 
-> Story Suite 2.0.0.
+> Story Suite 2.1.0.
 
 ## What it is
 
@@ -22,7 +22,7 @@ Tested with **SillyTavern 1.19**. In **Extensions → Install extension**, insta
 3. [RPG Battle](https://github.com/kohz87/rpg_battle)
 4. [NPC State Delta](https://github.com/kohz87/npc_state_delta)
 
-To start with the bundled **Ersveil** rules pack, open a fresh chat and follow **Setup → Pin Ersveil Rules → Create**,
+To start with the bundled **Ersveil 1.5.0** rules pack, open a fresh chat and follow **Setup → Pin Ersveil Rules → Create**,
 then choose your character's options. Existing chats load and rebuild unchanged; legacy chats stay unpinned.
 
 Report bugs in [this repo's Issues](https://github.com/kohz87/Story_director/issues), with steps to reproduce.
@@ -39,8 +39,7 @@ World screen). Update Story Block before Story Director. Install help:
 Switches are in **Settings → Features**. "No switch" means it is always on.
 
 - **Quests** (Quests tab, no switch): say you take a job and the story writes it down; it is under way at once.
-  The row shows progress and where it stands (Not yet, Ready, Ready to turn in). There are no quest buttons; you
-  turn in by telling the story.
+  The row shows progress and where it stands (Not yet, Ready, Ready to turn in). You turn in by telling the story. Open offers can use `| like: <template>`, or the reader can choose **Make this a quest**; code fixes the reward from the template's range at offer time. Ersveil 1.5.0 supplies 12 open templates.
 - **Turn-ins settle in the same reply:** a turn-in the story writes is checked where the reply ends up (after its
   `~ place` and `+ present` lines) and paid in that reply, once, even after a Continue. Safeguards:
   a tail line "Ready to turn in: Name (to giver, at place)", an automatic turn-in when the goal is met, you are at
@@ -89,6 +88,7 @@ The model writes the story and ends it with a hidden `<Changes>` list. Story Dir
 
 ```
 <Changes>
++ quest A job by the river | like: <template> | text: <objective>
 - quest Sluice-Rat Bounty — turned in
 ~ place Bluewatch Village, Guild Office | kind: settlement
 + present Elula
