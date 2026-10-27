@@ -26,6 +26,7 @@
 
 import { compareVersions, formatVersion, parseRange, parseVersion, satisfies } from './packs/version.js';
 import { HOST_DOMAIN } from './timeline/gate.js';
+import { SLUG } from './packs/limits.js';
 import { NEEDS_HINT, affectsStatic, featureOf, featureProblems, featureWarnings } from './features.js';
 
 // Commands the registry makes itself, so the command bus can run them like any other:
@@ -52,10 +53,12 @@ export const STANDARD_PREFIX = 'ss.';
 const SETTINGS_KEYS = ['defaults', 'schema', 'section', 'render', 'folds', 'place', 'rules'];
 export const SETTINGS_PLACES = Object.freeze(['diagnostics']);
 const placeOf = value => (SETTINGS_PLACES.includes(value) ? value : null);
-const KNOWN_KEYS = ['id', 'name', 'version', 'description', 'requires', 'domains', 'commands', 'queries', 'replayQueries', 'capture', 'context', 'hooks', 'settings', 'tabs', 'screens', 'widgets', 'features', 'cards', 'participant', 'batchResults'];
+const KNOWN_KEYS = ['id', 'name', 'version', 'description', 'requires', 'domains', 'commands', 'queries', 'replayQueries', 'capture', 'context', 'hooks', 'settings', 'tabs', 'screens', 'widgets', 'features', 'cards', 'participant', 'batchResults', 'capabilities'];
 const CONTEXT_KEYS = ['static', 'tail', 'budget', 'feature', 'parts'];
 // What `requires` may name: the Story Block it needs, and the peers (modules) it needs registered.
 const REQUIRES_KEYS = ['storyBlock', 'peers'];
+// How many capability names a module may declare (`capabilities`: what a pack's requires.capabilities can name).
+export const MAX_CAPABILITIES = 32;
 const COMMAND_KEYS = ['handler', 'internal', 'feature', 'enabled'];
 export const FIELD_TYPES = Object.freeze(['bool', 'int', 'choice', 'text', 'list', 'profile']);
 
@@ -161,6 +164,14 @@ export function definitionProblems(def) {
                 if (!MODULE_ID.test(peer)) problems.push(`requires.peers names "${peer}", which is not a module id (like "story-director")`);
                 else if (typeof range !== 'string' || !parseRange(range)) problems.push(`requires.peers["${peer}"] is not a version range (like ">=2.0.0" or "^2")`);
             }
+        }
+    }
+
+    if (def.capabilities !== undefined) {
+        if (!Array.isArray(def.capabilities)) problems.push('capabilities is not a list of names (like ["rb-rules-v2"])');
+        else if (def.capabilities.length > MAX_CAPABILITIES) problems.push(`capabilities lists more than ${MAX_CAPABILITIES} names`);
+        else for (const name of def.capabilities) {
+            if (typeof name !== 'string' || !SLUG.test(name)) problems.push(`capabilities names ${JSON.stringify(name)}, which is not a capability name (lowercase words joined by "-", like "rb-rules-v2")`);
         }
     }
 
@@ -646,7 +657,10 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         if (!kind) return null;
         const def = defs.get(owners.kind.get(kind));
         const spec = def.capture.kinds[kind];
-        return { moduleId: def.id, kind, grammar: spec.grammar.trim(), apply: def.capture.apply, feature: featureOf(spec), off: spec.enabled === false || off(spec), display: displayOf(spec) };
+        // `enabled: false` (a kind of an API not in use, MODULES / LIFECYCLE "Deferred domains"): acts as if it were not declared, so a
+        // line of it is told as an unknown kind, exactly as in a host that never had the kind.
+        if (spec.enabled === false) return null;
+        return { moduleId: def.id, kind, grammar: spec.grammar.trim(), apply: def.capture.apply, feature: featureOf(spec), off: off(spec), display: displayOf(spec) };
     }
 
     // The feature a command belongs to (a capture.<kind> command: its kind's), or null.

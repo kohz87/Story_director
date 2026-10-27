@@ -70,3 +70,5 @@ writer authorization is not permission for another module to write `rpg`.
 
 Stage 5 transport addition: kill objective `foe` may be a canonical `<base-ref>~<variant-slug>`;
 optional `allowVariants:boolean` is carried verbatim. Its meaning and eligibility are RB's.
+
+Trainer offers in RPG Battle (2.2.0, planned) consume the canonical place rather than own it. RB reads `atlas.canonical({})` once, when an offer is made, and records the place's id and name on the offer, so the offer still names the same place after the story materializes a pack place as a `pl_` place. Story Director adds no code for this; the `pack.<id>/<slug>` and `pl_` identities in `src/v2/atlas/canonical.js` are what let a trainer stay where it was offered.
