@@ -7,17 +7,40 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseChanges } from '../../../src/changes.js';
 
-const SPACES = ' '.repeat(20_000);
+const SMALL = 5_000;
+const LARGE = 20_000;
+const RUNS = 3;
+
 function ms(fn) {
     const start = process.hrtime.bigint();
     fn();
     return Number(process.hrtime.bigint() - start) / 1e6;
 }
 
+/** The fastest of RUNS timings: a load spike only ever adds time, so the minimum is the parser's own cost. */
+function best(fn) {
+    let fastest = Infinity;
+    for (let i = 0; i < RUNS; i += 1) fastest = Math.min(fastest, ms(fn));
+    return fastest;
+}
+
+/**
+ * Linear, not quadratic. The same line with four times the run of spaces should take about four times as long
+ * (a quadratic scan takes about sixteen times as long), so the test fails when the large parse is over 8x the
+ * small one. The 2 ms floor stops sub-millisecond timings from failing on noise alone. No absolute time is
+ * asserted, so a loaded machine cannot fail the test by being slow.
+ */
+function assertLinear(line, where) {
+    parseChanges(line(LARGE)); // warm up the JIT before timing
+    const small = best(() => parseChanges(line(SMALL)));
+    const large = best(() => parseChanges(line(LARGE)));
+    assert.ok(large < 8 * small + 2, `${where}: ${LARGE} spaces took ${large.toFixed(3)} ms, ${SMALL} spaces took ${small.toFixed(3)} ms`);
+}
+
 test('B-b5b-robust-7: parseChanges stays linear on a hook line with a long run of spaces in its key', () => {
-    assert.ok(ms(() => parseChanges(`+ hook Lost Cat${SPACES}x — find it | giver: Elke`)) < 100, 'KEY_DASH (changes.js:69) and the | split (changes.js:197)');
+    assertLinear(spaces => `+ hook Lost Cat${' '.repeat(spaces)}x — find it | giver: Elke`, 'KEY_DASH (changes.js:69) and the | split (changes.js:197)');
 });
 
 test('B-b5b-robust-7: parseChanges stays linear on a label with a long run of spaces', () => {
-    assert.ok(ms(() => parseChanges(`+ hook Lost Cat — find it | giver${SPACES}x`)) < 100, 'LABELLED (changes.js:73)');
+    assertLinear(spaces => `+ hook Lost Cat — find it | giver${' '.repeat(spaces)}x`, 'LABELLED (changes.js:73)');
 });
