@@ -19,7 +19,7 @@ import { DEFAULT_ELSEWHERE, MAX_ELSEWHERE } from './scene.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
 // A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set.
-const kinds = Object.fromEntries(THREAD_KINDS.filter(kind => kind !== 'quest').map(kind => [kind, {
+const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
     grammar: Object.hasOwn(GRAMMAR_ALONE, kind) ? env => grammarOf(kind, env) : GRAMMAR[kind],
     apply: applyThreadLine,
 }]));

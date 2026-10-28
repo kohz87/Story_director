@@ -271,24 +271,14 @@ function threadLine(ctx, given) {
     const tracker = toTracker(director);
     tracker.records = tracker.records.filter(record => {
         const thread = director.threads[director.keys[record.id]];
-        return thread && !thread.rpg && thread.kind !== 'quest';
+        return thread && !thread.rpg;
     });
     // Each record as read (the same objects come back from the rules, changed or not: so plain JSON).
     const asRead = new Map(tracker.records.map(record => [record.id, JSON.stringify(record)]));
     const ops = [op];
     const named = director.threads[director.keys[op.id]];
-    // A legacy quest is history. Generic edits never mutate its RPG extension or close it.
-    if (named?.kind === 'quest' && !named.rpg) return { summary: 'Quest from an earlier version (read only).', narrate: false, data: { thread: named.id } };
-    if (named?.rpg) {
-        if (line.op === '-' || line.op === '!') return ctx.call('capture.quest', { ...given, kind: 'quest' });
-        if (named.offer) acceptIntent(ctx, named);
-        // Neutral annotations remain SD-owned and never replace mechanics or compatibility projections.
-        for (const key of ['goal', 'step', 'progress', 'giver', 'due', 'place', 'people', 'now', 'then', 'on']) {
-            if (typeof line.labels?.[key] === 'string') named.fields[key] = capSummary(line.labels[key]);
-        }
-        if (line.text) named.summary = capSummary(line.text);
-        named.rev = ctx.rev;
-        return { summary: `Director: ${raw}`, narrate: false, data: { thread: named.id } };
+    if (named?.rpg || named?.owed || named?.ready) {
+        return { summary: 'Quest from an earlier version (read only).', narrate: false, data: { thread: named.id } };
     }
     if (!named && line.op === '+' && line.kind === 'hook' && line.labels?.goal) {
         const id = newId(ctx, new Set(Object.keys(director.threads)));
@@ -301,7 +291,8 @@ function threadLine(ctx, given) {
     const findings = result.problems;
     const records = result.tracker.records;
     for (const record of records) {
-        if (record.kind === 'quest') record.kind = director.threads[director.keys[record.id]]?.kind ?? line.kind;
+        if (record.id === op.id && line.kind === 'quest') record.kind = 'quest';
+        else if (record.kind === 'quest') record.kind = director.threads[director.keys[record.id]]?.kind ?? line.kind;
     }
     // One reply adds at most NEW_THREADS_PER_REPLY threads, and at most MAX_OPEN_THREADS are open at
     // once: past either, a line that would add one is not used.

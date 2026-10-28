@@ -69,6 +69,7 @@ export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
     hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
+    quest: '+ quest Name — a task the story follows | goal: what to do | giver: who asked',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',

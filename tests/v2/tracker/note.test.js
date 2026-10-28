@@ -43,7 +43,7 @@ test('the static part is byte-identical whatever the tracker holds, and names no
 });
 
 test('each kind has one grammar line for the change instruction', () => {
-    assert.deepEqual(Object.keys(part.kinds), ['agenda', 'event', 'hook', 'clock', 'beat', 'secret', 'time']);
+    assert.deepEqual(Object.keys(part.kinds), ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'time']);
     for (const [kind, entry] of Object.entries(part.kinds)) {
         // The beat's grammar depends on the module set (a fight runner or none, WAVE rule 11).
         for (const fights of [true, false]) {

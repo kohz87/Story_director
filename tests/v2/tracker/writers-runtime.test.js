@@ -72,10 +72,9 @@ test('retired quest registration and every automatic payout path pay nothing', a
         const result = await command(h, type, { id });
         assert.equal(result.code, 'UNKNOWN_COMMAND', type);
     }
-    assert.equal(h.registry.getModule?.('story-director')?.capture?.kinds?.quest, undefined);
     await h.send('Continue.', '<Changes>\n+ quest Old reward | reward: 100 | target: 1 wolf | met: yes\n- quest Old reward — done\n</Changes>');
     assert.equal(h.head().domains.inventory.wallets.party?.coin ?? 0, 0);
-    assert.ok(!Object.keys(h.head().domains.director.threads).length);
+    assert.equal(h.sdk.query('director.threads', { kind: 'quest' })[0].status, 'resolved');
     assert.ok(h.store.receipts().every(r => !['quest.settle', 'quest.payOwed'].includes(r.type)));
 });
 
