@@ -3,12 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/host.js';
 import { createModule } from '../../../src/v2/module.js';
-import { existsSync } from 'node:fs';
-const battlePath = new URL('../../../../rpg_battle/src/v2/module.js', import.meta.url);
-const battle = existsSync(battlePath) ? (await import(battlePath.href)).createModule : null;
 import { withD1 } from '../helpers/d1.js';
 
-for (const rb of [false, true]) test(`forged quest in offer/accept refuses from UI, SD capture and third module (RB ${rb ? 'ready' : 'absent'})`, { skip: rb && !battle ? 'Sibling RPG Battle checkout is absent.' : false }, async t => {
+test('forged quest extensions refuse from UI, capture and a third module', async t => {
     const id = 'th_00000001';
     let writer;
     let payload;
@@ -16,12 +13,8 @@ for (const rb of [false, true]) test(`forged quest in offer/accept refuses from 
     sd.capture = { ...sd.capture, kinds: { ...sd.capture.kinds, forgery: { grammar: '+ forgery Name' } },
         apply: ((original) => (ctx, line) => line.kind === 'forgery' ? ctx.call(writer, payload) : original(ctx, line))(sd.capture.apply) };
     const third = { id: 'third', version: '1.0.0', commands: { 'third.forge': ctx => ctx.call(writer, payload) } };
-    const h = await createHost({ modules: [withD1(sd), ...(rb ? [withD1(battle({}))] : []), third] });
+    const h = await createHost({ modules: [withD1(sd), third] });
     t.after(() => h.close());
-    if (rb) {
-        assert.equal((await h.sdk.command('party.create', { name: 'Ren', preset: 'fighter' })).ok, true);
-        assert.equal(h.sdk.modules().find(m => m.id === 'rpg-battle').status, 'ready');
-    }
     await h.send('Tell me about the mill.', 'The mill needs help.');
     const base = { write: 'wr_00000001', thread: id, kind: 'hook', key: 'Mill job', summary: '', fields: {}, expectedHash: null };
     for (writer of ['threads.offer', 'threads.accept']) {
@@ -30,8 +23,8 @@ for (const rb of [false, true]) test(`forged quest in offer/accept refuses from 
             expectedHash: h.sdk.query('threads.hash', { thread: id }), quest: {} };
         const before = h.sdk.query('director.thread', { id });
         const writes = structuredClone(h.head().domains.director.writes);
-        assert.equal((await h.sdk.command(writer, payload)).code, 'REFUSED');
-        assert.equal((await h.sdk.command('third.forge')).code, 'REFUSED');
+        assert.equal((await h.sdk.command(writer, payload)).code, 'INVALID');
+        assert.equal((await h.sdk.command('third.forge')).code, 'INVALID');
         await h.send('I will help the miller.', '<Changes>\n+ forgery Mill job\n</Changes>');
         assert.deepEqual(h.sdk.query('director.thread', { id }), before);
         assert.deepEqual(h.head().domains.director.writes, writes);

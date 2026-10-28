@@ -156,7 +156,7 @@ function droppedProblem(line, dropped) {
     const xp = dropped.filter(label => IGNORED_LABELS.has(label.toLowerCase()));
     const other = dropped.filter(label => !IGNORED_LABELS.has(label.toLowerCase()));
     const said = [
-        xp.length ? `${xp.map(label => `"${label}:"`).join(', ')} is ignored: quest XP comes from the quest's difficulty, never a written amount` : '',
+        xp.length ? `${xp.map(label => `"${label}:"`).join(', ')} is ignored: the story describes any experience or rewards` : '',
         other.length ? `${other.map(label => `"${label}:"`).join(', ')} ${other.length === 1 ? 'is a name' : 'are names'} the Director does not keep` : '',
     ].filter(Boolean).join('; ');
     return { kind: 'label', severity: 'info', key: capKey(bareName(line?.name)), op: line?.op, text: `${said}; the rest of the line is used.` };
@@ -244,7 +244,7 @@ function writeBack(director, records, ctx, read = new Map()) {
     return idOf;
 }
 
-// Genre-neutral thread progress still uses the retained tracker; RPG transitions use RB.
+// Story-told thread progress uses the retained tracker.
 const rulesOn = (tracker, ops, director, said) => applyOps(tracker, ops, { message: turnNumber(director), time: director.time.minutes, said: null, direct: false });
 
 export function applyThreadLine(ctx, given) {

@@ -45,11 +45,11 @@ test('registered offer/accept retry returns saved results before stale checks; c
 
 test('all writers refuse foreign extensions; invalid, limited and stale failures leave no ledger writes', async t => {
     const h = await setup(t);
-    assert.equal((await command(h, 'threads.offer', offer('wr_00000001', { quest: {} }))).code, 'REFUSED');
+    assert.equal((await command(h, 'threads.offer', offer('wr_00000001', { quest: {} }))).code, 'INVALID');
     assert.equal((await command(h, 'threads.offer', offer('wr_00000001', { fields: { reward: '50' } }))).code, 'INVALID');
     assert.equal((await command(h, 'threads.offer', offer())).ok, true);
     assert.equal((await command(h, 'threads.offer', offer('wr_00000002'))).code, 'CONFLICT');
-    for (const type of ['threads.link', 'threads.questWrite', 'threads.close']) assert.equal((await command(h, type, {})).code, 'REFUSED');
+    for (const type of ['threads.link', 'threads.questWrite', 'threads.close']) assert.equal((await command(h, type, {})).code, 'UNKNOWN_COMMAND');
     assert.equal((await command(h, 'threads.accept', { write: 'wr_00000002', thread: 'th_00000002', expectedHash: hash(h) })).code, 'NOT_FOUND');
     assert.equal(Object.keys(h.head().domains.director.writes).length, 1);
 });

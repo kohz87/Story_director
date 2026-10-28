@@ -6,7 +6,7 @@ const failure = (code, message) => ({ ok: false, code, message });
 const recordId = value => typeof value === 'string' && /^[a-z][a-z0-9]*_[0-9a-z]{8}$/.test(value);
 const own = (object, key) => Object.hasOwn(object ?? {}, key);
 
-/** Canonical public projection: include every public field, including rpg/rev; omit only track. */
+/** Canonical public projection: include every public field, including rev; omit only track. */
 export function threadProjection(thread) {
     if (!thread) return null;
     const { track: _track, ...publicFields } = thread;
@@ -61,9 +61,9 @@ export function neutralAcceptance(thread, proofs, proofId, { cause, caller = nul
         || proof.payload?.thread !== thread?.id) return failure('REFUSED', 'No active acceptance proof names this thread.');
     const payload = proof.payload;
     if (own(payload, 'selection')) {
-        if (cause !== 'ui' || caller && caller !== 'rpg-battle') return failure('REFUSED', 'This proof requires the reader\'s selected action.');
+        if (cause !== 'ui' || caller) return failure('REFUSED', 'This proof requires the reader\'s selected action.');
     } else if (own(payload, 'words')) {
-        // toRecord's injected type is an intent-matcher input only, never a stored RPG field.
+        // toRecord's injected type is an intent-matcher input only, never a stored field.
         const offered = { id: thread.id, key: thread.key, kind: 'hook', status: 'active',
             fields: { ...thread.fields, type: 'quest' }, aliases: thread.aliases ?? [] };
         const tracker = { records: [offered] };

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     at, closed, earlierState, fair, headState, makeQueries, makeRunner, makeState, pelts, plot, raid, rats, ring, smuggler, thread, wolves,
 } from './helpers/fixtures.js';
-import { calendarSetting, createScreensPart, finishState, readerWords } from '../../../src/v2/screens/index.js';
+import { calendarSetting, createScreensPart, readerWords } from '../../../src/v2/screens/index.js';
 
 const { run } = makeRunner();
 

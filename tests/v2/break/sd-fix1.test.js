@@ -70,7 +70,7 @@ test('qty, id, *_id, constructor and xp labels are left out of the thread with o
     assert.ok(pelts);
     assert.deepEqual(Object.keys(pelts.fields).sort(), ['giver', 'goal']);
     const problem = lastProblems(state).find(entry => entry.kind === 'label');
-    assert.match(problem.text, /"xp:" is ignored: quest XP comes from the quest's difficulty/);
+    assert.match(problem.text, /"xp:" is ignored: the story describes any experience or rewards/);
     assert.match(problem.text, /"qty:", "owner_id:", "constructor:" are names the Director does not keep/);
 });
 

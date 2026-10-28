@@ -14,7 +14,7 @@ const TEMPLATE = `
         <b>{{ t.key }}</b><p>{{ t.summary }}</p>
         <p>{{ t.fields.goal }}</p><p>{{ t.fields.progress }}</p><p>{{ t.fields.step }}</p>
         <p>{{ t.status }}</p><p data-if="t.offer">Offered</p>
-        <p data-if="t.kind == 'quest' && t.rpg == null">From an earlier version (read only)</p>
+        <p data-if="t.rpg != null || t.owed != null || t.ready != null">From an earlier version (read only)</p>
         <p data-if="t.owed != null && t.rpg == null">Reward from an earlier version: {{ t.owed.text }}</p>
       </li>
     </ul>
