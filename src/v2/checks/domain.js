@@ -68,9 +68,15 @@ function logProblems(log) {
     return bad ? [`checks.log.${bad} is not a check.`] : [];
 }
 
-/** The checks draft every writer uses. */
+// Story Director 2.1 and earlier kept `policy.rbActors` (links to a retired battle module) in every chat, linked or
+// not. Nothing reads it now; a slice may still carry it and the first write of the checks drops it.
+const LEGACY_POLICY = 'rbActors';
+
+/** The checks draft every writer uses, without the retired policy field. */
 export function draftChecks(ctx) {
-    return ctx.draft('checks');
+    const draft = ctx.draft('checks');
+    if (isRecord(draft.policy)) delete draft.policy[LEGACY_POLICY];
+    return draft;
 }
 
 /** The validator (SPEC §2.5). `topics` are the names in the check table. */
@@ -81,7 +87,8 @@ export function validateChecks(slice, topics) {
     if (!isRecord(actors) || Object.keys(actors).length > MAX_ACTORS) return [`checks.policy.actors is a record of at most ${MAX_ACTORS}.`];
     for (const [id, actor] of Object.entries(actors)) errors.push(...actorProblems(id, actor, topics));
     if (!(defaultActor === null || (typeof defaultActor === 'string' && Object.hasOwn(actors, defaultActor)))) errors.push('checks.policy.defaultActor is null or an actor.');
-    for (const key of Object.keys(slice.policy)) if (!['actors', 'defaultActor'].includes(key)) errors.push(`checks.policy has an unknown field "${key}".`);
+    if (Object.hasOwn(slice.policy, LEGACY_POLICY) && !isRecord(slice.policy[LEGACY_POLICY])) errors.push(`checks.policy.${LEGACY_POLICY} is not an object.`);
+    for (const key of Object.keys(slice.policy)) if (!['actors', 'defaultActor', LEGACY_POLICY].includes(key)) errors.push(`checks.policy has an unknown field "${key}".`);
     errors.push(...ledgerProblems(slice.writes, 'checks.writes'));
     errors.push(...logProblems(slice.log));
     for (const key of Object.keys(slice)) if (!['policy', 'writes', 'log'].includes(key)) errors.push(`checks has an unknown field "${key}".`);

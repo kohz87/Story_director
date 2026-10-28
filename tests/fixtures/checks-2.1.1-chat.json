@@ -1,0 +1,516 @@
+{
+ "note": "A standalone checks chat saved by Story Director 2.1.1 on the Story Block 2.4.0 it vendored (no battle module): Mara with DEX +2 and one rolled check. Its checks policy still has the retired rbActors field.",
+ "chat": [
+  {
+   "name": "Narrator",
+   "is_user": false,
+   "is_system": false,
+   "mes": "The story begins.",
+   "send_date": "",
+   "swipe_id": 0,
+   "swipes": [
+    "The story begins."
+   ],
+   "swipe_info": [
+    {
+     "send_date": "",
+     "extra": {}
+    }
+   ],
+   "extra": {
+    "storySuite": {
+     "v": 2,
+     "sid": "sw_d382dbda77b6",
+     "checkpoint": {
+      "v": 2,
+      "meta": {
+       "rev": 0,
+       "claims": {}
+      },
+      "domains": {
+       "arc": {
+        "arcs": {},
+        "ends": {}
+       },
+       "atlas": {
+        "places": {},
+        "routes": {},
+        "keys": {},
+        "focus": null,
+        "regions": {},
+        "placeRegions": {},
+        "placeRefs": {},
+        "danger": {
+         "world": null,
+         "regions": {},
+         "places": {}
+        },
+        "writes": {}
+       },
+       "checks": {
+        "policy": {
+         "actors": {},
+         "defaultActor": null,
+         "rbActors": {}
+        },
+        "writes": {},
+        "log": {}
+       },
+       "chronicle": {
+        "events": {},
+        "factions": {},
+        "seen": [
+         {}
+        ],
+        "seenAt": {},
+        "round": 0,
+        "surfaced": null,
+        "days": {},
+        "written": null,
+        "dayFacts": {},
+        "noted": null,
+        "questLog": {}
+       },
+       "director": {
+        "time": {
+         "minutes": null
+        },
+        "threads": {},
+        "keys": {},
+        "writes": {},
+        "problems": {},
+        "turn": {
+         "n": 0,
+         "now": null
+        },
+        "checked": null,
+        "recap": null,
+        "initiative": null
+       },
+       "inventory": {
+        "defs": {},
+        "stacks": {},
+        "wallets": {},
+        "aliases": {}
+       },
+       "scene": {
+        "place": {
+         "name": "",
+         "kind": "",
+         "region": ""
+        },
+        "present": []
+       }
+      }
+     },
+     "ops": [
+      {
+       "op": "add",
+       "path": "/domains/checks/policy/actors/ca_okdo6113",
+       "value": {
+        "id": "ca_okdo6113",
+        "name": "Mara",
+        "bonuses": {
+         "DEX": 2
+        }
+       }
+      },
+      {
+       "op": "replace",
+       "path": "/domains/checks/policy/defaultActor",
+       "value": "ca_okdo6113"
+      },
+      {
+       "op": "add",
+       "path": "/domains/checks/writes/wr_00000001",
+       "value": {
+        "fingerprint": "5b8c04197b70f0469c41622dcfb1e42d3d9471f1d222e9bd312b25df0aa9d27f",
+        "result": {
+         "actor": "ca_okdo6113",
+         "hash": "e3c9598a55e8947bdbe646097805e641d6f1687a43a577148964606ba234da43"
+        }
+       }
+      },
+      {
+       "op": "replace",
+       "path": "/meta/rev",
+       "value": 1
+      },
+      {
+       "op": "replace",
+       "path": "/domains/chronicle/noted",
+       "value": [
+        {
+         "rev": 2,
+         "minutes": null,
+         "from": null,
+         "settle": null
+        }
+       ]
+      },
+      {
+       "op": "replace",
+       "path": "/meta/rev",
+       "value": 2
+      }
+     ],
+     "receipts": [
+      {
+       "id": "rc_eaqosilb",
+       "type": "checks.actor",
+       "module": "story-director",
+       "cause": "ui",
+       "seed": 628717338,
+       "summary": "",
+       "narrate": false,
+       "data": {
+        "v2": {
+         "key": "checks.actor:ca_okdo6113",
+         "result": {
+          "actor": "ca_okdo6113",
+          "hash": "e3c9598a55e8947bdbe646097805e641d6f1687a43a577148964606ba234da43"
+         }
+        }
+       },
+       "rev": 1
+      },
+      {
+       "id": "rc_dcqvhltp",
+       "type": "chronicle.note",
+       "module": "story-director",
+       "cause": "system",
+       "seed": 1780197903,
+       "summary": "",
+       "narrate": false,
+       "data": {
+        "days": []
+       },
+       "rev": 2
+      }
+     ],
+     "narrated": [],
+     "spans": [
+      {
+       "n": 4,
+       "story": false
+      },
+      {
+       "n": 2,
+       "story": false
+      }
+     ],
+     "rev": 2,
+     "source": {
+      "logical": "sr_adv39zyn",
+      "swipeKey": "sw_cgwtmmfv",
+      "evidence": "ev_8oq0yngz",
+      "next": 0
+     },
+     "swipe": 0,
+     "mark": {
+      "t": "ca1478b1:17",
+      "d": ""
+     }
+    }
+   }
+  },
+  {
+   "name": "You",
+   "is_user": true,
+   "is_system": false,
+   "mes": "I sneak past the guard.",
+   "send_date": "",
+   "extra": {}
+  },
+  {
+   "name": "Narrator",
+   "is_user": false,
+   "is_system": false,
+   "mes": "You slip by.\n\n<!-- STORY_SUITE_V2\n<Changes>\n? check Stealth \u2014 sneak past the guard | dc: hard\n</Changes>\n-->",
+   "send_date": "",
+   "swipe_id": 0,
+   "swipes": [
+    "You slip by.\n\n<!-- STORY_SUITE_V2\n<Changes>\n? check Stealth \u2014 sneak past the guard | dc: hard\n</Changes>\n-->"
+   ],
+   "swipe_info": [
+    {
+     "send_date": "",
+     "extra": {
+      "storySuite": {
+       "v": 2,
+       "sid": "sw_2487533c00cd",
+       "ops": [
+        {
+         "op": "add",
+         "path": "/domains/checks/log/ck_9epj2zrg",
+         "value": {
+          "id": "ck_9epj2zrg",
+          "actor": "ca_okdo6113",
+          "stat": "DEX",
+          "skill": "Stealth",
+          "die": 4,
+          "modifiers": [
+           {
+            "source": "standalone",
+            "ref": "DEX",
+            "reason": "DEX bonus",
+            "amount": 2
+           }
+          ],
+          "mod": 2,
+          "total": 6,
+          "dc": 20,
+          "outcome": "fail",
+          "source": "standalone",
+          "fallback": "no-link",
+          "evidence": "ev_cxkpmis5"
+         }
+        },
+        {
+         "op": "add",
+         "path": "/meta/claims/sd:check:ev_cxkpmis5:57d5561a61b9abe4",
+         "value": true
+        },
+        {
+         "op": "replace",
+         "path": "/meta/rev",
+         "value": 3
+        },
+        {
+         "op": "add",
+         "path": "/domains/scene/weather",
+         "value": {
+          "text": "light rain",
+          "rev": 4,
+          "key": "no day|"
+         }
+        },
+        {
+         "op": "replace",
+         "path": "/meta/rev",
+         "value": 4
+        }
+       ],
+       "receipts": [
+        {
+         "id": "rc_r5g8b0su",
+         "type": "capture.check",
+         "module": "story-director",
+         "cause": "story",
+         "seed": 698481115,
+         "summary": "Mara tries Stealth: d20 4 +2 = 6 against 20, a fail.",
+         "narrate": true,
+         "data": {
+          "v2": {
+           "key": "check:ck_9epj2zrg",
+           "result": {
+            "check": "ck_9epj2zrg",
+            "actor": "ca_okdo6113",
+            "die": 4,
+            "modifiers": [
+             {
+              "source": "standalone",
+              "ref": "DEX",
+              "reason": "DEX bonus",
+              "amount": 2
+             }
+            ],
+            "mod": 2,
+            "total": 6,
+            "dc": 20,
+            "outcome": "fail"
+           }
+          }
+         },
+         "rev": 3,
+         "line": "ca2d7579"
+        },
+        {
+         "id": "rc_x8hrwtvq",
+         "type": "scene.weather",
+         "module": "story-block",
+         "cause": "system",
+         "seed": 668347591,
+         "summary": "The weather: light rain.",
+         "narrate": false,
+         "data": {
+          "text": "light rain",
+          "key": "no day|"
+         },
+         "rev": 4,
+         "afterCapture": true,
+         "replan": {
+          "payload": {
+           "text": "light rain",
+           "key": "no day|"
+          }
+         }
+        }
+       ],
+       "narrated": [],
+       "spans": [
+        {
+         "n": 3,
+         "story": true
+        },
+        {
+         "n": 2,
+         "story": false
+        }
+       ],
+       "source": {
+        "logical": "sr_7b65esvq",
+        "swipeKey": "sw_0sn5oj76",
+        "evidence": "ev_cxkpmis5",
+        "next": 0
+       },
+       "rev": 4,
+       "swipe": 0,
+       "mark": {
+        "t": "fc7e5b53:12",
+        "d": ""
+       }
+      }
+     }
+    }
+   ],
+   "extra": {
+    "storySuite": {
+     "v": 2,
+     "sid": "sw_2487533c00cd",
+     "ops": [
+      {
+       "op": "add",
+       "path": "/domains/checks/log/ck_9epj2zrg",
+       "value": {
+        "id": "ck_9epj2zrg",
+        "actor": "ca_okdo6113",
+        "stat": "DEX",
+        "skill": "Stealth",
+        "die": 4,
+        "modifiers": [
+         {
+          "source": "standalone",
+          "ref": "DEX",
+          "reason": "DEX bonus",
+          "amount": 2
+         }
+        ],
+        "mod": 2,
+        "total": 6,
+        "dc": 20,
+        "outcome": "fail",
+        "source": "standalone",
+        "fallback": "no-link",
+        "evidence": "ev_cxkpmis5"
+       }
+      },
+      {
+       "op": "add",
+       "path": "/meta/claims/sd:check:ev_cxkpmis5:57d5561a61b9abe4",
+       "value": true
+      },
+      {
+       "op": "replace",
+       "path": "/meta/rev",
+       "value": 3
+      },
+      {
+       "op": "add",
+       "path": "/domains/scene/weather",
+       "value": {
+        "text": "light rain",
+        "rev": 4,
+        "key": "no day|"
+       }
+      },
+      {
+       "op": "replace",
+       "path": "/meta/rev",
+       "value": 4
+      }
+     ],
+     "receipts": [
+      {
+       "id": "rc_r5g8b0su",
+       "type": "capture.check",
+       "module": "story-director",
+       "cause": "story",
+       "seed": 698481115,
+       "summary": "Mara tries Stealth: d20 4 +2 = 6 against 20, a fail.",
+       "narrate": true,
+       "data": {
+        "v2": {
+         "key": "check:ck_9epj2zrg",
+         "result": {
+          "check": "ck_9epj2zrg",
+          "actor": "ca_okdo6113",
+          "die": 4,
+          "modifiers": [
+           {
+            "source": "standalone",
+            "ref": "DEX",
+            "reason": "DEX bonus",
+            "amount": 2
+           }
+          ],
+          "mod": 2,
+          "total": 6,
+          "dc": 20,
+          "outcome": "fail"
+         }
+        }
+       },
+       "rev": 3,
+       "line": "ca2d7579"
+      },
+      {
+       "id": "rc_x8hrwtvq",
+       "type": "scene.weather",
+       "module": "story-block",
+       "cause": "system",
+       "seed": 668347591,
+       "summary": "The weather: light rain.",
+       "narrate": false,
+       "data": {
+        "text": "light rain",
+        "key": "no day|"
+       },
+       "rev": 4,
+       "afterCapture": true,
+       "replan": {
+        "payload": {
+         "text": "light rain",
+         "key": "no day|"
+        }
+       }
+      }
+     ],
+     "narrated": [],
+     "spans": [
+      {
+       "n": 3,
+       "story": true
+      },
+      {
+       "n": 2,
+       "story": false
+      }
+     ],
+     "source": {
+      "logical": "sr_7b65esvq",
+      "swipeKey": "sw_0sn5oj76",
+      "evidence": "ev_cxkpmis5",
+      "next": 0
+     },
+     "rev": 4,
+     "swipe": 0,
+     "mark": {
+      "t": "fc7e5b53:12",
+      "d": ""
+     }
+    }
+   }
+  }
+ ]
+}
