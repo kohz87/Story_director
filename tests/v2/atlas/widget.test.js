@@ -611,3 +611,20 @@ test('a zoomed stage on a phone: the tap lands on the dot drawn under it, and th
     alpha.dispatch('click', { clientX: drawnAt(far).x - 21, clientY: drawnAt(far).y });
     assert.equal(handle.state.picked, far.getAttribute('data-id'));
 });
+
+test('a phone: a click from the keyboard (Enter or Space on a focused place, detail 0) picks that place, never the nearest dot', () => {
+    const phone = { matchMedia: q => ({ matches: q === PHONE_LINE }) };
+    const { root, handle } = clusterDraw(phone);
+    const dot = name => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
+    const alpha = dot('Alpha');
+    const bravo = dot('Bravo');
+    const b = { x: parseFloat(bravo.style.left), y: parseFloat(bravo.style.top) };
+    // A browser's keyboard click carries the pointer position 0, 0 or, as here, one that lies on Bravo's dot: Alpha still.
+    alpha.dispatch('click', { detail: 0, clientX: b.x, clientY: b.y });
+    assert.equal(handle.state.picked, alpha.getAttribute('data-id'));
+    alpha.dispatch('click', { detail: 0, clientX: 0, clientY: 0 });
+    assert.equal(handle.state.picked, alpha.getAttribute('data-id'));
+    // The same position from a finger (detail 1) is Bravo's: the nearest dot.
+    alpha.dispatch('click', { detail: 1, clientX: b.x, clientY: b.y });
+    assert.equal(handle.state.picked, bravo.getAttribute('data-id'));
+});

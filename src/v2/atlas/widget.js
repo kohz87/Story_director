@@ -686,10 +686,12 @@ function render(el, props, api) {
     let dropClick = false;
     // On a phone the tap went to a button whose 44px square holds the tap; where two squares
     // cover one dot, the place whose dot is nearest the tap is the one picked (desktop: as is).
+    // A click from the keyboard (Enter or Space on a focused place: detail 0, no pointer position)
+    // is that place's own, never the nearest dot's.
     const phone = () => Boolean(win?.matchMedia?.(PHONE)?.matches);
     const tapped = event => {
         const own = placeOf(event.target);
-        if (!phone() || typeof event.clientX !== 'number') return own;
+        if (!phone() || typeof event.clientX !== 'number' || event.detail === 0) return own;
         const tap = local(event);
         const half = TAP_HALF / zoomOf();
         let best = '';
