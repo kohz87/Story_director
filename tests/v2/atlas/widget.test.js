@@ -57,6 +57,17 @@ function draw({ state = story(), props = {}, api = null, win = null, value } = {
 }
 
 const placeButton = (root, name) => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
+// The Region list: its choices, the chosen one's name, and a choice made (as the browser does: the value, then a change event).
+const regionNames = root => root.querySelectorAll('.sd-map-region option').map(option => option.textContent);
+const regionShown = root => {
+    const select = root.querySelector('.sd-map-region select');
+    return select.querySelectorAll('option').find(option => option.getAttribute('value') === select.value)?.textContent;
+};
+function chooseRegion(root, value) {
+    const select = root.querySelector('.sd-map-region select');
+    select.value = value;
+    select.dispatch('change');
+}
 
 test('the controls: search, zoom in and out, fit, centre on me, layers, a focusable map; the bar sits outside the map', () => {
     const { root, stage, $, $$ } = draw();
@@ -74,8 +85,8 @@ test('the controls: search, zoom in and out, fit, centre on me, layers, a focusa
     assert.equal(stage.getAttribute('aria-roledescription'), 'map');
     assert.equal(stage.querySelector('.sd-map-tools'), null, 'the controls never cover the map (or the nav under it)');
     // Item 2: All, then only the regions and planes that have places (no Mirelands, no empty chip).
-    assert.deepEqual($$('.sd-map-layer').map(chip => chip.textContent), ['All', 'Bluewatch Village', 'Core Cities', 'Locks', 'underground']);
-    assert.equal($('.sd-map-layer[aria-pressed="true"]').textContent, 'Core Cities');
+    assert.deepEqual(regionNames(root), ['All', 'Bluewatch Village', 'Core Cities', 'Locks', 'underground']);
+    assert.equal(regionShown(root), 'Core Cities');
     // Item 3: the "you are here" ring is drawn after (above) the places and the labels.
     const children = stage.children.map(child => child.className);
     assert.deepEqual(children, ['sd-map-svg', 'sd-map-places', 'sd-map-labels', 'sd-map-here']);
@@ -85,7 +96,7 @@ test('the controls: search, zoom in and out, fit, centre on me, layers, a focusa
 
 test('item 1: unvisited places are drawn, marked and small; their names come as the map comes closer, or on hover and focus', () => {
     const { root, $, $$, key, shownLabels, handle } = draw();
-    $('.sd-map-layer[data-layer="all"]').click();
+    chooseRegion(root, 'all');
     const names = $$('.sd-map-place').map(node => node.getAttribute('title'));
     assert.deepEqual(names, ['Bluewatch Village', 'Inspection Quay', 'Watch Granary', 'Watchhouse', 'Stray Oar', 'Reedmere', 'Coinwater']);
     assert.ok(!names.includes('Smugglers Cellar'), 'a hidden place is not drawn');
@@ -112,8 +123,8 @@ test('item 1: unvisited places are drawn, marked and small; their names come as 
 });
 
 test('item 3: shown labels never overlap one another, in the knot of places, at every zoom step', () => {
-    const { $, $$, key, handle } = draw();
-    $('.sd-map-layer[data-layer="all"]').click();
+    const { root, $, $$, key, handle } = draw();
+    chooseRegion(root, 'all');
     $('.sd-map-me').click();
     for (let step = 0; step < 12; step += 1) {
         const boxes = $$('.sd-map-label').filter(label => !label.hidden).map(label => ({
@@ -186,7 +197,7 @@ test('buttons: zoom in and out about the centre, fit all, centre on me (zoomed t
 
 test('touch and mouse: a drag pans, a tap picks, a drag ending on a place does not pick, a pinch zooms about its middle', () => {
     const { root, stage, pointer, handle, $ } = draw();
-    $('.sd-map-layer[data-layer="all"]').click();
+    chooseRegion(root, 'all');
     const fit = handle.state.view;
     // A drag of 40 px to the right.
     pointer('pointerdown', 1, 100, 100);
@@ -246,7 +257,7 @@ test('wheel: zooms about the pointer and stops the page from scrolling; huge del
 });
 
 test('search: tolerant, unvisited places marked "not visited", hidden ones never found; picking moves, switches layer and shows details', () => {
-    const { $, $$, handle } = draw();
+    const { root, $, $$, handle } = draw();
     const input = $('.sd-map-search input');
     input.value = 'GRANERY';
     input.dispatch('input');
@@ -265,14 +276,14 @@ test('search: tolerant, unvisited places marked "not visited", hidden ones never
     const enter = input.dispatch('keydown', { key: 'Enter' });
     assert.equal(enter.defaultPrevented, true);
     assert.equal(handle.state.layer, 'region:locks');
-    assert.equal($('.sd-map-layer[aria-pressed="true"]').textContent, 'Locks');
+    assert.equal(regionShown(root), 'Locks');
     const reed = $$('.sd-map-place').find(node => node.getAttribute('title') === 'Reedmere');
     assert.equal(handle.state.picked, reed.getAttribute('data-id'));
     assert.equal(reed.classList.contains('sd-map-picked'), true);
     assert.equal($('.sd-map-results').hidden, true);
     assert.match($('.sd-map-details').textContent, /Reedmere.*Town · Locks.*Not visited yet\..*From Bluewatch Village: 90 km, .* by river\./);
     // A result clicked: the knot's granary, zoomed so its neighbours stand apart; on "All" it stays on All.
-    $('.sd-map-layer[data-layer="all"]').click();
+    chooseRegion(root, 'all');
     input.value = 'granary';
     input.dispatch('input');
     $('.sd-map-result').click();
@@ -290,7 +301,7 @@ test('search: tolerant, unvisited places marked "not visited", hidden ones never
 
 test('details: the trip from the query (sync or async), "No known route" without one, nothing without a query; Close and Escape', async () => {
     const { root, $, queries } = draw();
-    $('.sd-map-layer[data-layer="all"]').click();
+    chooseRegion(root, 'all');
     placeButton(root, 'Reedmere').click();
     assert.deepEqual(queries.at(-1), { name: 'atlas.place', args: { id: placeButton(root, 'Reedmere').getAttribute('data-id') } });
     assert.match($('.sd-map-trip').textContent, /From Bluewatch Village: 90 km/);
@@ -299,7 +310,7 @@ test('details: the trip from the query (sync or async), "No known route" without
     $('.sd-map-close').click();
     assert.equal($('.sd-map-details').hidden, true);
     // A layer with no route from here.
-    $('.sd-map-layer[data-layer="region:bluewatch village"]').click();
+    chooseRegion(root, 'region:bluewatch village');
     placeButton(root, 'Watchhouse').click();
     assert.equal($('.sd-map-trip').textContent, 'No known route from where you are.');
     root.querySelector('.sd-map-stage').dispatch('keydown', { key: 'Escape' });
@@ -357,9 +368,9 @@ test('the view is the reader\'s: kept per layer while the page lives, kept acros
     first.key('ArrowRight');
     const mine = first.handle.state.view;
     // Another layer and back: each keeps its own view.
-    first.$('.sd-map-layer[data-layer="all"]').click();
+    chooseRegion(first.root, 'all');
     assert.notDeepEqual(first.handle.state.view, mine);
-    first.$('.sd-map-layer[data-layer="region:core cities"]').click();
+    chooseRegion(first.root, 'region:core cities');
     assert.deepEqual(first.handle.state.view, mine);
     // A state update (the story visits the granary) keeps the layer, pan and zoom.
     const next = command(at(state, 'Watch Granary'), 'atlas.visit', { name: 'Watch Granary' }, { pack: PACK }).state;
@@ -395,7 +406,7 @@ test('odd data: nothing, junk, duplicates, missing coordinates, dangling routes,
     const empty = draw({ value: { places: [] } });
     assert.equal(empty.$('.sd-map-empty').hidden, false);
     assert.equal(empty.$('.sd-map-stage').hidden, true);
-    assert.equal(empty.$('.sd-map-layers').hidden, true);
+    assert.equal(empty.$('.sd-map-region').hidden, true);
     empty.$('.sd-map-me').click();
     empty.key('+');
     const odd = draw({
@@ -413,7 +424,8 @@ test('odd data: nothing, junk, duplicates, missing coordinates, dangling routes,
         },
     });
     assert.deepEqual(odd.$$('.sd-map-place').map(node => node.getAttribute('title')), ['Alpha', 'b', 'Gamma', 'Delta']);
-    assert.deepEqual(odd.$$('.sd-map-layer').map(chip => chip.textContent), ['All']);
+    assert.deepEqual(regionNames(odd.root), ['All']);
+    assert.equal(odd.$('.sd-map-region').hidden, true, 'no region with places: no list');
     assert.equal(odd.$('.sd-map-here').hidden, true);
     assert.equal(odd.$$('.sd-map-route').length, 1);
     assert.match(odd.$$('.sd-map-place i').at(-1).className, /fa-location-dot/, 'an unsafe icon falls back');
@@ -508,4 +520,34 @@ test('desktop: no tap area, a click picks the place it landed on, as before', ()
     const towardBravo = { x: a.x + 3 * (b.x - a.x) / gap, y: a.y + 3 * (b.y - a.y) / gap };
     alpha.dispatch('click', { clientX: towardBravo.x, clientY: towardBravo.y });
     assert.equal(handle.state.picked, alpha.getAttribute('data-id'));
+});
+
+test('the Region list: a native select between the search box and the zoom buttons, All first, the shown layer chosen; a choice filters as the chips did', () => {
+    const { root, $, $$, handle } = draw();
+    const bar = $('.sd-map-bar');
+    assert.deepEqual(bar.children.map(child => child.className), ['sd-map-search', 'sd-map-region', 'sd-map-tools']);
+    const select = $('.sd-map-region select');
+    assert.equal(select.tagName, 'SELECT');
+    assert.equal(select.getAttribute('aria-label'), 'Region');
+    assert.equal($('.sd-map-region-cap').textContent, 'Region');
+    assert.equal($('.sd-map-region').tagName, 'LABEL', 'the caption names the list');
+    assert.deepEqual($$('.sd-map-region option').map(option => option.getAttribute('value')), ['all', 'region:bluewatch village', 'region:core cities', 'region:locks', 'plane:underground']);
+    assert.equal(select.value, 'region:core cities');
+    assert.equal($('.sd-map-region option[selected]').textContent, 'Core Cities');
+    const drawn = () => $$('.sd-map-place').map(node => node.getAttribute('title'));
+    const places = readView({ value: query(story(), 'atlas.view', {}, { pack: PACK }) }).places;
+    // Each choice shows that layer's places, as its chip did (onLayer); All shows every place off the planes.
+    for (const [value, layer, name] of [['region:locks', 'region:locks', 'Locks'], ['plane:underground', 'plane:underground', 'underground'], ['all', '', 'All']]) {
+        chooseRegion(root, value);
+        assert.equal(handle.state.layer, layer);
+        assert.deepEqual(drawn(), places.filter(place => onLayer(place, layer)).map(place => place.name), value);
+        assert.equal(regionShown(root), name);
+    }
+    assert.deepEqual(drawn(), ['Bluewatch Village', 'Inspection Quay', 'Watch Granary', 'Watchhouse', 'Stray Oar', 'Reedmere', 'Coinwater']);
+    // A search that lands on another layer moves the list with it.
+    const input = $('.sd-map-search input');
+    input.value = 'deep vault';
+    input.dispatch('input');
+    input.dispatch('keydown', { key: 'Enter' });
+    assert.equal(select.value, 'plane:underground');
 });

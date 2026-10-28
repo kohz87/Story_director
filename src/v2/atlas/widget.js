@@ -8,7 +8,7 @@
 //   keys, 0 or "Fit" for the whole layer, "Me" to centre on the current place), inside the zoom
 //   limits and never off the world; unvisited places get their icon, then their name, as the map
 //   comes closer, and hover or focus shows any place's name;
-// * switch layers: All, then each region and plane that has places;
+// * switch layers with the Region list beside the search box: All, then each region and plane that has places;
 // * search places by name, alias or region (unvisited ones too, marked "not visited"); picking one
 //   moves the map to it and shows it;
 // * pick a place (click, tap, Enter) for its details: kind, region, visited or not, and the trip
@@ -72,17 +72,22 @@ const CSS = `
 .sd-map .sd-map-result:hover, .sd-map .sd-map-result:focus-visible { background: var(--sd-map-raised); }
 .sd-map .sd-map-result-name { overflow-wrap: anywhere; }
 .sd-map .sd-map-result-about { max-width: 100%; color: var(--sd-map-muted); font-size: 0.85em; overflow-wrap: anywhere; }
-.sd-map .sd-map-tools, .sd-map .sd-map-layers { display: flex; flex-wrap: wrap; gap: 0.35em; }
-.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; max-width: min(100%, 12em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
-.sd-map .sd-map-btn:not(:disabled):hover, .sd-map .sd-map-layer:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
-.sd-map .sd-map-btn:not(:disabled):active, .sd-map .sd-map-layer:not(:disabled):active { transform: translateY(1px); }
-.sd-map .sd-map-layer { font-size: 0.9em; font-weight: 600; }
-.sd-map .sd-map-layer[aria-pressed="true"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: inset 0 0 0 1px var(--sd-map-fg); font-weight: 700; }
+.sd-map .sd-map-tools { display: flex; flex-wrap: wrap; gap: 0.35em; }
+.sd-map .sd-map-btn { min-width: 40px; min-height: 40px; max-width: min(100%, 12em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
+.sd-map .sd-map-btn:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
+.sd-map .sd-map-btn:not(:disabled):active { transform: translateY(1px); }
+/* The Region list: a native select, a pill like the search box, with its caption before it and a chevron drawn after it. */
+.sd-map .sd-map-region { position: relative; flex: 0 1 21em; min-width: 11em; display: flex; align-items: center; gap: 0.45em; margin: 0; font-weight: inherit; }
+.sd-map .sd-map-region-cap { color: var(--sd-map-muted); font-size: 0.85em; white-space: nowrap; }
+.sd-map .sd-map-region select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 40px; margin: 0; padding: 0.3em 2.2em 0.3em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: inherit; font: inherit; text-overflow: ellipsis; cursor: pointer; }
+.sd-map .sd-map-region::after { content: ""; position: absolute; right: 1em; top: 50%; width: 0.45em; height: 0.45em; margin-top: -0.3em; border: solid var(--sd-map-muted); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
+.sd-map .sd-map-region select:hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
 .sd-map .sd-map-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; min-height: 14em; overflow: hidden; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-bg); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 @media (max-width: 600px) {
   .sd-map .sd-map-stage { aspect-ratio: 1 / 1; max-height: 60vh; }
-  .sd-map .sd-map-layers { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
-  .sd-map .sd-map-layer { flex: 0 0 auto; }
+  /* the bar in three rows: the search box, the Region list (its caption left to its own label), the zoom buttons */
+  .sd-map .sd-map-region { flex: 1 1 100%; }
+  .sd-map .sd-map-region-cap { display: none; }
 }
 .sd-map .sd-map-stage.sd-map-dragging { cursor: grabbing; }
 .sd-map .sd-map-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -230,10 +235,12 @@ function render(el, props, api) {
     const centreMe = button(doc, 'sd-map-btn sd-map-me', '', 'Centre on where you are');
     centreMe.append(icon(doc, 'fa-location-crosshairs'));
     tools.append(zoomIn, zoomOut, fitAll, centreMe);
-    bar.append(searchBox, tools);
-    const layersBar = h(doc, 'div', 'sd-map-layers');
-    layersBar.setAttribute('role', 'toolbar');
-    layersBar.setAttribute('aria-label', 'Map layers');
+    // The layers as a Region list between the search box and the zoom buttons (All first; the shown one selected).
+    const regionBox = h(doc, 'label', 'sd-map-region');
+    const regions = h(doc, 'select', 'sd-map-regions');
+    regions.setAttribute('aria-label', 'Region');
+    regionBox.append(h(doc, 'span', 'sd-map-region-cap', 'Region'), regions);
+    bar.append(searchBox, regionBox, tools);
 
     const stage = h(doc, 'div', 'sd-map-stage');
     stage.setAttribute('tabindex', '0');
@@ -265,7 +272,7 @@ function render(el, props, api) {
     const legendCard = h(doc, 'section', 'sd-map-legend-card ss-listcard');
     legendCard.setAttribute('aria-label', 'Legend');
     legendCard.append(h(doc, 'h4', 'ss-label ss-listcard-head', 'Legend'), legend);
-    root.append(bar, layersBar, stage, empty, details, legendCard);
+    root.append(bar, stage, empty, details, legendCard);
     el.appendChild(root);
 
     // ---- state ----------------------------------------------------------------------------------
@@ -374,14 +381,16 @@ function render(el, props, api) {
     }
 
     function drawLayers() {
-        const chips = [{ id: ALL, name: 'All' }, ...data.layers].map(item => {
-            const chip = button(doc, 'sd-map-layer', item.name);
-            chip.setAttribute('aria-pressed', String(item.id === layer));
-            chip.setAttribute('data-layer', item.id || 'all');
-            return chip;
+        const options = [{ id: ALL, name: 'All' }, ...data.layers].map(item => {
+            const option = h(doc, 'option', '', item.name);
+            option.setAttribute('value', item.id || 'all');
+            if (item.id === layer) option.setAttribute('selected', '');
+            option.selected = item.id === layer;
+            return option;
         });
-        layersBar.replaceChildren(...chips);
-        layersBar.hidden = data.layers.length === 0;
+        regions.replaceChildren(...options);
+        regions.value = layer || 'all';
+        regionBox.hidden = data.layers.length === 0;
     }
 
     function drawShown() {
@@ -590,15 +599,13 @@ function render(el, props, api) {
         results.hidden = true;
         goTo(id);
     }
-    // Clicks on the layer chips, the results and the details' Close button (delegated: they are redrawn).
+    // The Region list, and clicks on the results and the details' Close button (delegated: they are redrawn).
     const closestWith = (target, stop, test) => {
         for (let node = target; node && node !== stop; node = node.parentNode) if (test(node)) return node;
         return null;
     };
-    listen(layersBar, 'click', event => {
-        const chip = closestWith(event.target, layersBar, node => node.getAttribute?.('data-layer'));
-        if (!chip) return;
-        const id = chip.getAttribute('data-layer') === 'all' ? ALL : chip.getAttribute('data-layer');
+    listen(regions, 'change', () => {
+        const id = regions.value === 'all' ? ALL : regions.value;
         if (id !== layer) setLayer(id);
     });
     listen(results, 'click', event => {
