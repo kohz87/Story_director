@@ -58,8 +58,7 @@ export const REST_ORDER = 150;
 // The suite's own screens and tabs: always in DEFAULT_ORDER, whatever `order` an older module still gives
 // (Cast, now Dossiers, once said 35); the reader moves them in Settings → Tabs & Packs → Tabs.
 export const SUITE_NAV = Object.freeze([
-    'rpg-battle/party', 'story-block/inventory', 'story-director/quests', 'story-director/world', 'story-director/map',
-    'rpg-battle/fight', 'rpg-battle/crafting', 'rpg-battle/trade', 'story-block/scene',
+    'story-block/inventory', 'story-director/quests', 'story-director/world', 'story-director/map', 'story-block/scene',
     'story-director/chronicle', 'story-director/director', 'npc-state-delta/cast',
 ]);
 
@@ -93,7 +92,7 @@ export function validateScreen(def, { id = null } = {}) {
     const errors = [];
     const name = label(def);
     if (typeof def.id !== 'string' || !SCREEN_ID.test(def.id)) {
-        errors.push('The screen needs an id made of letters, digits, ".", "_", "-" and "/" (for example "rpg-battle/party").');
+        errors.push('The screen needs an id made of letters, digits, ".", "_", "-" and "/" (for example "story-director/world").');
     } else if (id !== null && def.id !== id) {
         errors.push(`${name} was given for screen "${id}".`);
     }

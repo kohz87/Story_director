@@ -320,17 +320,8 @@ export async function ensureModules({ store, bus, registry, events = null }) {
 export const PREFLIGHT_CLASSES = Object.freeze(['empty', 'current', 'legacy', 'mixed', 'future', 'damaged']);
 // The version of the store records this Story Block reads (record `v`, state `v`).
 const STORE_VERSION = 2;
-// The slice whose root carries a module's rules marker (rulesVersion, rulesHash): RPG Battle's `rules`.
+// A module may keep version markers in a `rules` domain.
 const RULES_DOMAIN = 'rules';
-// What a module not registered yet is known by: the domains it keeps and the peers it needs, for the
-// suite's own modules, so `preflight({ module: 'rpg-battle' })` can look before it registers. Any
-// other module (or a different list) passes `domains` and `peers` itself.
-export const SUITE_MODULES = Object.freeze({
-    'rpg-battle': Object.freeze({
-        domains: Object.freeze(['party', 'effects', 'creation', 'gear', 'combat', 'bestiary', 'trade', 'craft', 'rules', 'progress', 'training', 'death']),
-        peers: Object.freeze(['story-director']),
-    }),
-});
 const MODULE_ID_TEXT = /^[a-z0-9][a-z0-9._-]*$/;
 const DOMAIN_TEXT = /^[a-z][a-zA-Z0-9_-]*$/;
 
@@ -346,7 +337,7 @@ const DOMAIN_TEXT = /^[a-z][a-zA-Z0-9_-]*$/;
  */
 export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, options) {
     if (!isObject(options) || typeof options.module !== 'string' || !MODULE_ID_TEXT.test(options.module)) {
-        throw new TypeError('Story Suite: preflight needs { module } with a module id (like "rpg-battle").');
+        throw new TypeError('Story Suite: preflight needs { module } with a module id (like "story-director").');
     }
     const wanted = options.rulesVersion;
     if (wanted !== undefined && wanted !== null && !(Number.isInteger(wanted) && wanted >= 1)) {
@@ -354,7 +345,6 @@ export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, 
     }
     const id = options.module;
     const def = registry.module?.(id) ?? null;
-    const suite = SUITE_MODULES[id] ?? null;
     // `domains` and `peers`, when given, are lists of valid names; a bad one throws, it is never left out
     // (a list that lost a name would read `empty`).
     const listed = (name, pattern) => {
@@ -365,8 +355,8 @@ export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, 
         }
         return list;
     };
-    const domainNames = listed('domains', DOMAIN_TEXT) ?? (def ? Object.keys(def.domains ?? {}) : suite ? [...suite.domains] : []);
-    const peerIds = listed('peers', MODULE_ID_TEXT) ?? (def ? registry.peers(id).map(peer => peer.module) : suite ? [...suite.peers] : []);
+    const domainNames = listed('domains', DOMAIN_TEXT) ?? (def ? Object.keys(def.domains ?? {}) : []);
+    const peerIds = listed('peers', MODULE_ID_TEXT) ?? (def ? registry.peers(id).map(peer => peer.module) : []);
 
     const result = {
         hostApi: apiVersion,

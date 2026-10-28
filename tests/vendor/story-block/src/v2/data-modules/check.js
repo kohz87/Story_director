@@ -7,7 +7,7 @@ import { validateLayout } from '../layout/validate.js';
 import { validateScreen } from '../view/screens.js';
 import { parseHtml } from '../view/template/html.js';
 import { checkScreens } from '../packs/validate.js';
-import { sha256 } from '../packs/rules-v2.js';
+import { sha256Hex as sha256 } from '../domains/digest.js';
 
 export { DM_DESCRIPTORS, DM_LIMITS, DM_DIAGNOSTICS, DATA_MODULES_CAPABILITY } from './schema.js';
 export { expressionType, conditionType } from './expressions.js';
