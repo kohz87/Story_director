@@ -482,7 +482,8 @@ test('phone taps: the dot keeps its size, its tap area is 44px (CSS), and in a d
     const phone = { matchMedia: q => ({ matches: q === '(pointer: coarse)' }) };
     const { doc, root, handle } = clusterDraw(phone);
     const css = MAP_CSS;
-    assert.match(css, /@media \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: 44px; height: 44px;/);
+    // 44px on the screen: over Story Block's zoom when it draws the screen zoomed (--ss-zoomed), else 44px.
+    assert.match(css, /@media \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: calc\(44px \/ var\(--ss-zoomed, 1\)\); height: calc\(44px \/ var\(--ss-zoomed, 1\)\);/);
     // The dots themselves are unchanged on a phone (no size rule inside the coarse block).
     assert.doesNotMatch(css.slice(css.indexOf('@media (pointer: coarse)')), /\.sd-map-place \{[^}]*width/);
 
@@ -550,4 +551,61 @@ test('the Region list: a native select between the search box and the zoom butto
     input.dispatch('input');
     input.dispatch('keydown', { key: 'Enter' });
     assert.equal(select.value, 'plane:underground');
+});
+
+test('a zoomed stage (Story Block draws its screens at 80%): sizes, drags, wheel and taps are worked out in the stage\'s own pixels', () => {
+    // The same map twice: drawn at 100%, and drawn at 80% (the browser reports drawn pixels: a 640 × 480 stage measures 512 × 384).
+    const plain = draw();
+    const zoomed = draw();
+    chooseRegion(plain.root, 'all');
+    chooseRegion(zoomed.root, 'all');
+    plain.stage.getBoundingClientRect = () => ({ left: 100, top: 50, width: 640, height: 480 });
+    zoomed.stage.getBoundingClientRect = () => ({ left: 100, top: 50, width: 512, height: 384 });
+    zoomed.stage.currentCSSZoom = 0.8;
+    plain.$('.sd-map-fit').click();
+    zoomed.$('.sd-map-fit').click();
+    assert.deepEqual(zoomed.handle.state.size, { width: 640, height: 480 }, 'the stage\'s own size, not the drawn one');
+    assert.deepEqual(zoomed.handle.state.view, plain.handle.state.view);
+    // A drag of 40 own pixels is 32 drawn ones.
+    plain.pointer('pointerdown', 1, 200, 200);
+    plain.pointer('pointermove', 1, 220, 200);
+    plain.pointer('pointermove', 1, 240, 200);
+    plain.pointer('pointerup', 1, 240, 200);
+    zoomed.pointer('pointerdown', 1, 180, 170);
+    zoomed.pointer('pointermove', 1, 196, 170);
+    zoomed.pointer('pointermove', 1, 212, 170);
+    zoomed.pointer('pointerup', 1, 212, 170);
+    for (const key of ['cx', 'cy', 'k']) assert.ok(Math.abs(zoomed.handle.state.view[key] - plain.handle.state.view[key]) < 1e-9, key);
+    // The wheel zooms about the same spot of the map.
+    plain.stage.dispatch('wheel', { deltaY: -200, deltaMode: 0, clientX: 100 + 200, clientY: 50 + 100 });
+    zoomed.stage.dispatch('wheel', { deltaY: -200, deltaMode: 0, clientX: 100 + 160, clientY: 50 + 80 });
+    for (const key of ['cx', 'cy', 'k']) assert.ok(Math.abs(zoomed.handle.state.view[key] - plain.handle.state.view[key]) < 1e-9, key);
+    // Without a currentCSSZoom the zoom is the drawn width over the own one.
+    delete zoomed.stage.currentCSSZoom;
+    zoomed.stage.offsetWidth = 640;
+    zoomed.$('.sd-map-fit').click();
+    assert.deepEqual(zoomed.handle.state.size, { width: 640, height: 480 });
+});
+
+test('a zoomed stage on a phone: the tap lands on the dot drawn under it, and the 44px tap area is 44 drawn pixels', () => {
+    const phone = { matchMedia: q => ({ matches: q === '(pointer: coarse)' }) };
+    const { root, stage, handle } = clusterDraw(phone);
+    stage.getBoundingClientRect = () => ({ left: 30, top: 20, width: 512, height: 384 });
+    stage.currentCSSZoom = 0.8;
+    root.querySelector('.sd-map-fit').click();
+    const dot = name => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
+    const drawnAt = node => ({ x: 30 + parseFloat(node.style.left) * 0.8, y: 20 + parseFloat(node.style.top) * 0.8 });
+    const alpha = dot('Alpha');
+    const bravo = dot('Bravo');
+    assert.equal(alpha.getAttribute('data-ss-hit'), '', 'the dot draws its own tap area');
+    // The browser gave the tap to Alpha's square; it landed on Bravo's dot as drawn: Bravo.
+    alpha.dispatch('click', { clientX: drawnAt(bravo).x, clientY: drawnAt(bravo).y });
+    assert.equal(handle.state.picked, bravo.getAttribute('data-id'));
+    alpha.dispatch('click', { clientX: drawnAt(alpha).x, clientY: drawnAt(alpha).y });
+    assert.equal(handle.state.picked, alpha.getAttribute('data-id'));
+    // 21 drawn pixels from Far Away's dot: inside its 44px square on the screen (26 of the stage's own pixels, more than 22), so a tap
+    // there picks Far Away whichever square the browser gave it to.
+    const far = dot('Far Away');
+    alpha.dispatch('click', { clientX: drawnAt(far).x - 21, clientY: drawnAt(far).y });
+    assert.equal(handle.state.picked, far.getAttribute('data-id'));
 });

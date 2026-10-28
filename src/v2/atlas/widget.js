@@ -16,6 +16,8 @@
 // The view (centre and zoom) is the reader's alone: kept in memory per layer for this page, never
 // in the story state. Picking a place writes nothing either (a screen may still pass `onSelect`).
 // Moves to a picked place are eased, except under prefers-reduced-motion.
+// Story Block draws its screens zoomed (its size.css): pointer and measured positions are drawn pixels, the stage's own
+// lengths (style.left, the view) are not, so every measure is divided by the stage's zoom (zoomOf).
 
 import {
     KNOWN_ICON_ZOOM, KNOWN_LABEL_ZOOM, NEAR_PX, between, boundsOf, centreOn, clampView, clipSegment, fitView, mapPoint,
@@ -34,7 +36,7 @@ const EASE_MS = 260;
 const R_VISITED = 12;
 const R_KNOWN_FAR = 4;
 const R_KNOWN = 9;
-const TAP_HALF = 22;               // half of a phone's 44px tap area (a coarse pointer only)
+const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (a coarse pointer only)
 const ALL = '';
 
 // Remembered views for this page: `${viewKey}|${layer}` → { cx, cy, zoom (× fit) }. Never story state.
@@ -101,10 +103,10 @@ const CSS = `
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
 .sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
-/* A phone (coarse pointer): the dot keeps its size; its tap area is a 44px square (::before, no paint).
-   Where two squares cover one dot, the click picks the place whose dot is nearest (see the click handler). */
+/* A phone (coarse pointer): the dot keeps its size; its tap area is a 44px square on the screen (::before, no paint; 44px over
+   Story Block's zoom, --ss-zoomed). Where two squares cover one dot, the click picks the place whose dot is nearest (see the click handler). */
 @media (pointer: coarse) {
-  .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: calc(44px / var(--ss-zoomed, 1)); height: calc(44px / var(--ss-zoomed, 1)); transform: translate(-50%, -50%); }
 }
 .sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .sd-map .sd-map-label[data-visited="false"] { color: var(--sd-map-muted); font-style: italic; }
@@ -296,9 +298,19 @@ function render(el, props, api) {
     const labels = new Map();        // id → label span
     const byId = id => data.places.find(place => place.id === id) ?? null;
 
+    // The zoom the stage is drawn at (Story Block's roots are zoomed): the browser's currentCSSZoom, else drawn over own width.
+    function zoomOf() {
+        const own = Number(stage.currentCSSZoom);
+        if (Number.isFinite(own) && own > 0) return own;
+        const width = Number(stage.offsetWidth);
+        const drawn = Number(stage.getBoundingClientRect?.()?.width);
+        return width > 0 && drawn > 0 ? drawn / width : 1;
+    }
+
     function measure() {
         const rect = stage.getBoundingClientRect?.();
-        if (rect && rect.width > 0 && rect.height > 0) size = { width: rect.width, height: rect.height };
+        const z = zoomOf();
+        if (rect && rect.width > 0 && rect.height > 0) size = { width: rect.width / z, height: rect.height / z };
         return size;
     }
 
@@ -410,6 +422,8 @@ function render(el, props, api) {
         labels.clear();
         const items = shown.map(place => {
             const node = button(doc, 'sd-map-place');
+            // the dot draws its own tap area: Story Block's phone rule (44px controls) leaves it its size
+            node.setAttribute('data-ss-hit', '');
             node.setAttribute('data-id', place.id);
             node.setAttribute('data-visited', String(place.visited));
             if (place.kind) node.setAttribute('data-kind', place.kind.slice(0, 64));
@@ -674,10 +688,11 @@ function render(el, props, api) {
         const own = placeOf(event.target);
         if (!coarse() || typeof event.clientX !== 'number') return own;
         const tap = local(event);
+        const half = TAP_HALF / zoomOf();
         let best = '';
         let bestD = Infinity;
         for (const [id, dot] of placeAt) {
-            if (Math.abs(dot.x - tap.x) > TAP_HALF || Math.abs(dot.y - tap.y) > TAP_HALF) continue;
+            if (Math.abs(dot.x - tap.x) > half || Math.abs(dot.y - tap.y) > half) continue;
             const d = Math.hypot(dot.x - tap.x, dot.y - tap.y);
             if (d < bestD) { best = id; bestD = d; }
         }
@@ -708,7 +723,8 @@ function render(el, props, api) {
     let captured = null;
     const local = event => {
         const rect = stage.getBoundingClientRect?.() ?? { left: 0, top: 0 };
-        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const z = zoomOf();
+        return { x: (event.clientX - rect.left) / z, y: (event.clientY - rect.top) / z };
     };
     listen(stage, 'pointerdown', event => {
         if (event.pointerType === 'mouse' && event.button) return;
