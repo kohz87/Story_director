@@ -56,6 +56,8 @@ function draw({ state = story(), props = {}, api = null, win = null, value } = {
     return { doc, el, root, stage, handle, $, $$, key, pointer, shownLabels, queries, state, data };
 }
 
+// Story Block's phone line (a narrow screen or a coarse pointer): the dots' 44px tap areas and the nearest-dot tap.
+const PHONE_LINE = '(max-width: 759.98px), (pointer: coarse)';
 const placeButton = (root, name) => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
 // The Region list: its choices, the chosen one's name, and a choice made (as the browser does: the value, then a change event).
 const regionNames = root => root.querySelectorAll('.sd-map-region option').map(option => option.textContent);
@@ -479,13 +481,13 @@ function clusterDraw(win) {
 }
 
 test('phone taps: the dot keeps its size, its tap area is 44px (CSS), and in a dense cluster the tap picks the nearest dot', () => {
-    const phone = { matchMedia: q => ({ matches: q === '(pointer: coarse)' }) };
+    const phone = { matchMedia: q => ({ matches: q === PHONE_LINE }) };
     const { doc, root, handle } = clusterDraw(phone);
     const css = MAP_CSS;
     // 44px on the screen: over Story Block's zoom when it draws the screen zoomed (--ss-zoomed), else 44px.
-    assert.match(css, /@media \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: calc\(44px \/ var\(--ss-zoomed, 1\)\); height: calc\(44px \/ var\(--ss-zoomed, 1\)\);/);
-    // The dots themselves are unchanged on a phone (no size rule inside the coarse block).
-    assert.doesNotMatch(css.slice(css.indexOf('@media (pointer: coarse)')), /\.sd-map-place \{[^}]*width/);
+    assert.match(css, /@media \(max-width: 759\.98px\), \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: calc\(44px \/ var\(--ss-zoomed, 1\)\); height: calc\(44px \/ var\(--ss-zoomed, 1\)\);/);
+    // The dots themselves are unchanged on a phone (no size rule inside the phone block).
+    assert.doesNotMatch(css.slice(css.indexOf('@media (max-width: 759.98px), (pointer: coarse)')), /\.sd-map-place \{[^}]*width/);
 
     const dot = name => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
     const at = node => ({ x: parseFloat(node.style.left), y: parseFloat(node.style.top) });
@@ -588,7 +590,7 @@ test('a zoomed stage (Story Block draws its screens at 80%): sizes, drags, wheel
 });
 
 test('a zoomed stage on a phone: the tap lands on the dot drawn under it, and the 44px tap area is 44 drawn pixels', () => {
-    const phone = { matchMedia: q => ({ matches: q === '(pointer: coarse)' }) };
+    const phone = { matchMedia: q => ({ matches: q === PHONE_LINE }) };
     const { root, stage, handle } = clusterDraw(phone);
     stage.getBoundingClientRect = () => ({ left: 30, top: 20, width: 512, height: 384 });
     stage.currentCSSZoom = 0.8;

@@ -36,7 +36,9 @@ const EASE_MS = 260;
 const R_VISITED = 12;
 const R_KNOWN_FAR = 4;
 const R_KNOWN = 9;
-const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (a coarse pointer only)
+const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (the phone line, PHONE)
+// The phone line, as Story Block's (its size.css): a narrow screen or a coarse pointer gets the dots' 44px tap areas.
+const PHONE = '(max-width: 759.98px), (pointer: coarse)';
 const ALL = '';
 
 // Remembered views for this page: `${viewKey}|${layer}` → { cx, cy, zoom (× fit) }. Never story state.
@@ -103,9 +105,10 @@ const CSS = `
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
 .sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
-/* A phone (coarse pointer): the dot keeps its size; its tap area is a 44px square on the screen (::before, no paint; 44px over
-   Story Block's zoom, --ss-zoomed). Where two squares cover one dot, the click picks the place whose dot is nearest (see the click handler). */
-@media (pointer: coarse) {
+/* A phone (a narrow screen or a coarse pointer, PHONE): the dot keeps its size; its tap area is a 44px square on the screen (::before,
+   no paint; 44px over Story Block's zoom, --ss-zoomed). Where two squares cover one dot, the click picks the place whose dot is nearest
+   (see the click handler). */
+@media (max-width: 759.98px), (pointer: coarse) {
   .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: calc(44px / var(--ss-zoomed, 1)); height: calc(44px / var(--ss-zoomed, 1)); transform: translate(-50%, -50%); }
 }
 .sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
@@ -683,10 +686,10 @@ function render(el, props, api) {
     let dropClick = false;
     // On a phone the tap went to a button whose 44px square holds the tap; where two squares
     // cover one dot, the place whose dot is nearest the tap is the one picked (desktop: as is).
-    const coarse = () => Boolean(win?.matchMedia?.('(pointer: coarse)')?.matches);
+    const phone = () => Boolean(win?.matchMedia?.(PHONE)?.matches);
     const tapped = event => {
         const own = placeOf(event.target);
-        if (!coarse() || typeof event.clientX !== 'number') return own;
+        if (!phone() || typeof event.clientX !== 'number') return own;
         const tap = local(event);
         const half = TAP_HALF / zoomOf();
         let best = '';
