@@ -1,16 +1,4 @@
-// Story Director v2, part **checks**: the `checks` domain (contract §3 P09, "independent checks"). Pure.
-//
-//   checks = {
-//     policy: { actors: { [ca_ id]: { id, name, bonuses: { [stat or "topic:<name>"]: -30..30 } } },
-//               defaultActor: null | ca_ id,
-//               rbActors: { [ca_ id]: ActorId } },        // an explicit, one-to-one link to a RPG Battle character (never by name)
-//     writes: { [write id]: { fingerprint, result } },   // the retry ledger of the writers (writes.js), left out of every hash
-//     log:    { [ck_ id]: CheckRecord },                 // the newest checks, as rolled (roll.js)
-//   }
-//
-// Effective `rbModifiers` and `social` come from SD's settings (default true), never stored. The policy projection `checks.policy`
-// carries all of it with a hash of the normalized JSON of the projection (effective settings included, the hash itself and the ledgers
-// excluded). Without a record of an older save the missing maps read as empty.
+// The standalone checks domain, actor policy, and roll history.
 
 import { STATS } from './words.js';
 import { hashJson } from '../hash.js';
@@ -18,7 +6,6 @@ import { ledgerProblems } from '../writes.js';
 
 export const ACTOR_ID = /^ca_[0-9a-z]{8}$/;
 export const CHECK_ID = /^ck_[0-9a-z]{8}$/;
-export const RB_ACTOR_ID = /^ac_[0-9a-z]{8}$/;
 export const MAX_ACTORS = 24;
 export const MAX_BONUSES = 40;
 export const MAX_LOG = 60;
@@ -29,7 +16,7 @@ export const isRecord = value => value !== null && typeof value === 'object' && 
 const isInt = value => Number.isSafeInteger(value);
 
 export function initialChecks() {
-    return { policy: { actors: {}, defaultActor: null, rbActors: {} }, writes: {}, log: {} };
+    return { policy: { actors: {}, defaultActor: null }, writes: {}, log: {} };
 }
 
 /** Whether a bonus key is a stat or `topic:<name>` of the table. */
@@ -41,14 +28,12 @@ export function policyOf(checks) {
     return {
         actors: isRecord(policy.actors) ? policy.actors : {},
         defaultActor: typeof policy.defaultActor === 'string' ? policy.defaultActor : null,
-        rbActors: isRecord(policy.rbActors) ? policy.rbActors : {},
     };
 }
 
-/** The effective settings the policy hash covers: `rbModifiers` and `social` (default true), as booleans. */
+/** The effective settings the policy hash covers. */
 export function effective(settings) {
     return {
-        rbModifiers: settings?.rbModifiers !== false,
         social: settings?.social !== false,
     };
 }
@@ -59,7 +44,6 @@ export function projection(checks, settings) {
     const body = {
         actors: Object.fromEntries(Object.keys(policy.actors).sort().map(id => [id, { id, name: policy.actors[id].name, bonuses: Object.fromEntries(Object.keys(policy.actors[id].bonuses ?? {}).sort().map(key => [key, policy.actors[id].bonuses[key]])) }])),
         defaultActor: policy.defaultActor,
-        rbActors: Object.fromEntries(Object.keys(policy.rbActors).sort().map(id => [id, policy.rbActors[id]])),
         ...effective(settings),
     };
     return { ...structuredClone(body), hash: hashJson(body) };
@@ -98,7 +82,7 @@ export function draftChecks(ctx) {
     if (!isRecord(draft.policy)) draft.policy = {};
     if (!isRecord(draft.policy.actors)) draft.policy.actors = {};
     if (typeof draft.policy.defaultActor !== 'string') draft.policy.defaultActor = null;
-    if (!isRecord(draft.policy.rbActors)) draft.policy.rbActors = {};
+    delete draft.policy.rbActors;
     if (!isRecord(draft.writes)) draft.writes = {};
     if (!isRecord(draft.log)) draft.log = {};
     for (const id of Object.keys(draft.log)) if (logProblems({ [id]: draft.log[id] }).length) delete draft.log[id];
@@ -113,19 +97,10 @@ export function validateChecks(slice, topics) {
     if (isRecord(slice) && !Object.hasOwn(slice, 'policy')) return Object.keys(slice).every(key => ['prepared', 'log', 'last', 'pending', 'writes'].includes(key)) ? [] : ['checks has fields that are neither ours nor RPG Battle\'s.'];
     if (!isRecord(slice) || !isRecord(slice.policy)) return ['checks is not { policy, writes, log }.'];
     const errors = [];
-    const { actors, defaultActor, rbActors } = slice.policy;
+    const { actors, defaultActor } = slice.policy;
     if (!isRecord(actors) || Object.keys(actors).length > MAX_ACTORS) return [`checks.policy.actors is a record of at most ${MAX_ACTORS}.`];
     for (const [id, actor] of Object.entries(actors)) errors.push(...actorProblems(id, actor, topics));
     if (!(defaultActor === null || (typeof defaultActor === 'string' && Object.hasOwn(actors, defaultActor)))) errors.push('checks.policy.defaultActor is null or an actor.');
-    if (!isRecord(rbActors)) errors.push('checks.policy.rbActors is not an object.');
-    else {
-        const seen = new Set();
-        for (const [id, target] of Object.entries(rbActors)) {
-            if (!Object.hasOwn(actors, id) || typeof target !== 'string' || !RB_ACTOR_ID.test(target)) errors.push(`checks.policy.rbActors.${id} links an actor to a character.`);
-            else if (seen.has(target)) errors.push(`${target} is linked to two actors.`);
-            seen.add(target);
-        }
-    }
     for (const key of Object.keys(slice.policy)) if (!['actors', 'defaultActor', 'rbActors'].includes(key)) errors.push(`checks.policy has an unknown field "${key}".`);
     errors.push(...ledgerProblems(slice.writes, 'checks.writes'));
     errors.push(...logProblems(slice.log));

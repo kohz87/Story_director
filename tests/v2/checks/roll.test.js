@@ -3,17 +3,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hashOf, makeState, run, write } from './helpers.js';
-import { combine, rbParts, socialParts, standaloneParts } from '../../../src/v2/checks/roll.js';
+import { combine, socialParts, standaloneParts } from '../../../src/v2/checks/roll.js';
 import { statForCheck, topicsOf } from '../../../src/v2/checks/words.js';
 
 const EVIDENCE = 'ev_00000001';
 const known = { 'story.evidence': () => [{ id: EVIDENCE }] };
 
-function withActor(bonuses = {}, rb = null) {
+function withActor(bonuses = {}) {
     let state = makeState();
     state = run(state, 'checks.actor', { write: write(), name: 'Mara', bonuses, expectedHash: hashOf(state) }).state;
     const id = state.domains.checks.policy.defaultActor;
-    if (rb) state = run(state, 'checks.link', { write: write(), actor: id, rbActor: rb, expectedHash: hashOf(state) }, { queries: { 'rules.sheet': () => ({ id: rb, kind: 'pc' }) } }).state;
     return { state, id };
 }
 /** The log record of a roll: where its modifier came from. */
@@ -38,7 +37,7 @@ test('standalone: bonuses[stat] and each matching topic once; the outcome is the
     assert.deepEqual(result.modifiers, [{ source: 'standalone', ref: 'DEX', reason: 'DEX bonus', amount: 2 }, { source: 'standalone', ref: 'topic:stealth', reason: 'stealth bonus', amount: 1 }]);
     assert.deepEqual(Object.keys(result), ['check', 'actor', 'die', 'modifiers', 'mod', 'total', 'dc', 'outcome'], 'the contract\'s result, nothing more');
     assert.deepEqual([result.actor, result.die, result.mod, result.total, result.dc, result.outcome], [id, 12, 3, 15, 15, 'success']);
-    assert.deepEqual([how(out).source, how(out).fallback], ['standalone', 'no-link'], 'where the modifier came from is on the log record');
+    assert.equal(how(out).source, 'standalone');
     assert.deepEqual(out.state.domains.checks.log[result.check].modifiers, result.modifiers);
     assert.equal(out.result.narrate, true);
 });
@@ -54,29 +53,6 @@ test('outcomes: natural 20 and 1, success, cost within the margin, fail; no dc u
     assert.equal(outcome(7, 10, { costMargin: 3 }), 'cost');
     assert.equal(roll(state, {}, { die: 14, settings: { defaultDc: 14 } }).result.data.v2.result.outcome, 'success');
     assert.equal(roll(state, {}, { die: 14 }).result.data.v2.result.dc, 15);
-});
-
-test('a linked character\'s rules.modifier replaces the standalone subtotal, never added to it; the parts sum to the modifier', () => {
-    const { state } = withActor({ DEX: 9, 'topic:stealth': 9 }, 'ac_00000001');
-    const parts = [{ source: 'stat', ref: null, reason: 'DEX 11', amount: 3 }, { source: 'skill', ref: 'pack.fixture/s00', reason: 'Shadow Step', amount: 2 }];
-    let asked = null;
-    const out = roll(state, { dc: 10 }, { die: 5, queries: { ...known, 'rules.modifier': args => { asked = args; return { actor: args.actor, stat: args.stat, amount: 5, parts }; } } });
-    assert.ok(out.ok, out.message);
-    assert.deepEqual(asked, { actor: 'ac_00000001', stat: 'DEX', skill: 'Stealth' });
-    const result = out.result.data.v2.result;
-    assert.deepEqual([result.mod, how(out).source, how(out).fallback], [5, 'rb', null]);
-    assert.equal(result.modifiers.reduce((sum, part) => sum + part.amount, 0), result.mod);
-});
-
-test('RB absent, off, throwing, null or malformed: the standalone bonuses and the reason', () => {
-    const { state } = withActor({ DEX: 2 }, 'ac_00000001');
-    const reason = (queries, settings) => { const out = roll(state, {}, { queries: { ...known, ...queries }, settings }); return { ...how(out), mod: out.result.data.v2.result.mod }; };
-    assert.deepEqual([reason({}).fallback, reason({}).mod], ['rb-unavailable', 2]);
-    assert.equal(reason({ 'rules.modifier': () => null }).fallback, 'rb-no-answer');
-    assert.equal(reason({ 'rules.modifier': args => ({ actor: args.actor, stat: args.stat, amount: 99, parts: [] }) }).fallback, 'rb-malformed');
-    assert.equal(reason({ 'rules.modifier': args => ({ actor: args.actor, stat: args.stat, amount: 4, parts: [{ source: 'stat', ref: null, reason: '', amount: 1 }] }) }).fallback, 'rb-malformed', 'parts that do not add up');
-    assert.equal(reason({ 'rules.modifier': args => ({ actor: 'ac_00000009', stat: args.stat, amount: 0, parts: [] }) }).fallback, 'rb-malformed', 'another character\'s answer');
-    assert.equal(reason({}, { rbModifiers: false }).fallback, 'rb-modifiers-off');
 });
 
 test('the clamp: a modifier past 30 is held with a cap part, so the parts still sum to it', () => {
@@ -146,10 +122,7 @@ test('refusals: no actor, unknown actor, bad payloads, a supplied die or outcome
     for (const extra of [{ die: 20 }, { outcome: 'crit' }, { stat: 'WIS' }, { dc: 41 }, { dc: 0 }, { targetNpc: 'brannoc' }, { skill: '' }, { evidence: 'x' }]) assert.equal(roll(state, extra).code, 'INVALID', JSON.stringify(extra));
 });
 
-test('the pure parts: RB\'s answer and NSD\'s are checked before they are believed', () => {
-    assert.equal(rbParts(null, 'ac_00000001', 'DEX'), null);
-    assert.equal(rbParts({ actor: 'ac_00000001', stat: 'STR', amount: 0, parts: [] }, 'ac_00000001', 'DEX'), null);
-    assert.deepEqual(rbParts({ actor: 'ac_00000001', stat: 'DEX', amount: 0, parts: [] }, 'ac_00000001', 'DEX'), []);
+test('the pure parts validate NPC social modifiers', () => {
     assert.deepEqual(socialParts({ mod: 0, reasons: [] }), []);
     assert.deepEqual(socialParts({ mod: 2, name: 'Brannoc', skill: 'x', reasons: [{ text: 'a', value: 5 }] }).map(part => part.amount), [2], 'reasons that do not add up are kept as one part');
     assert.deepEqual(standaloneParts(null, 'DEX', 'sneak'), []);

@@ -17,8 +17,8 @@ const wr = () => `wr_${(n += 1).toString(36).padStart(8, '0')}`;
 test('the policy is empty at first, the player\'s actor is the default, and the hash moves with every write', async () => {
     const host = await newHost();
     const empty = host.sdk.query('checks.policy', {});
-    assert.deepEqual(Object.keys(empty), ['actors', 'defaultActor', 'rbActors', 'rbModifiers', 'social', 'hash']);
-    assert.deepEqual([empty.actors, empty.defaultActor, empty.rbActors, empty.rbModifiers, empty.social], [{}, null, {}, true, true]);
+    assert.deepEqual(Object.keys(empty), ['actors', 'defaultActor', 'social', 'hash']);
+    assert.deepEqual([empty.actors, empty.defaultActor, empty.social], [{}, null, true]);
     const made = await ok(host.sdk.command('checks.actor', { write: wr(), name: 'Mara', bonuses: { DEX: 2 }, expectedHash: empty.hash }));
     const id = made.receipt.data.v2.result.actor;
     const after = host.sdk.query('checks.policy', {});
@@ -70,7 +70,7 @@ test('flip: the module registers the checks domain, the check kind, the commands
     const { createModule } = await import('../../../src/v2/module.js');
     const def = createModule();
     assert.equal(Object.hasOwn(def.domains, 'checks'), true);
-    assert.deepEqual(Object.keys(def.commands).filter(name => name.startsWith('checks.')).sort(), ['checks.actor', 'checks.link', 'checks.roll']);
+    assert.deepEqual(Object.keys(def.commands).filter(name => name.startsWith('checks.')).sort(), ['checks.actor', 'checks.roll']);
     assert.equal(Object.hasOwn(def.capture.kinds, 'check'), true);
     const host = await createHost({ modules: [def] });
     assert.deepEqual(Object.keys(host.head().domains.checks), ['policy', 'writes', 'log']);

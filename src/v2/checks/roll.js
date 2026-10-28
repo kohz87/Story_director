@@ -1,9 +1,4 @@
-// Story Director v2, part **checks**: the modifier of a check and its roll (contract §3 P09). Pure over what the command asked.
-//
-// One SD actor, optionally one explicit link to a RPG Battle character, one `rules.modifier` projection, at most one NPC State Delta
-// social part. With a valid RB projection its parts replace the whole standalone subtotal (two stat bases are never summed); without
-// one (no link, RB absent/dormant/off, a throw, a null or a malformed answer) SD's own bonuses apply and the reason is recorded. The final
-// modifier is clamped to -30..30 and a `cap` part makes the parts add up to it exactly.
+// Standalone and NPC social modifiers for a check.
 
 import { topicsOf } from './words.js';
 
@@ -21,18 +16,6 @@ export function standaloneParts(actor, stat, skill) {
         const key = `topic:${topic}`;
         if (isInt(bonuses[key]) && bonuses[key] !== 0) parts.push({ source: 'standalone', ref: key, reason: `${topic} bonus`, amount: bonuses[key] });
     }
-    return parts;
-}
-
-/** RPG Battle's `rules.modifier` answer as parts, or null when it is not a well-formed RulesModifier for this actor and stat. */
-export function rbParts(answer, rbActor, stat) {
-    if (!isRecord(answer) || answer.actor !== rbActor || answer.stat !== stat || !isInt(answer.amount) || Math.abs(answer.amount) > MOD_LIMIT || !Array.isArray(answer.parts)) return null;
-    const parts = [];
-    for (const part of answer.parts) {
-        if (!isRecord(part) || typeof part.source !== 'string' || !isInt(part.amount) || Math.abs(part.amount) > MOD_LIMIT || !(part.ref === null || typeof part.ref === 'string')) return null;
-        parts.push({ source: clip(part.source, 24), ref: part.ref === null ? null : clip(part.ref, 80), reason: clip(part.reason, 120), amount: part.amount });
-    }
-    if (parts.reduce((sum, part) => sum + part.amount, 0) !== answer.amount) return null;
     return parts;
 }
 
