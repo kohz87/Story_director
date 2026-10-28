@@ -1,12 +1,14 @@
-// Story Director checks: standalone actor bonuses, dice, and optional NPC social modifiers.
+// Story Director checks: standalone actor bonuses, dice, and optional NPC social modifiers. The reader sets who rolls
+// in a chat on the Director screen's Checks card (widget.js); until then a check is the player's with no bonuses.
 
 import { commands } from './commands.js';
 import { initialChecks, validateChecks } from './domain.js';
 import { kind as checkKind } from './capture.js';
 import { queries } from './queries.js';
 import { TOPIC_NAMES } from './words.js';
+import { CHECKS_WIDGET, checksWidget } from './widget.js';
 
-export { checkKind };
+export { checkKind, CHECKS_WIDGET, checksWidget };
 export const DEFAULTS = Object.freeze({ defaultDc: 15, costMargin: 2, social: true });
 
 export const part = {
@@ -21,6 +23,7 @@ export const part = {
     commands,
     queries,
     kinds: { check: checkKind },
+    widgets: { [CHECKS_WIDGET]: checksWidget },
     settings: {
         section: 'Checks',
         defaults: { ...DEFAULTS },

@@ -115,8 +115,19 @@ test('S3: the pre-roll stands on the previous reply\'s evidence but is its own c
     assert.ok(roll(first.state, { dc: 12 }, { cause: 'system', caller: 'story-block' }).ok, 'a later message\'s pre-roll, whatever the claims; once per message is the assist\'s claim');
 });
 
-test('refusals: no actor, unknown actor, bad payloads, a supplied die or outcome', () => {
-    assert.equal(roll(makeState(), {}).code, 'NOT_FOUND');
+test('no character yet: the check is the player\'s with no bonuses, logged with no actor', () => {
+    const out = roll(makeState(), { dc: 12 }, { die: 11 });
+    assert.ok(out.ok, out.message);
+    const result = out.result.data.v2.result;
+    assert.deepEqual([result.actor, result.die, result.mod, result.total, result.outcome, result.modifiers], [null, 11, 0, 11, 'cost', []]);
+    assert.equal(how(out).actor, null);
+    assert.match(out.result.summary, /^You try Stealth: d20 11 \+0 = 11 against 12/);
+    assert.deepEqual(out.state.domains.checks.policy, makeState().domains.checks.policy, 'no actor is made for the reader');
+    assert.equal(roll(out.state, { dc: 12 }).code, 'REFUSED', 'and the same check on the same evidence is not rolled twice');
+});
+
+test('refusals: unknown actor, bad payloads, a supplied die or outcome', () => {
+    assert.equal(roll(makeState(), { actor: 'ca_zzzzzzzz' }).code, 'NOT_FOUND');
     const { state } = withActor();
     assert.equal(roll(state, { actor: 'ca_zzzzzzzz' }).code, 'NOT_FOUND');
     for (const extra of [{ die: 20 }, { outcome: 'crit' }, { stat: 'WIS' }, { dc: 41 }, { dc: 0 }, { targetNpc: 'brannoc' }, { skill: '' }, { evidence: 'x' }]) assert.equal(roll(state, extra).code, 'INVALID', JSON.stringify(extra));

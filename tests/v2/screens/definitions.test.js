@@ -67,9 +67,9 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(director.event_closed, { query: 'director.threads', args: { kind: 'event', status: 'resolved' } });
     // Behind the scenes is the Reveal panel's (director.behind), and so are its problems.
     assert.equal(director.secret_closed, undefined);
-    const { problems, time, arc, behind, ...threads } = director;
+    const { problems, time, arc, behind, checks, ...threads } = director;
     assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });
-    assert.deepEqual([arc, behind], [{ query: 'director.arc' }, { query: 'director.behind' }]);
+    assert.deepEqual([arc, behind, checks], [{ query: 'director.arc' }, { query: 'director.behind' }, { query: 'checks.policy' }]);
     // The reply's card shows no next beat (a spoiler); it adds the map coordinates and the weather.
     assert.equal(byId[STATUS_CARD_ID].data.next, undefined);
     assert.deepEqual(byId[STATUS_CARD_ID].data.status, { query: 'director.status' });

@@ -5,6 +5,7 @@
 - RPG Battle is no longer supported. Its rules packs cannot be imported; existing RPG Battle chats should stay on the previous versions.
 - Quests are told by the story. Checks, the calendar, map, World, Chronicle and arc planning continue without battle rules.
 - A goal such as “defeat 3 wolves” closes when the story says it is done; it no longer needs a counted turn-in or a payment receipt. Quest types, rewards and difficulty remain part of the story's record.
+- Checks work in a new chat without any setup: until you set a character, a check (the story's own or Assist's pre-roll) rolls for you with no bonuses. The Director screen has a **Checks** card to set the name and stat bonuses checks use.
 - Chats with checks from 2.1 and earlier keep their characters and check history, and editing a character or rolling a check in them works again.
 
 

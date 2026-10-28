@@ -9,13 +9,14 @@ import { resolveData, runtime, skipReason } from './helpers/runtime.js';
 import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
 import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, part, screens } from '../../../src/v2/screens/index.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
+import { CHECKS_WIDGET, checksWidget } from '../../../src/v2/checks/widget.js';
 
 // The module's own widgets on the Director screen, with a planner that is not there and a reveal choice
 // the test sets (shown unless a test hides it).
 let shown = true;
 const stillReveal = { guard: () => true, revealed: () => shown, set: on => { shown = on; }, hidden: () => !shown, subscribe: () => () => {} };
 const noPlanner = { status: () => ({ available: true, busy: false, draft: null, error: '', hidden: !shown, arc: null }), subscribe: () => () => {}, plan() {}, end() {} };
-const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }) });
+const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), [CHECKS_WIDGET]: checksWidget });
 
 const skip = runtime ? false : skipReason;
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
@@ -96,7 +97,7 @@ test('director: threads by kind, open first and closed folded, secrets by name, 
     assert.match(problems[1], /The story time is not set yet/);
     assert.equal(el.querySelector('.sd-empty'), null);
     const { el: none } = draw(DIRECTOR_ID, makeState());
-    assert.match(squash(none.textContent), /No arc planned yet\. Plan arc Nothing tracked yet\.$/);
+    assert.match(squash(none.textContent), /No arc planned yet\. Plan arc Nothing tracked yet\. Checks Checks roll for you with no bonuses\./);
     assert.equal(none.querySelector('.sd-behind'), null, 'nothing behind the scenes: no Reveal panel');
 });
 
@@ -258,4 +259,53 @@ test('status card rows: a row with no value is left out; no box of its own (the 
     // An unset clock: no Time row, the place and goal still shown.
     const { el: noClock } = draw(STATUS_CARD_ID, headState({ minutes: null }));
     assert.deepEqual(noClock.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place', 'Goal']);
+});
+
+// The Checks card: with no character a check is the player's at +0; Set up saves one through checks.actor as the reader.
+test('director: the Checks card says who rolls, and Set up / Edit save the character through checks.actor', { skip }, async () => {
+    const sent = [];
+    const command = async (type, payload) => { sent.push({ type, payload }); return { ok: true }; };
+    const fresh = draw(DIRECTOR_ID, makeState(), { command });
+    const card = () => fresh.el.querySelector('section.sd-checks');
+    assert.match(squash(card().textContent), /Checks roll for you with no bonuses\./);
+    button(card(), 'Set up')[0].click();
+    const name = card().querySelector('input.sd-checks-name');
+    name.value = 'Mara';
+    name.dispatch('input');
+    const dex = card().querySelector('input[data-stat="DEX"]');
+    dex.value = '2';
+    dex.dispatch('input');
+    button(card(), 'Save')[0].click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'checks.actor');
+    const { write, expectedHash, ...rest } = sent[0].payload;
+    assert.match(write, /^wr_[0-9a-z]{8}$/);
+    assert.match(expectedHash, /^[0-9a-f]{64}$/);
+    assert.deepEqual(rest, { name: 'Mara', bonuses: { DEX: 2 }, makeDefault: true });
+    assert.equal(card().querySelector('form, .sd-checks-form'), null, 'the form closes once saved');
+
+    // An actor already there: its line, and Edit keeps its topic bonuses and id.
+    const actor = { id: 'ca_mara0001', name: 'Mara', bonuses: { DEX: 2, 'topic:stealth': 1 } };
+    const base = makeState();
+    const state = { ...base, domains: { ...base.domains, checks: { policy: { actors: { [actor.id]: actor }, defaultActor: actor.id }, writes: {}, log: {} } } };
+    const set = draw(DIRECTOR_ID, state, { command });
+    const box = set.el.querySelector('section.sd-checks');
+    assert.match(squash(box.textContent), /Checks roll as Mara: DEX \+2\./);
+    button(box, 'Edit')[0].click();
+    const str = box.querySelector('input[data-stat="STR"]');
+    str.value = '-1';
+    str.dispatch('input');
+    button(box, 'Save')[0].click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.deepEqual({ ...sent[1].payload, write: undefined, expectedHash: undefined }, { write: undefined, expectedHash: undefined, id: actor.id, name: 'Mara', bonuses: { 'topic:stealth': 1, STR: -1, DEX: 2 } });
+
+    // A refusal stays in the card with the form.
+    const refusing = draw(DIRECTOR_ID, state, { command: async () => ({ ok: false, code: 'STALE', message: 'The checks settings changed since they were read.' }) });
+    const third = refusing.el.querySelector('section.sd-checks');
+    button(third, 'Edit')[0].click();
+    button(third, 'Save')[0].click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.match(squash(third.querySelector('.sd-checks-error').textContent), /changed since they were read/);
+    assert.ok(third.querySelector('.sd-checks-form'));
 });

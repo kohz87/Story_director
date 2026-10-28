@@ -107,8 +107,9 @@ function checksRoll(ctx, payload) {
     const checks = ctx.read('checks');
     const policy = policyOf(checks);
     const actorId = payload.actor ?? policy.defaultActor;
+    // Until the reader sets up a character (the Director screen's Checks card), a check is the player's with no bonuses.
     const actor = actorId === null ? null : policy.actors[actorId] ?? null;
-    if (!actor) ctx.fail('NOT_FOUND', payload.actor === undefined ? 'There is no check actor to roll for. Make one with checks.actor { write, name, expectedHash }.' : 'That actor is not there.');
+    if (actorId !== null && !actor) ctx.fail('NOT_FOUND', 'That actor is not there.');
     if (!knownEvidence(ctx, payload.evidence)) ctx.fail('NOT_FOUND', 'No such evidence for this check.');
     // One use per evidence and meaning: the same request twice is the same check, not a second die.
     const stat = statForCheck(skill, payload.stat);
@@ -145,7 +146,7 @@ function checksRoll(ctx, payload) {
     const result = { check: id, actor: actorId, die, modifiers, mod, total, dc, outcome };
     const sign = mod >= 0 ? `+${mod}` : String(mod);
     return {
-        summary: `${actor.name} tries ${skill}: d20 ${die} ${sign} = ${total} against ${dc}, ${{ crit: 'a critical success', critfail: 'a critical fail', success: 'success', cost: 'success at a cost', fail: 'a fail' }[outcome]}.`,
+        summary: `${actor ? `${actor.name} tries` : 'You try'} ${skill}: d20 ${die} ${sign} = ${total} against ${dc}, ${{ crit: 'a critical success', critfail: 'a critical fail', success: 'success', cost: 'success at a cost', fail: 'a fail' }[outcome]}.`,
         narrate: true,
         data: { v2: { key: `check:${id}`, result } },
     };
