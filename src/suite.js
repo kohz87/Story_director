@@ -1,5 +1,4 @@
-// Story Suite handshake, v1. This file is identical in Story Block, Story Director, NPC State
-// Delta and RPG Battle; change it in all four together (docs/STORY_SUITE.md).
+// Story Suite handshake. Story Block and Story Director share this registry; older peers can join it.
 //
 // The extensions work alone and together. Together, each announces itself and the areas it can
 // own, and asks who owns an area before sending something another extension already sends: the
@@ -7,7 +6,7 @@
 // imports anything or depends on another extension being installed; the first extension to load
 // creates the registry on globalThis and the others join it, in any load order.
 
-export const SUITE_VERSION = 1;
+export const SUITE_VERSION = 2;
 
 // The areas, and who owns each when several offer it (first listed that is present wins).
 export const AREAS = Object.freeze({
@@ -20,11 +19,11 @@ export const AREAS = Object.freeze({
     // The world's timeline: off-screen agendas, quests, clocks, arcs.
     timeline: ['story-director', 'story-block'],
     // Game numbers: HP, MP, stats, skills, fights.
-    stats: ['rpg-battle', 'story-block', 'npc-state-delta'],
+    stats: ['story-block', 'npc-state-delta'],
     // What the player carries.
-    items: ['story-block', 'rpg-battle'],
+    items: ['story-block'],
     // Roll modifiers for checks outside fights.
-    rolls: ['rpg-battle', 'story-block'],
+    rolls: ['story-block'],
 });
 
 function makeRegistry(previous = null) {
