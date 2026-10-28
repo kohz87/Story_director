@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.1
+
+- **The Map's regions are a list:** the rows of region chips are replaced by a **Region** list on the same row as **Find a place**, before the zoom and locate buttons. It has the same choices in the same order (All first) and shows a region as its chip did; the region shown is the one selected, and a search that lands on another region moves the list with it. On a phone the bar wraps to three rows: Find a place, Region, the buttons.
+- **The Map works at Story Block 2.5.2's new size** (Story Suite drawn at what used to be 80%): the places fill the map, a drag follows the pointer or finger, the wheel zooms about the pointer, and a click or tap picks the place under it. On a phone a place's tap area stays 44 px on the screen.
+
+### Upgrading from 2.1.0
+
+Update together with Story Block 2.5.2: under Story Block 2.5.2, Story Director 2.1.0's Map draws its places in a corner and its drags and clicks land off target. Story Director 2.1.1 also works with Story Block 2.5.1 as before. Nothing in saved chats changes.
+
 ## 2.1.0
 
 - **Open quest templates:** add `| like: <template>` to a quest offer line, or use the reader's **Make this a quest** action. The reward is fixed from the template's range at offer time and recorded with the offer.
