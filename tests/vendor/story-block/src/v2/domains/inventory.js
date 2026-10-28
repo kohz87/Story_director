@@ -807,7 +807,7 @@ export function captureLoot(ctx, line, env) {
             let created;
             ({ def, created } = defineByName(ctx, scratch, name, env, { owner: 'party' }, false));
             if (items.some(item => aliasKey(item.name) === aliasKey(def.name) || resolveDef(scratch, item.name).id === def.id)) { notes.push(`${def.name} is offered once.`); continue; }
-            held = storyItems(ctx, inv, def, qty, created, false, false);
+            held = storyItems(ctx, inv, def, qty, created, false, false, 'offered');
         } catch (error) {
             if (typeof error?.code !== 'string') throw error;
             notes.push(error.message);
@@ -850,13 +850,18 @@ function lootTake(ctx, payload, env) {
     if (!ctx.claim(offer.claim || `loot:${sid}`)) ctx.fail('REFUSED', 'That loot has already been taken: each reply\'s loot is taken once.');
     const skipped = [];
     const wanted = [];
+    const over = [];
     let coin = 0;
     for (const at of [...new Set(picks)].sort((a, b) => a - b)) {
         const item = things[at];
         if (item.coin !== undefined) { coin += item.coin; continue; }
         if (owned(inv, item.name)) { skipped.push(item.name); continue; }
         const { def, created } = defineByName(ctx, inv, item.name, env, { owner: 'party' });
-        wanted.push({ def, qty: item.qty, created });
+        // The offer was held to what one grant can give as it read the item then; a pack enabled since (or an
+        // offer an older version saved) can make it a thing that does not stack: what fits is taken, the rest stays.
+        const qty = def.stack ? item.qty : Math.min(item.qty, MAX_UNSTACKED);
+        if (qty < item.qty) over.push({ name: def.name, qty: item.qty - qty });
+        wanted.push({ def, qty, created });
     }
     if (!wanted.length && !coin) ctx.fail('REFUSED', `${joinNames(skipped)} ${skipped.length === 1 ? 'is' : 'are'} already carried.`);
     if (wanted.length) readerCarry(ctx, wanted.map(entry => ({ defId: entry.def.id, qty: entry.qty })), 'party');
@@ -869,10 +874,12 @@ function lootTake(ctx, payload, env) {
     const where = offer.where ? ` (${offer.where})` : '';
     const left = skipped.length ? `; ${joinNames(skipped)} ${skipped.length === 1 ? 'is' : 'are'} already carried` : '';
     const took = [...wanted.map(entry => itemText(entry.def.name, entry.qty)), ...(coin ? [formatAmount(coin, currency)] : [])];
+    const behind = over.length ? ` ${joinNames(over.map(entry => itemText(entry.name, entry.qty)))} ${over.length === 1 && over[0].qty === 1 ? 'is' : 'are'} left where ${over.length === 1 ? 'it' : 'they'} lay: a thing that does not stack is given at most ${MAX_UNSTACKED} at once.` : '';
     return {
-        summary: `The party takes ${joinNames(took)}${where}${left}.`,
-        data: { sid, taken: wanted.map(entry => ({ def: entry.def.id, qty: entry.qty })), coin, skipped, stacks },
+        summary: `The party takes ${joinNames(took)}${where}${left}.${behind}`,
+        data: { sid, taken: wanted.map(entry => ({ def: entry.def.id, qty: entry.qty })), coin, skipped, stacks, ...(over.length ? { left: over } : {}) },
         narrate: told(ctx),
+        ...(behind ? { problem: behind.trim() } : {}),
     };
 }
 
@@ -1272,7 +1279,7 @@ function storyCoin(ctx, inv, amount, currency, vouched = false) {
 // `qty` of a def held to what this reply may still give (of that item, in worth, and, when the def is
 // new, in kinds): { qty, problem, notable }. Refused when nothing may be given. Only a `+ item` line
 // (not `more`, a raised count) may be the reply's notable item.
-function storyItems(ctx, inv, def, qty, created = false, more = false, notableOk = !more) {
+function storyItems(ctx, inv, def, qty, created = false, more = false, notableOk = !more, verb = 'given') {
     const tally = tallyOf(ctx, inv);
     if (!tally) return { qty, problem: null, notable: false };
     if (!Number.isFinite(storyCoinBudget(ctx))) {
@@ -1287,7 +1294,7 @@ function storyItems(ctx, inv, def, qty, created = false, more = false, notableOk
         keepTally(inv, tally);
         return {
             qty: given,
-            problem: given < qty ? `${itemText(def.name, qty)}${more ? ' more' : ''} was written, but ${def.name} does not stack and at most ${MAX_UNSTACKED} can be given at once; ${given} were given.` : null,
+            problem: given < qty ? `${itemText(def.name, qty)}${more ? ' more' : ''} was written, but ${def.name} does not stack and at most ${MAX_UNSTACKED} can be given at once; ${given} were ${verb}.` : null,
             notable: false,
         };
     }
@@ -1333,7 +1340,7 @@ function storyItems(ctx, inv, def, qty, created = false, more = false, notableOk
     return {
         qty: given,
         notable,
-        problem: given < qty ? `${itemText(def.name, qty)}${more ? ' more' : ''} was written, but one reply may give ${limits.join(' and ')}; ${given} ${given === 1 ? 'was' : 'were'} given${notable ? ' as a key item' : ''}.` : null,
+        problem: given < qty ? `${itemText(def.name, qty)}${more ? ' more' : ''} was written, but one reply may give ${limits.join(' and ')}; ${given} ${given === 1 ? 'was' : 'were'} ${verb}${notable ? ' as a key item' : ''}.` : null,
     };
 }
 
