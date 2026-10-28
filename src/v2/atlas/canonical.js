@@ -1,6 +1,6 @@
 // Story Director v2, atlas part: the canonical place (contract §3 P24, "Canonical resolution"). Pure.
 //
-// One identity per place for every module that keys on a place (RPG Battle's area, shop, trainer, quest and save seams):
+// One identity per place for every module that keys on a place (such as a map or another module's place data):
 //   * a pack place is its content definition id (`pack.<id>/<slug>`), **before and after** the story materializes it as a `pl_` place;
 //   * a place no pack has is its own `pl_` id, mapped to itself;
 //   * a name that more than one pack's place answers to, or an own place that matches several packs, is **ambiguous**: null, held until

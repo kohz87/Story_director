@@ -103,7 +103,7 @@ export function questDifficulty(value) → 'easy' | 'normal' | 'hard' | 'nightma
 // deadly/impossible/extreme/lethal → nightmare), else normal; missing → normal. parseChanges
 // stores a non-empty `difficulty:` this way, so the tracker only holds the four words (an
 // empty one clears the field, which reads as normal).
-// `encounter` (v0.8): the foes of a planned fight, free text in RPG Battle's shape
+// `encounter` (v0.8): the foes of a planned fight, free text
 // (`3 bandit, bandit captain (boss)`, `2 x dire wolf rank D`), stored as written, never parsed.
 export function lineKey(key) → id     // lowercase, markdown and punctuation squashed, spaces single
 export function parseChanges(text) → { ops: [Op], errors: [{ line, message }] }
@@ -564,7 +564,7 @@ Land trips take the straight line × `roadFactor`; boats, ships and flight go st
 
 ## `src/suite.js` (v0.8): the Story Suite handshake
 
-Shared byte for byte with Story Block, NPC State Delta and RPG Battle; the contract is
+Shared byte for byte with Story Block and NPC State Delta; the contract is
 [STORY_SUITE.md](STORY_SUITE.md). Never edited here alone.
 
 ```js

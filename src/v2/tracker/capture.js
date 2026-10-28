@@ -22,7 +22,6 @@ const QUOTE_CHARS = 300;
 // `…_id` are IDs, three keys no state may hold): kept under such a name in `fields`, they would get
 // the whole line refused. They mean nothing to the Director, so they are left out with a Problem.
 const RESERVED_LABEL = /^(?:qty|id|.+_id|.+Id|__proto__|constructor|prototype)$/;
-// `xp:` on a quest: quest XP is RPG Battle's, scaled by difficulty (MODULES §F5); never a written amount.
 const IGNORED_LABELS = new Set(['xp', 'exp', 'experience', 'reward', 'target', 'met', 'ready', 'difficulty']);
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';

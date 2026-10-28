@@ -9,7 +9,7 @@ import { createModule } from '../../../src/v2/module.js';
 import { ACCEPT, END, FEATURE, UPDATE, createArcController } from '../../../src/v2/arc/index.js';
 import { FIGHT_RULE, NO_FIGHT_RULE } from '../../../src/v2/arc/plan.js';
 import { browserStore, createReveal } from '../../../src/v2/screens/reveal.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
@@ -42,7 +42,7 @@ async function setUp({ script = [PLAN], rpg = false, settings = {}, sdkOverride 
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
     host = await createHost({
         callModel: model,
-        modules: [...(rpg ? [fakeRpgBattle()] : []), module],
+        modules: [...(rpg ? [fakeFightRunner()] : []), module],
         settings: { modules: { 'story-director': settings } },
     });
     const store = browserStore(null);

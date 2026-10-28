@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
 
 const STATIC_KEY = 'story_suite_static';
@@ -24,7 +24,7 @@ const worldLines = tail => (tail ?? '').split('\n').filter(line => line.startsWi
 async function newHost() {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeRpgBattle(), module] });
+    host = await createHost({ modules: [fakeFightRunner(), module] });
     return host;
 }
 

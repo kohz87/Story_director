@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { MODULE_ID, createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from './helpers/fake-rpg.js';
+import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 import { problemList } from '../../../src/v2/tracker/domain.js';
 
 const STATIC_KEY = 'story_suite_static';
@@ -27,7 +27,7 @@ const receipts = host => host.sdk.receipts().map(entry => entry.receipt);
 async function newHost(options = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeRpgBattle(), module], ...options });
+    host = await createHost({ modules: [fakeFightRunner(), module], ...options });
     return host;
 }
 

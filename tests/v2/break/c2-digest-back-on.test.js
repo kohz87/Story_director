@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { DIGEST_FEATURE } from '../../../src/v2/chronicle/days.js';
 
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
@@ -22,7 +22,7 @@ async function hostWithSwitch() {
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
     const original = module.hooks.beforeGenerate;
     module.hooks.beforeGenerate = (view, info) => original({ ...view, feature: id => (id === DIGEST_FEATURE ? flag.on : true) }, info);
-    host = await createHost({ modules: [fakeRpgBattle(), module] });
+    host = await createHost({ modules: [fakeFightRunner(), module] });
     return { host, flag };
 }
 

@@ -6,7 +6,7 @@ RPG Battle is no longer supported. Its rules packs cannot be imported; existing 
 
 ## Install
 
-Install [Story Block](https://github.com/kohz87/Story_block), then [Story Director](https://github.com/kohz87/Story_director), and reload SillyTavern. [NPC State Delta](https://github.com/kohz87/npc_state_delta) is optional. Story Director requires Story Block 2.0.0-beta.2 or later; use Story Block 2.6.0 for this release.
+Install [Story Block](https://github.com/kohz87/Story_block), then [Story Director](https://github.com/kohz87/Story_director), and reload SillyTavern. [NPC State Delta](https://github.com/kohz87/npc_state_delta) is optional. Story Director requires Story Block 2.6.0 or later.
 
 ## Playing
 

@@ -3,14 +3,14 @@
 // time-skip reminder. The digest keeps the revisions of the day-facts entries it was made from
 // (`src`), the entries stay while it is whole, and the digest is worked out again on read from the
 // entries left (days.daysOf). Nothing positional is stored; replay equals live after swipes, middle
-// deletes, rewinds and reloads; Story Director alone (no RPG Battle) lists no fights.
+// deletes, rewinds and reloads; Story Director alone (no example fight runner) lists no fights.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { DIGEST, FOLLOW_MAX, daysOf, entriesByDay, makeDigest, orderedDays, validateDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 import { YESTERDAY_TAG, digestTailLine } from '../../../src/v2/chronicle/digest.js';
 
@@ -21,7 +21,7 @@ const june3 = host => host.sdk.query('chronicle.days').find(day => day.date === 
 async function newHost({ rpg = true, settings = {} } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [...(rpg ? [fakeRpgBattle()] : []), module], settings: { modules: { 'story-director': settings } } });
+    host = await createHost({ modules: [...(rpg ? [fakeFightRunner()] : []), module], settings: { modules: { 'story-director': settings } } });
     return host;
 }
 
@@ -138,7 +138,7 @@ test('a swipe after the digest keeps it; a rewind past it takes it away; rebuild
     host.close();
 });
 
-test('Story Director alone (no RPG Battle): the day follows a delete and lists no fights', async () => {
+test('Story Director alone (no example fight runner): the day follows a delete and lists no fights', async () => {
     const host = await digestedDay({ rpg: false });
     await deleteExchange(host, 'To the weir.');
     const day = june3(host);

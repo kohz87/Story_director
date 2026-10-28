@@ -4,14 +4,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const director = host => host.head().domains.director;
 
 async function fresh(t, first = []) {
     t.mock.method(console, 'warn', () => {});
-    const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
+    const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
     t.after(() => host.close());
     await host.send('Hello.', reply('The road.', first));
     return host;

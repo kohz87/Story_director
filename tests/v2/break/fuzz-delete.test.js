@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const SEEDS = [1, 2, 3];
 const REPLIES = 20;
@@ -182,7 +182,7 @@ for (const seed of SEEDS) {
         const restore = seedCrypto(seed);
         const r = prng(seed);
         const ra = prng(seed ^ 0xA5C);
-        const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
+        const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
         try {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
                 ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
@@ -237,7 +237,7 @@ for (const seed of SEEDS) {
             }
             await host.send('And then?', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
-            const again = await createHost({ modules: [fakeRpgBattle(), createModule()] });
+            const again = await createHost({ modules: [fakeFightRunner(), createModule()] });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
                 assert.deepEqual(again.store.problems(), [], `seed ${seed}: a fresh load skips nothing`);

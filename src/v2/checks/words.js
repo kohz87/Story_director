@@ -1,5 +1,5 @@
 // Story Director v2, part **checks**: the words a check is read by (contract §3 P09: "Resolve explicit stat first, else transferred
-// statForCheck(skill) (unknown -> LUK)" and "the transferred topic table"). Moved from RPG Battle's party/checks.js and checks/modifiers.js
+// statForCheck(skill) (unknown -> LUK)" and "the transferred topic table").
 // with their patterns unchanged. Pure.
 
 export const STATS = Object.freeze(['STR', 'VIT', 'AGI', 'DEX', 'INT', 'LUK', 'CHA']);

@@ -14,7 +14,7 @@ import { MAX_JUMP_DAYS, maxJumpMinutes, settingsDefaults, timeAfter } from '../.
 import { lastProblems, makeState, reply, thread } from '../tracker/helpers/fake-ctx.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const gregorian = makeCalendar('gregorian');
 const DAY = 1440;

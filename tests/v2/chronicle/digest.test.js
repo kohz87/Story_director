@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { DIGEST, DIGEST_FEATURE, dayOf, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 import { LAST_DAY_TAG, YESTERDAY_TAG, digestCommands, digestTailLine } from '../../../src/v2/chronicle/digest.js';
 import { features, part } from '../../../src/v2/chronicle/index.js';
@@ -26,7 +26,7 @@ const lineOf = (host, date) => host.sdk.query('chronicle.days').find(day => day.
 async function newHost(settings = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeRpgBattle(), module], settings: { modules: { 'story-director': settings } } });
+    host = await createHost({ modules: [fakeFightRunner(), module], settings: { modules: { 'story-director': settings } } });
     return host;
 }
 

@@ -61,7 +61,7 @@ export function staticText({ fights = true } = {}) {
     ].join('\n');
 }
 
-/** The static part with a fight runner there (RPG Battle), as before. */
+/** The static part when an optional fight runner is present. */
 export const STATIC_TEXT = staticText();
 
 /** Each Director kind's one line for the change-line instruction (SPEC §4.4). */
@@ -89,7 +89,7 @@ export function withoutEncounters(tracker) {
     return { ...tracker, records: tracker.records.map(record => (record.fields?.encounter ? { ...record, fields: { ...record.fields, encounter: '' } } : record)) };
 }
 
-// All neutral instructions keep hook identity; RPG capture belongs to RB.
+// All neutral instructions keep hook identity.
 const v2Lines = value => value.replace(/\bquest Key\b/g, 'hook Key');
 
 // The thread ids the time part's recap for this reply tells (empty without the time part).

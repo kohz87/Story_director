@@ -47,7 +47,7 @@ export const MODULE_NAME = 'Story Director';
 export const VERSION = '2.2.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-export const STORY_BLOCK_RANGE = '>=2.0.0-beta.2';
+export const STORY_BLOCK_RANGE = '>=2.6.0';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);
@@ -182,7 +182,7 @@ function partView(ns, view, shared) {
 
 // ---- stand-alone (WAVE rule 11) ----------------------------------------------------------------
 
-// Queries only a fight runner answers (RPG Battle's combat part, MODULES §B3).
+// Queries that an optional fight runner may answer.
 const FIGHT_QUERIES = ['combat.foesBeaten', 'combat.session', 'combat.offers'];
 const UNANSWERED = /no module answers|no query called|there is no query/i;
 

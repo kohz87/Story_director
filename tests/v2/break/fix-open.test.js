@@ -1,5 +1,5 @@
 // The open findings of the beta fuzz and matrix cells, on Story Block's real feature switch and with
-// Story Director alone (WAVE rule 11: no RPG Battle). The cells' own tests sit beside this one
+// Story Director alone (WAVE rule 11: no example fight runner). The cells' own tests sit beside this one
 // (c1-time-after-middle-delete, c2-time-jump-per-reply, c1-days-date-twice, c2-digest-back-on,
 // c2-digest-off-queries); these add what they could not drive: the reader's switch through the host,
 // and replay == live after each fix.

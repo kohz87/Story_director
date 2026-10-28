@@ -19,7 +19,7 @@ const line = (raw, state, options = {}) => {
     return run(state, 'check', { op: '?', kind: 'check', name, text: text.join(' — '), labels, raw }, { cause: 'story', source: SOURCE, ...options });
 };
 
-test('the grammar is the old one and, after the flip, this part keeps the `check` kind (RPG Battle\'s part is gone)', () => {
+test('the grammar is the old one and, after the flip, this part keeps the `check` kind (example fight runner\'s part is gone)', () => {
     assert.match(checkKind.grammar, /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name$/);
     assert.equal(part.kinds.check, checkKind);
 });

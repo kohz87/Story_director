@@ -3,7 +3,7 @@
 // as a small model does), and Story Director's `time` kind moves the clock. The reader sees it on the
 // reply's card as "! time +20m (assist)" (the card's `assisted` list is the reply's receipts marked
 // `assist`, Story Block's ui-host; its folded header counts them). Story Block and Story Director only (no
-// RPG Battle, no NSD).
+// example fight runner, no NSD).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

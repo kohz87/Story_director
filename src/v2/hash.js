@@ -1,6 +1,6 @@
 // Story Director v2, the contract's Hash (§4): SHA-256 of the normalized JSON of a value. Queries are given no `hash` tool (only
 // commands and the replay hook are: `ctx.hash`, `hooks.replayGuard({ hash })`), and `checks.policy` and `atlas.policy` answer a Hash from a query,
-// so this is the same function, written here because an extension cannot import Story Block (RPG Battle's rules/hash.js is its twin).
+// so this is the same function, written here because an extension cannot import Story Block.
 // tests/v2/hash.test.js holds it to the contract's known values. Pure.
 
 const utf8 = new TextEncoder();

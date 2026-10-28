@@ -1,5 +1,5 @@
 // Story Director on the real Story Block v2 host (the vendored runtime and testkit in
-// tests/vendor/story-block/): Story Block's core module, a stand-in RPG Battle and this module,
+// tests/vendor/story-block/): Story Block's core module, a stand-in example fight runner and this module,
 // driven the way SillyTavern drives them (messages, replies with <Changes> blocks, swipes,
 // deletes, UI commands).
 
@@ -8,12 +8,12 @@ import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule, MODULE_ID } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from './helpers/fake-rpg.js';
+import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
 
-const newHost = (options = {}) => createHost({ modules: [fakeRpgBattle(), createModule()], ...options });
+const newHost = (options = {}) => createHost({ modules: [fakeFightRunner(), createModule()], ...options });
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const quest = (host, key) => host.sdk.query('director.thread', { key });
 const claims = host => Object.keys(host.head().meta.claims).sort();

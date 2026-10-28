@@ -23,7 +23,7 @@ test('the months field asks for the text form; the other calendar fields are as 
 });
 
 test('Story Block\'s settings show the months one per line; 13 typed months are the chat\'s calendar; 0, negative or no days are refused', async () => {
-    // Alone: no RPG Battle, no other module (WAVE rule 11).
+    // Alone: no example fight runner, no other module (WAVE rule 11).
     // Queries read the settings through Story Block's live sdk; the testkit host stands in for it (as wiring.test.js).
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });

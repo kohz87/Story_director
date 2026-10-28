@@ -26,8 +26,8 @@ export const queries = {
     /** The checks policy and its hash (the read-only projection every writer compares `expectedHash` with). */
     'checks.policy': (state, _args, tools) => projection(state?.domains?.checks, settingsOf(tools)),
     /**
-     * `director.contract({}) -> { api: 2, enabled, clock, tiers, threads, journal, checks }`: what Story Director offers a rules module,
-     * as booleans RPG Battle probes before it goes ready. `clock`: the story clock answers; `tiers`: places and their danger resolve;
+     * `director.contract({}) -> { api: 2, enabled, clock, tiers, threads, journal, checks }`: the capabilities
+     * Story Director offers other modules. `clock`: the story clock answers; `tiers`: places and their danger resolve;
      * `threads`: the thread store and its hash answer; `journal`: day recaps answer without the digest on screen; `checks`: the policy answers.
      */
     'director.contract': (state, _args, tools) => ({

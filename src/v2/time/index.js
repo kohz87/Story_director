@@ -134,7 +134,7 @@ function queryCalendar(tools) {
 }
 
 /**
- * `time.now`: the story clock for other modules (RPG Battle's timed effects, the day digest):
+ * `time.now`: the story clock for other modules (for example, the day digest):
  * `{ minutes, text, day, date }`: whole story minutes, that time on the chat's calendar
  * ("June 3, 1200, 08:00 am"), the story day (minutes / 1440, floored) and its date ("June 3, 1200").
  * While the story has not set the time: `{ minutes: null, text: '', day: null, date: '' }`.

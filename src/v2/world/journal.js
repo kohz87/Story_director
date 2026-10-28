@@ -133,7 +133,7 @@ function linesOf(entry) {
 
 /**
  * `journal.day({ day, snapshot? }) -> { day, title, lines, source: 'digest' | 'facts' | 'snapshot', missing }` (contract §3): one story day
- * for a module that wants its recap (RPG Battle's save points, the wake after a return). It works whether or not the Journal screen or the
+ * for a module that wants its recap (for example, a save point). It works whether or not the Journal screen or the
  * day digest is on: the visible digest first, else the visible facts of the day (the receipts the digest would be written from), else the
  * saved visible scene of `snapshot`. At most twelve lines of 240 characters; what {{user}} must not know (a secret, an arc) is left
  * out as the Journal leaves it out, and no hidden event is recapped. A day with none of these is `missing: true`, titled `Day <day>`, with

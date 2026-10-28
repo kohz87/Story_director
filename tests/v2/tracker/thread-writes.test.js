@@ -50,7 +50,7 @@ test('standalone hook acceptance checks only active reader proof and neutral int
     const accepted = proof('I will help the miller.');
     assert.equal(neutralAcceptance(thread(), [accepted], accepted.id, { cause: 'story' }).ok, true);
     assert.equal(neutralAcceptance(thread(), [], accepted.id, { cause: 'story' }).code, 'REFUSED');
-    assert.equal(neutralAcceptance(thread(), [{ ...accepted, owner: 'rpg-battle' }], accepted.id, { cause: 'story' }).code, 'REFUSED');
+    assert.equal(neutralAcceptance(thread(), [{ ...accepted, owner: 'rules-module' }], accepted.id, { cause: 'story' }).code, 'REFUSED');
     assert.equal(neutralAcceptance({ ...thread(), id: 'th_00000002' }, [accepted], accepted.id, { cause: 'story' }).code, 'REFUSED');
 });
 

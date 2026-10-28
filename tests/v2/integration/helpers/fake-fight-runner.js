@@ -1,14 +1,12 @@
-// A small stand-in for RPG Battle (module `rpg-battle`, MODULES §B) for Story Director's
-// integration tests: a party with one PC, a `combat.beaten` list a test fills with `combat.win`,
-// and the two things quests use from it: `combat.foesBeaten({ sinceRev })` and `party.grantXp`.
-// Only the shapes of MODULES §B3 and §F5; none of the real rules.
+// A test-only fight runner for checking optional-module behavior. It supplies a party
+// and a combat receipt source; Story Director also works when it is absent.
 
 const ACTOR = 'ac_astra001';
 
-export function fakeRpgBattle() {
+export function fakeFightRunner() {
     return {
-        id: 'rpg-battle',
-        name: 'RPG Battle (test stand-in)',
+        id: 'rules-module',
+        name: 'example fight runner (test stand-in)',
         version: '0.0.0-test',
         domains: {
             party: {
@@ -23,14 +21,6 @@ export function fakeRpgBattle() {
                 const combat = ctx.draft('combat');
                 combat.beaten.push({ rev: ctx.rev, foes: foes.map(foe => ({ name: foe.name, count: foe.count })), won: true });
                 return { summary: `Astra wins a fight: ${foes.map(foe => `${foe.count} ${foe.name}`).join(', ')}.`, narrate: true, data: {} };
-            },
-            // MODULES §F5: { actor?, amount?, quest?, difficulty? }; quest XP by difficulty.
-            'party.grantXp'(ctx, payload = {}) {
-                const party = ctx.draft('party');
-                const amount = Number.isSafeInteger(payload.amount) ? payload.amount : { easy: 10, normal: 25, hard: 50, nightmare: 100 }[payload.difficulty] ?? 25;
-                party.actors[ACTOR].xp += amount;
-                party.xpLog.push({ quest: payload.quest ?? null, amount, caller: ctx.caller ?? null });
-                return { summary: `Astra gains ${amount} XP.`, narrate: false, data: { amount } };
             },
         },
         queries: {

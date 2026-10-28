@@ -1,4 +1,4 @@
-// checks.roll (contract §3 P09): one d20, the standalone subtotal or RPG Battle's projection in its place, one NPC social part, the clamp
+// checks.roll (contract §3 P09): one d20, the standalone subtotal or example fight runner's projection in its place, one NPC social part, the clamp
 // with its cap part, and the evidence a check stands on.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -91,7 +91,7 @@ test('a person\'s social part: the identity resolves to the current name, one ca
 test('who may roll, and what it stands on: the story and the pre-roll, not a click; unknown evidence NOT_FOUND; the same check twice is refused', () => {
     const { state } = withActor();
     assert.equal(roll(state, {}, { cause: 'ui' }).code, 'REFUSED');
-    assert.equal(roll(state, {}, { cause: 'system', caller: 'rpg-battle' }).code, 'REFUSED');
+    assert.equal(roll(state, {}, { cause: 'system', caller: 'rules-module' }).code, 'REFUSED');
     assert.ok(roll(state, {}, { cause: 'system', caller: 'story-block' }).ok, 'the pre-roll');
     assert.equal(roll(state, { evidence: 'ev_00000009' }).code, 'NOT_FOUND');
     assert.ok(roll(state, { evidence: 'ev_00000009' }, { source: { evidence: 'ev_00000009' }, queries: {} }).ok, 'the block\'s own evidence');
