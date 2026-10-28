@@ -154,7 +154,7 @@ function defErrors(key, def) {
 }
 
 // The carry capacity a def may add (PACKS.md "Carry capacity"): only a pack's item has one, so the story's
-// words never make or raise it (WAVE rule 1); a carry module (RPG Battle's items.carry) reads it.
+// words never make or raise it (WAVE rule 1); a carry module (`items.carry`) reads it.
 export const CARRY_MAX = 1000;
 const packCarry = (id, value) => (typeof id === 'string' && id.startsWith('pack.') && isCount(value, 1) && value <= CARRY_MAX ? value : null);
 
@@ -299,14 +299,14 @@ function takeAcross(inv, stacks, qty) {
 
 // A key item (`key: true` on its stack): the one notable item a reply's story gives outside its goods
 // budget (storyItems), a stack kept apart from the rest of that item. It is used, worn, given and consumed like any other, but it has no cash value: a module
-// that buys things back or counts what they are worth (RPG Battle's trade and crafting) counts it as 0.
+// that buys things back or counts what they are worth (for trade or crafting) counts it as 0.
 // It never joins another stack, nor another stack it (looseMatch, inventory.merge), and the part of it
 // that is given away or split off stays a key stack.
 // The story's own (`story: true` on its stack, B-a2-2): what a story line (`+ item`) gave, or the reader
 // took from a story's loot (`? loot`, inventory.lootTake, FB-2), whatever its def (a pack's item named in
 // the story too). inventory.grant never sets it: no story line reaches it (modules and pack events call it
 // with what their code chose) and it moves no stack. Its worth was counted in that reply's goods budget, so a
-// module that buys things back holds what it pays for it to its worth at the sell rate (RPG Battle's
+// module that buys things back holds what it pays for it to its worth at the sell rate (the module's
 // trade). It stacks with the rest of that item; a stack it joins, or that joins it, is the story's too,
 // and the part of it that is given away or split off stays the story's.
 function addStack(ctx, inv, def, qty, owner, note, key = false, story = false) {
@@ -508,11 +508,11 @@ function pay(ctx, env, { owner, amount, note }) {
     };
 }
 
-// ---------- equipment: who can wear what, and "Equip on…" (MODULES §F99) ----------
+// ---------- equipment: who can wear what ----------
 
-// Slots that hold several pieces, each copy under its own key (`accessory-1`, `accessory-2`, as RPG
-// Battle's item.equip keys them), with the count when no module says otherwise. Every other slot holds
-// one piece. The counts come from the `items.slots` query (RPG Battle's rules: { accessory, worn }, or
+// Slots that hold several pieces, each under its own key (`accessory-1`, `accessory-2`),
+// with the count when no module says otherwise. Every other slot holds one piece.
+// The counts come from the `items.slots` query ({ accessory, worn }, or
 // `accessories`), held to 0…MAX_MANY.
 export const MANY_SLOTS = Object.freeze({ accessory: 2, worn: 1 });
 export const MAX_MANY = 3;
@@ -554,7 +554,7 @@ function membersOf(query, party) {
 }
 
 // The main character's id (`party.pc`, else the party domain's `pc`), or null: what the shared bag wears
-// is theirs (RPG Battle's rule).
+// is theirs when a party module identifies them.
 function pcOf(query, party) {
     const pc = asking(query, 'party.pc', {});
     const id = typeof pc?.id === 'string' ? pc.id : typeof party?.pc === 'string' ? party.pc : null;
@@ -590,13 +590,13 @@ function readParty(ctx) {
     }
 }
 
-// ---------- equipment through the rules module (RB_CONTRACT §3, P07) ----------
+// ---------- equipment through the rules module ----------
 //
 function joinNames(names) {
     return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-// ---------- gear condition (`cond`, for RPG Battle's wear rules) ----------
+// ---------- gear condition (`cond`) ----------
 
 // Only another module's rules wear or mend a piece (a fight, a fall, a smith's work): `ctx.caller` must
 // be set, whatever the cause. Amounts are clamped into 0…100, so a module's call never fails on a
@@ -647,9 +647,9 @@ function repair(ctx, payload) {
 }
 
 // The story's word for wear on a piece (`~ item Coat — torn by brambles | wear: scuff|tear|ruin`). With a
-// module answering `item.wear` (RPG Battle's gear rules: bands, refinement, its own claim) the line goes
+// module answering `item.wear` (a module's gear rules) the line goes
 // there as `item.wear { name, wear, why, story: true }`; without one Story Block wears the stack itself
-// by STORY_WEAR, once per piece per reply. Words and numbers are RPG Battle's (items/condition.js), so
+// by STORY_WEAR, once per piece per reply. The words and numbers are shared by the fallback, so
 // both read a line the same way.
 export const STORY_WEAR = Object.freeze({ scuff: 5, tear: 15, ruin: 40 });
 const WEAR_WORDS = Object.freeze({
@@ -1372,8 +1372,7 @@ function lineQty(ctx, line, fallback) {
 }
 
 // A consumable the story says was used (MODULES §F96): `- item Potion | used: yes`, or a used-word in
-// the line or the reply, and no word that says it went another way. Copied from RPG Battle's
-// items/story-use.js (usedByLine), so both read a line the same way.
+// the line or the reply, and no word that says it went another way.
 export const USED_WORDS = /\b(?:used|uses|drank|drinks|drunk|ate|eats|eaten|applied|applies|quaffed|swallowed|consumed)\b/i;
 export const GONE_WORDS = /\b(?:lost|loses|sold|sells|gave|given|gives|dropped|stolen|traded|handed|broke|broken|spilled|spilt)\b/i;
 
@@ -1612,7 +1611,7 @@ const asker = tools => (name, args) => {
  *   wearers: { [stack]: [{ id, name }] } (who may put on each piece of equipment, not its wearer),
  *   givers: { [stack]: [{ id, name }] } (where Give may hand each stack: the party's bag and members,
  *   not its owner), users: { [stack]: [{ id, name }] } (whom Use on… offers for a consumable: usersOf),
- *   limits: { accessory, worn }, detail: bool (RPG Battle's item detail is there) }.
+ *   limits: { accessory, worn } }.
  */
 export function equipmentView(state, tools) {
     const query = asker(tools);
@@ -1646,8 +1645,7 @@ export function equipmentView(state, tools) {
 
 /**
  * Who a Use on… picker offers for each consumable (bag management, beta.1 live test): the module that
- * answers `items.useOn` (RPG Battle: the members a dose would help now, none while a fight has the
- * party; its Use runs `item.use { stack, target }`). Only consumables the party holds, only members;
+ * answers `items.useOn`; Use runs `item.use { stack, target }`. Only consumables the party holds, only members;
  * {} without such a module, so the picker is not drawn.
  */
 function usersOf(query, inventory, items, members) {

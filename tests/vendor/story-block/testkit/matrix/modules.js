@@ -8,7 +8,7 @@
 //   * `make(imported, ref)`: a fresh definition; `ref.sdk` is the host's sdk once it is up (set after
 //     createHost), for the modules whose settings come through it;
 //   * `A`, `B`, `C`: three replies' change lines (A first, B second, C the swipe / re-read text);
-//   * `setup(host)`: commands run before the first reply (RPG Battle makes its party);
+//   * `setup(host)`: commands run before the first reply (an example module makes its party);
 //   * `action(host)` → [type, payload]: the reader's action, run after reply A;
 //   * `watch(host)` (optional): what the action is expected to change when `facts` does not show it;
 //   * `facts(host)`: a plain projection of what the module keeps, to compare with a host that

@@ -15,7 +15,7 @@
 // refused by the bus (commandFeature); a change line of its kinds is told quietly (capture().off).
 // `featureValue(id)` gives the reader's stored choice (true, false or undefined for the default).
 //
-// Lifecycle (docs/v2/LIFECYCLE.md, RB_CONTRACT §2 P22): a module may name the peers it needs
+// Lifecycle (docs/v2/LIFECYCLE.md): a module may name the peers it needs
 // (`requires: { peers: { 'story-director': '^2' } }`). A module whose peer is missing, of another
 // version, turned off or not ready itself, or whose peers need each other, is dormant: it is
 // registered and its names stay reserved, but it has no domain set up, no capture, hooks, context or

@@ -314,7 +314,7 @@ export async function ensureModules({ store, bus, registry, events = null }) {
     return results;
 }
 
-// ---- sdk.preflight (RB_CONTRACT §2, §9; docs/v2/LIFECYCLE.md) --------------------------------------
+// ---- sdk.preflight (docs/v2/LIFECYCLE.md) --------------------------------------
 
 /** The classes a module's stored data can be in, as sdk.preflight tells them. */
 export const PREFLIGHT_CLASSES = Object.freeze(['empty', 'current', 'legacy', 'mixed', 'future', 'damaged']);
@@ -576,7 +576,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
             current: () => (typeof dialogCurrent === 'function' ? dialogCurrent() ?? null : null),
         }),
         /**
-         * The timeline coordinator (RB_CONTRACT §8; docs/v2/TIMELINE.md): `head`, `make` (a manual save), `list`, `status`,
+         * The timeline coordinator (docs/v2/TIMELINE.md): `head`, `make` (a manual save), `list`, `status`,
          * `history`, `forget` for a reader; `prepare`, `activate`, `abort`, `recover`, `nativeEvent`, `registerParticipant`
          * refuse without the host's capability, which no module is given. Every method answers `{ ok: true, … }` or
          * `{ ok: false, code, message }`, as a promise.

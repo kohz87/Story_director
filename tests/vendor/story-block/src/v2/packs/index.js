@@ -10,11 +10,10 @@
 // Interface for the other parts:
 // * query `packs.list` → installed packs for display (`installed.js` list()).
 // * query `packs.content({ kind, pack? })` → records of one kind from enabled packs (places and
-//   routes are the map Story Director's atlas reads; `terms` the level and XP words RPG Battle reads; `ranks` a
-//   ladder of quest ranks for Story Director's `quest.ranks` and RPG Battle's foe strength).
+//   routes are the map Story Director's atlas reads; other content is available to modules).
 // * query `packs.calendar` → the first enabled pack's calendar for the story clock, or null.
 // * query `packs.crafts` → the craft table (default crafts, enabled packs' `crafts` laid over them:
-//   `[{ craft, title, stats, stations, note?, pack }]`) that RPG Battle's crafting reads with recipes.
+//   `[{ craft, title, stats, stations, note?, pack }]`) for modules that use recipes.
 // * query `packs.weather` → the first enabled pack's weather table `{ pack, seasons, tables }`, or null
 //   (MODULES §F122: Story Director's weather by rule).
 // * query `packs.economy` → the first enabled pack's money scale `{ pack, scale, note }`, or null. Modules
@@ -23,7 +22,7 @@
 //   the enabled packs' `markets` records (settlement types and environment tags, the first pack's per
 //   name) and the places with a market: the character lorebook's `market:` lines first
 //   (`from: 'lorebook'`), then the packs' places that name a `market` or `tags` (`from: 'pack'`).
-//   RPG Battle's trade lays them over its built-in factors. The lorebook is read when a chat opens
+//   A module may use these records to set prices. The lorebook is read when a chat opens
 //   (`refreshLore()`) and from the Packs panel, never by a query.
 // * query `packs.item({ name })` and hook `item.resolve(name)` → the pack item def a story
 //   name means (`pack.<packId>/<slug>`, SPEC §7 shape) or null. Inventory capture calls it

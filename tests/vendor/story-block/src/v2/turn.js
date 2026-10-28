@@ -505,7 +505,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     }
     const blockedBy = () => askCanGenerate();
 
-    // A module's own onBlocked hook (what it does when it held the story back: RPG Battle opens the
+    // A module's own onBlocked hook (what it does when it held the story back: an example module opens the
     // character wizard). → true when it ran without throwing.
     // C3-2: through the off-aware hook list, so a hook whose feature is off is never called (nor offered).
     const onBlockedOf = moduleId => registry.hookEntries('onBlocked').find(entry => entry.moduleId === moduleId)?.fn ?? null;

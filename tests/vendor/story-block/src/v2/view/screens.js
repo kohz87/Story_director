@@ -39,7 +39,7 @@ const isRecord = value => value !== null && typeof value === 'object' && !Array.
 
 /** The game view's landing page: always the first screen and the first tab. */
 export const HOME_ID = 'story-block/home';
-// The default places, by the last part of an id ('rpg-battle/party' → party): the party and what it
+// The default places, by the last part of an id ('example-module/party' → party): the party and what it
 // carries, what it is doing and where, the activities, the scene, the record, the Director (the game
 // master's view, with what the reader has not been told) and, last, NPC State Delta's Dossiers (its old
 // Cast id, `npc-state-delta/cast`: the people present are on the World screen now, so the dossier

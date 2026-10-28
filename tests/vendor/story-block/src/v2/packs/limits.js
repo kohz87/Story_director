@@ -45,7 +45,7 @@ export const EVENT_FIELDS = Object.freeze(['id', 'when', 'cue', 'once', 'after',
 // The events part's own limits (src/v2/events), so a pack that passes here also runs there.
 export const EVENT_LIMITS = Object.freeze({ when: 500, cue: 500, then: 8 });
 export const CHOICE_FIELDS = Object.freeze(['id', 'name', 'note', 'stats', 'tags']);
-// RPG Battle's skill template (v1 skillFromTemplate): the numbers come from its rules.
+// A skill template: numbers are supplied by the consuming module.
 export const SKILL_FIELDS = Object.freeze(['name', 'slug', 'type', 'stat', 'target', 'element', 'note', 'tags']);
 export const SKILL_TYPES = Object.freeze(['physical', 'magic', 'heal', 'buff', 'debuff']);
 export const SKILL_TARGETS = Object.freeze(['one', 'all', 'self', 'ally', 'allies']);
@@ -59,7 +59,7 @@ export const STAT_NAME = /^[A-Z]{2,12}$/;
 export const PLACE_FIELDS = Object.freeze(['name', 'slug', 'aliases', 'region', 'kind', 'layer', 'x', 'y', 'note', 'hidden', 'secret', 'market', 'tags']);
 export const ROUTE_FIELDS = Object.freeze(['slug', 'from', 'to', 'kind', 'km', 'hours', 'corridor', 'note']);
 // Display terms a pack suggests (MODULES §F25): `{ id?, name?, levelName?, xpName?, tiers? }`, `tiers`
-// being `true` or `{ size?, numerals?, enabled? }`. A term is a label in RPG Battle's blocks
+// being `true` or `{ size?, numerals?, enabled? }`. A term is a label in a module's blocks
 // (`Soul Class: III (Lv 24)`), so it may not hold what separates fields there.
 export const TERMS_FIELDS = Object.freeze(['id', 'name', 'levelName', 'xpName', 'tiers']);
 export const TERMS_TIER_FIELDS = Object.freeze(['size', 'numerals', 'enabled']);
@@ -84,7 +84,7 @@ export const MARKET_WORD = /^[a-z][a-z0-9]*(?:-[a-z0-9]+){0,3}$/;
 
 // Crafting (MODULES §F102). A recipe may say which craft it is, how hard (`dc`), where it is made
 // (`station`), which stats it rolls with (`stat`, overriding the craft's), whether a character knows
-// it from the start (`known`) and who teaches it. RPG Battle's craft part reads them; code sets every
+// it from the start (`known`) and who teaches it. A crafting module may read them; code sets every
 // chance. Fields a recipe had before (fee, minutes, any other plain data) are kept as they were.
 export const RECIPE_CRAFT_FIELDS = Object.freeze(['craft', 'dc', 'station', 'stat', 'known', 'teaches']);
 export const RECIPE_LIMITS = Object.freeze({ dcMin: 5, dcMax: 40, teaches: 120, stats: 3 });
@@ -138,5 +138,5 @@ export const SEMVER = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})(?:-[0-9A-Za-z.-]{1,40})?
 export const COMMAND = /^[a-z][a-z0-9-]{0,39}(?:\.[a-z][A-Za-z0-9-]{0,39}){1,3}$/;
 // A reference to a def outside the pack: `story/rope`, `pack.fantasy/iron-sword`.
 export const DEF_ID = /^(?:story|pack\.[a-z0-9]+(?:-[a-z0-9]+)*)\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
-// A screen id: a module's (`rpg-battle/party`) to override, or the pack's own.
+// A screen id: a module's (`example-module/party`) to override, or the pack's own.
 export const SCREEN_ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
