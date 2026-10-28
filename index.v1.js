@@ -264,7 +264,7 @@ function signature(message) {
     for (let index = 0; index < text.length; index++) hash = ((hash * 33) ^ text.charCodeAt(index)) >>> 0;
     // (0.9.15) The reader's abandon stamp is part of what a reply says.
     const stamp = [...abandonedStamp(message), ...takenStamp(message).map(id => `+${id}`)].join('|');
-    const proof = JSON.stringify([message?.extra?.storyBlockIdentity, message?.extra?.storyDirectorQuest, message?.extra?.rpgBattleEvidence]);
+    const proof = JSON.stringify([message?.extra?.storyBlockIdentity, message?.extra?.storyDirectorQuest]);
     return `${message?.is_user ? 'u' : 'a'}:${text.length}:${hash}${stamp ? `:${stamp}` : ''}:${proof}`;
 }
 
@@ -1581,10 +1581,8 @@ let questGenerating = false;
 let questWriting = false;
 let uncertainQuestWrite = null;
 
-function questApi() {
-    const api = storySuite().api('rpg-battle')?.quests;
-    return api?.version === 1 ? api : null;
-}
+// The historical v1 entry point has no external quest provider.
+function questApi() { return null; }
 
 function questContextAt(index) {
     const state = context()?.chat?.[index]?.extra?.storyDirectorQuest;
@@ -1634,7 +1632,7 @@ function questEvaluation(record, { upTo = (context()?.chat?.length ?? 0) - 1, pr
             : info?.questConflict ? `${info.questConflict} Recovery is required before another turn-in.` : '';
     if (result.managed && (storyBlock()?.transactionVersion !== 1 || api?.rewardVersion !== 1 || recovery || pendingAbandons().has(record.id))) {
         return { ...result, eligible: false, reason: recovery || (pendingAbandons().has(record.id) ? 'Abandonment is queued.'
-            : api?.rewardVersion !== 1 ? 'Update RPG Battle for coordinated XP and quest rewards.' : 'Coordinated saving is unavailable.') };
+            : api?.rewardVersion !== 1 ? 'Coordinated quest rewards are unavailable.' : 'Coordinated saving is unavailable.') };
     }
     return result;
 }
