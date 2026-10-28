@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.0
+
+- RPG Battle is no longer supported. Its rules packs cannot be imported; existing RPG Battle chats should stay on the previous versions.
+- Quests are told by the story. Checks, the calendar, map, World, Chronicle and arc planning continue without battle rules.
+
+
 ## 2.1.1
 
 - **The Map's regions are a list:** the rows of region chips are replaced by a **Region** list on the same row as **Find a place**, before the zoom and locate buttons. It has the same choices in the same order (All first) and shows a region as its chip did; the region shown is the one selected, and a search that lands on another region moves the list with it. On a phone the bar wraps to three rows: Find a place, Region, the buttons.

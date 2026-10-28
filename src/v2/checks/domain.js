@@ -82,7 +82,6 @@ export function draftChecks(ctx) {
     if (!isRecord(draft.policy)) draft.policy = {};
     if (!isRecord(draft.policy.actors)) draft.policy.actors = {};
     if (typeof draft.policy.defaultActor !== 'string') draft.policy.defaultActor = null;
-    delete draft.policy.rbActors;
     if (!isRecord(draft.writes)) draft.writes = {};
     if (!isRecord(draft.log)) draft.log = {};
     for (const id of Object.keys(draft.log)) if (logProblems({ [id]: draft.log[id] }).length) delete draft.log[id];
@@ -101,7 +100,7 @@ export function validateChecks(slice, topics) {
     if (!isRecord(actors) || Object.keys(actors).length > MAX_ACTORS) return [`checks.policy.actors is a record of at most ${MAX_ACTORS}.`];
     for (const [id, actor] of Object.entries(actors)) errors.push(...actorProblems(id, actor, topics));
     if (!(defaultActor === null || (typeof defaultActor === 'string' && Object.hasOwn(actors, defaultActor)))) errors.push('checks.policy.defaultActor is null or an actor.');
-    for (const key of Object.keys(slice.policy)) if (!['actors', 'defaultActor', 'rbActors'].includes(key)) errors.push(`checks.policy has an unknown field "${key}".`);
+    for (const key of Object.keys(slice.policy)) if (!['actors', 'defaultActor'].includes(key)) errors.push(`checks.policy has an unknown field "${key}".`);
     errors.push(...ledgerProblems(slice.writes, 'checks.writes'));
     errors.push(...logProblems(slice.log));
     for (const key of Object.keys(slice)) if (![...LEGACY_FIELDS, 'policy', 'writes', 'log'].includes(key)) errors.push(`checks has an unknown field "${key}".`);
