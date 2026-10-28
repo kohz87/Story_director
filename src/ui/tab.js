@@ -143,7 +143,7 @@ function renderRecord(record, { formatDate, onPin, note = '' }) {
     const head = el('div', { className: 'story-director-record-head' }, [
         el('span', { className: 'story-director-record-key', text: record.key }),
         note ? el('span', { className: 'story-director-tag', text: note }) : null,
-        // A planned fight (its foes are the encounter row): RPG Battle offers it when due.
+        // A planned fight has its foes in the encounter row.
         text(record.fields?.encounter) ? el('span', { className: 'story-director-tag is-fight', text: 'fight' }) : null,
         typeof onPin === 'function' ? pinButton(record, onPin) : null,
     ]);

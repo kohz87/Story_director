@@ -46,7 +46,7 @@ test('registered offer/accept retry returns saved results before stale checks; c
 test('all writers refuse foreign extensions; invalid, limited and stale failures leave no ledger writes', async t => {
     const h = await setup(t);
     assert.equal((await command(h, 'threads.offer', offer('wr_00000001', { quest: {} }))).code, 'INVALID');
-    assert.equal((await command(h, 'threads.offer', offer('wr_00000001', { fields: { reward: '50' } }))).code, 'INVALID');
+    assert.equal((await command(h, 'threads.offer', offer('wr_00000001', { fields: { xp: '50' } }))).code, 'INVALID');
     assert.equal((await command(h, 'threads.offer', offer())).ok, true);
     assert.equal((await command(h, 'threads.offer', offer('wr_00000002'))).code, 'CONFLICT');
     for (const type of ['threads.link', 'threads.questWrite', 'threads.close']) assert.equal((await command(h, type, {})).code, 'UNKNOWN_COMMAND');
@@ -76,6 +76,33 @@ test('retired quest registration and every automatic payout path pay nothing', a
     assert.equal(h.head().domains.inventory.wallets.party?.coin ?? 0, 0);
     assert.equal(h.sdk.query('director.threads', { kind: 'quest' })[0].status, 'resolved');
     assert.ok(h.store.receipts().every(r => !['quest.settle', 'quest.payOwed'].includes(r.type)));
+});
+
+test('counted story goals can finish without a battle provider or a payment receipt', async t => {
+    const h = await setup(t);
+    for (const [name, goal, closing] of [
+        ['Wolf hunt', 'defeat 3 wolves', '- quest Wolf hunt — done'],
+        ['Parcel run', 'deliver 5 parcels', '~ quest Parcel run | step: completed'],
+        ['Permit', 'possess 1 permit', '- quest Permit — done'],
+    ]) {
+        await h.send('I take the job.', `<Changes>\n+ quest ${name} | goal: ${goal} | type: bounty | reward: 2 silver | difficulty: hard\n</Changes>`);
+        const active = h.sdk.query('director.thread', { key: name });
+        assert.equal(active.status, 'active');
+        assert.deepEqual({ type: active.fields.type, reward: active.fields.reward, difficulty: active.fields.difficulty },
+            { type: 'bounty', reward: '2 silver', difficulty: 'hard' });
+        await h.send('The job is over.', `<Changes>\n${closing}\n</Changes>`);
+        assert.equal(h.sdk.query('director.thread', { key: name }).status, 'resolved');
+    }
+    assert.equal(h.head().domains.inventory.wallets.party?.coin ?? 0, 0);
+});
+
+test('an offered goal retains its story reward without paying it', async t => {
+    const h = await setup(t);
+    await h.send('Is there work?', '<Changes>\n+ hook Bridge job | goal: mend the bridge | type: mission | reward: 2 silver | difficulty: easy\n</Changes>');
+    const offered = h.sdk.query('director.thread', { key: 'Bridge job' });
+    assert.deepEqual({ type: offered.fields.type, reward: offered.fields.reward, difficulty: offered.fields.difficulty },
+        { type: 'mission', reward: '2 silver', difficulty: 'easy' });
+    assert.equal(h.head().domains.inventory.wallets.party?.coin ?? 0, 0);
 });
 
 test('C15 standalone offer, reader acceptance, generic progress and closure use no RPG lookups', async t => {

@@ -4,7 +4,6 @@
 // never mutates its inputs (records are copied on write, unchanged ones are shared).
 
 import { FIELDS, QUEST_TYPE_WORDS, formatOp, kindOf, lineKey, questDifficulty } from './changes.js';
-import { acceptedContract, requirementOf } from './quest-completion.js';
 
 const HISTORY_LIMIT = 20;
 const SUPERSEDED = /supersed|replac|merged/i;
@@ -58,7 +57,6 @@ export function waitsForPay(record) {
 /** Whether an open quest's step or now says it is over, so the note can ask the story to close it. */
 export function looksFinished(record) {
     if (record?.kind !== 'quest' || record.status !== 'active') return false;
-    if (record.contract || requirementOf(record.fields, record.extra).managed) return false;
     return ['step', 'now'].some(field => LOOKS_OVER.test(String(record.fields?.[field] ?? '')));
 }
 
@@ -398,7 +396,7 @@ function applyFields(record, op) {
 }
 
 // Every applied op counts as the record being seen, and leaves a trace of the line itself.
-function touch(record, op, at, contractContext = null) {
+function touch(record, op, at) {
     if (legChanged.has(record)) {
         legChanged.delete(record);
         record.legSince = record.fields.leg ? { ...at } : null;
@@ -410,14 +408,9 @@ function touch(record, op, at, contractContext = null) {
     const text = op.raw || formatOp(op);
     // (0.9.30) With its time, so the Journal can date it once the message is behind a checkpoint.
     record.history = [...record.history, { message: at.message, op: op.op, text, time: at.time ?? null }].slice(-HISTORY_LIMIT);
-    if (record.kind === 'hook' && !record.offeredAt && contractContext?.place) record.offeredAt = contractContext.place;
-    if (record.kind === 'quest' && !record.contract) {
-        const contract = acceptedContract(record, contractContext);
-        if (contract) record.contract = contract;
-    }
 }
 
-function newRecord(op, at, contractContext = null) {
+function newRecord(op, at) {
     const record = {
         key: op.key,
         id: op.id || lineKey(op.key),
@@ -437,7 +430,7 @@ function newRecord(op, at, contractContext = null) {
         history: [],
     };
     applyFields(record, op);
-    touch(record, op, at, contractContext);
+    touch(record, op, at);
     return record;
 }
 
@@ -465,7 +458,7 @@ function aliasIndexOf(records, indexById) {
 // `direct` (Story Director v2): the story's `+ quest` is the reader's acceptance, so a job is never
 // held as an offer; a hook or event becomes a quest only by `+ quest` (or a `-` that says it was taken
 // on), never by a `~` that gives it a giver or a reward, and closing a hook never makes it a quest.
-export function applyOps(tracker, ops, { message, time = null, said, chosen = [], taken = [], contractContext = null, settlements = [], direct = false } = {}) {
+export function applyOps(tracker, ops, { message, time = null, said, chosen = [], taken = [], direct = false } = {}) {
     const records = [...tracker.records];
     // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.
     const gated = said !== undefined;
@@ -569,7 +562,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
                 if (op.kind === 'quest') questNow.add(records.length);
                 indexById.set(id, records.length);
                 copied.add(records.length);
-                records.push(newRecord(added, at, contractContext));
+                records.push(newRecord(added, at));
                 continue;
             }
             if (op.kind === 'quest') questNow.add(index);
@@ -600,7 +593,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
                 record.extra = {};
                 applyFields(record, op);
             }
-            touch(record, op, at, contractContext);
+            touch(record, op, at);
             continue;
         }
 
@@ -632,7 +625,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
                 const added = untrackedRecordOp(op, id);
                 indexById.set(id, records.length);
                 copied.add(records.length);
-                records.push(newRecord(added, at, contractContext));
+                records.push(newRecord(added, at));
                 problems.push(finding('untracked-added', 'info', op,
                     `"${op.key}" was not tracked; added as ${withArticle(added.kind)} (write "+ kind Key" to set its kind).`));
                 continue;
@@ -657,7 +650,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             } else if (BECOMES_QUEST.has(record.kind)) {
                 problems.push(finding('became-quest', 'info', op, `"${record.key}" was ${withArticle(record.kind)}; it is a quest now.`));
                 record.kind = 'quest';
-                touch(record, op, at, contractContext);
+                touch(record, op, at);
             } else {
                 problems.push(finding('taken-on', 'info', op, `"${record.key}" was taken on, not ended; it stays open.`));
             }
@@ -671,8 +664,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         }
         // (0.9.1) A change that says the record is over closes it, as its `-` would have.
         // (0.9.7) Closing what is already closed changes nothing: the record keeps the reply that
-        // first closed it, so a model repeating "- Quest — done" later never finishes it twice
-        // (RPG Battle's quest XP follows the reply a quest was closed in).
+        // first closed it, so a model repeating "- Quest — done" later never finishes it twice.
         const closing = op.op === '-' || ((op.op === '~' || op.op === '!') && overByChange(record, op) !== null);
         if (closing && record.status !== 'active') {
             problems.push(finding('already-closed', 'info', op, `"${record.key}" is already ${record.status}; the line changed nothing.`));
@@ -681,16 +673,6 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         const over = (op.op === '~' || op.op === '!') ? overByChange(record, op) : null;
         // (0.9.15) Giving a job up or turning it down is the reader's choice, not the model's.
         const ending = op.op === '-' ? String(op.reason ?? '') : over;
-        const managed = record.contract || requirementOf(record.fields, record.extra).managed;
-        const receipt = settlements.find(entry => entry.quest && entry.quest === record.contract?.id
-            && JSON.stringify(entry.contract) === JSON.stringify(record.contract));
-        if (closing && managed && !FAILED.test(ending ?? '') && !SUPERSEDED.test(ending ?? '')) {
-            if (!receipt || record.settlement) {
-                problems.push(finding('unverified-completion', 'warn', op, `"${record.key}" needs a verified Complete turn-in; narrative success was ignored.`));
-                continue;
-            }
-            record.settlement = structuredClone(receipt);
-        }
         if (gated && closing && ending !== null && CHOSEN_END.test(ending) && (record.kind === 'quest' || isJob(record)) && !chose(record)) {
             problems.push(finding('not-chosen', 'info', op, `"${record.key}" stays open: giving it up or turning it down is {{user}}'s choice, and their message did not make it.`));
             continue;
@@ -708,7 +690,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             record.status = 'resolved';
             record.resolved = { ...at, reason: over };
             problems.push(finding('closed-by-change', 'info', op, `"${record.key}" read as finished ("${over}"); "- ${record.key} — ${over}" says it directly.`));
-            touch(record, op, at, contractContext);
+            touch(record, op, at);
             continue;
         }
         if (op.op === '~') {
@@ -751,7 +733,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         } else {
             continue;
         }
-        touch(record, op, at, contractContext);
+        touch(record, op, at);
     }
 
     return {
@@ -811,7 +793,6 @@ export function replay(entries, { seed = null } = {}) {
             const result = applyOps(tracker, entry.ops, {
                 ...at, ...(entry.said === undefined ? {} : { said: entry.said }),
                 chosen: entry.chosen ?? [], taken: entry.taken ?? [],
-                contractContext: entry.contractContext ?? null, settlements: entry.settlements ?? [],
             });
             tracker = result.tracker;
             for (const problem of result.problems) {

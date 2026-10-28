@@ -47,11 +47,8 @@ function aliasesOf(names, thread) {
     return (names.get(thread.id) ?? []).filter(name => name !== own);
 }
 
-/**
- * The v1 record a thread reads as. `contracts`: a thread with a code-checked `target` (SD-quests)
- * reads as v1's managed quest, so a story line saying it is done is not taken for the Finish.
- */
-export function toRecord(thread, aliases = [], { contracts = false } = {}) {
+/** The v1 record a thread reads as. */
+export function toRecord(thread, aliases = []) {
     const track = thread.track ?? {};
     const fields = Object.fromEntries(FIELDS.map(name => [name, '']));
     const extra = {};
@@ -87,20 +84,14 @@ export function toRecord(thread, aliases = [], { contracts = false } = {}) {
     };
     if (track.engaged) record.engaged = position(track.engaged);
     if (track.offeredAt) record.offeredAt = track.offeredAt;
-    if (contracts && thread.target) {
-        record.contract = {
-            requirement: { action: thread.target.kind === 'foes' ? 'defeat' : 'possess', qty: thread.target.count, entity: thread.target.noun },
-            rewardText: text(thread.reward?.text ?? fields.reward),
-        };
-    }
     return record;
 }
 
 /** The v1 tracker the domain reads as: `{ version, records, message, time }`. */
-export function toTracker(director, options = {}) {
+export function toTracker(director) {
     // The key index is turned round once: looked up per thread it made this quadratic (B-b1-capture-13).
     const names = namesById(director);
-    const records = orderedThreads(director).map(thread => toRecord(thread, aliasesOf(names, thread), options));
+    const records = orderedThreads(director).map(thread => toRecord(thread, aliasesOf(names, thread)));
     return { version: 1, records, message: director?.turn?.n ?? -1, time: director?.time?.minutes ?? null };
 }
 

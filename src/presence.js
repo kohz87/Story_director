@@ -106,15 +106,3 @@ export function offerPresence(record, { place = '', visits = [], scene = '', pre
         ? { here: true, badge: `${giver} · here`, ask: '' }
         : { here: false, badge: `${giver} · not here`, ask: `${giver} isn't here — take it anyway?` };
 }
-
-/** Strict Complete gate: only a recorded issuing settlement or explicit present cast. */
-export function turnInPresence(contract, { place = '', scene = '', present = null } = {}) {
-    const issuer = settlementName(contract?.issuer);
-    if (issuer && settlementKey(issuer) && settlementKey(place) === settlementKey(issuer)) return { here: true, reason: '' };
-    const giver = String(contract?.giver ?? '').trim();
-    if (giver && giverPresent(giver, { scene, present, reply: '' })) return { here: true, reason: '' };
-    return {
-        here: false,
-        reason: giver || issuer ? `Return to ${[giver, issuer].filter(Boolean).join(' or ')}.` : 'Turn-in availability unknown.',
-    };
-}

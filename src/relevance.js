@@ -239,7 +239,7 @@ function isNumber(value) {
 }
 
 // ---------------------------------------------------------------------------------------
-// Encounters: planned fights, for other extensions (RPG Battle offers "Fight?" with them)
+// Encounters: planned fights for other extensions.
 
 function encounterText(record) {
     return String(record?.fields?.encounter ?? '').trim();

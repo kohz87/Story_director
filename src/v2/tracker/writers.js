@@ -4,9 +4,9 @@ import { lineKey } from '../../changes.js';
 import { THREAD_KINDS } from './convert.js';
 import { replyDraft, replyTurn } from './domain.js';
 import { neutralAcceptance, prepareThreadWrite, threadProjection, threadWriteEntry } from './thread-writes.js';
-import { closed, cursor, hash, map, recordId, source, text } from './quest-shape.js';
+import { closed, cursor, hash, map, recordId, source, text } from './thread-shape.js';
 
-const neutralFields = new Set(['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'reach', 'goal', 'step', 'progress', 'giver']);
+const neutralFields = new Set(['desc', 'now', 'then', 'on', 'due', 'shown', 'leg', 'arrive', 'place', 'people', 'encounter', 'reach', 'goal', 'step', 'progress', 'giver', 'type', 'reward', 'difficulty']);
 const copy = value => structuredClone(value);
 const same = (ctx, a, b) => ctx.hash(a) === ctx.hash(b);
 const fail = (ctx, code, message) => ctx.fail(code, message);
@@ -75,7 +75,7 @@ export function writeThread(type, ctx, payload) {
         thread.taken = { rev: ctx.rev };
         thread.acceptance = accepted;
         thread.rev = ctx.rev;
-        result = { thread: thread.id, hash: ctx.hash(threadProjection(thread)), accepted: true, linked: !!thread.rpg };
+        result = { thread: thread.id, hash: ctx.hash(threadProjection(thread)), accepted: true, linked: false };
     }
     director.writes ??= {};
     director.writes[payload.write] = threadWriteEntry(prepared, result);

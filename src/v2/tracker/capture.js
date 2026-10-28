@@ -1,4 +1,4 @@
-// Genre-neutral Director capture. Reader acceptance uses typed evidence; RPG capture belongs to RB.
+// Story-told Director capture. Reader acceptance uses typed evidence.
 
 import { lineKey, parseChanges } from '../../changes.js';
 import { applyOps } from '../../tracker.js';
@@ -22,7 +22,7 @@ const QUOTE_CHARS = 300;
 // `…_id` are IDs, three keys no state may hold): kept under such a name in `fields`, they would get
 // the whole line refused. They mean nothing to the Director, so they are left out with a Problem.
 const RESERVED_LABEL = /^(?:qty|id|.+_id|.+Id|__proto__|constructor|prototype)$/;
-const IGNORED_LABELS = new Set(['xp', 'exp', 'experience', 'reward', 'target', 'met', 'ready', 'difficulty']);
+const IGNORED_LABELS = new Set(['xp', 'exp', 'experience', 'target', 'met', 'ready']);
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
@@ -180,7 +180,7 @@ export function toV1Op(line) {
     const stand = `${op}${op === '+' ? ` ${line.kind}` : ''} x${text ? ` — ${text}` : ''}${labels}`;
     const parsed = parseChanges(stand).ops[0];
     if (!parsed) return { error: `"${lineText(line)}" could not be read.` };
-    for (const key of ['type', 'reward', 'target', 'difficulty', 'rank', 'met', 'ready', 'xp', 'exp', 'experience']) {
+    for (const key of ['target', 'rank', 'met', 'ready', 'xp', 'exp', 'experience']) {
         delete parsed.fields?.[key];
         delete parsed.extra?.[key];
     }
@@ -282,7 +282,7 @@ function threadLine(ctx, given) {
     if (!named && line.op === '+' && line.kind === 'hook' && line.labels?.goal) {
         const id = newId(ctx, new Set(Object.keys(director.threads)));
         ctx.call('threads.offer', { write: threadWriteId(ctx, `offer:${id}`), thread: id, kind: 'hook', key: op.key,
-            summary: capSummary(line.text ?? ''), fields: Object.fromEntries(Object.entries(line.labels ?? {}).filter(([key]) => ['goal', 'giver', 'step', 'progress', 'due', 'place', 'people', 'now', 'then', 'on'].includes(key))), expectedHash: null });
+            summary: capSummary(line.text ?? ''), fields: Object.fromEntries(Object.entries(line.labels ?? {}).filter(([key]) => ['goal', 'giver', 'step', 'progress', 'due', 'place', 'people', 'now', 'then', 'on', 'type', 'reward', 'difficulty'].includes(key))), expectedHash: null });
         return { summary: `Director: ${raw}`, narrate: false, data: { thread: id } };
     }
     if (named?.offer) acceptIntent(ctx, named);

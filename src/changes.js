@@ -39,8 +39,7 @@ export const QUEST_TYPE_WORDS = Object.freeze({
 // asks, what it pays, the step it is at, and (v0.8.2) how hard it is.
 export const QUEST_FIELDS = ['type', 'giver', 'goal', 'reward', 'step', 'difficulty', 'target'];
 
-// A quest's difficulty is one of four words, so other extensions can scale by it (RPG Battle
-// awards quest XP by it). A missing or unreadable one is normal.
+// A quest's difficulty is one of four words. A missing or unreadable one is normal.
 export const QUEST_DIFFICULTIES = Object.freeze(['easy', 'normal', 'hard', 'nightmare']);
 const DIFFICULTY_WORDS = Object.freeze({
     easy: 'easy', trivial: 'easy', simple: 'easy', minor: 'easy', light: 'easy', low: 'easy',
@@ -55,7 +54,7 @@ export function questDifficulty(value) {
     const known = words.find(word => Object.hasOwn(DIFFICULTY_WORDS, word));
     return known ? DIFFICULTY_WORDS[known] : 'normal';
 }
-// A planned fight: who the foes are, as free text in RPG Battle's shape (`3 bandit, bandit
+// A planned fight: who the foes are, as free text (`3 bandit, bandit
 // captain (boss)`, `2 x dire wolf rank D`). Story Director only stores and schedules it; the
 // fight itself is resolved by another extension, so the text is never parsed here.
 // (0.9.19) `reach`: how a beat touches {{user}} wherever they are (a price, a door shut, a

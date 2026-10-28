@@ -454,13 +454,13 @@ test('long parts are trimmed in the note and its token count, never in the recor
     assert.ok(lines(buildNote(selection({ relevant: [geva] }), { calendar })).includes('Off-screen: Geva — Bailiff Court → files the warrant (Goldwane 17)'));
 });
 
-test('verified quests send their accepted target and reward with an explicit turn-in boundary', () => {
+test('quest notes use the story goal and reward even if old contract data remains', () => {
     const job = record({ key: 'Wolf bounty', kind: 'quest', fields: { goal: 'protect the road', reward: '999 gold' },
         contract: { requirement: { action: 'defeat', qty: 3, entity: 'wolf' }, rewardText: '1 silver per wolf' } });
     const note = buildNote(selection({ relevant: [job] }), { calendar: null });
-    assert.match(note, /Wolf bounty — verified target: defeat 3 wolf; await Verified turn-in/);
-    assert.match(note, /1 silver per wolf/);
-    assert.doesNotMatch(note, /999 gold/);
+    assert.match(note, /Wolf bounty — protect the road/);
+    assert.match(note, /999 gold/);
+    assert.doesNotMatch(note, /verified target|1 silver per wolf/);
 });
 
 test('quest check: an open quest whose step or now reads as over asks the story to close it (0.9.5)', () => {
