@@ -3,7 +3,7 @@
 ## 2.1.1
 
 - **The Map's regions are a list:** the rows of region chips are replaced by a **Region** list on the same row as **Find a place**, before the zoom and locate buttons. It has the same choices in the same order (All first) and shows a region as its chip did; the region shown is the one selected, and a search that lands on another region moves the list with it. On a phone the bar wraps to three rows: Find a place, Region, the buttons.
-- **The Map works at Story Block 2.5.2's new size** (Story Suite drawn at what used to be 80%): the places fill the map, a drag follows the pointer or finger, the wheel zooms about the pointer, and a click or tap picks the place under it. On a phone a place's tap area stays 44 px on the screen.
+- **The Map works at Story Block 2.5.2's new size** (Story Suite drawn at what used to be 80%): the places fill the map, a drag follows the pointer or finger, the wheel zooms about the pointer, and a click or tap picks the place under it. On a phone (a screen under 760 px or a touch screen, as the rest of Story Suite) a place's tap area stays 44 px on the screen, and Enter or Space on a focused place picks that place, never a neighbour's dot.
 
 ### Upgrading from 2.1.0
 
