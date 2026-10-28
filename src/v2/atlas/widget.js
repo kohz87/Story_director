@@ -8,7 +8,7 @@
 //   keys, 0 or "Fit" for the whole layer, "Me" to centre on the current place), inside the zoom
 //   limits and never off the world; unvisited places get their icon, then their name, as the map
 //   comes closer, and hover or focus shows any place's name;
-// * switch layers: All, then each region and plane that has places;
+// * switch layers with the Region list beside the search box: All, then each region and plane that has places;
 // * search places by name, alias or region (unvisited ones too, marked "not visited"); picking one
 //   moves the map to it and shows it;
 // * pick a place (click, tap, Enter) for its details: kind, region, visited or not, and the trip
@@ -16,6 +16,8 @@
 // The view (centre and zoom) is the reader's alone: kept in memory per layer for this page, never
 // in the story state. Picking a place writes nothing either (a screen may still pass `onSelect`).
 // Moves to a picked place are eased, except under prefers-reduced-motion.
+// Story Block draws its screens zoomed (its size.css): pointer and measured positions are drawn pixels, the stage's own
+// lengths (style.left, the view) are not, so every measure is divided by the stage's zoom (zoomOf).
 
 import {
     KNOWN_ICON_ZOOM, KNOWN_LABEL_ZOOM, NEAR_PX, between, boundsOf, centreOn, clampView, clipSegment, fitView, mapPoint,
@@ -34,7 +36,9 @@ const EASE_MS = 260;
 const R_VISITED = 12;
 const R_KNOWN_FAR = 4;
 const R_KNOWN = 9;
-const TAP_HALF = 22;               // half of a phone's 44px tap area (a coarse pointer only)
+const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (the phone line, PHONE)
+// The phone line, as Story Block's (its size.css): a narrow screen or a coarse pointer gets the dots' 44px tap areas.
+const PHONE = '(max-width: 759.98px), (pointer: coarse)';
 const ALL = '';
 
 // Remembered views for this page: `${viewKey}|${layer}` → { cx, cy, zoom (× fit) }. Never story state.
@@ -72,17 +76,22 @@ const CSS = `
 .sd-map .sd-map-result:hover, .sd-map .sd-map-result:focus-visible { background: var(--sd-map-raised); }
 .sd-map .sd-map-result-name { overflow-wrap: anywhere; }
 .sd-map .sd-map-result-about { max-width: 100%; color: var(--sd-map-muted); font-size: 0.85em; overflow-wrap: anywhere; }
-.sd-map .sd-map-tools, .sd-map .sd-map-layers { display: flex; flex-wrap: wrap; gap: 0.35em; }
-.sd-map .sd-map-btn, .sd-map .sd-map-layer { min-width: 40px; min-height: 40px; max-width: min(100%, 12em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
-.sd-map .sd-map-btn:not(:disabled):hover, .sd-map .sd-map-layer:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
-.sd-map .sd-map-btn:not(:disabled):active, .sd-map .sd-map-layer:not(:disabled):active { transform: translateY(1px); }
-.sd-map .sd-map-layer { font-size: 0.9em; font-weight: 600; }
-.sd-map .sd-map-layer[aria-pressed="true"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: inset 0 0 0 1px var(--sd-map-fg); font-weight: 700; }
+.sd-map .sd-map-tools { display: flex; flex-wrap: wrap; gap: 0.35em; }
+.sd-map .sd-map-btn { min-width: 40px; min-height: 40px; max-width: min(100%, 12em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.15em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: var(--sd-map-fg); font: inherit; }
+.sd-map .sd-map-btn:not(:disabled):hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
+.sd-map .sd-map-btn:not(:disabled):active { transform: translateY(1px); }
+/* The Region list: a native select, a pill like the search box, with its caption before it and a chevron drawn after it. */
+.sd-map .sd-map-region { position: relative; flex: 0 1 21em; min-width: 11em; display: flex; align-items: center; gap: 0.45em; margin: 0; font-weight: inherit; }
+.sd-map .sd-map-region-cap { color: var(--sd-map-muted); font-size: 0.85em; white-space: nowrap; }
+.sd-map .sd-map-region select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 40px; margin: 0; padding: 0.3em 2.2em 0.3em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: inherit; font: inherit; text-overflow: ellipsis; cursor: pointer; }
+.sd-map .sd-map-region::after { content: ""; position: absolute; right: 1em; top: 50%; width: 0.45em; height: 0.45em; margin-top: -0.3em; border: solid var(--sd-map-muted); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
+.sd-map .sd-map-region select:hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
 .sd-map .sd-map-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; min-height: 14em; overflow: hidden; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-bg); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 @media (max-width: 600px) {
   .sd-map .sd-map-stage { aspect-ratio: 1 / 1; max-height: 60vh; }
-  .sd-map .sd-map-layers { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
-  .sd-map .sd-map-layer { flex: 0 0 auto; }
+  /* the bar in three rows: the search box, the Region list (its caption left to its own label), the zoom buttons */
+  .sd-map .sd-map-region { flex: 1 1 100%; }
+  .sd-map .sd-map-region-cap { display: none; }
 }
 .sd-map .sd-map-stage.sd-map-dragging { cursor: grabbing; }
 .sd-map .sd-map-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -96,10 +105,11 @@ const CSS = `
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
 .sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
-/* A phone (coarse pointer): the dot keeps its size; its tap area is a 44px square (::before, no paint).
-   Where two squares cover one dot, the click picks the place whose dot is nearest (see the click handler). */
-@media (pointer: coarse) {
-  .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+/* A phone (a narrow screen or a coarse pointer, PHONE): the dot keeps its size; its tap area is a 44px square on the screen (::before,
+   no paint; 44px over Story Block's zoom, --ss-zoomed). Where two squares cover one dot, the click picks the place whose dot is nearest
+   (see the click handler). */
+@media (max-width: 759.98px), (pointer: coarse) {
+  .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: calc(44px / var(--ss-zoomed, 1)); height: calc(44px / var(--ss-zoomed, 1)); transform: translate(-50%, -50%); }
 }
 .sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .sd-map .sd-map-label[data-visited="false"] { color: var(--sd-map-muted); font-style: italic; }
@@ -230,10 +240,12 @@ function render(el, props, api) {
     const centreMe = button(doc, 'sd-map-btn sd-map-me', '', 'Centre on where you are');
     centreMe.append(icon(doc, 'fa-location-crosshairs'));
     tools.append(zoomIn, zoomOut, fitAll, centreMe);
-    bar.append(searchBox, tools);
-    const layersBar = h(doc, 'div', 'sd-map-layers');
-    layersBar.setAttribute('role', 'toolbar');
-    layersBar.setAttribute('aria-label', 'Map layers');
+    // The layers as a Region list between the search box and the zoom buttons (All first; the shown one selected).
+    const regionBox = h(doc, 'label', 'sd-map-region');
+    const regions = h(doc, 'select', 'sd-map-regions');
+    regions.setAttribute('aria-label', 'Region');
+    regionBox.append(h(doc, 'span', 'sd-map-region-cap', 'Region'), regions);
+    bar.append(searchBox, regionBox, tools);
 
     const stage = h(doc, 'div', 'sd-map-stage');
     stage.setAttribute('tabindex', '0');
@@ -265,7 +277,7 @@ function render(el, props, api) {
     const legendCard = h(doc, 'section', 'sd-map-legend-card ss-listcard');
     legendCard.setAttribute('aria-label', 'Legend');
     legendCard.append(h(doc, 'h4', 'ss-label ss-listcard-head', 'Legend'), legend);
-    root.append(bar, layersBar, stage, empty, details, legendCard);
+    root.append(bar, stage, empty, details, legendCard);
     el.appendChild(root);
 
     // ---- state ----------------------------------------------------------------------------------
@@ -289,9 +301,19 @@ function render(el, props, api) {
     const labels = new Map();        // id → label span
     const byId = id => data.places.find(place => place.id === id) ?? null;
 
+    // The zoom the stage is drawn at (Story Block's roots are zoomed): the browser's currentCSSZoom, else drawn over own width.
+    function zoomOf() {
+        const own = Number(stage.currentCSSZoom);
+        if (Number.isFinite(own) && own > 0) return own;
+        const width = Number(stage.offsetWidth);
+        const drawn = Number(stage.getBoundingClientRect?.()?.width);
+        return width > 0 && drawn > 0 ? drawn / width : 1;
+    }
+
     function measure() {
         const rect = stage.getBoundingClientRect?.();
-        if (rect && rect.width > 0 && rect.height > 0) size = { width: rect.width, height: rect.height };
+        const z = zoomOf();
+        if (rect && rect.width > 0 && rect.height > 0) size = { width: rect.width / z, height: rect.height / z };
         return size;
     }
 
@@ -374,14 +396,16 @@ function render(el, props, api) {
     }
 
     function drawLayers() {
-        const chips = [{ id: ALL, name: 'All' }, ...data.layers].map(item => {
-            const chip = button(doc, 'sd-map-layer', item.name);
-            chip.setAttribute('aria-pressed', String(item.id === layer));
-            chip.setAttribute('data-layer', item.id || 'all');
-            return chip;
+        const options = [{ id: ALL, name: 'All' }, ...data.layers].map(item => {
+            const option = h(doc, 'option', '', item.name);
+            option.setAttribute('value', item.id || 'all');
+            if (item.id === layer) option.setAttribute('selected', '');
+            option.selected = item.id === layer;
+            return option;
         });
-        layersBar.replaceChildren(...chips);
-        layersBar.hidden = data.layers.length === 0;
+        regions.replaceChildren(...options);
+        regions.value = layer || 'all';
+        regionBox.hidden = data.layers.length === 0;
     }
 
     function drawShown() {
@@ -401,6 +425,8 @@ function render(el, props, api) {
         labels.clear();
         const items = shown.map(place => {
             const node = button(doc, 'sd-map-place');
+            // the dot draws its own tap area: Story Block's phone rule (44px controls) leaves it its size
+            node.setAttribute('data-ss-hit', '');
             node.setAttribute('data-id', place.id);
             node.setAttribute('data-visited', String(place.visited));
             if (place.kind) node.setAttribute('data-kind', place.kind.slice(0, 64));
@@ -590,15 +616,13 @@ function render(el, props, api) {
         results.hidden = true;
         goTo(id);
     }
-    // Clicks on the layer chips, the results and the details' Close button (delegated: they are redrawn).
+    // The Region list, and clicks on the results and the details' Close button (delegated: they are redrawn).
     const closestWith = (target, stop, test) => {
         for (let node = target; node && node !== stop; node = node.parentNode) if (test(node)) return node;
         return null;
     };
-    listen(layersBar, 'click', event => {
-        const chip = closestWith(event.target, layersBar, node => node.getAttribute?.('data-layer'));
-        if (!chip) return;
-        const id = chip.getAttribute('data-layer') === 'all' ? ALL : chip.getAttribute('data-layer');
+    listen(regions, 'change', () => {
+        const id = regions.value === 'all' ? ALL : regions.value;
         if (id !== layer) setLayer(id);
     });
     listen(results, 'click', event => {
@@ -662,15 +686,18 @@ function render(el, props, api) {
     let dropClick = false;
     // On a phone the tap went to a button whose 44px square holds the tap; where two squares
     // cover one dot, the place whose dot is nearest the tap is the one picked (desktop: as is).
-    const coarse = () => Boolean(win?.matchMedia?.('(pointer: coarse)')?.matches);
+    // A click from the keyboard (Enter or Space on a focused place: detail 0, no pointer position)
+    // is that place's own, never the nearest dot's.
+    const phone = () => Boolean(win?.matchMedia?.(PHONE)?.matches);
     const tapped = event => {
         const own = placeOf(event.target);
-        if (!coarse() || typeof event.clientX !== 'number') return own;
+        if (!phone() || typeof event.clientX !== 'number' || event.detail === 0) return own;
         const tap = local(event);
+        const half = TAP_HALF / zoomOf();
         let best = '';
         let bestD = Infinity;
         for (const [id, dot] of placeAt) {
-            if (Math.abs(dot.x - tap.x) > TAP_HALF || Math.abs(dot.y - tap.y) > TAP_HALF) continue;
+            if (Math.abs(dot.x - tap.x) > half || Math.abs(dot.y - tap.y) > half) continue;
             const d = Math.hypot(dot.x - tap.x, dot.y - tap.y);
             if (d < bestD) { best = id; bestD = d; }
         }
@@ -701,7 +728,8 @@ function render(el, props, api) {
     let captured = null;
     const local = event => {
         const rect = stage.getBoundingClientRect?.() ?? { left: 0, top: 0 };
-        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const z = zoomOf();
+        return { x: (event.clientX - rect.left) / z, y: (event.clientY - rect.top) / z };
     };
     listen(stage, 'pointerdown', event => {
         if (event.pointerType === 'mouse' && event.button) return;

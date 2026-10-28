@@ -70,9 +70,9 @@ test('Story Block\'s template renderer draws the real Map widget from atlas.view
     assert.ok(root, 'the widget drew');
     assert.equal(root.getAttribute('aria-label'), 'Map');
     // It opens on the current place's region (the pack's, not the scene's "The Wide Lands"), with
-    // the unvisited pack place drawn and marked; the chips are All and the regions with places.
-    assert.deepEqual(root.querySelectorAll('.sd-map-layer').map(chip => chip.textContent), ['All', 'Fenmarch', 'Lakeshore']);
-    assert.equal(root.querySelector('.sd-map-layer[aria-pressed="true"]').textContent, 'Lakeshore');
+    // the unvisited pack place drawn and marked; the Region list is All and the regions with places.
+    assert.deepEqual(root.querySelectorAll('.sd-map-region option').map(option => option.textContent), ['All', 'Fenmarch', 'Lakeshore']);
+    assert.equal(root.querySelector('.sd-map-region select').value, 'region:lakeshore');
     assert.deepEqual(root.querySelectorAll('.sd-map-place').map(node => node.getAttribute('title')), ['Bluewatch Village', 'Old Weir']);
     assert.equal(root.querySelector('.sd-map-place[data-visited="false"]').getAttribute('title'), 'Old Weir');
     // A pick: the details with the trip by known routes (code's figures), and no command run.

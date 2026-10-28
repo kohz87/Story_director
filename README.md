@@ -1,4 +1,4 @@
-# Story Director 2.1.0
+# Story Director 2.1.1
 
 > Story Suite 2.1.0.
 
