@@ -10,7 +10,7 @@
 // words; the recap goes in this part's tail, for that reply only.
 //
 // Commands: `time.settle` (the hook's) and `director.advance` (another module's rule moving the clock
-// on: crafting takes time; advance.js).
+// on; see advance.js).
 // Queries: `time.now` (the clock for other modules: minutes, the calendar text, the story day and its
 // date), `time.overdue` and `time.recap`.
 
@@ -35,19 +35,6 @@ function fail(ctx, code, message) {
     error.code = code;
     throw error;
 }
-
-// A query that may not exist (the quests part's `quest.progress`): its answer, or the fallback.
-function tryQuery(query, name, args, fallback) {
-    if (typeof query !== 'function') return fallback;
-    try {
-        return query(name, args) ?? fallback;
-    } catch {
-        return fallback;
-    }
-}
-
-// A quest whose target is met waits only for its turn-in: like v1's pay waiting, the hour fails nothing.
-const targetMet = () => () => false;
 
 /*
  * The meta.rev this receipt will carry (SPEC §2.4, MODULES §F2 `ctx.rev`). Without `ctx.rev`,
@@ -85,7 +72,7 @@ function settleCommand(ctx, payload = {}) {
     // Each thread it closes is marked (Story Block's ctx.ifThere, SPEC §2.2 rule d): when the reply that
     // made the thread is deleted, replay passes over that closing and keeps the rest of the settle.
     const within = id => { if (typeof ctx.ifThere === 'function') ctx.ifThere('director', `/threads/${id}`); };
-    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), within, met: targetMet(ctx.query), fights: ctx.fights !== false });
+    const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), within, fights: ctx.fights !== false });
     const told = settleSummary(done.closed, { calendar, now: done.now });
     return {
         summary: told || `Story time settled at ${calendar.format(done.now, { era: false })}.`,
@@ -109,7 +96,7 @@ export function beforeGenerate(view) {
     const settings = timeSettings(view.settings);
     const at = isInt(view?.chat?.length) ? view.chat.length : null;
     const calendar = calendarOf(settings);
-    if (!needsSettle(state, { calendar, settings, at, met: targetMet(view.query) })) return { lines: [], commands: [] };
+    if (!needsSettle(state, { calendar, settings, at })) return { lines: [], commands: [] };
     const rev = isInt(state.meta?.rev) ? state.meta.rev + 1 : null;
     return { lines: [], commands: [{ type: SETTLE, payload: { at, rev } }] };
 }

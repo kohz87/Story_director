@@ -207,17 +207,16 @@ export function readerWords(value, substitute = null) {
 }
 
 // A Problem about a passing state of a quest is shown only while that state lasts: "has no goal" while it
-// is open with no goal (the quests part's `quest.details` says; without it, a `goal:` field). An older
+// is open with no goal (its `goal:` field). An older
 // chat's "was offered, not taken on" is not shown: there is nothing to accept any more.
-function stillSo(problem, director, query) {
+function stillSo(problem, director) {
     if (problem.kind === 'offered') return false;
     if (problem.kind !== 'no-goal') return true;
     const id = director?.keys?.[lineKey(text(problem.key))];
     const thread = id ? director?.threads?.[id] : null;
     if (!thread) return true;
     if (!isOpen(thread)) return false;
-    const details = ask(query, 'quest.details', { id: thread.id }, null);
-    return isRecord(details) && typeof details.hasGoal === 'boolean' ? !details.hasGoal : !text(thread.fields?.goal);
+    return !text(thread.fields?.goal);
 }
 
 /**
@@ -229,11 +228,10 @@ export function problemsList(state, args, tools) {
     const director = state?.domains?.director;
     const problems = problemList(director);
     const substitute = typeof tools?.substitute === 'function' ? tools.substitute : null;
-    const query = queryFrom(tools);
     // `behind: true` / `false`: only those about a thread behind the scenes, or only the others.
     const behind = typeof args?.behind === 'boolean' ? args.behind : null;
     // The newest PROBLEM_SHOWN: the tracker keeps more than that (domain.js PROBLEM_ROOM).
-    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director, query))
+    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director))
         .filter(problem => behind === null || isBehindProblem(problem, director) === behind).map(problem => ({
         rev: problem.rev ?? null,
         kind: text(problem.kind),
