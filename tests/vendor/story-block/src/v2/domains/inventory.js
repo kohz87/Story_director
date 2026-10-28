@@ -1276,13 +1276,20 @@ function storyItems(ctx, inv, def, qty, created = false, more = false, notableOk
     const tally = tallyOf(ctx, inv);
     if (!tally) return { qty, problem: null, notable: false };
     if (!Number.isFinite(storyCoinBudget(ctx))) {
+        // No limit: the story decides. Only a thing that does not stack is held to what one line can give
+        // (each piece is a stack of its own, grantInto), so a loot offer is always one its Take can give.
+        const given = def.stack ? qty : Math.min(qty, MAX_UNSTACKED);
         // Keep the reply's accounting for replay and for a later change to the setting, without limiting the gift.
         if (created) tally.made = Math.min(Number.MAX_SAFE_INTEGER, tally.made + 1);
-        tally.items[def.id] = Math.min(Number.MAX_SAFE_INTEGER, (tally.items[def.id] ?? 0) + qty);
+        tally.items[def.id] = Math.min(Number.MAX_SAFE_INTEGER, (tally.items[def.id] ?? 0) + given);
         const value = isCount(def.value, 1) ? def.value : 0;
-        tally.worth = Math.min(Number.MAX_SAFE_INTEGER, tally.worth + value * qty);
+        tally.worth = Math.min(Number.MAX_SAFE_INTEGER, tally.worth + value * given);
         keepTally(inv, tally);
-        return { qty, problem: null, notable: false };
+        return {
+            qty: given,
+            problem: given < qty ? `${itemText(def.name, qty)}${more ? ' more' : ''} was written, but ${def.name} does not stack and at most ${MAX_UNSTACKED} can be given at once; ${given} were given.` : null,
+            notable: false,
+        };
     }
     if (created) {
         if (tally.made >= STORY_NEW_DEFS) ctx.fail('REFUSED', `This reply has already brought ${STORY_NEW_DEFS} new kinds of item into the story, the most one reply may; ${def.name} was not added.`);
