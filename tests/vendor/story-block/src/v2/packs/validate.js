@@ -24,7 +24,7 @@ import { MAX_AT_DEPTH, cssDepth, sheetEscape } from '../view/css.js';
 import { MAX_COINS, MAX_COIN_VALUE, coinsOf } from '../domains/money.js';
 import { validateDataModules, dataModulesPackHash } from '../data-modules/check.js';
 
-export const HOST_VERSION = '2.6.0';
+export const HOST_VERSION = '2.6.1';
 
 /** A slug for a display name: "Iron Sword (old)" → "iron-sword-old". */
 export function slugify(name) {

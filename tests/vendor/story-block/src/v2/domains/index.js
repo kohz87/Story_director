@@ -10,7 +10,7 @@
 
 import {
     FEATURE, INVENTORY_FEATURES, createInventoryCommands, createInventoryQueries, captureCoin, captureItem, captureLoot, encumbranceTail,
-    featureOn, initialInventory, inventoryTail, validateInventory,
+    featureOn, initialInventory, inventoryTail, validateInventory, LOOT_KINDS, lootTakeGuard,
 } from './inventory.js';
 import { WEATHER_CHARS, capturePlace, capturePresent, captureWeather, initialScene, sceneCommands, sceneQueries, sceneTail, validateScene } from './scene.js';
 import { DEFAULT_CURRENCY, MAX_COIN_VALUE, moneyLine, resolveCurrency } from './money.js';
@@ -299,8 +299,13 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
     const dataPart = createDataModulesPart({ packs: packs.packs, ...dataModules });
     const merged = mergeParts([core, packs.part, events, assist ?? createAssistPart({ settings: () => settings() }), createTimelinePart({ timeline }), dataPart]);
     const timelineGuard = merged.hooks.replayGuard;
-    merged.hooks.replayGuard = Object.assign((view, info) => String(info?.guard?.predicate?.kind ?? '').startsWith('dm.')
-        ? dataModuleGuard(view, info) : timelineGuard(view, info), { hostOwned: true });
+    // One host-owned hook for the host's guarded blocks, by predicate: data modules (`dm.*`), a loot offer or take
+    // (`loot.offer`, `loot.take`, inventory.js), else the timeline's.
+    merged.hooks.replayGuard = Object.assign((view, info) => {
+        const kind = String(info?.guard?.predicate?.kind ?? '');
+        if (kind.startsWith('dm.')) return dataModuleGuard(view, info);
+        return LOOT_KINDS.includes(kind) ? lootTakeGuard(view, info) : timelineGuard(view, info);
+    }, { hostOwned: true });
     return {
         id: CORE_MODULE_ID,
         name: 'Story Block',
