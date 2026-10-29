@@ -23,7 +23,7 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     assert.equal(def.context.static(), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
     assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
     assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'arc', 'checks', 'screens']);
-    assert.equal(def.capture.kinds.quest, undefined);
+    assert.match(def.capture.kinds.quest.grammar, /story follows/);
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;
     const ctx = { fail: (code, message) => { failed = { code, message }; throw new Error(message); } };

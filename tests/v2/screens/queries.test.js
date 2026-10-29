@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
     at, closed, earlierState, fair, headState, makeQueries, makeRunner, makeState, pelts, plot, raid, rats, ring, smuggler, thread, wolves,
 } from './helpers/fixtures.js';
-import { calendarSetting, createScreensPart, finishState, readerWords } from '../../../src/v2/screens/index.js';
+import { calendarSetting, createScreensPart, readerWords } from '../../../src/v2/screens/index.js';
 
 const { run } = makeRunner();
 
@@ -114,7 +114,8 @@ test('director.problems: a Problem about a missing goal goes once that is no lon
     const state = makeState({ threads: [rats(), wolves(), vague, given], problems });
     assert.deepEqual(run(state, 'director.problems').map(problem => [problem.kind, problem.rev]), [['no-goal', 4], ['time', 5]],
         'the offers (an older chat\'s) and the mill with its goal are left out');
-    // Without the quests part's details, a goal: field decides.
-    const { 'quest.details': _details, ...noDetails } = makeQueries();
-    assert.equal(makeRunner(noDetails).run(state, 'director.problems').length, 2);
+    // A different module's quest projection cannot override the story's goal field.
+    const queries = makeQueries();
+    const result = queries['director.problems'](state, {}, { query: () => ({ hasGoal: false }) });
+    assert.equal(result.length, 2);
 });

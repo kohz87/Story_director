@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
-import { fakeRpgBattle } from './helpers/fake-rpg.js';
+import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 
 globalThis.STORY_DIRECTOR_NO_START = true;
 const { NEEDS_HOST, start, v2Host } = await import('../../../index.js');
@@ -22,7 +22,7 @@ function fakeDocument() {
 }
 
 test('with Story Block v2 the module registers once, and its chat state is set up', async () => {
-    const host = await createHost({ modules: [fakeRpgBattle()] });
+    const host = await createHost({ modules: [fakeFightRunner()] });
     const root = { StoryBlock: { apiVersion: 2, ready: Promise.resolve(host.sdk), sdk: host.sdk } };
     assert.ok(v2Host(root));
     const first = await start({ root, doc: fakeDocument(), wait: noWait, tries: 0 });

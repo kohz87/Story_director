@@ -23,30 +23,13 @@ function render(options) {
 
 const subText = node => node.querySelector('span').textContent;
 
-test('measurable progress and Complete use eligibility, and queued completion offers Undo', () => {
-    const calls = [];
-    const wolf = quest('Wolves');
-    const options = {
-        quests: [wolf], completion: () => ({ managed: true, eligible: false, label: 'Wolves 2/3', reason: 'Need 1 more wolf.' }),
-        onFinish: id => calls.push(id),
-    };
-    let pane = render(options);
-    assert.match(pane.textContent, /Wolves 2\/3/);
-    assert.equal(pane.querySelector('.story-director-quest-finish').disabled, true);
-    assert.equal(pane.querySelector('.story-director-quest-finish').textContent, 'Complete');
-    pane.querySelector('.story-director-quest-finish').click();
-    assert.deepEqual(calls, []);
-    pane = render({ ...options, completion: () => ({ managed: true, eligible: true, label: 'Wolves 8/3', paymentText: '8 silver', claimable: 8, required: 3 }) });
-    assert.match(pane.textContent, /Ready to turn in/);
-    pane.querySelector('.story-director-quest-finish').click();
-    assert.deepEqual(calls, ['wolves']);
-    pane = render({ ...options, finishing: { plan: { record: 'wolves' }, attachedTo: null, sentFor: null }, onUndoFinish: () => calls.push('undo') });
-    assert.match(pane.textContent, /Undo complete/);
-    pane.querySelector('.story-director-quest-finish').click();
-    assert.deepEqual(calls, ['wolves', 'undo']);
-    pane = render({ ...options, completion: () => ({ managed: false }) });
+test('quests show their story reward and have no counted completion control', () => {
+    const wolf = quest('Wolves', { goal: 'defeat 3 wolves', reward: '2 silver' }, { contract: { rewardText: '5 gold' } });
+    const pane = render({ quests: [wolf] });
     assert.equal(pane.querySelector('.story-director-quest-finish'), null);
-    assert.match(pane.textContent, /Story-tracked — no numeric target; completion follows the story/);
+    assert.match(pane.textContent, /defeat 3 wolves/);
+    assert.match(pane.textContent, /2 silver/);
+    assert.doesNotMatch(pane.textContent, /5 gold/);
 });
 
 test('grouped by type in a fixed order, untyped last; plural and singular types are one group', () => {

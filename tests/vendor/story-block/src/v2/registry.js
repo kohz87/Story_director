@@ -15,7 +15,7 @@
 // refused by the bus (commandFeature); a change line of its kinds is told quietly (capture().off).
 // `featureValue(id)` gives the reader's stored choice (true, false or undefined for the default).
 //
-// Lifecycle (docs/v2/LIFECYCLE.md, RB_CONTRACT §2 P22): a module may name the peers it needs
+// Lifecycle (docs/v2/LIFECYCLE.md): a module may name the peers it needs
 // (`requires: { peers: { 'story-director': '^2' } }`). A module whose peer is missing, of another
 // version, turned off or not ready itself, or whose peers need each other, is dormant: it is
 // registered and its names stay reserved, but it has no domain set up, no capture, hooks, context or
@@ -69,7 +69,7 @@ const COMMAND = /^[a-z][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9_-]+)*$/;
 const KIND = /^[a-z][a-z0-9_-]*$/;
 const TAB_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const FOLD_ID = /^[a-z0-9][a-z0-9_-]*$/;
-// Screen ids are namespaced like `rpg-battle/party` (§13.1); widget names like `rpg-battle.battle-board`.
+// Screen ids are namespaced like `story-director/world` (§13.1); widget names like `story-director.world-card`.
 const SCREEN_ID = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/;
 const WIDGET_NAME = /^[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)+$/;
 
@@ -151,7 +151,7 @@ export function definitionProblems(def) {
         if (!isObject(value)) { problems.push(`${where} is not an object`); return false; }
         return true;
     };
-    if (typeof def.id !== 'string' || !MODULE_ID.test(def.id)) problems.push('its id must be lowercase letters, digits, ".", "_" or "-" (like "rpg-battle")');
+    if (typeof def.id !== 'string' || !MODULE_ID.test(def.id)) problems.push('its id must be lowercase letters, digits, ".", "_" or "-" (like "story-director")');
     for (const key of ['name', 'version', 'description']) if (def[key] !== undefined && typeof def[key] !== 'string') problems.push(`${key} is not text`);
     if (def.requires !== undefined) {
         if (!isObject(def.requires)) problems.push('requires is not an object (like { storyBlock: ">=2.0.0" })');
@@ -168,10 +168,10 @@ export function definitionProblems(def) {
     }
 
     if (def.capabilities !== undefined) {
-        if (!Array.isArray(def.capabilities)) problems.push('capabilities is not a list of names (like ["rb-rules-v2"])');
+        if (!Array.isArray(def.capabilities)) problems.push('capabilities is not a list of names (like ["custom-data"])');
         else if (def.capabilities.length > MAX_CAPABILITIES) problems.push(`capabilities lists more than ${MAX_CAPABILITIES} names`);
         else for (const name of def.capabilities) {
-            if (typeof name !== 'string' || !SLUG.test(name)) problems.push(`capabilities names ${JSON.stringify(name)}, which is not a capability name (lowercase words joined by "-", like "rb-rules-v2")`);
+            if (typeof name !== 'string' || !SLUG.test(name)) problems.push(`capabilities names ${JSON.stringify(name)}, which is not a capability name (lowercase words joined by "-", like "custom-data")`);
         }
     }
 

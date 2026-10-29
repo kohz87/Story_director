@@ -13,14 +13,6 @@
 // requires.capabilities is checked for form only).
 // `dataModuleDefinitions`: checked normalized dependency definitions for public cross-pack data imports.
 //
-// A pack with a rules manifest (`content.rules`, RB_CONTRACT §7; PACKS.md "Rules packs") also goes through the
-// rules checker (rules-v2.js), on the raw data, once the pass below has found nothing wrong with the envelope and
-// the records this file owns (so the checker does not repeat that pass: `envelope: false`) and before the manifest
-// is wrapped. The definitions the manifest owns (creatures, quests, shops, recipes) are then stored as the
-// checker resolved them, nested slugs written as full IDs. A pack without the manifest never meets the checker:
-// its creatures and quests stay open records, as they always were. The result then also carries `rulesHash` and
-// `packHash` (the checker's two hashes).
-
 import { RECORD_LIMITS, CALENDAR_FIELDS, CALENDAR_HOLIDAY_FIELDS, CALENDAR_LIMITS, CALENDAR_START_FIELDS, CHOICE_FIELDS, CONTENT_KINDS, COMMAND, CRAFT_FIELDS, ECONOMY_FIELDS, ECONOMY_LIMITS, CRAFTS_LIMITS, DEFAULT_CRAFTS, METER_FIELDS, METER_LIMITS, METER_PRESET_FIELDS, METER_RESERVED, METER_STAGE_FIELDS, RECIPE_LIMITS, STAT_SUM, DEF_ID, EVENT_FIELDS, EVENT_LIMITS, ITEM_FIELDS, ITEM_KINDS, LIMITS, MOUNTS, PACK_FIELDS, PACK_ID, PLACE_FIELDS, PRESET_FIELDS, RARITIES, ROUTE_FIELDS, SCREEN_FIELDS, SCREEN_ID, SEMVER, SKILL_FIELDS, SKILL_TARGETS, SKILL_TYPES, SLUG, START_FIELDS, STAT_NAME, RANK_FIELDS, RANK_ID, RANKS_LIMITS, TERM_SEPARATORS, ITEM_CARRY, MARKET_FIELDS, MARKET_LIMITS, MARKET_WORD, TERMS_FIELDS, TERMS_LIMITS, TERMS_NUMERALS, TERMS_TIER_FIELDS, WEATHER_FIELDS, WEATHER_LIMITS, WEATHER_SEASON_FIELDS, WEATHER_TABLE_FIELDS } from './limits.js';
 import { byteLength, checkPlain } from './safety.js';
 import { parseRange, satisfies } from './version.js';
@@ -30,12 +22,9 @@ import { MAX_LOOP_DEPTH, templateShape } from '../view/template/index.js';
 import { MAX_JSON_DEPTH } from '../view/template/json.js';
 import { MAX_AT_DEPTH, cssDepth, sheetEscape } from '../view/css.js';
 import { MAX_COINS, MAX_COIN_VALUE, coinsOf } from '../domains/money.js';
-// rules-v2.js imports this file back (it checks the rest of a pack with validatePack); both only use the
-// other's exports when called, never while loading, so the cycle is harmless.
-import { validateRulesPack } from './rules-v2.js';
 import { validateDataModules, dataModulesPackHash } from '../data-modules/check.js';
 
-export const HOST_VERSION = '2.4.0';
+export const HOST_VERSION = '2.6.0';
 
 /** A slug for a display name: "Iron Sword (old)" → "iron-sword-old". */
 export function slugify(name) {
@@ -71,21 +60,10 @@ export function validatePack(input, { hostVersion = HOST_VERSION, capabilities =
 
     const errors = [];
     const add = (code, path, message) => { if (errors.length < limits.errors) errors.push({ code, path, message }); };
-    const rules = { checked: false };
-    const pack = normalize(raw, { add, failed: () => errors.length > 0, rules, hostVersion, capabilities, limits, dataModuleDefinitions });
+    const pack = normalize(raw, { add, hostVersion, capabilities, limits, dataModuleDefinitions });
     if (errors.length) return { ok: false, errors };
     const result = { ok: true, pack, raw };
-    if (rules.checked) {
-        // The checker's hashes cost about a sixth of its check and most readers (the installed list on every page load) never
-        // ask for them: they are worked out the first time one is read, from the raw pack, and kept.
-        let again = null;
-        const hash = name => () => {
-            again ??= validateRulesPack(raw, { capabilities, hostVersion, limits, envelope: false });
-            return again.ok ? again[name] : undefined;
-        };
-        Object.defineProperty(result, 'rulesHash', { get: hash('rulesHash'), enumerable: false, configurable: true });
-        Object.defineProperty(result, 'packHash', { get: hash('packHash'), enumerable: false, configurable: true });
-    } else if (pack.content.dataModules !== undefined) {
+    if (pack.content.dataModules !== undefined) {
         // Hash the checked snapshot, before a consumer can edit its detached result.
         Object.defineProperty(result, 'packHash', { value: dataModulesPackHash(pack), enumerable: false, configurable: true });
     }
@@ -96,7 +74,7 @@ function fail(code, path, message) {
     return { ok: false, errors: [{ code, path, message }] };
 }
 
-function normalize(raw, { add, failed, rules: seen, hostVersion, capabilities, limits, dataModuleDefinitions }) {
+function normalize(raw, { add, hostVersion, capabilities, limits, dataModuleDefinitions }) {
     for (const key of Object.keys(raw)) if (!PACK_FIELDS.includes(key)) add('UNKNOWN_FIELD', key, `"${key}" is not a pack field (expected ${PACK_FIELDS.join(', ')}).`);
 
     const id = raw.id;
@@ -109,9 +87,7 @@ function normalize(raw, { add, failed, rules: seen, hostVersion, capabilities, l
     if (raw.description !== undefined && typeof raw.description !== 'string') add('BAD_FIELD', 'description', 'description must be text.');
 
     const requires = checkRequires(raw.requires, { add, hostVersion, capabilities });
-    // A rules pack's money may carry `display` and an empty coin list (schema 2, which the checker reads); the old check does not know them.
-    const rules = isObject(raw.content) && raw.content.rules !== undefined;
-    const currency = raw.currency === undefined ? null : checkCurrency(rules ? withoutRulesMoney(raw.currency) : raw.currency, add);
+    const currency = raw.currency === undefined ? null : checkCurrency(raw.currency, add);
     const calendar = raw.calendar === undefined ? null : checkCalendar(raw.calendar, add);
     const economy = raw.economy === undefined ? null : checkEconomy(raw.economy, add);
     const weather = raw.weather === undefined ? null : checkWeather(raw.weather, add);
@@ -124,7 +100,6 @@ function normalize(raw, { add, failed, rules: seen, hostVersion, capabilities, l
     const items = records(given.items, 'items', { add, packId, check: (record, path, label) => checkItem(record, path, label, add) });
     content.items = items;
     const ref = itemRefs(items, packId);
-    // With a rules manifest these are checked again below, by the rules checker, and stored as it resolved them.
     content.creatures = records(given.creatures, 'creatures', { add, packId, check: openRecord });
     content.shops = records(given.shops, 'shops', { add, packId, check: (record, path) => checkShop(record, path, add, ref) });
     // Crafts before recipes: a recipe's `craft` is a default craft or one this pack declares.
@@ -148,7 +123,7 @@ function normalize(raw, { add, failed, rules: seen, hostVersion, capabilities, l
         content.routes = records(given.routes, 'routes', { add, packId, check: (record, path) => checkRoute(record, path, add, place), named: false, autoSlug: routeSlug });
     }
     if (given.terms !== undefined) {
-        if (Array.isArray(given.terms) && given.terms.length > TERMS_LIMITS.records) add('BAD_CONTENT', 'content.terms', `content.terms holds at most ${TERMS_LIMITS.records} records (RPG Battle reads the first one that names something).`);
+        if (Array.isArray(given.terms) && given.terms.length > TERMS_LIMITS.records) add('BAD_CONTENT', 'content.terms', `content.terms holds at most ${TERMS_LIMITS.records} records.`);
         else content.terms = records(given.terms, 'terms', { add, packId, check: (record, path, label) => checkTerms(record, path, label, add), slugField: 'id', named: false, autoSlug: termsSlug() });
     }
     if (given.ranks !== undefined) content.ranks = checkRanks(given.ranks, packId, add);
@@ -173,10 +148,6 @@ function normalize(raw, { add, failed, rules: seen, hostVersion, capabilities, l
     }
     const screens = raw.screens === undefined ? [] : checkScreens(raw.screens, packId, add);
     const theme = raw.theme === undefined ? {} : checkTheme(raw.theme, add, 'theme');
-
-    // Everything this file owns has been looked at; the rules checker takes the manifest and its definitions from here.
-    if (rules) reserveRulesSlug(content, packId, add);
-    if (rules && !failed()) checkRules(raw, { add, seen, content, currency, packId, hostVersion, capabilities, limits });
 
     return {
         id: packId,
@@ -264,55 +235,6 @@ function records(list, kind, { add, packId, check, slugField = 'slug', named = s
 function openRecord(record) {
     const { slug: _slug, id: _id, pack: _pack, ...rest } = record;
     return { ...rest, name: oneLine(record.name, LIMITS.name) };
-}
-
-// A record without the host's wrapper fields (records() adds them back).
-function bare(record) {
-    const { slug: _slug, id: _id, pack: _pack, ...rest } = record;
-    return rest;
-}
-
-// A rules pack's money without what only schema 2 knows: `display`, and an empty coin list (the checker reads both).
-function withoutRulesMoney(currency) {
-    if (!isObject(currency)) return currency;
-    const { display: _display, ...rest } = currency;
-    if (Array.isArray(rest.coins) && rest.coins.length === 0) delete rest.coins;
-    return rest;
-}
-
-// The rules checker's turn (RB_CONTRACT §7): it gets the raw pack, with the envelope pass skipped because it has just been made.
-// Its errors keep its codes and paths, except that unsafe text is `UNSAFE_HTML` here whoever found it. What it owns (creatures,
-// quests, shops, recipes) replaces the bodies of the records already wrapped (id, slug and pack stay), as it resolved them; the
-// manifest becomes one more record (name and slug, so `pack.<id>/rules`), and the pack's money gets its schema-2 `display`.
-// The manifest is `pack.<id>/rules`; no other record of the pack may take that ID.
-function reserveRulesSlug(content, packId, add) {
-    const taken = fullId(packId, 'rules');
-    for (const [kind, list] of Object.entries(content)) {
-        if (!Array.isArray(list)) continue;
-        list.forEach((record, index) => {
-            if (record?.id === taken) add('DUPLICATE', `content.${kind}[${index}]`, `content.${kind}[${index}] has the slug "rules", which is the rules manifest's own (${taken}); give it another slug.`);
-        });
-    }
-}
-
-function checkRules(raw, { add, seen, content, currency, packId, hostVersion, capabilities, limits }) {
-    const checked = validateRulesPack(raw, { capabilities, hostVersion, limits, envelope: false, hashes: false });
-    if (!checked.ok) {
-        for (const error of checked.errors) add(error.code === 'unsafe-markup' ? 'UNSAFE_HTML' : error.code, error.path, error.message);
-        return;
-    }
-    for (const [kind, table] of [['creatures', 'foes'], ['quests', 'quests'], ['shops', 'shops'], ['recipes', 'recipes']]) {
-        content[kind] = content[kind].map((record, index) => {
-            const found = checked.resolved[table]?.[record.id];
-            if (found) return { ...bare(found), id: record.id, slug: record.slug, pack: record.pack };
-            add('BAD_RECORD', `content.${kind}[${index}]`, `content.${kind}[${index}] was not resolved by the rules checker.`);
-            return record;
-        });
-    }
-    // The manifest: the id, slug and pack are the host's and sit outside what the checker's closed schema allows.
-    content.rules = records(checked.pack.content.rules, 'rules', { add, packId, check: manifest => bare(manifest) });
-    if (currency && isObject(checked.pack.currency)) currency.display = checked.pack.currency.display;
-    seen.checked = true;
 }
 
 function checkItem(record, path, label, add) {
@@ -805,8 +727,7 @@ function checkStart(start, add, ref) {
 const isText = (value, max) => typeof value === 'string' && value.length <= max;
 const isNumber = value => typeof value === 'number' && Number.isFinite(value);
 
-// A skill template for RPG Battle (v1 skillFromTemplate): what it is, never its numbers, which
-// RPG Battle's rules set at the level it is learned.
+// A skill template describes a skill; its numbers are supplied by the consuming module.
 function checkSkill(record, path, label, add) {
     let ok = true;
     const say = (field, message, code = 'BAD_RECORD') => { ok = false; add(code, `${path}.${field}`, `${label}: ${message}`); };
@@ -950,9 +871,9 @@ function termsSlug() {
     };
 }
 
-// The words a world uses for levels and XP (MODULES §F25), as RPG Battle's terms read them:
+// The words a world uses for levels and XP (MODULES §F25), for a consuming module:
 // `{ id?, name?, levelName?, xpName?, tiers?: true | { size?, numerals?, enabled? } }`. The reader's
-// own terms win over these. A term is a label in RPG Battle's blocks, so it may not hold `| : # < >`
+// own terms win over these. A term is a label in a module's blocks, so it may not hold `| : # < >`
 // or a line break; checkPlain has already refused any markup or script link in it.
 function checkTerms(record, path, label, add) {
     let ok = true;
@@ -987,9 +908,10 @@ function checkTerms(record, path, label, add) {
     return ok ? out : null;
 }
 
-// A ladder of ranks, lowest first (Story Director's quest letters, RPG Battle's foe strength). The id is
+// A ladder of ranks, lowest first for a module that reads them. The id is
 // the rank as the story writes it ('F', 'SS'), kept as given and unique ignoring case, not a slug;
-// `levels` and `reward` are whole-number ranges, the reward in units of the chat's one currency.
+// `levels`, `reward` and `xp` are whole-number ranges, the reward in units of the chat's one currency and the xp (2.5.0, optional,
+// at most RANKS_LIMITS.xp) the experience a job of the rank may give.
 // A rank never starts below the one before it, so a ladder written highest first is caught.
 function checkRanks(list, packId, add) {
     if (!Array.isArray(list)) {
@@ -1003,8 +925,8 @@ function checkRanks(list, packId, add) {
     const out = [];
     const seen = new Set();
     let ok = true;
-    // The last rank (id and range) that gave levels, and the last that gave a reward.
-    const last = { levels: null, reward: null };
+    // The last rank (id and range) that gave levels, the last that gave a reward and the last that gave xp.
+    const last = { levels: null, reward: null, xp: null };
     list.forEach((record, index) => {
         const path = `content.ranks[${index}]`;
         if (!isObject(record)) { ok = false; return add('BAD_RECORD', path, `${path} must be an object like { "id": "F", "title": "Registered" }.`); }
@@ -1031,9 +953,10 @@ function checkRanks(list, packId, add) {
         };
         const levels = range('levels', 1, RANKS_LIMITS.level, `whole levels from 1 to ${RANKS_LIMITS.level}`);
         const reward = range('reward', 0, Number.MAX_SAFE_INTEGER, 'whole amounts of 0 or more of the chat\'s currency');
+        const xp = range('xp', 0, RANKS_LIMITS.xp, `whole amounts of experience from 0 to ${RANKS_LIMITS.xp.toLocaleString('en-US')}`);
         if (!good) { ok = false; return; }
-        const rank = { id: record.id, ...(title !== undefined ? { title: oneLine(title) } : {}), ...(levels ? { levels } : {}), ...(reward ? { reward } : {}), pack: packId };
-        for (const field of ['levels', 'reward']) {
+        const rank = { id: record.id, ...(title !== undefined ? { title: oneLine(title) } : {}), ...(levels ? { levels } : {}), ...(reward ? { reward } : {}), ...(xp ? { xp } : {}), pack: packId };
+        for (const field of ['levels', 'reward', 'xp']) {
             if (!rank[field]) continue;
             const before = last[field];
             if (before && rank[field][0] < before.range[0]) {
@@ -1047,8 +970,8 @@ function checkRanks(list, packId, add) {
     return ok ? out : [];
 }
 
-// Markets (PACKS.md "Markets"): settlement types and environment tags with their price factors, as
-// RPG Battle's trade reads them over its built-in ones. Each record is a type (`type`, with `buy`, `sell`
+// Markets (PACKS.md "Markets"): settlement types and environment tags with their price factors.
+// A module can read these alongside its own defaults. Each record is a type (`type`, with `buy`, `sell`
 // and `stock`) or a tag (`tag`, with `prices` per item category); one of each name per pack.
 function checkMarkets(list, packId, add) {
     if (!Array.isArray(list)) {
@@ -1267,7 +1190,7 @@ export function checkScreens(list, packId, add) {
         let ok = true;
         const say = (field, message, code = 'BAD_SCREENS') => { ok = false; add(code, `${path}.${field}`, `${label}: ${message}`); };
         for (const key of Object.keys(screen)) if (!SCREEN_FIELDS.includes(key)) say(key, `"${key}" is not a screen field (expected ${SCREEN_FIELDS.join(', ')}).`, 'UNKNOWN_FIELD');
-        if (typeof screen.id !== 'string' || !SCREEN_ID.test(screen.id) || screen.id.length > 100) say('id', 'id must be a screen id like "rpg-battle/party" (to restyle that screen) or "riverside-board".');
+        if (typeof screen.id !== 'string' || !SCREEN_ID.test(screen.id) || screen.id.length > 100) say('id', 'id must be a screen id like "example-module/overview" (to restyle that screen) or "riverside-board".');
         else if (seen.has(screen.id)) say('id', 'two screens share this id.', 'DUPLICATE');
         else seen.add(screen.id);
         for (const field of ['title', 'icon']) if (screen[field] !== undefined && (typeof screen[field] !== 'string' || screen[field].length > LIMITS.name)) say(field, `${field} must be text of at most ${LIMITS.name} characters.`);

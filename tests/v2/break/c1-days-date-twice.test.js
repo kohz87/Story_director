@@ -11,7 +11,7 @@ import { conditionEvaluator } from '../../vendor/story-block/src/v2/view/bind.js
 import { compile, evaluate } from '../../vendor/story-block/src/v2/events/index.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { installFakeDom } from '../../ui-fake-dom.js';
 
 const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
@@ -20,7 +20,7 @@ const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines
 test('a day in the Journal (the Days screen before) shows its date once in its folded head', async () => {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeRpgBattle(), module] });
+    host = await createHost({ modules: [fakeFightRunner(), module] });
     await host.send('Start.', reply('Harrow.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow', '+ coin 40']));
     await host.send('Weir.', reply('The weir.', ['~ time June 4, 1200, 08:00 am', '~ place Old Weir']));
     await host.send('On.', reply('On.'));

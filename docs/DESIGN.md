@@ -320,7 +320,7 @@ needs nothing from Director to work; with the Story Suite it reads Director's ca
   the stored World_State block, for readers who keep that section (a toggle, on by default).
   NPC State Delta does not read it.
 - **Story Suite** (v0.8, [STORY_SUITE.md](STORY_SUITE.md)): Story Block, Director, NPC State
-  Delta and RPG Battle announce what they own on a shared registry. Director offers the
+  Delta announce what they own on a shared registry. Director offers the
   calendar, the timeline and NPCs; while NPC State Delta keeps who each NPC is, Director's
   agenda lines give only plans and timing. NPC State Delta takes Director's calendar
   (`StoryDirector.calendar()`).

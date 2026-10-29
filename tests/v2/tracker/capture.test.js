@@ -162,7 +162,8 @@ test('+ hook makes no quest: a job the story only mentions stays an open thread,
     const rats = thread(state, 'Watch Granary Rats');
     assert.deepEqual([rats.kind, rats.offer, rats.taken, rats.status], ['hook', false, null, 'active']);
     assert.equal(threads(state, { kind: 'hook' }).length, 1);
-    assert.deepEqual(kinds(state), ['label']);
+    assert.equal(rats.fields.reward, '5 copper per dozen tails (up to 40)');
+    assert.deepEqual(kinds(state), []);
     valid(state);
     // The story moving it on, or the reader saying yes, does not make it a quest: only + hook does.
     state = story([{ lines: '~ hook Watch Granary Rats | step: in the cellar | reward: 6 copper a dozen', said: 'Yes, I\'ll take it.' }], state);

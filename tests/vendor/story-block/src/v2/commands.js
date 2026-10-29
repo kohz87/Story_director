@@ -551,7 +551,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
             // Every other module's answer to hook `name` on the state this command sees (MODULES §F126): each
             // module's `hooks[name]({ state, query }, args)`, synchronous. An answer that is null, a promise,
             // or a throw is left out, so asking is always safe: [{ module, answer }] in module order, frozen
-            // copies. RPG Battle asks `checkModifiers` before a check is resolved.
+            // copies. An example module asks `checkModifiers` before a check is resolved.
             gather(name, args) {
                 open();
                 if (typeof name !== 'string' || !name) fail('INVALID', 'gather needs a hook name.');
@@ -602,7 +602,7 @@ export function createCommandBus({ store, registry, settings = () => ({}), onCom
         // problem goes to the Problems list (turn.js). Not stored in the receipt.
         const problem = typeof result.problem === 'string' && result.problem.trim() ? result.problem.trim() : null;
         // `replan: true` (a system step only, B-a1-13): what it did is planned from the story state it ran
-        // on (RPG Battle's story-time heal), so a Re-read of the reply it is kept on runs it again on the
+        // on (an example module's story-time heal), so a Re-read of the reply it is kept on runs it again on the
         // new story changes instead of applying what it did before (store.replaceStory).
         const replan = cause === 'system' && result.replan === true;
         return { summary, narrate, data: clone(data), problem, replan };

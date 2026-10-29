@@ -56,11 +56,11 @@ test('a day\'s facts: places, money in and out, fights, NPC stages, world news, 
         r('wallet.pay', { module: 'story-block', cause: 'ui', summary: 'The party pays 3 gold (32 gold left).', data: { owner: 'party', amount: 3, now: 32 } }),
         r('quest.finish', { summary: 'You turn in Rat Cellar: 3 rats beaten (target 3), 30 gold paid.', narrate: true, data: { quest: 'th_aaaaaaaa', paid: { amount: 30 } } }),
         r('capture.quest', { summary: 'You turn in Lost Ring: goal met, 12 gold paid.', narrate: true, data: { thread: 'th_bbbbbbbb', turnIn: { paid: { amount: 12 } } } }),
-        r('combat.end', { module: 'rpg-battle', summary: 'Victory over 2 Wolves: 7 gold.', narrate: true, data: { session: 'fs_1', outcome: 'won', foes: [], loot: { money: 7, items: [] } } }),
-        r('combat.flee', { module: 'rpg-battle', summary: 'You get away from the Troll.', narrate: true, data: { session: 'fs_2', outcome: 'fled', foes: [] } }),
-        r('combat.act', { module: 'rpg-battle', summary: 'Ren hits the Troll.', data: { session: 'fs_2', status: 'active' } }),
-        r('trade.sell', { module: 'rpg-battle', cause: 'ui', summary: 'Sold Rope for 4 gold.', data: { kind: 'sell', total: 4 } }),
-        r('trade.buy', { module: 'rpg-battle', cause: 'ui', summary: 'Bought Lamp for 6 gold.', data: { kind: 'buy', total: 6 } }),
+        r('combat.end', { module: 'encounter-example', summary: 'Victory over 2 Wolves: 7 gold.', narrate: true, data: { session: 'fs_1', outcome: 'won', foes: [], loot: { money: 7, items: [] } } }),
+        r('combat.flee', { module: 'encounter-example', summary: 'You get away from the Troll.', narrate: true, data: { session: 'fs_2', outcome: 'fled', foes: [] } }),
+        r('combat.act', { module: 'encounter-example', summary: 'Ren hits the Troll.', data: { session: 'fs_2', status: 'active' } }),
+        r('trade.sell', { module: 'encounter-example', cause: 'ui', summary: 'Sold Rope for 4 gold.', data: { kind: 'sell', total: 4 } }),
+        r('trade.buy', { module: 'encounter-example', cause: 'ui', summary: 'Bought Lamp for 6 gold.', data: { kind: 'buy', total: 6 } }),
         r('capture.npc', { module: 'npc-state-delta', summary: 'Mira: trust reached Friend. Mira: trust 18 → 25.', narrate: true, data: { name: 'Mira', stages: [{ meter: 'trust', from: 'Wary', to: 'Friend' }] } }),
         r('capture.npc', { module: 'npc-state-delta', summary: 'Mira: trust reached Ally.', narrate: true, data: { name: 'Mira', stages: [{ meter: 'trust', from: 'Friend', to: 'Ally' }] } }),
         r('capture.npc', { module: 'npc-state-delta', summary: 'Brom: tension 5 → 9.', data: { name: 'Brom', stages: [] } }),
@@ -70,9 +70,9 @@ test('a day\'s facts: places, money in and out, fights, NPC stages, world news, 
     ];
     const facts = factsOf(list);
     assert.deepEqual(facts.places, ['Harrow', 'Old Weir']);
-    // 40 (coin) + 30 (quest) + 12 (story turn-in) + 7 (loot) + 4 (sale) in; 5 (coin) + 3 (wallet.pay) + 6 (buy) out.
+    // Only the wallet and recorded legacy quest payments count as money moved.
     // Ren's own purse (not the party's) is not the party's money.
-    assert.deepEqual(facts.money, { in: 93, out: 14 });
+    assert.deepEqual(facts.money, { in: 82, out: 8 });
     assert.deepEqual(facts.fights, { count: 2, won: 1, lost: 0, fled: 1 });
     assert.deepEqual(facts.npcs, ['Mira: trust Wary → Ally']);
     assert.deepEqual(facts.world, ['World: Red Plague is now ongoing — the docks close.']);
@@ -201,9 +201,9 @@ test('the validator: days kept under their own day, every field checked, both fi
 test('RX-cap-5: per-reply bookkeeping (system receipts the story was not told, dice, a character made) is no fact of the day', () => {
     const list = [
         clock(D * DAY + 8 * 60),
-        r('checks.prepare', { module: 'rpg-battle', cause: 'system', summary: 'Dice for the next reply: Roll 1 = 20 · Roll 2 = 17.' }),
-        r('party.create', { module: 'rpg-battle', cause: 'ui', narrate: true, summary: 'Ren is ready.' }),
-        r('creation.finish', { module: 'rpg-battle', cause: 'ui', summary: 'Ren steps out.' }),
+        r('checks.prepare', { module: 'encounter-example', cause: 'system', summary: 'Dice for the next reply: Roll 1 = 20 · Roll 2 = 17.' }),
+        r('module.prepare', { module: 'encounter-example', cause: 'system', summary: 'Ren is ready.' }),
+        r('module.initialize', { module: 'encounter-example', cause: 'system', summary: 'Ren steps out.' }),
         r('module.set.up', { module: 'other', cause: 'system', summary: 'Other module set up.' }),
     ];
     const quietDay = factsOf(list);

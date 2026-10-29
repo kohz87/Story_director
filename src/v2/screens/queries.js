@@ -168,90 +168,20 @@ export function nextDue(state, args, tools, { settings = null } = {}) {
 // ---------------------------------------------------------------------------------------------------
 // The quest board
 
-/**
- * Whether Finish could be pressed now: `{ show, blocked, reason }`, for a pack's or card's own Finish button
- * (the default Quests screen draws none: turn-ins follow the story, F95). Shown when code can count the
- * quest's target or the quest's goal is one the story judges (F83); blocked, with the reason in plain
- * words, until it is taken on and its target is met (or the story said its goal is met), then by
- * `quest.progress`'s own `finish: { ok, reason }` (the quests part's rule, place included, which
- * `quest.finish` checks again). Without `finish` (an older quests part) the place is left to `quest.finish`.
- */
-export function finishState(thread, progress) {
-    if (!progress || !(progress.need > 0 || isRecord(progress.finish))) return { show: false, blocked: true, reason: '' };
-    let reason = '';
-    if (!thread.taken) reason = 'It was never taken on.';
-    else if (!progress.met) reason = text(progress.reason) || 'Not done yet.';
-    else if (isRecord(progress.finish) && progress.finish.ok === false) reason = text(progress.finish.reason) || 'It cannot be turned in here.';
-    return { show: true, blocked: Boolean(reason), reason };
+/** Story-told quests on the Home screen, using only Director threads. */
+export function questBoard(state, _args, tools) {
+    const quests = threadsOf(state, queryFrom(tools), { kind: 'quest', status: 'active' }).filter(isOpen);
+    const row = thread => ({
+        id: thread.id,
+        key: text(thread.key),
+        goal: text(thread.fields?.goal) || text(thread.summary),
+        status: isOffer(thread) ? { state: 'offered', text: 'Offered' } : { state: 'active', text: 'Under way' },
+        meter: false,
+    });
+    return { active: quests.filter(thread => !isOffer(thread)).map(row), offers: quests.filter(isOffer).map(row) };
 }
 
-const OUTCOME_TEXT = Object.freeze({ done: 'Done', failed: 'Failed', abandoned: 'Given up', declined: 'Turned down', superseded: 'Replaced' });
-const NOTE_CHARS = 160;
 const cut = (value, max) => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
-
-function rewardOf(thread) {
-    return text(thread.reward?.text) || text(thread.fields?.reward);
-}
-
-function progressOf(query, thread) {
-    const value = ask(query, 'quest.progress', { id: thread.id }, null);
-    if (!isRecord(value)) return null;
-    const need = Number.isSafeInteger(value.need) ? value.need : 0;
-    const have = Number.isSafeInteger(value.have) ? value.have : 0;
-    return {
-        have,
-        need,
-        met: value.met === true,
-        ready: value.ready === true,
-        source: value.source ?? null,
-        label: text(value.label) || (need > 0 ? `${have}/${need}` : ''),
-        reason: text(value.reason),
-        ...(isRecord(value.finish) ? { finish: { ok: value.finish.ok !== false, reason: text(value.finish.reason) } } : {}),
-    };
-}
-
-// The story time written on the chat's calendar, '' when there is none.
-function dateText(minutes, calendar) {
-    if (!Number.isSafeInteger(minutes)) return '';
-    try {
-        return text(calendar.format(minutes));
-    } catch {
-        return '';
-    }
-}
-
-// A quest's status line without the quests part's `quest.details` (F95's three words).
-function plainStatus(thread, progress) {
-    if (!thread.taken) return { state: 'untaken', text: 'Not taken on' };
-    if (progress?.met) return { state: progress.finish?.ok === false ? 'ready' : 'here', text: progress.finish?.ok === false ? 'Ready' : 'Ready to turn in' };
-    return { state: 'notyet', text: progress?.label ? `Not yet: ${progress.label}` : 'Not yet' };
-}
-
-/**
- * What a quest's details pop-up shows (F84), from the quests part's `quest.details`: `{ goal, note, giver,
- * due, rank, terms, held, owed, taken, ended, history: [{ rev, text }], hasHistory }` with the dates written on
- * the chat's calendar ('' when the story time was not set). Without `quest.details`, read from the thread.
- */
-function detailsOf(thread, given, calendar) {
-    const details = isRecord(given) ? given : {};
-    const terms = isRecord(details.terms) ? details.terms : {};
-    const history = Array.isArray(details.history) ? details.history.filter(isRecord).map(entry => ({ rev: entry.rev ?? null, text: text(entry.text) })) : [];
-    return {
-        goal: text(details.goal) || text(thread.fields?.goal) || text(thread.summary),
-        note: cut(text(details.note) || text(thread.fields?.progress) || text(thread.fields?.step), NOTE_CHARS),
-        giver: text(details.giver) || text(thread.fields?.giver),
-        due: text(details.due) || text(thread.fields?.due),
-        rank: text(details.rank?.title),
-        terms: text(terms.text) || rewardOf(thread),
-        held: text(terms.held),
-        // A reward owed ("Reward owed: 30 copper bits (add copper bits in Settings → Coins)"), else ''.
-        owed: text(details.owed?.text),
-        taken: thread.taken ? dateText(thread.taken.at, calendar) || 'yes' : '',
-        ended: thread.ended ? dateText(thread.ended.at, calendar) || 'yes' : '',
-        history,
-        hasHistory: history.length > 0,
-    };
-}
 
 // ---------------------------------------------------------------------------------------------------
 // Problems, in the reader's words
@@ -277,17 +207,16 @@ export function readerWords(value, substitute = null) {
 }
 
 // A Problem about a passing state of a quest is shown only while that state lasts: "has no goal" while it
-// is open with no goal (the quests part's `quest.details` says; without it, a `goal:` field). An older
+// is open with no goal (its `goal:` field). An older
 // chat's "was offered, not taken on" is not shown: there is nothing to accept any more.
-function stillSo(problem, director, query) {
+function stillSo(problem, director) {
     if (problem.kind === 'offered') return false;
     if (problem.kind !== 'no-goal') return true;
     const id = director?.keys?.[lineKey(text(problem.key))];
     const thread = id ? director?.threads?.[id] : null;
     if (!thread) return true;
     if (!isOpen(thread)) return false;
-    const details = ask(query, 'quest.details', { id: thread.id }, null);
-    return isRecord(details) && typeof details.hasGoal === 'boolean' ? !details.hasGoal : !text(thread.fields?.goal);
+    return !text(thread.fields?.goal);
 }
 
 /**
@@ -299,11 +228,10 @@ export function problemsList(state, args, tools) {
     const director = state?.domains?.director;
     const problems = problemList(director);
     const substitute = typeof tools?.substitute === 'function' ? tools.substitute : null;
-    const query = queryFrom(tools);
     // `behind: true` / `false`: only those about a thread behind the scenes, or only the others.
     const behind = typeof args?.behind === 'boolean' ? args.behind : null;
     // The newest PROBLEM_SHOWN: the tracker keeps more than that (domain.js PROBLEM_ROOM).
-    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director, query))
+    return problems.slice(-PROBLEM_SHOWN).filter(isRecord).filter(problem => stillSo(problem, director))
         .filter(problem => behind === null || isBehindProblem(problem, director) === behind).map(problem => ({
         rev: problem.rev ?? null,
         kind: text(problem.kind),
@@ -390,6 +318,7 @@ export function screenQueries({ settings = null } = {}) {
     return {
         'director.behind': (state, args, tools) => behindView(state, args, tools),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
+        'quest.board': (state, args, tools) => questBoard(state, args, tools),
         'director.next': (state, args, tools) => nextDue(state, args, tools, { settings }),
         'director.problems': (state, args, tools) => problemsList(state, args, tools),
         'director.status': (state, args, tools) => statusExtras(state, args, tools),

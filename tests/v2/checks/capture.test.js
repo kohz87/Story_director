@@ -19,7 +19,7 @@ const line = (raw, state, options = {}) => {
     return run(state, 'check', { op: '?', kind: 'check', name, text: text.join(' — '), labels, raw }, { cause: 'story', source: SOURCE, ...options });
 };
 
-test('the grammar is the old one and, after the flip, this part keeps the `check` kind (RPG Battle\'s part is gone)', () => {
+test('the grammar is the old one and, after the flip, this part keeps the `check` kind (example fight runner\'s part is gone)', () => {
     assert.match(checkKind.grammar, /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name$/);
     assert.equal(part.kinds.check, checkKind);
 });
@@ -50,7 +50,7 @@ test('who names one of SD\'s own actors, exactly; vs names a person NSD knows; n
     assert.equal(line('? check Persuade — talk | dc: normal | vs: Stranger', state, { queries }).code, 'NOT_FOUND');
 });
 
-test('what is refused is refused whole: a bad difficulty, no skill, no reply, no actor; no die and no claim are kept', () => {
+test('what is refused is refused whole: a bad difficulty, no skill, no reply, an unknown who; no die and no claim are kept', () => {
     const state = ready();
     for (const raw of ['? check Stealth — x | dc: kinda', '? check Stealth — x | stat: WIS | dc: easy']) {
         const out = line(raw, state);
@@ -58,7 +58,8 @@ test('what is refused is refused whole: a bad difficulty, no skill, no reply, no
         assert.deepEqual(out.state.meta.claims, {});
     }
     assert.equal(run(state, 'check', { op: '?', kind: 'check', name: 'Stealth', labels: { dc: 'easy' } }, { cause: 'story', source: null }).code, 'REFUSED', 'no reply to hold it: a refusal that says so, not a failure');
-    assert.equal(line('? check Stealth — x | dc: easy', makeState()).code, 'NOT_FOUND');
+    assert.equal(line('? check Stealth — x | dc: easy | who: Mara', makeState()).code, 'NOT_FOUND');
+    assert.equal(line('? check Stealth — x | dc: easy', makeState()).ok, true, 'with no character yet the player rolls with no bonuses');
     assert.equal(run(state, 'check', { op: '?', kind: 'check', name: '', labels: { dc: 'easy' } }, { cause: 'story', source: SOURCE }).code, 'INVALID');
 });
 

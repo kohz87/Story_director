@@ -1,4 +1,4 @@
-// Time part: `director.advance`, another module's rule moving the story clock on (RPG Battle's
+// Time part: `director.advance`, another module's rule moving the story clock on (example fight runner's
 // crafting), on the real Story Block v2 host with a crafting stand-in: the clock moves as a `~ time`
 // line moves it, held to a day a call and to once a reply per cause; a click is refused; the receipt
 // names the cause; the settle and the day digest follow; a swipe and a middle delete replay cleanly.
@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { fakeCraft } from './helpers/fake-craft.js';
 import { ADVANCE, MAX_ADVANCE, advanceClaim, spanText } from '../../../src/v2/time/advance.js';
 import { DIGEST } from '../../../src/v2/chronicle/days.js';
@@ -21,7 +21,7 @@ const clock = host => host.sdk.query('time.now').minutes;
 async function newHost() {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeRpgBattle(), module, fakeCraft()] });
+    host = await createHost({ modules: [fakeFightRunner(), module, fakeCraft()] });
     return host;
 }
 

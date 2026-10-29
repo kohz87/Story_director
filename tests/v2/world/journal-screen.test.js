@@ -17,7 +17,7 @@ import { compile, evaluate } from '../../vendor/story-block/src/v2/events/index.
 import { scopeCss } from '../../vendor/story-block/src/v2/view/css.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { installFakeDom } from '../../ui-fake-dom.js';
 
 const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
@@ -26,7 +26,7 @@ const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines
 async function threeDays() {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeRpgBattle(), module], settings: { modules: { 'story-director': { 'chronicle.digestDays': 2 } } } });
+    host = await createHost({ modules: [fakeFightRunner(), module], settings: { modules: { 'story-director': { 'chronicle.digestDays': 2 } } } });
     await host.send('Start.', reply('Harrow.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow', '+ coin 40', '+ item Rope']));
     await host.send('Weir.', reply('The weir.', ['~ time June 4, 1200, 08:00 am', '~ place Old Weir', '+ world Red Plague — coughing in the docks']));
     await host.send('Fort.', reply('The fort.', ['~ time June 5, 1200, 08:00 am', '~ place Ridge Fort', '- coin 5']));

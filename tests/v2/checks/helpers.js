@@ -102,7 +102,7 @@ import { PARTS, createModule } from '../../../src/v2/module.js';
 
 /**
  * Story Director's module with the checks part registered, as the flip release will register it. The module as shipped does not register it
- * (RPG Battle's checks part owns the `checks` domain, the `check` kind and `checks.*` until the flip retires it).
+ * (example fight runner's checks part owns the `checks` domain, the `check` kind and `checks.*` until the flip retires it).
  */
 export const moduleWithChecks = (options = {}) => createModule(options);
 

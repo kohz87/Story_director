@@ -22,7 +22,7 @@ const answeringView = { query: () => null };
 const absentView = { query: name => { throw new Error(`Story Suite: no module answers the query "${name}".`); } };
 
 test('an older host (no status): a module that registers combat.* commands runs fights, as before', t => {
-    withLiveSdk(t, [entry('story-block', ['scene.place']), entry('rpg-battle', ['combat.start', 'item.use'])]);
+    withLiveSdk(t, [entry('story-block', ['scene.place']), entry('rules-module', ['combat.start', 'item.use'])]);
     assert.equal(fightRunner(), true);
     withLiveSdk(t, [entry('story-block', ['scene.place']), entry('crafting', ['craft.make'])]);
     assert.equal(fightRunner(), false);
@@ -31,23 +31,23 @@ test('an older host (no status): a module that registers combat.* commands runs 
 });
 
 test('a lifecycle host: only a ready module with combat.* commands runs fights', t => {
-    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rpg-battle', ['combat.start'], 'ready')]);
+    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rules-module', ['combat.start'], 'ready')]);
     assert.equal(fightRunner(), true);
-    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rpg-battle', ['combat.start'], 'dormant')]);
+    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rules-module', ['combat.start'], 'dormant')]);
     assert.equal(fightRunner(), false, 'dormant: no encounter requests');
-    withLiveSdk(t, [entry('story-block', [], 'restore-pending'), entry('rpg-battle', ['combat.start'], 'restore-pending')]);
+    withLiveSdk(t, [entry('story-block', [], 'restore-pending'), entry('rules-module', ['combat.start'], 'restore-pending')]);
     assert.equal(fightRunner(), false, 'restore-pending: nothing is ready');
-    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rpg-battle', ['item.use'], 'ready')]);
+    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rules-module', ['item.use'], 'ready')]);
     assert.equal(fightRunner(), false, 'ready, but no combat commands');
     withLiveSdk(t, [entry('story-block', [], 'ready')]);
     assert.equal(fightRunner(), false, 'missing');
 });
 
 test('a lifecycle host: no fallback to a query for a dormant entry, whatever the view answers', t => {
-    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rpg-battle', ['combat.start'], 'dormant')]);
+    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rules-module', ['combat.start'], 'dormant')]);
     assert.equal(fightRunner(answeringView), false);
     assert.equal(fightRunner(absentView), false);
-    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rpg-battle', ['combat.start'], 'ready')]);
+    withLiveSdk(t, [entry('story-block', [], 'ready'), entry('rules-module', ['combat.start'], 'ready')]);
     assert.equal(fightRunner(absentView), true, 'a ready entry is enough; the view is not asked');
 });
 
@@ -67,14 +67,14 @@ test('the real host: a dormant fight runner is not asked for, and a late peer wa
     t.after(() => { restoreLive(); host.close(); });
     globalThis.StoryBlock = { sdk: host.sdk };
     await host.sdk.registerModule({
-        id: 'rpg-battle', name: 'RPG Battle', version: '2.0.0-beta.2', requires: { peers: { 'story-director': '>=2.0.0-beta.1' } },
+        id: 'rules-module', name: 'example fight runner', version: '2.0.0-beta.2', requires: { peers: { 'story-director': '>=2.0.0-beta.1' } },
         commands: { 'combat.start': () => ({ summary: 'A fight starts.', narrate: false }) },
         queries: { 'combat.session': () => null },
     });
-    assert.equal(host.sdk.modules().find(item => item.id === 'rpg-battle').status, 'dormant');
+    assert.equal(host.sdk.modules().find(item => item.id === 'rules-module').status, 'dormant');
     assert.equal(fightRunner({ query: (name, args) => host.sdk.query(name, args) }), false, 'dormant: no encounters');
     await host.sdk.registerModule({ id: 'story-director', name: 'Story Director', version: '2.0.0-beta.2' });
-    assert.equal(host.sdk.modules().find(item => item.id === 'rpg-battle').status, 'ready');
+    assert.equal(host.sdk.modules().find(item => item.id === 'rules-module').status, 'ready');
     assert.equal(fightRunner({ query: (name, args) => host.sdk.query(name, args) }), true, 'late activation: asked for at the next look');
     host.registry.setRestore('pending', 'Restoring.');
     assert.equal(fightRunner(), false, 'restore-pending');

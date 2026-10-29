@@ -43,4 +43,4 @@ of `src/v2/world/index.js` and `known.js` (the exact PC-known rules), Story Bloc
 
 - Show that a rebuild after swipe / middle delete draws the same World (derived views make this free; a
   stored field breaks it).
-- Test with NSD, RPG Battle and packs absent.
+- Test with NSD and packs absent.

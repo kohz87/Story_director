@@ -7,7 +7,7 @@
 //   places    where the scene moved to (Story Block's `place` receipts);
 //   quests    taken on, finished, failed or given up that day (the threads' own `taken` and `ended`
 //             stamps, by the receipt that made them);
-//   fights    how many ended, won, lost, fled (RPG Battle's fight results);
+//   fights    how many ended, won, lost or fled;
 //   money     what came in and went out, in the currency's smallest unit (the receipts' own amounts);
 //   npcs      stage moves of NPC State Delta's meters (its receipts' `stages`);
 //   world     the chronicle's own world lines of that day (their receipt summaries);
@@ -61,16 +61,12 @@ export const MAX_MET = 8;
 // another module's command has no receipt of its own; the time part's settle before the next reply
 // sets the clock right again.
 const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'director.advance']);
-// Receipts that are bookkeeping only: never a fact of the day. Besides these, every receipt Story Block
-// or a module committed on its own (cause `system`) that the story was not told (RX-cap-5: RPG Battle's
-// `checks.prepare` dice for the next reply, a module set up): per-reply bookkeeping, not what happened.
-// Making a character is the start of the story, not a day's event.
-const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed', 'checks.prepare', 'party.create']);
+// Receipts that are bookkeeping only: never a fact of the day.
+const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed']);
 // The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's
 // name and counts are never a fact of the day (the Journal shows only what {{user}} knows).
 const PLANNED_TYPES = new Set(['director.arc.accept', 'director.arc.update', 'director.arc.end']);
-const quiet = receipt => QUIET_TYPES.has(receipt.type) || String(receipt.type).startsWith('creation.')
-    || (receipt.cause === 'system' && receipt.narrate !== true);
+const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause === 'system' && receipt.narrate !== true);
 const SETTLE = 'time.settle';
 // Story Block's scene receipts that name who came into the scene (`data.added`).
 const PRESENT_TYPES = new Set(['capture.present', 'scene.present']);
@@ -257,20 +253,13 @@ function moneyOf(receipt) {
     // A Director line that also paid turn-ins its reply left waiting carries each under `settled`.
     if (Array.isArray(data.settled)) for (const item of data.settled) out.in += amount(item?.turnIn?.paid?.amount);
     else out.in += amount(data.turnIn?.paid?.amount);
-    // RPG Battle: a fight's loot, a sale, a purchase, a commission's fee.
-    if (receipt.module === 'rpg-battle') {
-        out.in += amount(data.loot?.money);
-        if (data.kind === 'sell') out.in += amount(data.total);
-        else if (data.kind === 'buy') out.out += amount(data.total);
-        else if (data.kind === 'commission') out.out += amount(data.fee);
-    }
     return out;
 }
 
-// A fight that ended (RPG Battle): 'won' | 'lost' | 'fled', or null.
+// A module can report a finished encounter in its receipt.
 function fightOf(receipt) {
     const data = receipt.data;
-    if (receipt.module !== 'rpg-battle' || !isRecord(data) || typeof data.session !== 'string') return null;
+    if (!['combat.end', 'combat.flee'].includes(receipt.type) || !isRecord(data) || typeof data.session !== 'string') return null;
     return ['won', 'lost', 'fled'].includes(data.outcome) ? data.outcome : null;
 }
 

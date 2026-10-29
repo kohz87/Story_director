@@ -7,13 +7,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const reply = (text, lines = []) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
 test('a reply and its Continues move the story clock at most maxJump (30 days) in all', async t => {
     t.mock.method(console, 'warn', () => {});
-    const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
+    const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
     t.after(() => host.close());
     await host.send('Morning.', reply('Dawn.', ['~ time March 3, 8:00 am']));
     const before = host.store.head().domains.director.time.minutes;

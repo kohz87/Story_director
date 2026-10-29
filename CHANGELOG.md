@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0
+
+- RPG Battle is no longer supported. Its rules packs cannot be imported; existing RPG Battle chats should stay on the previous versions.
+- Quests are told by the story. Checks, the calendar, map, World, Chronicle and arc planning continue without battle rules.
+- A goal such as “defeat 3 wolves” closes when the story says it is done; it no longer needs a counted turn-in or a payment receipt. Quest types, rewards and difficulty remain part of the story's record.
+- Checks work in a new chat without any setup: until a check character is set up, a check (the story's own or Assist's pre-roll) rolls for you at +0. Check characters saved in earlier chats keep working with their bonuses.
+- Chats with checks from 2.1 and earlier keep their characters and check history, and editing a character or rolling a check in them works again.
+
+
 ## 2.1.1
 
 - **The Map's regions are a list:** the rows of region chips are replaced by a **Region** list on the same row as **Find a place**, before the zoom and locate buttons. It has the same choices in the same order (All first) and shows a region as its chip did; the region shown is the one selected, and a search that lands on another region moves the list with it. On a phone the bar wraps to three rows: Find a place, Region, the buttons.

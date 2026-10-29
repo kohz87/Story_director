@@ -19,3 +19,23 @@ test('SD alone keeps generic threads, the story clock and the journal', async t 
     assert.equal(h.head().domains.party, undefined);
     assert.equal(h.head().domains.inventory.wallets.party?.coin ?? 0, 0);
 });
+
+test('SD alone follows a story-told quest through progress, completion and replay', async t => {
+    const h = await createHost({ modules: [withD1(createModule())] });
+    t.after(() => h.close());
+    await h.send('I will help.', '<Changes>\n+ quest Lost ring — Find the ring | goal: find the ring | giver: Mara\n</Changes>');
+    const quest = h.sdk.query('director.threads', { kind: 'quest' })[0];
+    assert.ok(quest);
+    assert.equal(h.sdk.query('director.goal').key, 'Lost ring');
+    assert.deepEqual(h.sdk.query('quest.board').active.map(row => row.key), ['Lost ring']);
+    await h.send('I search.', '<Changes>\n~ quest Lost ring | step: found a clue\n</Changes>');
+    assert.equal(h.sdk.query('director.thread', { id: quest.id }).fields.step, 'found a clue');
+    await h.send('I return it.', '<Changes>\n- quest Lost ring — returned to Mara\n</Changes>');
+    assert.equal(h.sdk.query('director.thread', { id: quest.id }).status, 'resolved');
+    assert.equal(h.sdk.query('director.goal'), null);
+    assert.equal(h.head().domains.inventory.wallets.party?.coin ?? 0, 0);
+    assert.deepEqual(h.turn.problems(), []);
+    const before = structuredClone(h.head());
+    h.store.rebuild();
+    assert.deepEqual(h.head(), before);
+});

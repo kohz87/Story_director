@@ -61,7 +61,7 @@ export function staticText({ fights = true } = {}) {
     ].join('\n');
 }
 
-/** The static part with a fight runner there (RPG Battle), as before. */
+/** The static part when an optional fight runner is present. */
 export const STATIC_TEXT = staticText();
 
 /** Each Director kind's one line for the change-line instruction (SPEC §4.4). */
@@ -69,6 +69,7 @@ export const GRAMMAR = Object.freeze({
     agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
     event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
     hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
+    quest: '+ quest Name — a task the story follows | goal: what to do | giver: who asked',
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',
@@ -88,7 +89,7 @@ export function withoutEncounters(tracker) {
     return { ...tracker, records: tracker.records.map(record => (record.fields?.encounter ? { ...record, fields: { ...record.fields, encounter: '' } } : record)) };
 }
 
-// All neutral instructions keep hook identity; RPG capture belongs to RB.
+// All neutral instructions keep hook identity.
 const v2Lines = value => value.replace(/\bquest Key\b/g, 'hook Key');
 
 // The thread ids the time part's recap for this reply tells (empty without the time part).

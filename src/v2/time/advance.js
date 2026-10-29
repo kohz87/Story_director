@@ -1,5 +1,5 @@
 // Story Director v2, part **time**: `director.advance`, the story clock moved on by another module's
-// rule (RPG Battle's crafting takes story time). Pure apart from the ctx.
+// rule (a module action takes story time). Pure apart from the ctx.
 //
 // `director.advance { minutes, cause?, reason? }`, for modules and Story Block's own steps only (cause
 // `story` or `system`, usually through `ctx.call` from a capture): the clock moves forward by `minutes`,

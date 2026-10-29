@@ -1,6 +1,6 @@
-// A small stand-in for RPG Battle's crafting (RB #89) for Story Director's tests: a `craft` change line
+// A small stand-in for example fight runner's crafting (RB #89) for Story Director's tests: a `craft` change line
 // (`! craft Iron Sword | hours: 2 | cause: craft`) whose capture moves the story clock through
-// `ctx.call('director.advance', { minutes, reason, cause? })`, the way RPG Battle's craft part does
+// `ctx.call('director.advance', { minutes, reason, cause? })`, the way example fight runner's craft part does
 // (it passes `reason`, and lets UNKNOWN_COMMAND pass). Only the call's shape; none of the real rules.
 
 export function fakeCraft() {

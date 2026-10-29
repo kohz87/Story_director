@@ -34,7 +34,7 @@
 
 import { threadProjection } from './thread-writes.js';
 import { hashJson } from './hash.js';
-import { closed, cursor, hash, map, minute, recordId, source, validQuest } from './quest-shape.js';
+import { closed, cursor, hash, map, minute, recordId, source } from './thread-shape.js';
 import { lineKey } from '../../changes.js';
 import { slotIn, slotValue, toSlot } from '../slot.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
@@ -209,7 +209,8 @@ function threadErrors(id, thread) {
         const a = thread.acceptance;
         if (!closed(a, ['source', 'cursor', 'minute', 'proof']) || !source(a.source) || !cursor(a.cursor) || !minute(a.minute) || !recordId(a.proof)) errors.push(`${at}.acceptance is invalid.`);
     }
-    if (thread.rpg !== undefined && !validQuest(thread.rpg)) errors.push(`${at}.rpg is invalid.`);
+    // Unsupported old quest data is opaque and read-only; no battle schema is interpreted.
+    if (thread.rpg !== undefined && !map(thread.rpg)) errors.push(`${at}.rpg must be an object.`);
     return errors;
 }
 

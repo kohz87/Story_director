@@ -177,7 +177,7 @@ test('writer refusals: bad shapes, unknown regions and places, a policy over the
     }
     assert.ok(set({ scope: 'world', key: null, policy: policy(1, { allowedFoes: Array.from({ length: 1000 }, (_, i) => `pack.x/f${i}`) }) }).ok, '1000 foes are the limit');
     assert.equal(set({ scope: 'world', key: null, policy: policy(1) }, { cause: 'capture' }).code, 'REFUSED');
-    assert.equal(set({ scope: 'world', key: null, policy: policy(1) }, { caller: 'rpg-battle' }).code, 'REFUSED');
+    assert.equal(set({ scope: 'world', key: null, policy: policy(1) }, { caller: 'rules-module' }).code, 'REFUSED');
     assert.equal(write(state, 'atlas.placeRegion', { place: 'Nowhere', region: rg }).code, 'NOT_FOUND');
     assert.equal(write(state, 'atlas.placeRegion', { place: 'Haven', region: 'rg_zzzzzzzz' }, { pack: ONE }).code, 'NOT_FOUND');
     assert.equal(write(state, 'atlas.placeRegion', { place: 'Haven', region: 'x' }, { pack: ONE }).code, 'INVALID');

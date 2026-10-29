@@ -19,7 +19,7 @@ import { PROBLEM_ROOM, problemList, replyTurn } from '../../../src/v2/tracker/do
 import { IDLE_REPLIES, tailThreads } from '../../../src/v2/tracker/note.js';
 import { seenOf } from '../../../src/v2/chronicle/domain.js';
 import { slotValue } from '../../../src/v2/slot.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { makeState, reply as trackerReply } from '../tracker/helpers/fake-ctx.js';
 
 const said = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
@@ -28,7 +28,7 @@ const keys = host => Object.values(director(host).threads).map(entry => entry.ke
 
 async function fresh(t, first = []) {
     t.mock.method(console, 'warn', () => {});
-    const host = await createHost({ modules: [fakeRpgBattle(), createModule()] });
+    const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
     t.after(() => host.close());
     await host.send('Hello.', said('The road.', first));
     return host;
@@ -68,7 +68,7 @@ test('deleting an early reply keeps every later reply\'s threads, problems, sett
     const live = JSON.stringify(host.head());
     host.store.rebuild();
     assert.equal(JSON.stringify(host.head()), live);
-    const again = await createHost({ modules: [fakeRpgBattle(), createModule()] });
+    const again = await createHost({ modules: [fakeFightRunner(), createModule()] });
     t.after(() => again.close());
     await again.st.loadChat(structuredClone(host.ctx.chat));
     assert.equal(JSON.stringify(again.head().domains), JSON.stringify(host.head().domains));
@@ -211,13 +211,12 @@ test('a zero-width or bidi mark makes no new thread, place or world event', asyn
 
 // ---- B-b7r2-1 ------------------------------------------------------------------------------------------
 
-test('the module needs Story Block 2.0.0-beta.2 or later', async t => {
+test('the module needs Story Block 2.6.0 or later', async t => {
     const def = createModule();
-    assert.deepEqual(def.requires, { storyBlock: '>=2.0.0-beta.2' });
-    assert.equal(STORY_BLOCK_RANGE, '>=2.0.0-beta.2');
-    // Story Block 2.0.0-alpha.2 orders pre-releases (Story Block before it compared without the tag, so
-    // it read this as ">=2.0.0" and still loaded the module). Every alpha and beta.1 are below beta.2.
-    for (const [version, ok] of [['2.0.0-beta.2', true], ['2.0.0-beta.3', true], ['2.0.0-rc.1', true], ['2.0.0', true], ['2.0.0-beta.1', false], ['2.0.0-alpha.10', false], ['2.0.0-alpha.2', false], ['2.0.0-alpha.1', false], ['1.9.0', false]]) {
+    assert.deepEqual(def.requires, { storyBlock: '>=2.6.0' });
+    assert.equal(STORY_BLOCK_RANGE, '>=2.6.0');
+    // Check the release boundary as well as later versions and prereleases.
+    for (const [version, ok] of [['2.5.3', false], ['2.6.0-beta.1', false], ['2.6.0', true], ['2.6.1', true], ['2.7.0', true]]) {
         assert.equal(satisfies(version, def.requires.storyBlock), ok, version);
     }
     const host = await fresh(t);

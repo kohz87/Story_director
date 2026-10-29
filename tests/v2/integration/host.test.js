@@ -1,5 +1,5 @@
 // Story Director on the real Story Block v2 host (the vendored runtime and testkit in
-// tests/vendor/story-block/): Story Block's core module, a stand-in RPG Battle and this module,
+// tests/vendor/story-block/): Story Block's core module, a stand-in example fight runner and this module,
 // driven the way SillyTavern drives them (messages, replies with <Changes> blocks, swipes,
 // deletes, UI commands).
 
@@ -8,12 +8,12 @@ import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule, MODULE_ID } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from './helpers/fake-rpg.js';
+import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
 
-const newHost = (options = {}) => createHost({ modules: [fakeRpgBattle(), createModule()], ...options });
+const newHost = (options = {}) => createHost({ modules: [fakeFightRunner(), createModule()], ...options });
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const quest = (host, key) => host.sdk.query('director.thread', { key });
 const claims = host => Object.keys(host.head().meta.claims).sort();
@@ -89,10 +89,10 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
 test('the module registers whole: screens instead of tabs, settings fields, capture kinds, queries', async () => {
     const host = await newHost();
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
-    assert.equal(mine.version, '2.1.1');
+    assert.equal(mine.version, '2.2.0');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
-    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'landmark', 'route', 'secret', 'time', 'world']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'checks.actor', 'checks.link', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'threads.accept', 'threads.close', 'threads.intent', 'threads.link', 'threads.offer', 'threads.questWrite', 'time.settle']);
+    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'landmark', 'quest', 'route', 'secret', 'time', 'world']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
         'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card',
@@ -101,7 +101,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual(Object.keys(defs.schema).sort(), [
         'arc.autoAccept', 'arc.genre', 'arc.keepNote', 'arc.lowThreads', 'arc.maxTokens', 'arc.note', 'arc.profile', 'arc.recent', 'arc.stallDays', 'arc.trigger',
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
-        'checks.costMargin', 'checks.defaultDc', 'checks.rbModifiers', 'checks.social',
+        'checks.costMargin', 'checks.defaultDc', 'checks.social',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail',
         'screens.hideBehind', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',

@@ -188,7 +188,7 @@ export function createClassifier({ callModel, settings, chat, chatId, hasKind, l
             return null;
         }
         if (!hasKind(CHECK_KIND)) {
-            note('skipped', { key, message: 'no module keeps checks (RPG Battle is not on)' });
+            note('skipped', { key, message: 'no module keeps checks' });
             return null;
         }
         const prepared = line => ({ lines: [ROLLED_LINE], commands: [{ type: PRECHECK, payload: { key, line } }] });

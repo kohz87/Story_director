@@ -12,7 +12,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).

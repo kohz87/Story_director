@@ -1,6 +1,5 @@
-/* Story Suite shared styles, v1: the settings-panel look of NPC State Delta, for all four. This
-   file is identical in Story Block, Story Director, NPC State Delta and RPG Battle; change it in
-   all four together (docs/STORY_SUITE.md). Each extension loads it once as
+/* Story Suite shared styles, v1: the settings-panel look of NPC State Delta. Keep the copies in
+   Story Block, Story Director and NPC State Delta aligned (docs/STORY_SUITE.md). Each loads it once as
    <link id="story-suite-css">; whichever loads first wins, and the copies are the same.
    Only story-suite-* classes, scoped to a panel's `.story-suite-panel` (its drawer content). */
 

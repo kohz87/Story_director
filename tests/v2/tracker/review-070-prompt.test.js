@@ -11,7 +11,7 @@ for (const fights of [false, true]) test(`non-quest prompt bytes equal main (fig
     const h = await createHost({ modules: [createModule()] }); t.after(() => h.close());
     const check = () => {
         assert.equal(staticText({ fights }), main.text[Number(fights)]);
-        for (const [kind, grammar] of Object.entries(GRAMMAR)) assert.equal(grammar, main.grammar[kind], kind);
+        for (const [kind, grammar] of Object.entries(main.grammar)) assert.equal(GRAMMAR[kind], grammar, kind);
     };
     await h.send('Walk.', 'A quiet road.'); check();
     await h.st.loadChat(structuredClone(h.ctx.chat)); check(); h.store.rebuild(); check();

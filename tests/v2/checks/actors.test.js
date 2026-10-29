@@ -1,11 +1,8 @@
 // checks.actor and checks.link (contract §3 P09/P24): the player's settings, the retry ledger, the stale hash, the one-to-one link.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deepFreeze, hashOf, makeState, replay, run, write } from './helpers.js';
+import { hashOf, makeState, replay, run, write } from './helpers.js';
 import { part } from '../../../src/v2/checks/index.js';
-import { policyOf } from '../../../src/v2/checks/domain.js';
-
-const SHEET = { 'rules.sheet': ({ actor }) => ({ ac_00000001: { id: actor, kind: 'pc' }, ac_00000002: { id: actor, kind: 'companion' }, ac_00000003: { id: actor, kind: 'summon' } })[actor] ?? null };
 
 function actor(state, extra = {}, options = {}) {
     return run(state, 'checks.actor', { write: write(), name: 'Mara', expectedHash: hashOf(state), ...extra }, options);
@@ -26,14 +23,12 @@ test('the first actor becomes the default, bonuses default to {}, a second does 
     assert.equal(third.result.data.v2.result.hash, hashOf(third.state));
 });
 
-test('editing keeps the link and the bonuses it was not given; an unknown id is NOT_FOUND for the player', () => {
+test('editing keeps bonuses it was not given; an unknown id is NOT_FOUND for the player', () => {
     let state = actor(makeState(), { bonuses: { STR: 3 } }).state;
     const id = state.domains.checks.policy.defaultActor;
-    state = run(state, 'checks.link', { write: write(), actor: id, rbActor: 'ac_00000001', expectedHash: hashOf(state) }, { queries: SHEET }).state;
     const edited = actor(state, { id, name: 'Mara of the Marsh' });
     assert.ok(edited.ok, edited.message);
     assert.deepEqual(edited.state.domains.checks.policy.actors[id], { id, name: 'Mara of the Marsh', bonuses: { STR: 3 } });
-    assert.equal(edited.state.domains.checks.policy.rbActors[id], 'ac_00000001');
     assert.equal(actor(state, { id: 'ca_zzzzzzzz' }).code, 'NOT_FOUND');
 });
 
@@ -66,46 +61,6 @@ test('refusals: unknown fields and bad bonuses are INVALID; the story, a module 
     assert.equal(run(state, 'checks.actor', base, { caller: 'story-block' }).code, 'REFUSED');
 });
 
-test('RPG Battle\'s creation makes a missing actor, and never edits one', () => {
-    const made = actor(makeState(), {}, { cause: 'ui', caller: 'rpg-battle' });
-    assert.ok(made.ok, made.message);
-    const id = made.result.data.v2.result.actor;
-    assert.equal(actor(made.state, { id }, { caller: 'rpg-battle' }).code, 'REFUSED');
-    // A missing one by its id is made too.
-    const named = actor(made.state, { id: 'ca_abcd1234', name: 'Wren' }, { caller: 'rpg-battle' });
-    assert.ok(named.ok, named.message);
-    assert.ok(named.state.domains.checks.policy.actors.ca_abcd1234);
-});
-
-test('checks.link: the PC or a durable companion, one to one, null unlinks, the player may relink and RB\'s creation may not', () => {
-    let state = actor(makeState()).state;
-    const mara = state.domains.checks.policy.defaultActor;
-    state = actor(state, { name: 'Tov' }).state;
-    const tov = Object.keys(state.domains.checks.policy.actors).find(id => id !== mara);
-    const link = (which, rb, options = {}) => run(state, 'checks.link', { write: write(), actor: which, rbActor: rb, expectedHash: hashOf(state) }, { queries: SHEET, ...options });
-    const linked = link(mara, 'ac_00000001');
-    assert.ok(linked.ok, linked.message);
-    assert.deepEqual(linked.result.data.v2.result, { actor: mara, rbActor: 'ac_00000001', hash: hashOf(linked.state) });
-    state = linked.state;
-    assert.equal(link(tov, 'ac_00000001').code, 'CONFLICT', 'one character, one actor');
-    assert.equal(link(tov, 'ac_00000002').ok, true, 'a durable companion');
-    assert.equal(link(tov, 'ac_00000003').code, 'REFUSED', 'a summon is not linked');
-    assert.equal(link(tov, 'ac_00000009').code, 'NOT_FOUND', 'RPG Battle has no such character');
-    assert.equal(link('ca_zzzzzzzz', 'ac_00000002').code, 'NOT_FOUND');
-    assert.equal(link(mara, 'ac_00000002').ok, true, 'the player relinks');
-    assert.equal(link(mara, 'ac_00000002', { caller: 'rpg-battle' }).code, 'CONFLICT', 'creation does not relink silently');
-    assert.equal(link(mara, 'ac_00000001', { caller: 'rpg-battle' }).ok, true, 'the same link again is fine');
-    // A link whose character RPG Battle no longer has is stale: its creation may take the actor for the new one; with RPG Battle silent it cannot tell and does not.
-    const gone = { 'rules.sheet': ({ actor }) => (actor === 'ac_00000002' ? { id: actor, kind: 'companion' } : null) };
-    assert.equal(link(mara, 'ac_00000002', { caller: 'rpg-battle', queries: gone }).ok, true, 'the old character is gone');
-    assert.equal(link(mara, 'ac_00000002', { caller: 'rpg-battle', queries: { 'rules.sheet': ({ actor }) => (actor === 'ac_00000001' ? { id: actor, kind: 'pc' } : { id: actor, kind: 'companion' }) } }).code, 'CONFLICT', 'a living one stays');
-    const none = link(mara, null);
-    assert.ok(none.ok);
-    assert.deepEqual(none.state.domains.checks.policy.rbActors, {});
-    assert.equal(link(mara, 'ac_00000002', { queries: {} }).code, 'DEPENDENCY_UNAVAILABLE', 'RPG Battle is not ready');
-    assert.equal(link(mara, 'ac_00000001', { cause: 'capture' }).code, 'REFUSED');
-});
-
 test('a rebuild from the ops is the state (the writes are in the domain)', () => {
     const a = actor(makeState());
     const b = actor(a.state, { name: 'Tov' });
@@ -113,26 +68,9 @@ test('a rebuild from the ops is the state (the writes are in the domain)', () =>
     assert.deepEqual(replay(initial, [a, b]), b.state);
 });
 
-// S2: after RPG Battle's checks part ran, the domain holds its own slice ({ prepared, log, ... }), with no policy or ledger.
-test('S2: an RPG Battle-shaped checks slice is valid, and the first write of ours makes it ours: policy and ledger filled, its pending fields dropped, its log kept', () => {
-    const entry = { id: 'ck_00000001', actor: 'ac_x', skill: 'stealth', stat: 'DEX', dc: 15, die: 12, mod: 2, total: 14, outcome: 'cost', modifiers: [] };
-    const legacy = { prepared: { k1: { for: 3, rolls: [4, 17] } }, last: { id: 'ck_00000001' }, pending: {}, log: { ck_00000001: entry, junk: { x: 1 } } };
-    assert.deepEqual(part.domains.checks.validate(legacy), [], 'valid as it is');
-    assert.ok(part.domains.checks.validate({ policy: 1 }).length > 0, 'a slice that claims a policy is held to it');
-    assert.ok(part.domains.checks.validate({ prepared: {}, mine: 1 }).length > 0, 'a field that is nobody\'s is not');
-    const state = deepFreeze({ v: 2, meta: { rev: 0, claims: {} }, domains: { checks: legacy } });
-    assert.equal(policyOf(legacy).defaultActor, null);
-    const made = run(state, 'checks.actor', { write: write(), name: 'Mara', expectedHash: hashOf(state) });
-    assert.ok(made.ok, made.message);
-    const slice = made.state.domains.checks;
-    assert.deepEqual(part.domains.checks.validate(slice), []);
-    assert.deepEqual(Object.keys(slice).sort(), ['log', 'policy', 'writes']);
-    assert.deepEqual(Object.keys(slice.log), ['ck_00000001'], 'its log is kept where it is ours in shape');
-    const id = slice.policy.defaultActor;
-    assert.ok(id && slice.policy.actors[id]);
-    // link and roll on the same legacy slice
-    const linked = run(state, 'checks.link', { write: write(), actor: 'ca_zzzzzzzz', rbActor: null, expectedHash: hashOf(state) });
-    assert.equal(linked.code, 'NOT_FOUND', 'a missing actor is NOT_FOUND, not a crash');
-    const rolled = run(made.state, 'checks.roll', { skill: 'stealth', evidence: 'ev_00000001' }, { cause: 'capture', source: { evidence: 'ev_00000001' } });
-    assert.ok(rolled.ok, rolled.message);
+test('the standalone checks domain accepts its initial state and rejects unknown fields', () => {
+    const initial = part.domains.checks.initial();
+    assert.deepEqual(part.domains.checks.validate(initial), []);
+    assert.ok(part.domains.checks.validate({ ...initial, unexpected: {} }).length > 0);
+    assert.ok(part.domains.checks.validate({ log: {} }).length > 0);
 });

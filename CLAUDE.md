@@ -3,15 +3,12 @@
 Story Director 2 is a **module** of Story Suite v2 (module id `story-director`). Story Block (kohz87/Story_block,
 the host) keeps the state, reads the replies' `<Changes>` lines, builds the prompt and hosts tabs and
 settings; this repo registers one module definition through Story Block's sdk: the story clock and
-calendar, threads (agendas, events, hooks, quests, clocks, beats, secrets), quests and rewards, deadlines
+calendar, threads (agendas, events, hooks, quests, clocks, beats, secrets), story-told quests, deadlines
 and the While away recap, the map and travel (atlas), the chronicle and day digest, the World screen
 (what the player character knows), arc planning, and the Director / Quests / World screens. The other
-modules are RPG Battle (kohz87/rpg_battle) and NPC State Delta (kohz87/npc_state_delta).
+module is NPC State Delta (kohz87/npc_state_delta).
 
-Story Director must work **without RPG Battle** (a dating sim or mystery: no fights, stats or levels)
-and without NSD: read other modules only through guarded queries with a fallback (`tryQuery` in
-`src/v2/world/known.js`; no level → lowest rank, no fights → asks for no encounters) and test every
-change with each other module absent. Work is on `main`, the development branch (v1 is on branch `v1`).
+Story Director works without NPC State Delta. Read other modules through guarded queries with a fallback and test the standalone path. Work on the assigned branch.
 
 ## Directory map
 
@@ -20,7 +17,6 @@ change with each other module absent. Work is on `main`, the development branch 
   namespaced per part; `fights` (whether a module runs fights) told to every part.
 - `src/v2/tracker/`: the `director` domain, its change-line kinds and grammar, the clock (`time.js`), calendar
   settings, the note (static + tail, `note.js`), seed.
-- `src/v2/quests/`: taking, progress, goals, finishing, rewards and ranks.
 - `src/v2/time/`: settle (lapses, overdue, due now), advance, recap, records.
 - `src/v2/atlas/`: places, routes, map widget, travel. `src/v2/chronicle/`: world events, factions, day digest.
 - `src/v2/world/`: the World screen (Now / Journal), PC-known views, people widget; nothing stored.
@@ -50,8 +46,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 
 ## Non-negotiables (every PR keeps them)
 
-1. **Code sets numbers; the story proposes.** Rewards priced and capped by code (story-written rewards held to
-   the per-reply story budget, at most one story-vouched turn-in per reply); the clock moves at most
+1. **Code sets numbers; the story proposes.** The clock moves at most
    `tracker.maxJump` days (30) per reply; invalid times refused.
 2. **Per-reply bookkeeping** keyed by carrier `sid` / id (`turn.now` written whole as a slot, problems under
    their own `<rev>.<n>` key, pruned by key); never positional appends or a `replace` of another reply's
@@ -90,12 +85,9 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 
 ## Known traps
 
-- Cross-repo tests need sibling checkouts named exactly `Story_block`, `rpg_battle`, `Story_director`,
-  `npc_state_delta` side by side (e.g. `tests/v2/break/rx-*` look for `../rpg_battle`, or `RPG_BATTLE_DIR`;
-  `STORY_BLOCK_DIR` points the screens and map tests at a Story Block checkout). Without them they skip,
-  and CI has only this repo. Run Story Block's `suite-check` skill for the full picture.
+- Cross-repo tests use Story Block and NPC State Delta alongside this checkout; `STORY_BLOCK_DIR` can point to a host checkout.
 - There is no `sync-testkit` npm script here: call Story Block's script with `--to .`.
 - Tests run against the **vendored** testkit, not Story Block's head; a host change can turn tests red on
   the next re-sync. Never edit the vendored files.
 - A Continue is the same reply (by `sid`): `maxJump`, `turn.n` and tallies must hold across it.
-- `tests/v2/integration/alone.test.js` is the Story-Director-without-RPG-Battle guard; keep it green.
+- `tests/v2/integration/alone.test.js` is the standalone Director guard; keep it green.

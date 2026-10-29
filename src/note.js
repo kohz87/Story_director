@@ -20,9 +20,6 @@ export const CHANGE_INSTRUCTION = [
     'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a job only offered: + hook with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.',
     'Write only changes, never the whole list. Never write actions for {{user}}.',
 ].join('\n');
-
-export const QUEST_INSTRUCTION = 'Measurable jobs: target: defeat 3 wolf, deliver 5 Rat Tail, or possess 1 Travel Permit; reward: 1 silver per wolf, 2 silver, or none. Quests with a target: narrate no completed turn-in or reward payment without this reply\'s "Verified turn-in:" instruction. Story-tracked quests close through the story.';
-
 // How a schedule meets a scene, about 70 tokens; only when something is scheduled. Without
 // it a model handed "Due now: the warrant is filed" tends to stop the scene and stage it.
 export const PACING = [
@@ -32,7 +29,7 @@ export const PACING = [
 // The same, when a capture call writes the changes and the model writes none.
 export const PACING_NO_CHANGES = PACING.replace(/ What cannot fit yet happens off-screen \(!\) or slips \(~ on: later\)\./, ' What cannot fit yet can happen off-screen or later.');
 // Added to the Pacing line only while a due or arriving record carries an encounter, about 35
-// tokens. The fight is resolved in code by another extension (RPG Battle); a storyteller left
+// tokens. The fight is resolved by another extension; a storyteller left
 // alone would narrate the whole fight and decide how it ends, so it stops at the first blow.
 export const ENCOUNTER_CUE = 'A due fight starts when the scene reaches it: show the foes appear and stop at the first blow; the fight is resolved outside the story.';
 // While NPC State Delta is the source of truth for who an NPC is (Story Suite, area `npc`),
@@ -521,11 +518,9 @@ function arrivalItem(record, verb = 'arrives') {
 // "Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Haywane 30".
 function questItem(record, clock = text => text) {
     const f = noteFields(record);
-    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', record.contract ? notePart(record.contract.rewardText, 'reward') : f.reward, f.due ? `by ${clock(f.due)}` : '']
+    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${clock(f.due)}` : '']
         .map(part => String(part ?? '').trim())
         .filter(Boolean);
-    const target = record.contract?.requirement;
-    if (target) parts.unshift(`verified target: ${target.error ? 'unavailable' : notePart(`${target.action} ${target.qty} ${target.entity}`, 'target')}; await Verified turn-in`);
     // A normal difficulty goes without saying; a set one rides with the type: "(bounty, hard)".
     const difficulty = questDifficulty(f.difficulty);
     const tags = [String(f.type ?? '').trim(), difficulty === 'normal' ? '' : difficulty].filter(Boolean);

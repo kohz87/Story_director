@@ -8,13 +8,13 @@ import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { PARTS, createModule } from '../../../src/v2/module.js';
 import { part as time } from '../../../src/v2/time/index.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
 const sent = (host, key) => host.st.promptLog.filter(entry => entry.key === key && entry.value).map(entry => entry.value);
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
-const newHost = () => createHost({ modules: [fakeRpgBattle(), createModule({ parts: [...PARTS.filter(([id]) => id !== 'time'), ['time', time]] })] });
+const newHost = () => createHost({ modules: [fakeFightRunner(), createModule({ parts: [...PARTS.filter(([id]) => id !== 'time'), ['time', time]] })] });
 
 test('on the host: the lapse is told once in [Happened], the recap once in the tail, both again on a swipe', async () => {
     const host = await newHost();

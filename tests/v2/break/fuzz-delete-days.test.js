@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { fakeCraft } from '../time/helpers/fake-craft.js';
 import { DIGEST, dayOf, entriesByDay, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 
@@ -120,7 +120,7 @@ for (const seed of SEEDS) {
         const settings = settingsOf(caps);
         let gone = 0;
         let insideDeletes = 0;
-        const host = await createHost({ modules: [fakeRpgBattle(), createModule(), fakeCraft()], settings });
+        const host = await createHost({ modules: [fakeFightRunner(), createModule(), fakeCraft()], settings });
         try {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5']));
             for (let n = 1; n <= REPLIES; n += 1) {
@@ -172,7 +172,7 @@ for (const seed of SEEDS) {
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === DIGEST), `seed ${seed}: days were written`);
             assert.ok(host.sdk.query('chronicle.days').length > 0);
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
-            const again = await createHost({ modules: [fakeRpgBattle(), createModule(), fakeCraft()], settings });
+            const again = await createHost({ modules: [fakeFightRunner(), createModule(), fakeCraft()], settings });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
                 assert.deepEqual(again.store.problems(), [], `seed ${seed}: a fresh load skips nothing`);

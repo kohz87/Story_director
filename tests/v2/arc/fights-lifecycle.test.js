@@ -9,7 +9,7 @@ import { createModule, fightRunner } from '../../../src/v2/module.js';
 import { createArcController } from '../../../src/v2/arc/index.js';
 import { FIGHT_RULE, NO_FIGHT_RULE } from '../../../src/v2/arc/plan.js';
 import { browserStore, createReveal } from '../../../src/v2/screens/reveal.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const said = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const PLAN = `<plan>
@@ -20,8 +20,8 @@ ENCOUNTER: Wreckers — 3 wrecker | on: in 3 days
 const original = Object.getOwnPropertyDescriptor(globalThis, 'StoryBlock');
 const restoreLive = () => { if (original) Object.defineProperty(globalThis, 'StoryBlock', original); else delete globalThis.StoryBlock; };
 
-// RPG Battle's stand-in, naming a peer: dormant until `waitsFor` is registered.
-const rpg = waitsFor => ({ ...fakeRpgBattle(), requires: { storyBlock: '>=2.0.0-beta.2', peers: { [waitsFor]: '>=0.0.0' } } });
+// example fight runner's stand-in, naming a peer: dormant until `waitsFor` is registered.
+const rpg = waitsFor => ({ ...fakeFightRunner(), requires: { storyBlock: '>=2.0.0-beta.2', peers: { [waitsFor]: '>=0.0.0' } } });
 
 async function setUp(t, { waitsFor = 'nobody-yet', beforeModule = null } = {}) {
     const probe = await createHost({ modules: [] });
@@ -49,7 +49,7 @@ const beat = (host, key) => host.sdk.query('director.threads', { kind: 'beat' })
 test('a dormant fight runner: the planner is told no fights and keeps none', async t => {
     const s = await setUp(t);
     if (!s) return;
-    assert.equal(s.host.sdk.modules().find(entry => entry.id === 'rpg-battle').status, 'dormant');
+    assert.equal(s.host.sdk.modules().find(entry => entry.id === 'rules-module').status, 'dormant');
     assert.equal((await s.arc.plan()).ok, true);
     assert.ok(s.model.calls[0].system.includes(NO_FIGHT_RULE));
     assert.ok(!s.model.calls[0].system.includes(FIGHT_RULE));
@@ -61,7 +61,7 @@ test('a dormant fight runner: the planner is told no fights and keeps none', asy
 test('a restore pending: nothing is a fight runner, and the planner is not asked at all', async t => {
     const s = await setUp(t, { waitsFor: 'story-block' });     // ready: its peer is Story Block itself
     if (!s) return;
-    assert.equal(s.host.sdk.modules().find(entry => entry.id === 'rpg-battle').status, 'ready');
+    assert.equal(s.host.sdk.modules().find(entry => entry.id === 'rules-module').status, 'ready');
     assert.equal(fightRunner(), true);
     s.host.registry.setRestore('pending', 'Going back to a save point.');
     assert.equal(fightRunner(), false, 'restore-pending: no fight runner');

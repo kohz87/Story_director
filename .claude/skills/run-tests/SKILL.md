@@ -25,9 +25,7 @@ Node 24 is what CI uses (node ≥ 22 works). No install step.
      `file:///…` line is the test file and line.
    - a line starting `⚠` is a failing `test.todo` (a known open problem); it prints `X` but does not fail the run.
    - for totals and skips run a file with the default reporter: `node --test tests/v2/tracker/time.test.js`.
-4. Tests that need RPG Battle or Story Block checked out beside this repo (`../rpg_battle`,
-   `RPG_BATTLE_DIR`, `STORY_BLOCK_DIR`) skip without them, in CI too. Run them locally with the four repos
-   side by side (Story Block's `suite-check` skill).
-5. Always keep `tests/v2/integration/alone.test.js` green: Story Director without RPG Battle.
+4. Run cross-repository checks with Story Block and NPC State Delta alongside this checkout.
+5. Always keep `tests/v2/integration/alone.test.js` green.
 6. Tests run against the vendored Story Block in `tests/vendor/story-block/` (VERSION names the commit). A
    failure that comes from the host side needs the `sync-testkit` skill, not a local workaround.

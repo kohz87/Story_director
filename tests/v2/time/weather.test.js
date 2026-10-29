@@ -3,7 +3,7 @@
 // region (a pack's table, else a temperate one), seeded per story day and region; set through Story Block's
 // `scene.weather` as an afterCapture step when the day or region changes; the story's `~ weather` wins for the
 // rest of that day and place. Deterministic and replay-safe (Re-read, swipe, rebuild, reload), with or without
-// RPG Battle, and off with either feature.
+// example fight runner, and off with either feature.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { makeCalendar, normalizeCalendar, PRESETS } from '../../../src/calendar.js';
 import { TEMPERATE, WEATHER_FEATURE, hashOf, seasonByYear, seasonOf, tableFor, weatherFor, weatherHook, weatherKey } from '../../../src/v2/time/weather.js';
-import { fakeRpgBattle } from '../integration/helpers/fake-rpg.js';
+import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const weather = host => host.head().domains.scene.weather;
@@ -67,7 +67,7 @@ test('the pick is seeded by the story day and region: the same day and place, th
     assert.ok(Array.from(weatherKey(at, 'x'.repeat(200))).length <= 80, 'the key fits Story Block\'s');
 });
 
-for (const [name, modules] of [['with RPG Battle', () => [fakeRpgBattle(), createModule()]], ['without RPG Battle', () => [createModule()]]]) {
+for (const [name, modules] of [['with example fight runner', () => [fakeFightRunner(), createModule()]], ['without example fight runner', () => [createModule()]]]) {
     test(`the weather is set each story day and region, kept on the reply (${name})`, async () => {
         const host = await createHost({ modules: modules() });
         await host.send('Morning.', reply('Bluewatch wakes.', START));

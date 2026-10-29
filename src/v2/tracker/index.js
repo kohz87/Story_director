@@ -1,11 +1,8 @@
 // Story Director v2, part **tracker** (MODULES §C1): the `director` domain, its change-line
 // kinds, the story clock (set from a pack's start date when the story has not set it), its queries
 // and what the model is told. Its screen is the screens part's `story-director/director`.
-// The coordinator's src/v2/module.js merges this part with the others into module
-// `story-director`. Quest taking, finishing, targets and progress are part `quests` (§C2):
-// this part keeps `taken`, `target` and `reward` as they are, and sets `ended` when a line
-// closes a thread. Its quest lines also carry `met:` (a thread's `ready`), `progress:` (the step
-// note), the no-goal Problem and the story's own turn-in (quest-lines.js).
+// The module merges this part with the others. Quests are story-told threads; this part
+// retains older quest data read-only and records ordinary thread progress and closure.
 
 import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
@@ -19,7 +16,7 @@ import { DEFAULT_ELSEWHERE, MAX_ELSEWHERE } from './scene.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
 
 // A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set.
-const kinds = Object.fromEntries(THREAD_KINDS.filter(kind => kind !== 'quest').map(kind => [kind, {
+const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
     grammar: Object.hasOwn(GRAMMAR_ALONE, kind) ? env => grammarOf(kind, env) : GRAMMAR[kind],
     apply: applyThreadLine,
 }]));
@@ -54,11 +51,7 @@ export const part = {
         budget: TAIL_BUDGET,
         parts: [{ feature: INITIATIVE_FEATURE, static: () => INITIATIVE_STATIC }],
     },
-    // Right after a reply's last story line (Story Block's afterCapture, MODULES §F121): the turn-ins the
-    // reply left waiting, settled on the scene it ended up in, in that reply. Before each reply: the clock
-    // from a pack's start, and (on an older Story Block, which never calls afterCapture) the same turn-ins,
-    // which the step before the next reply then settles (quest-lines.js). A Continue's afterCapture also
-    // pays a turn-in the place refused at the end of the reply's first part, once the party is there.
+    // Seed the clock and choose optional NPC initiative before generation.
     hooks: { beforeGenerate, replayGuard: threadReplayGuard },
     settings: {
         section: 'Calendar',
