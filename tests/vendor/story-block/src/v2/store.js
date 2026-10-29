@@ -1036,9 +1036,14 @@ export function createStore({
     // State after the last carrier at or before `upTo`, or null when no checkpoint precedes it. A block
     // of ops that no longer applies (a hand-edited chat, a middle reply deleted) is skipped and reported
     // on its own, so a bad change cannot take the rest of its carrier, or anything later, with it.
-    function replay(arr, upTo) {
+    // `whole`: from the first carrier's own checkpoint, past every later one (carriedTo, below).
+    function replay(arr, upTo, { whole = false } = {}) {
         counts.replays++;
-        const { from } = chain(arr, upTo);
+        let { from } = chain(arr, upTo);
+        if (whole) {
+            const first = carrierIndexes(arr)[0];
+            if (first !== undefined && first <= upTo && readRecord(arr[first])?.checkpoint) from = first;
+        }
         // A damaged record (B-b2-timeline-7) is skipped, and said so.
         const problems = from >= 0 ? unpackProblems(arr, from, readRecord(arr[from]).carried) : [];
         for (let i = Math.max(from, 0); i <= upTo && i < arr.length; i++) {
@@ -1577,10 +1582,12 @@ export function createStore({
 
     // B-b2-timeline-3: the state the first carrier starts from when the carriers before it were deleted:
     // what they ended with, as the store last saw them (their message objects still hold their records).
+    // The deleted replies are replayed whole, from the first one's checkpoint: a later checkpoint among them holds what their
+    // blocks did without asking them, and a block that must not outlive its reply (a reply-bound guard) is asked here again.
     function carriedTo(message) {
         const at = known ? known.indexOf(message) : -1;
         if (at <= 0) return null;
-        const { state } = replay(known, at - 1);
+        const { state } = replay(known, at - 1, { whole: true });
         return state ? structuredClone(state) : null;
     }
 

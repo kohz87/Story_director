@@ -696,6 +696,12 @@ function storyWear(ctx, inv, def, written, why) {
 // perReply); a second loot line in the reply adds to it. A reply keeps the LOOT_KEEP newest offers.
 export const LOOT_ITEMS = 8;
 export const LOOT_KEEP = 5;
+// The guards of the loot blocks (Story Block's own, asked through the core module's replayGuard): a take's (lootTakeGuard),
+// and the offer's, reply-bound, so it holds while its reply is in the chat (asked, it only checks its own shape).
+export const LOOT_GUARD = 'loot.take';
+export const LOOT_OFFER = 'loot.offer';
+export const LOOT_KINDS = Object.freeze([LOOT_OFFER, LOOT_GUARD]);
+const LOOT_OWNER = 'story-block';
 const MAX_WHERE = 120;
 
 function lootErrors(loot) {
@@ -824,6 +830,10 @@ export function captureLoot(ctx, line, env) {
     const here = trimText(line.text ?? '', MAX_WHERE);
     const where = before && before.where !== here ? trimText([before.where, here].filter(Boolean).join('; '), MAX_WHERE) : here;
     inv.loot[sid] = { sid, n: Number.isSafeInteger(ctx.rev) ? ctx.rev : 0, where, claim: `loot:${sid}`, items: { ...items } };
+    // The offer is the reply's own (REPLAY.md "Reply-bound guards"): it goes with its reply, also when deleting the earliest
+    // replies carries the rest of what they did forward, and a take of it (lootTakeGuard) goes with it.
+    const offered = { kind: LOOT_OFFER, sid };
+    ctx.replayGuard({ owner: LOOT_OWNER, version: 2, epoch: ctx.epoch, rulesHash: null, inputHash: ctx.hash(offered), predicate: offered, replyBound: true });
     const list = items.map(item => itemText(item.name, item.qty));
     return {
         summary: `Loot to pick from${where ? ` (${where})` : ''}: ${list.join(', ')}. The reader picks what to take (this reply's card, or To pick up in the Inventory).`,
@@ -836,6 +846,8 @@ export function captureLoot(ctx, line, env) {
 // `inventory.lootTake { sid, pick: [index…] }` (the reader's "Take selected" on the reply's card):
 // once per reply's offer (claim `loot:<sid>`), the picked things the party does not carry yet go to the
 // party's bag, as the offer held them. The reader's own take: past the carry limit it is refused.
+// The take is a guarded block (REPLAY.md, predicate `loot.take`): what a reply laid out goes away with it, so
+// the take applies, with its claim, only while that reply's offer still lays out what was taken (lootTakeGuard).
 function lootTake(ctx, payload, env) {
     if (!featureOn(ctx, FEATURE.loot)) ctx.fail('FEATURE_OFF', 'Loot to pick from is turned off in the Features.');
     const inv = ctx.draft('inventory');
@@ -861,10 +873,13 @@ function lootTake(ctx, payload, env) {
         // offer an older version saved) can make it a thing that does not stack: what fits is taken, the rest stays.
         const qty = def.stack ? item.qty : Math.min(item.qty, MAX_UNSTACKED);
         if (qty < item.qty) over.push({ name: def.name, qty: item.qty - qty });
-        wanted.push({ def, qty, created });
+        wanted.push({ def, qty, created, offered: item.name });
     }
     if (!wanted.length && !coin) ctx.fail('REFUSED', `${joinNames(skipped)} ${skipped.length === 1 ? 'is' : 'are'} already carried.`);
     if (wanted.length) readerCarry(ctx, wanted.map(entry => ({ defId: entry.def.id, qty: entry.qty })), 'party');
+    // What the take needs of the offer, decided now and kept on the block: the offer's names and how many of each were taken.
+    const predicate = { kind: LOOT_GUARD, sid, claim: offer.claim || `loot:${sid}`, items: wanted.map(entry => ({ name: entry.offered, qty: entry.qty })), coin };
+    ctx.replayGuard({ owner: LOOT_OWNER, version: 2, epoch: ctx.epoch, rulesHash: null, inputHash: ctx.hash(predicate), predicate });
     // FB-2: what the story offered is the story's own (`story: true`, as a `+ item` line's), whatever its
     // def (a pack's item named in the `? loot` line): its worth was held to that reply's goods budget.
     const stacks = wanted.flatMap(entry => grantInto(ctx, inv, entry.def, entry.qty, 'party', '', false, true));
@@ -877,10 +892,68 @@ function lootTake(ctx, payload, env) {
     const behind = over.length ? ` ${joinNames(over.map(entry => itemText(entry.name, entry.qty)))} ${over.length === 1 && over[0].qty === 1 ? 'is' : 'are'} left where ${over.length === 1 ? 'it' : 'they'} lay: a thing that does not stack is given at most ${MAX_UNSTACKED} at once.` : '';
     return {
         summary: `The party takes ${joinNames(took)}${where}${left}.${behind}`,
-        data: { sid, taken: wanted.map(entry => ({ def: entry.def.id, qty: entry.qty })), coin, skipped, stacks, ...(over.length ? { left: over } : {}) },
+        data: { sid, taken: wanted.map(entry => ({ def: entry.def.id, qty: entry.qty })), coin, skipped, stacks, ...(over.length ? { left: over } : {}),
+            v2: { result: { taken: predicate.items, coin } } },
         narrate: told(ctx),
         ...(behind ? { problem: behind.trim() } : {}),
     };
+}
+
+// The guard of a take, as the core module's replayGuard asks it (domains/index.js) on the state before the take's block,
+// on a rebuild, a reload, a delete, a swipe and a Re-read alike. Pure: the state before the block and the guard's own
+// predicate, nothing else. The take holds while the reply's offer is there under the same claim and lays out, by the
+// tolerant name, at least as many of each thing as was taken (and at least the coin taken). The names are matched as the
+// inventory looks a name up (resolveDef over the offer's things: the exact name first, then singular and plural, the
+// name without portion words, then the word-order key), so "Torches" still offers what "Torch" took; a name that matches
+// none of them, or two, or the thing another taken name matches, does not hold. A Re-read that leaves the
+// offer as it was, or still offering what was taken, keeps the take; a deleted reply, or a Re-read that drops a taken
+// thing or lowers it below what was taken, turns the take off with its claim (the block stays stored, inactive, and the
+// Problems say why). The changes it made were decided when the reader took, and are replayed as they were. The offer's
+// reply-bound guard (`loot.offer`) is answered here too.
+
+// The taken things (`wanted`, [{ name, qty }]) the offer's things no longer lay out: for each, the one thing of the offer its
+// name means by the inventory's own lookup (an offer as a slice of defs keyed by position, each named and aliased by its own
+// name), with at least as many; a name that means none, or more than one, or a thing an earlier taken name took, is gone.
+function offeredFor(things, wanted) {
+    const defs = {};
+    const aliases = {};
+    things.forEach((item, at) => {
+        if (!isPlainObject(item) || item.coin !== undefined || !nonBlank(item.name)) return;
+        defs[String(at)] = { name: item.name };
+        aliases[aliasKey(item.name)] ??= String(at);
+    });
+    const used = new Set();
+    return wanted.filter(want => {
+        const found = resolveDef({ defs, aliases }, want.name);
+        if (found.status !== 'found' || used.has(found.id)) return true;
+        used.add(found.id);
+        const qty = things[Number(found.id)].qty;
+        return !(Number.isSafeInteger(qty) && qty >= want.qty);
+    });
+}
+export function lootTakeGuard({ state, hash }, { guard }) {
+    const predicate = guard?.predicate;
+    const damaged = { ok: false, reason: 'its loot guard is damaged' };
+    if (predicate?.kind === LOOT_OFFER) {
+        return guard.owner === LOOT_OWNER && guard.version === 2 && guard.replyBound === true && typeof predicate.sid === 'string'
+            && Object.keys(predicate).length === 2 && hash(predicate) === guard.inputHash ? { ok: true } : damaged;
+    }
+    if (guard?.owner !== LOOT_OWNER || guard.version !== 2 || !isPlainObject(predicate) || predicate.kind !== LOOT_GUARD
+        || typeof predicate.sid !== 'string' || typeof predicate.claim !== 'string' || !isCount(predicate.coin, 0)
+        || !Array.isArray(predicate.items) || predicate.items.some(item => !isPlainObject(item) || !nonBlank(item.name) || !isCount(item.qty, 1))) return damaged;
+    if (hash(predicate) !== guard.inputHash) return damaged;
+    const loot = state?.domains?.inventory?.loot;
+    const offer = isPlainObject(loot) && Object.hasOwn(loot, predicate.sid) && isPlainObject(loot[predicate.sid]) ? loot[predicate.sid] : null;
+    if (!offer || (offer.claim || `loot:${predicate.sid}`) !== predicate.claim) return { ok: false, reason: 'the loot it took is no longer on offer' };
+    const things = lootItems(offer) ?? [];
+    const gone = offeredFor(things, predicate.items);
+    const purse = things.find(item => isPlainObject(item) && item.coin !== undefined)?.coin;
+    const short = predicate.coin > 0 && !(Number.isSafeInteger(purse) && purse >= predicate.coin);
+    if (gone.length || short) {
+        const names = [...gone.map(want => itemText(want.name, want.qty)), ...(short ? ['the money'] : [])];
+        return { ok: false, reason: `the loot on offer no longer holds ${joinNames(names)} it took` };
+    }
+    return { ok: true };
 }
 
 // The most definitions one `inventory.definitions` call may ask for by ID.
