@@ -107,7 +107,7 @@ function checksRoll(ctx, payload) {
     const checks = ctx.read('checks');
     const policy = policyOf(checks);
     const actorId = payload.actor ?? policy.defaultActor;
-    // Until the reader sets up a character (the Director screen's Checks card), a check is the player's with no bonuses.
+    // With no actor set up (a saved one from checks.actor keeps rolling with its bonuses), a check is the player's with no bonuses.
     const actor = actorId === null ? null : policy.actors[actorId] ?? null;
     if (actorId !== null && !actor) ctx.fail('NOT_FOUND', 'That actor is not there.');
     if (!knownEvidence(ctx, payload.evidence)) ctx.fail('NOT_FOUND', 'No such evidence for this check.');

@@ -10,7 +10,7 @@ Install [Story Block](https://github.com/kohz87/Story_block), then [Story Direct
 
 ## Playing
 
-Take a quest in the story and the narrator records it as a thread. Quest goals and rewards are story-told. The Quests screen lists open quests; the map, World and Chronicle show the places, people and events the story has recorded. The Director can plan an arc when requested. Calendar, checks, weather and arc settings are under Story Suite’s Settings. Checks roll for you with no bonuses until you set a name and stat bonuses on the Director screen’s **Checks** card.
+Take a quest in the story and the narrator records it as a thread. Quest goals and rewards are story-told. The Quests screen lists open quests; the map, World and Chronicle show the places, people and events the story has recorded. The Director can plan an arc when requested. Calendar, checks, weather and arc settings are under Story Suite’s Settings. Checks roll for you at +0 until a check character is set up; check characters saved in earlier chats keep their bonuses.
 
 Story Block’s [guide](https://github.com/kohz87/Story_block/blob/main/docs/v2/GUIDE.md) explains installation and play. Report bugs in [Issues](https://github.com/kohz87/Story_director/issues).
 

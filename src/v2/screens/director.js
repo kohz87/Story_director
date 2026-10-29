@@ -3,9 +3,8 @@
 // the arc panel (widget `story-director.arc`, arc/widget.js), then the threads the reader may see
 // (quests, hooks, world events) grouped by kind (open ones first, closed ones folded under them), then
 // behind the scenes (widget `story-director.behind`: agendas, beats, clocks and secrets, hidden behind
-// Reveal per chat, reveal.js), the Checks card (widget `story-director.checks`: who rolls this chat's checks, the
-// reader's one setting here), then the problems the last replies' Director lines had about the rest,
-// newest first. Secrets show by name only. The threads are read-only: they come from `director.threads` (bindings per kind: all, open, closed), the
+// Reveal per chat, reveal.js), then the problems the last replies' Director lines had about the rest,
+// newest first. Secrets show by name only. Read-only: the threads come from `director.threads` (bindings per kind: all, open, closed), the
 // problems from `director.problems` (their `{{user}}` written out; one about an offer or a missing goal
 // only while that is still so). An older chat's offer, which the Quests tab no longer shows, is tagged
 // "offered" here.
@@ -18,7 +17,6 @@ import { BASE_CSS } from './style.js';
 import { BEHIND } from './reveal.js';
 import { BEHIND_WIDGET } from './behind.js';
 import { ARC_WIDGET } from '../arc/widget.js';
-import { CHECKS_WIDGET } from '../checks/widget.js';
 
 export const DIRECTOR_ID = 'story-director/director';
 
@@ -91,7 +89,6 @@ const TEMPLATE = `
   <p class="sd-empty" data-if="!len(q.all)">Nothing tracked yet.</p>
 ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
   <ss-widget class="sd-wide" name="${BEHIND_WIDGET}" data-props='{"bind":"q.behind"}' data-if="q.behind.total"></ss-widget>
-  <ss-widget name="${CHECKS_WIDGET}" data-props='{"bind":"q.checks"}'></ss-widget>
   <section class="sd-kind ss-listcard ss-glass sd-problems-box" data-kind="problems" data-if="len(q.problems)">
     <h4 class="ss-label ss-listcard-head sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
     <ol class="ss-listcard-rows sd-problems">
@@ -141,17 +138,6 @@ const CSS = `${BASE_CSS}
 /* Buttons keep their icon and label on one line (the block's button is a flex box with a gap). */
 .sd-arc .sd-btn, .sd-behind .sd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .sd-behind { display: grid; gap: 14px; min-width: 0; }
-/* The Checks card (widget story-director.checks): who rolls this chat's checks, and a small form to set it. */
-.sd-checks { display: grid; gap: 8px; min-width: 0; }
-.sd-checks .sd-h, .sd-checks .sd-line { margin: 0; overflow-wrap: anywhere; }
-.sd-checks-form { display: grid; gap: 8px; min-width: 0; }
-.sd-checks .sd-field { display: grid; gap: 3px; font-size: 0.9em; }
-.sd-checks-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5em, 1fr)); gap: 6px; margin: 0; padding: 8px; min-width: 0;
-  border: 1px solid var(--sd-border); border-radius: var(--sd-radius); }
-.sd-checks-stats legend { font-size: 0.9em; color: var(--sd-muted); }
-.sd-checks-stat input { width: 100%; box-sizing: border-box; }
-.sd-checks .sd-checks-default { display: flex; align-items: center; gap: 6px; }
-.sd-checks .sd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
 .sd-lock { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 10px 12px;
   border: 1px dashed var(--sd-border); border-radius: var(--ss-radius-l); min-width: 0; }
 .sd-lock-icon { margin-top: 3px; color: var(--sd-accent); }
@@ -174,7 +160,6 @@ const data = {
     problems: { query: 'director.problems', args: { behind: false } },
     arc: { query: 'director.arc' },
     behind: { query: 'director.behind' },
-    checks: { query: 'checks.policy' },
 };
 for (const [kind] of OPEN_KIND_GROUPS) {
     data[kind] = { query: 'director.threads', args: { kind } };

@@ -6,7 +6,6 @@
 import { PRESETS, makeCalendar } from '../../../../src/calendar.js';
 import { part as tracker } from '../../../../src/v2/tracker/index.js';
 import { part as arc } from '../../../../src/v2/arc/index.js';
-import { part as checks } from '../../../../src/v2/checks/index.js';
 import { createScreensPart } from '../../../../src/v2/screens/index.js';
 
 export const calendar = makeCalendar(PRESETS.gregorian);
@@ -68,7 +67,7 @@ const fakes = {
 
 /** Every query the screens bind to, as Story Block's registry would hold them. */
 export function makeQueries({ settings = { calendar: PRESETS.gregorian } } = {}) {
-    return { ...fakes, ...tracker.queries, ...arc.queries, ...checks.queries, ...createScreensPart({ settings }).queries };
+    return { ...fakes, ...tracker.queries, ...arc.queries, ...createScreensPart({ settings }).queries };
 }
 
 /** `run(state, name, args)` like Story Block's runQuery: tools.query over the same state, plain copies. */
