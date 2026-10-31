@@ -1,7 +1,7 @@
 // Story Director v2, part screens: `story-director/status-card` (SPEC §13.1), the inline card under
 // each reply (mount `card`). Rows with no box of their own (they sit in the card's fold), labels on the
 // left: the story time, the place, its map coordinates when the atlas knows them, the weather (Story
-// Block's `scene.weather`, when the story set one) and the current goal (the active quest touched last:
+// Block's `scene.weather`, when the story set one), a Travel row while a trip is on (feature `story-director.trip`) and the current goal (the active quest touched last:
 // its goal and step, with that quest's progress). A row with no value is left out. Only what {{user}} knows (world/known.js): the next thing coming
 // due is not here (a planned beat or clock would spoil the story); the Director screen shows it, behind
 // Reveal. A card shows **that reply's** state: Story Block's card mount runs
@@ -33,6 +33,10 @@ const TEMPLATE = `
   <div class="sd-row sd-coords" data-if="q.status.coords">
     <dt><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> Coordinates</dt>
     <dd>{{ q.status.coords }}</dd>
+  </div>
+  <div class="sd-row sd-travel" data-if="q.trip.row">
+    <dt><i class="fa-solid fa-route" aria-hidden="true"></i> Travel</dt>
+    <dd>{{ q.trip.row }}</dd>
   </div>
   <div class="sd-row sd-goal" data-if="q.goal" data-class="sd-new: changed(state.director.threads[q.goal.id])">
     <dt><i class="fa-solid fa-flag" aria-hidden="true"></i> Goal</dt>
@@ -69,6 +73,8 @@ export const statusCardScreen = Object.freeze({
         time: { query: 'director.time' },
         // The place's map coordinates and the weather (screens/queries.js statusExtras).
         status: { query: 'director.status' },
+        // The reply's trip (atlas.trip, feature story-director.trip): null with none, and the row is left out.
+        trip: { query: 'atlas.trip' },
         goal: { query: 'director.goal' },
     },
     template: TEMPLATE,

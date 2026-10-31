@@ -12,6 +12,16 @@ Install [Story Block](https://github.com/kohz87/Story_block), then [Story Direct
 
 Take a quest in the story and the narrator records it as a thread. Quest goals and rewards are story-told. The Quests screen lists open quests; the map, World and Chronicle show the places, people and events the story has recorded. The Director can plan an arc when requested. Calendar, checks, weather and arc settings are under Story Suite’s Settings. Checks roll for you at +0 until a check character is set up; check characters saved in earlier chats keep their bonuses.
 
+## Trips
+
+When the party sets out for a place, the narrator writes `~ trip Wolfmere Outpost | by: riding | via: Hollin's Reach` (`by:` is foot, riding, wagon, boat, ship and so on; `via:` is optional and may list several stops). Code plans the way along the routes the map knows (the packs' and the story's `+ route` lines), through each stop and the shortest by km, and keeps the stages with their dates. A ride goes at the pace of Story Block's slowest mount (Mounts), else the usual ride pace. A trip with no known route is refused with the gap named.
+
+- `~ trip stop` ends the trip where the party is. `~ trip delay: 1 day | because: lame horse` pushes every arrival still ahead.
+- Where the party is on the road is worked out from the story time, never stored. The narrator is told "On the road: …, 8 of 100 km, arrive Goldwane 16", and when a stage has been reached, to write `~ place` (Story Director never moves the place itself).
+- A new `~ trip` while on the road must go on to the end of the stage or back to its start.
+- The Status card under a reply has a **Travel** row, the World screen's Now view an "On the road" line, and the **Map** draws the route as a thick line, a "You" marker, the movers {{user}} knows of (events with a `leg:` and an `arrive:`; never agendas, clocks, beats or secrets) and an **On the road** panel (under the map on a phone).
+- Switch it off under Features → Trips: nothing new in the prompt, the saved story or the screens. More in [docs/dev/trips.md](docs/dev/trips.md).
+
 Story Block’s [guide](https://github.com/kohz87/Story_block/blob/main/docs/v2/GUIDE.md) explains installation and play. Report bugs in [Issues](https://github.com/kohz87/Story_director/issues).
 
 Licensed under [MIT](LICENSE); the Story Block test copy is AGPL-3.0, see [NOTICE](NOTICE.md).

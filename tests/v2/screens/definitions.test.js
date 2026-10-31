@@ -83,7 +83,7 @@ test('the status card\'s progress follows its goal binding ($goal.id), and is em
     const { run } = makeRunner();
     const card = byId[STATUS_CARD_ID];
     const data = resolveData(card.data, (name, args) => run(headState(), name, args));
-    assert.deepEqual(data.order, ['time', 'status', 'goal']);
+    assert.deepEqual(data.order, ['time', 'status', 'trip', 'goal']);
     assert.equal(data.q.goal.id, 'th_wolves01');
     assert.equal(data.q.progress, undefined);
     const none = resolveData(card.data, (name, args) => run(headState({ threads: [] }), name, args));

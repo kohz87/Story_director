@@ -2,7 +2,7 @@
 //
 // A tab and a full-screen view holding the atlas's own Map widget (`story-director.map`,
 // widget.js) bound to the `atlas.view` query: pan and zoom, layers, search, and a place's details
-// with the trip from where the reader is. Picking a place writes nothing to the story state; the
+// with the trip from where the reader is. While a trip is on (feature `story-director.trip`) the widget also draws it, with the "On the road" panel. Picking a place writes nothing to the story state; the
 // widget keeps the view for the reader. Cards and packs may restyle or replace the screen by its
 // id; `atlas.map` still gives Story Block's `ss.map` its props for a screen that wants that one.
 
@@ -11,7 +11,7 @@ import { MAP_WIDGET } from './widget.js';
 export const MAP_SCREEN_ID = 'story-director/map';
 
 const TEMPLATE = `<div class="atlas">
-  <ss-widget name="${MAP_WIDGET}" data-props='{"bind":"q.view","label":"Map"}'></ss-widget>
+  <ss-widget name="${MAP_WIDGET}" data-props='{"bind":"q.view","label":"Map","trip":{{ q.trip }}}'></ss-widget>
 </div>`;
 
 const CSS = `.atlas { display: flex; flex-direction: column; gap: var(--ss-w-gap, 0.4em); min-width: 0; }`;
@@ -26,5 +26,7 @@ export const mapScreen = Object.freeze({
     css: CSS,
     data: Object.freeze({
         view: Object.freeze({ query: 'atlas.view' }),
+        // The trip and the movers {{user}} knows of (atlas.trip, feature story-director.trip): null while the feature is off or there is none.
+        trip: Object.freeze({ query: 'atlas.trip' }),
     }),
 });

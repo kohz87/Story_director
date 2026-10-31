@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { createModule, namespaced, partSettings, PARTS, storyDirectorModule } from '../../../src/v2/module.js';
 import { STATIC_TEXT } from '../../../src/v2/tracker/note.js';
-import { STATIC_TEXT as ATLAS_STATIC, TAIL_BUDGET as ATLAS_BUDGET } from '../../../src/v2/atlas/note.js';
+import { STATIC_TEXT as ATLAS_STATIC, TAIL_BUDGET as ATLAS_BUDGET, TRIP_TAIL_BUDGET } from '../../../src/v2/atlas/note.js';
 import { RECAP_BUDGET } from '../../../src/v2/time/recap.js';
 import { screens as SCREENS } from '../../../src/v2/screens/index.js';
 import { mapScreen } from '../../../src/v2/atlas/screen.js';
@@ -21,7 +21,7 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     // The time, atlas and screens parts add nothing to the static part.
     assert.equal(ATLAS_STATIC, '');
     assert.equal(def.context.static(), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
-    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
     assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'arc', 'checks', 'screens']);
     assert.match(def.capture.kinds.quest.grammar, /story follows/);
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');

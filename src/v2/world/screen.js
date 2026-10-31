@@ -79,6 +79,7 @@ const NOW = `
     <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
     <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
+    <p class="wv-weather wv-road" data-if="q.trip.row"><i class="fa-solid fa-route" aria-hidden="true"></i> <span class="sd-key">On the road</span> <span>{{ q.trip.row }}</span></p>
     ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
@@ -219,6 +220,8 @@ const CSS = `${BASE_CSS}
 const DATA = Object.freeze({
     world: Object.freeze({ query: 'director.world' }),
     journal: Object.freeze({ query: 'director.journal' }),
+    // The trip (atlas.trip, feature story-director.trip), shown under the weather while one is on: null with none.
+    trip: Object.freeze({ query: 'atlas.trip' }),
 });
 
 /** The World screen (feature `story-director.world`). */

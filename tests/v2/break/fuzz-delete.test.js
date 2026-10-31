@@ -13,6 +13,9 @@
 // later delete takes away (its closing is passed over, ctx.ifThere); and after each delete the clock must
 // be what the replies left say: `~ time <date>` exact (a set, ctx.absolute), moves added on top. Between replies the
 // reader sometimes accepts an arc plan (director.arc.accept, its own names) or ends the arc.
+// Trips (feature story-director.trip): from a stream of their own, replies that make a route between the first reply's places, put the scene in one of
+// them and set out, delay or stop a trip (`~ trip`); the records are per reply (atlas.trips), so a delete of the reply that set out leaves a later
+// delay with nothing to move, never a failing block.
 // Lasting changes (chronicle.lasting, a pack's events: tests/v2/chronicle/helpers/lasting-pack.js): a pack whose
 // events write and move world events (one chain tried before the first reply has set the clock, so it waits),
 // replies whose world lines name them, and the reader's edits of them, from a random stream of their own.
@@ -145,6 +148,23 @@ function replyLines(r, n) {
     return lines;
 }
 
+// A reply's trip lines (own stream): routes from both of the first reply's places to a waypoint of the reply's own (so there is a way to go from
+// wherever the scene is; routes of the reply's own, as the other lines' routes are, so a delete never takes what a later route line changes), then a
+// trip, a delay or a stop. The scene starts at Bluewatch (the first reply). Reply 4 always sets out, so every seed has a trip to delete around.
+function tripLines(rt, n) {
+    const forced = n === 4;
+    if (!forced && !rt.chance(0.35)) return [];
+    const roll = forced ? 0 : rt();
+    if (roll < 0.5) {
+        const stop = `Wayside${n}`;
+        return [`+ route ${BASE_PLACES[0]} — ${stop} | hours: ${rt.int(6, 40)} | kind: road`, `+ route ${BASE_PLACES[1]} — ${stop} | hours: ${rt.int(6, 40)} | kind: road`,
+            `~ trip ${stop} | by: ${rt.pick(['foot', 'riding', 'wagon'])}${rt.chance(0.25) ? ` | via: ${BASE_PLACES[0]}` : ''}`,
+            ...(forced || rt.chance(0.5) ? [`~ trip delay: ${rt.int(1, 3)} hours`] : [])];
+    }
+    if (roll < 0.8) return [`~ trip delay: ${rt.int(1, 20)} ${rt.pick(['hours', 'days'])}${rt.chance(0.5) ? ' | because: a lame horse' : ''}`];
+    return ['~ trip stop'];
+}
+
 const said = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
 // The clock the replies left say, without replaying anything: the first reply sets June 3, 08:00 am
@@ -187,17 +207,18 @@ for (const seed of SEEDS) {
         const r = prng(seed);
         const ra = prng(seed ^ 0xA5C);
         const rl = prng(seed ^ 0x1A57);
+        const rt = prng(seed ^ 0x7121);
         const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
         try {
             assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
-            await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
+            await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', `~ place ${BASE_PLACES[0]} | kind: town`, ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
                 ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
                 ...BASE_WORLD.map(key => `+ world ${key} — afoot | state: ongoing`)]));
             const start = host.head().domains.director.time.minutes;
             const times = new Map();
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
-                const lines = [...replyLines(r, n), ...lastingLines(rl)];
+                const lines = [...replyLines(r, n), ...lastingLines(rl), ...tripLines(rt, n)];
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
                 times.set(host.ctx.chat.at(-1), timeOf(lines));
                 if (n === COINS_AT) host.settings.set('story-block', 'coins', [{ name: 'copper bit', plural: 'copper bits', value: 1 }, { name: 'gold', value: 100 }]);
@@ -246,6 +267,10 @@ for (const seed of SEEDS) {
             await host.send('And then?', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === 'events.fire' && entry.receipt.data?.then?.includes('chronicle.lasting')), `seed ${seed}: a pack event wrote a lasting change`);
+            const summaries = host.sdk.receipts().map(entry => entry.receipt.summary ?? '');
+            const tripsMade = summaries.filter(text => /^On the road to /.test(text)).length;
+            assert.ok(tripsMade >= 1, `seed ${seed}: the fuzz set out on a trip`);
+            t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             const again = await createHost({ modules: [fakeFightRunner(), createModule()] });
             try {

@@ -364,6 +364,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             kinds[kind] = {
                 get grammar() { return typeof grammar === 'function' ? grammar({ fights: env.fights }) : grammar; },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
+                // A kind a feature owns (MODULES §F100): Story Block leaves its grammar out, and its lines unused, while that feature is off.
+                ...(typeof spec.feature === 'string' ? { feature: spec.feature } : {}),
             };
             appliers[kind] = (ctx, line) => spec.apply(partCtx(ns, ctx, shared), line);
             for (const alias of spec.aliases ?? []) appliers[alias] = appliers[kind];
