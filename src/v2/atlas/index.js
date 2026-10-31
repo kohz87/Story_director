@@ -44,7 +44,8 @@ export const part = {
     kinds: {
         route: { grammar: GRAMMAR.route, apply: applyRouteLine },
         landmark: { grammar: GRAMMAR.landmark, apply: applyLandmarkLine },
-        trip: { grammar: GRAMMAR.trip, apply: applyTripLine, feature: TRIP_FEATURE },
+        // A trip is planned from the place and the mounts the reply sets up, so its line runs behind the reply's place and mount lines.
+        trip: { grammar: GRAMMAR.trip, apply: applyTripLine, feature: TRIP_FEATURE, after: ['place', 'mount'] },
     },
     context: {
         static: () => STATIC_TEXT,

@@ -1,4 +1,4 @@
-# Story Director 2.5.0
+# Story Director 2.5.1
 
 Story Director is the story’s memory and clock. It tracks quests and story threads, the calendar and weather, and offers a map, World, Chronicle and optional arc planning. Checks use standalone actor bonuses and can include NPC State Delta’s social context.
 
