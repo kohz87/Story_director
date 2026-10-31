@@ -188,13 +188,16 @@ export function dayBoard(state, _args, tools) {
 }
 
 // The lasting entries a pack event wrote, by the revision of the receipt that fired it: for the Journal's world
-// lines (the event's own receipt tells only its cue; the nested `chronicle.lasting` has none).
+// lines (the event's own receipt tells only its cue; the nested `chronicle.lasting` has none). The entry keeps
+// the receipt of the fire that last changed it (`fire`), so a world line or a reader's edit afterwards does not
+// hide it; an entry without one (written by hand into a saved chat) is found by the revision it was last changed at.
 function lastingByRev(state) {
     const byRev = new Map();
     for (const event of orderedEvents(state?.domains?.chronicle)) {
-        if (!isLocked(event) || !Number.isSafeInteger(event.rev)) continue;
-        if (!byRev.has(event.rev)) byRev.set(event.rev, []);
-        byRev.get(event.rev).push({ id: event.id, by: event.by, text: worldLineText(event) });
+        const fire = event.fire ?? (isLocked(event) ? { rev: event.rev, by: event.by } : null);
+        if (!fire || !Number.isSafeInteger(fire.rev)) continue;
+        if (!byRev.has(fire.rev)) byRev.set(fire.rev, []);
+        byRev.get(fire.rev).push({ id: event.id, by: fire.by, text: worldLineText(event) });
     }
     return rev => byRev.get(rev) ?? [];
 }

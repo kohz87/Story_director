@@ -2,8 +2,8 @@
 // step may write it (`ctx.caller` is `event:<id>`); the entry it writes is locked against the story's own
 // `world` lines (a summary may be added to, the state may not move) but not against the reader's edits or
 // another lasting change; `keep` holds up to two open entries in every reply's tail; `since` and `updated`
-// are the Director's clock (null while it is not set); an entry no pack event wrote has none of the new
-// fields, so older chats validate and answer as they did.
+// are the Director's clock (the command fails while it is not set); an entry no pack event wrote has none of
+// the new fields, so older chats validate and answer as they did.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,7 +79,7 @@ test('it creates the entry: fields as given, since and updated from the clock, t
     assert.match(event.id, /^ev_[0-9a-z]{8}$/);
     assert.deepEqual({ ...event, id: undefined }, {
         id: undefined, name: 'Seventh seal failed', summary: 'The seal over Auvoth has failed.', state: 'ongoing', since: 10 * DAY, updated: 10 * DAY,
-        place: 'Auvoth', factions: ['Adventurer Guild', 'Sealwardens'], aka: [], rev: 1, by: BY, keep: true,
+        place: 'Auvoth', factions: ['Adventurer Guild', 'Sealwardens'], aka: [], rev: 1, by: BY, keep: true, fire: { rev: 1, by: BY },
     });
     assert.equal(run.result.summary, 'World: Seventh seal failed (Auvoth) is now ongoing — The seal over Auvoth has failed.');
     assert.equal(run.result.narrate, false);
@@ -89,7 +89,7 @@ test('it creates the entry: fields as given, since and updated from the clock, t
     // Without keep (or with keep: false) the entry has no keep field; only what was given is written.
     const plain = must(lasting(state, { name: 'Quiet change', state: 'looming', keep: false }));
     assert.deepEqual({ ...eventNamed(plain.state, 'Quiet change'), id: undefined }, {
-        id: undefined, name: 'Quiet change', summary: '', state: 'looming', since: 10 * DAY, updated: 10 * DAY, place: '', factions: [], aka: [], rev: 1, by: BY,
+        id: undefined, name: 'Quiet change', summary: '', state: 'looming', since: 10 * DAY, updated: 10 * DAY, place: '', factions: [], aka: [], rev: 1, by: BY, fire: { rev: 1, by: BY },
     });
 });
 
@@ -220,16 +220,35 @@ test('another chronicle.lasting may change anything of a locked entry, state inc
     assert.deepEqual([event.state, event.place, event.factions, event.by], ['looming', '', [], 'event:two']);
 });
 
-test('the Director\'s clock not set: since and updated are null, and a delay counted from it never comes due', () => {
-    let state = must(lasting(makeState(), SEAL)).state;
-    const event = eventNamed(state, 'Seventh seal failed');
-    assert.deepEqual([event.since, event.updated], [null, null]);
-    assert.deepEqual(validateChronicle(state.domains.chronicle), []);
-    for (const minutes of [0, DAY]) assert.equal(query(state, 'chronicle.passed', { name: 'Seventh seal failed', minutes }), false);
-    // The clock starts later: still no `since` to count from.
-    state = clockAt(state, 400 * DAY);
-    assert.equal(query(state, 'chronicle.passed', { name: 'Seventh seal failed', minutes: DAY }), false);
-    assert.equal(query(state, 'chronicle.event', { name: 'Seventh seal failed' }).since, null);
+test('the Director\'s clock not set: the command fails (NOT_YET) and saves nothing; once it is set the entry is dated from it', () => {
+    const state = makeState();
+    const run = lasting(state, SEAL);
+    assert.deepEqual([run.ok, run.code], [false, 'NOT_YET']);
+    assert.equal(run.message, 'The story has no date yet; this world event waits for one.');
+    assert.equal(run.state, state, 'nothing saved');
+    // An update of an entry the story made before it had a date waits too.
+    const told = must(line(makeState(), '+ world Border War — raids')).state;
+    const update = lasting(told, { name: 'Border War', state: 'ongoing' });
+    assert.deepEqual([update.ok, update.code], [false, 'NOT_YET']);
+    assert.equal(update.state, told);
+    // A payload that is wrong is still INVALID, and a caller that is not a pack event still REFUSED, before the clock is asked.
+    assert.equal(lasting(state, { name: '', state: 'ongoing' }).code, 'INVALID');
+    assert.equal(runCommand(state, part.commands['chronicle.lasting'], SEAL, { cause: 'ui' }).code, 'REFUSED');
+    // The clock starts later: the same step now works, and the delay counts from that time.
+    const dated = must(lasting(clockAt(state, 400 * DAY), SEAL)).state;
+    const event = eventNamed(dated, 'Seventh seal failed');
+    assert.deepEqual([event.since, event.updated], [400 * DAY, 400 * DAY]);
+    assert.equal(query(clockAt(dated, 401 * DAY - 1), 'chronicle.passed', { name: 'Seventh seal failed', minutes: DAY }), false);
+    assert.equal(query(clockAt(dated, 401 * DAY), 'chronicle.passed', { name: 'Seventh seal failed', minutes: DAY }), true);
+});
+
+test('chronicle.passed stays false for an entry with no since (the story\'s own world line before it had a date)', () => {
+    const told = must(line(makeState(), '+ world Border War — raids')).state;
+    const event = eventNamed(told, 'Border War');
+    assert.equal(event.since, null);
+    for (const now of [null, 400 * DAY]) {
+        for (const minutes of [0, DAY]) assert.equal(query(clockAt(told, now), 'chronicle.passed', { name: 'Border War', minutes }), false);
+    }
 });
 
 test('chronicle.passed: true once the clock is `minutes` past the event\'s since; false for anything else', () => {
@@ -270,7 +289,13 @@ test('older chats: an entry with neither field validates, a bad `by` or `keep` d
         Object.assign(slice.events[id], extra);
         assert.notDeepEqual(validateChronicle(slice), [], JSON.stringify(extra));
     }
-    for (const extra of [{ by: BY }, { by: 'event:a.b/c:d-e' }, { keep: true }, { by: BY, keep: true }]) {
+    // `fire` is the receipt of the pack event that last changed the entry: { rev, by }.
+    for (const extra of [{ fire: 'x' }, { fire: { rev: 1 } }, { fire: { rev: -1, by: BY } }, { fire: { rev: 1, by: 'story' } }, { fire: { rev: 1, by: BY, other: 1 } }, { fire: [{ rev: 1, by: BY }] }]) {
+        const slice = structuredClone(state.domains.chronicle);
+        Object.assign(slice.events[id], extra);
+        assert.notDeepEqual(validateChronicle(slice), [], JSON.stringify(extra));
+    }
+    for (const extra of [{ by: BY }, { by: 'event:a.b/c:d-e' }, { keep: true }, { by: BY, keep: true }, { by: BY, fire: { rev: 3, by: BY } }, { fire: { rev: 0, by: BY } }]) {
         const slice = structuredClone(state.domains.chronicle);
         Object.assign(slice.events[id], extra);
         assert.deepEqual(validateChronicle(slice), [], JSON.stringify(extra));
@@ -382,4 +407,45 @@ test('the Journal\'s world line of a day: a pack event\'s lasting change is told
     const without = { ...fire, data: { event: 'the-seventh-seal-fails', then: ['wallet.receive'] } };
     assert.deepEqual(entryOf([without], 1, { lasting: () => [{ id: 'ev_x', by: BY, text: 'x' }] }).world, []);
     assert.deepEqual(entryOf([fire], 1).world, [], 'no lasting reader, as before');
+});
+
+test('the Journal finds a lasting change by the receipt that fired it, not by the entry\'s current revision', () => {
+    const name = 'Seventh seal failed';
+    const fire = { rev: 1, type: 'events.fire', cause: 'system', narrate: true, summary: 'The seventh seal has failed.', data: { event: 'the-seventh-seal-fails', then: ['chronicle.lasting'] } };
+    const noted = state => part.queries['chronicle.noteFacts'](state, { after: 0, minutes: DAY }, { receipts: () => [{ index: 0, receipt: fire }] }).entries[0].entry.world;
+    let state = must(lasting(makeState({ minutes: DAY }), SEAL, { seed: 4 })).state;
+    assert.deepEqual(eventNamed(state, name).fire, { rev: 1, by: BY });
+    assert.equal(noted(state).length, 1);
+
+    // The story's own world line in the same reply adds to the summary: the entry's rev moves on, the fire is still found.
+    state = must(line(state, `~ world ${name} — a second crack`, { seed: 5 })).state;
+    assert.equal(eventNamed(state, name).rev, 2);
+    assert.deepEqual(eventNamed(state, name).fire, { rev: 1, by: BY }, 'a world line is not a fire');
+    assert.equal(noted(state).length, 1);
+    assert.match(noted(state)[0].text, /^World: Seventh seal failed \(Auvoth\) is ongoing — /);
+
+    // So does a change by the reader, even one that clears the lock (the `by` of the entry itself).
+    state = must(command(state, 'chronicle.edit', { id: eventNamed(state, name).id, summary: 'Mended by hand.' })).state;
+    assert.equal(noted(state).length, 1);
+    assert.match(noted(state)[0].text, /Mended by hand/, 'the line tells the entry as it stands');
+    state = must(command(state, 'chronicle.edit', { id: eventNamed(state, name).id, locked: false })).state;
+    assert.equal(eventNamed(state, name).by, undefined);
+    assert.equal(noted(state).length, 1);
+
+    // Another event\'s fire is the entry\'s fire now: the first receipt is not attributed to it, the second is.
+    state = must(lasting(clockAt(state, 2 * DAY), { name, state: 'resolved' }, { caller: 'event:the-seal-is-mended', seed: 6 })).state;
+    assert.deepEqual(eventNamed(state, name).fire, { rev: state.meta.rev, by: 'event:the-seal-is-mended' });
+    assert.equal(noted(state).length, 0);
+    const mended = { ...fire, rev: state.meta.rev, data: { event: 'the-seal-is-mended', then: ['chronicle.lasting'] } };
+    assert.equal(part.queries['chronicle.noteFacts'](state, { after: 0, minutes: DAY }, { receipts: () => [{ index: 1, receipt: mended }] }).entries[0].entry.world.length, 1);
+
+    // An unchanged repeat is not a fire.
+    const same = must(lasting(clockAt(state, 3 * DAY), { name, state: 'resolved' }, { caller: 'event:the-seal-is-mended', seed: 7 }));
+    assert.deepEqual(eventNamed(same.state, name).fire, eventNamed(state, name).fire);
+    assert.deepEqual(validateChronicle(state.domains.chronicle), []);
+
+    // An entry written by hand without one is found by the revision it was last changed at, by the event that locked it.
+    const old = structuredClone(must(lasting(makeState({ minutes: DAY }), SEAL)).state);
+    delete old.domains.chronicle.events[eventNamed(old, name).id].fire;
+    assert.equal(noted(old).length, 1);
 });

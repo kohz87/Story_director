@@ -7,8 +7,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
+import { packsFor } from '../../vendor/story-block/src/v2/runtime.js';
+import { stCapabilities } from '../../vendor/story-block/src/v2/packs/st-adapter.js';
 import { createModule } from '../../../src/v2/module.js';
 import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
 import { validateChronicle } from '../../../src/v2/chronicle/domain.js';
@@ -199,5 +202,140 @@ test('on the host: the Journal tells the lasting change on its day; News leaves 
     assert.deepEqual(host.sdk.query('director.world', {}).news.map(item => item.name).sort(), [CRACKS, 'Seventh seal failed']);
     await host.send('A whisper.', reply('Rumour.', [`+ secret ${CRACKS} — the Sealwardens know`]));
     assert.deepEqual(host.sdk.query('director.world', {}).news.map(item => item.name), ['Seventh seal failed']);
+    host.close();
+});
+
+// ---- the capability a pack can require --------------------------------------------------------------
+
+const NEEDS_LASTING = {
+    id: 'needs-lasting', version: '1.0.0', name: 'Needs lasting', requires: { storyBlock: '^2', capabilities: ['chronicle-lasting'] },
+    content: { events: [{ id: 'omen', when: 'true', cue: 'A dark omen.', once: true, then: [{ command: 'chronicle.lasting', payload: { name: 'Dark omen', state: 'looming' } }] }] },
+};
+
+// Story Block checks `requires.capabilities` against the running modules' declared names (st-adapter.js, the check the
+// live host uses; the testkit host leaves it off, so the packs part is built here with it on, over the host's settings).
+async function withBlock(host, run) {
+    globalThis.StoryBlock = { sdk: host.sdk };
+    try { return await run(packsFor(host.ctx, { capabilities: stCapabilities })); } finally { delete globalThis.StoryBlock; }
+}
+
+test('on the host: Story Director declares chronicle-lasting, so a pack that requires it installs; without Story Director the reader is told what is missing', async () => {
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    assert.deepEqual(module.capabilities, ['chronicle-lasting']);
+    host = await createHost({ modules: [fakeFightRunner(), module] });
+    assert.deepEqual(host.sdk.modules().find(entry => entry.id === 'story-director').capabilities, ['chronicle-lasting']);
+    const saved = await withBlock(host, async part => {
+        assert.ok(stCapabilities().includes('chronicle-lasting'));
+        const result = await part.packs.install(JSON.stringify(NEEDS_LASTING), { origin: 'pack.json' });
+        assert.deepEqual([result.ok, result.action], [true, 'installed'], JSON.stringify(result));
+        const [listed] = part.packs.list();
+        assert.deepEqual([listed.enabled, listed.missing, listed.problem], [true, [], '']);
+        return structuredClone(host.ctx.extensionSettings.storySuite);
+    });
+    host.close();
+
+    // No Story Director: the same pack is turned away with the reason, and nothing is installed.
+    const bare = await createHost({ modules: [] });
+    await withBlock(bare, async part => {
+        assert.equal(stCapabilities().includes('chronicle-lasting'), false);
+        const result = await part.packs.install(JSON.stringify(NEEDS_LASTING), { origin: 'pack.json' });
+        assert.equal(result.ok, false);
+        assert.deepEqual(result.errors.map(error => [error.code, error.message]), [['MISSING_CAPABILITY', 'This pack needs chronicle-lasting, which no installed module provides.']]);
+        assert.deepEqual(part.packs.list(), []);
+    });
+    bare.close();
+
+    // A pack installed while Story Director was there and then opened without it is listed as missing the capability.
+    const later = await createHost({ modules: [], settings: saved });
+    await withBlock(later, async part => {
+        const [listed] = part.packs.list();
+        assert.deepEqual([listed.id, listed.missing], ['needs-lasting', ['chronicle-lasting']]);
+    });
+    later.close();
+});
+
+// ---- an event waits for the story to have a date -----------------------------------------------------
+
+const lastRun = host => host.sdk.query('events.status').lastRun;
+const firedIds = host => receipts(host).filter(receipt => receipt.type === 'events.fire').map(receipt => receipt.data.event.split('/')[1]);
+
+// What the Studio writes for an "Any time" event with a lasting change and a second event "2 days after" it.
+const ANY_TIME = JSON.stringify({
+    id: 'ui-made', version: '1.0.0', name: 'UI made', requires: { storyBlock: '^2', capabilities: ['chronicle-lasting'] },
+    content: {
+        events: [
+            { id: 'the-seal-cracks', when: 'true', cue: 'Cracks.', then: [{ command: 'chronicle.lasting', payload: { name: 'Seal cracking', state: 'ongoing' } }] },
+            { id: 'the-seal-fails', after: 'the-seal-cracks', when: "query('chronicle.passed', { name: 'Seal cracking', minutes: 2880 })", cue: 'It fails.' },
+        ],
+    },
+});
+
+async function hostWith(pack) {
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    host = await createHost({ modules: [fakeFightRunner(), module] });
+    const installed = await host.packs.packs.install(pack, { origin: 'pack.json' });
+    assert.equal(installed.ok, true, JSON.stringify(installed.errors));
+    return host;
+}
+
+test('on the host: an "Any time" event with a lasting change waits for a date, then fires once; the event two days after it comes due exactly then', async () => {
+    const host = await hostWith(ANY_TIME);
+    // No date yet: the step says so plainly, nothing is claimed, saved or told, and it is tried again on every reply.
+    await host.send('Begin.', reply('Dust on the road.'));
+    assert.deepEqual(lastRun(host).failed.map(({ id, code, message }) => [id, code, message]), [['pack.ui-made/the-seal-cracks', 'NOT_YET', 'The story has no date yet; this world event waits for one.']]);
+    assert.deepEqual([firedIds(host), events(host)], [[], []]);
+    await host.send('Still no date.', reply('More dust.'));
+    assert.deepEqual(lastRun(host).failed.map(item => item.code), ['NOT_YET']);
+    assert.deepEqual(host.store.problems(), []);
+
+    // The reply sets the date; the event fires before the next reply, dated from then.
+    await host.send('The inn.', reply('The inn.', ['~ time June 3, 1200, 08:00 am']));
+    assert.deepEqual(events(host), [], 'checked before the reply, which is what set the date');
+    const start = host.sdk.query('director.time').minutes;
+    await host.send('Rest.', reply('A quiet night.'));
+    assert.deepEqual(firedIds(host), ['the-seal-cracks']);
+    assert.equal(named(host, 'Seal cracking').since, start);
+    assert.deepEqual(lastRun(host).failed, []);
+
+    // The second event comes due exactly two days after, not a minute before.
+    for (const jump of ['! time +1d', '! time +23h', '! time +59m']) {
+        await host.send('On.', reply('On.', [jump]));
+        await host.send('Check.', reply('Check.'));
+        assert.equal(firedIds(host).includes('the-seal-fails'), false, jump);
+    }
+    assert.equal(host.sdk.query('director.time').minutes, start + 2880 - 1);
+    await host.send('One more minute.', reply('On.', ['! time +1m']));
+    assert.equal(firedIds(host).includes('the-seal-fails'), false, 'checked before the reply that moved the clock');
+    await host.send('Check.', reply('Check.'));
+    assert.deepEqual(firedIds(host), ['the-seal-cracks', 'the-seal-fails']);
+    host.close();
+});
+
+test('on the host: a pack that starts on a calendar date has the clock seeded after the event check; the event fires on the next reply and its delayed event a day later', async () => {
+    const base = JSON.parse(readFileSync(new URL('../../fixtures/ersveil-bluewatch.pack.json', import.meta.url), 'utf8'));
+    const pack = JSON.stringify({
+        id: 'dated-start', version: '1.0.0', name: 'Dated start', requires: { storyBlock: '^2', capabilities: ['chronicle-lasting'] },
+        calendar: base.calendar, start: { scene: { place: { name: 'Bluewatch Village', kind: 'settlement', region: 'River Confederacy' } } },
+        content: {
+            events: [
+                { id: 'any-parent', when: 'true', cue: 'A dark omen.', once: true, then: [{ command: 'chronicle.lasting', payload: { name: 'Dark omen', state: 'looming' } }] },
+                { id: 'any-child', after: 'any-parent', when: "query('chronicle.passed', { name: 'Dark omen', minutes: 1440 })", cue: 'The omen comes true.', once: true },
+            ],
+        },
+    });
+    const host = await hostWith(pack);
+    await host.send('Begin.', reply('Morning.'));
+    assert.notEqual(host.sdk.query('director.time').minutes, null, 'the start seeded the clock');
+    assert.deepEqual([firedIds(host), events(host)], [[], []]);
+    assert.deepEqual(lastRun(host).failed.map(item => item.code), ['NOT_YET']);
+    await host.send('Go on.', reply('Later.'));
+    const omen = named(host, 'Dark omen');
+    assert.deepEqual([firedIds(host), omen.since === host.sdk.query('director.time').minutes], [['any-parent'], true]);
+    await host.send('A day.', reply('A day passes.', ['! time +1d']));
+    assert.equal(firedIds(host).includes('any-child'), false);
+    await host.send('Check.', reply('Check.'));
+    assert.deepEqual(firedIds(host), ['any-parent', 'any-child']);
     host.close();
 });

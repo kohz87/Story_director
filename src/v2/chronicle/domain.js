@@ -23,7 +23,10 @@
 // `by` and `keep` are written only by `chronicle.lasting` (a pack event's lasting change, capture.js): `by` is
 // the `event:<id>` that wrote the entry, which locks its state against the story's own `world` lines (the
 // reader's edits and another `chronicle.lasting` may still change it); `keep: true` puts an open entry in
-// every reply's tail (at most MAX_KEPT, pick.js). An entry no pack event wrote has neither field.
+// every reply's tail (at most MAX_KEPT, pick.js). `fire` is `{ rev, by }`, the receipt of the pack event
+// that last changed the entry, so the Journal can tell the change on the day its event fired even after the entry's
+// own `rev` has moved on (a `world` line in the same reply, a reader's edit). It is written whole with the entry's
+// own fields, never kept apart. An entry no pack event wrote has none of these fields.
 // `seenAt` and `surfaced` are kept apart from the events, so an event changes only when the story
 // or the reader changes it. `seenAt` is per-reply bookkeeping (SPEC §2.2, a scratch field): each pick
 // adds its events' rounds by key and removes closed ones by key, a world line that closes an event
@@ -193,8 +196,12 @@ function eventErrors(id, event) {
     if (!isInt(event.rev) || event.rev < 0) errors.push(`${at}.rev must be a whole number.`);
     if (event.by !== undefined && !(typeof event.by === 'string' && LASTING_BY.test(event.by))) errors.push(`${at}.by must be the event that wrote it ("event:<id>").`);
     if (event.keep !== undefined && event.keep !== true) errors.push(`${at}.keep must be true when it is there.`);
+    if (event.fire !== undefined && !(isRecord(event.fire) && Object.keys(event.fire).length === 2 && isInt(event.fire.rev) && event.fire.rev >= 0
+        && typeof event.fire.by === 'string' && LASTING_BY.test(event.fire.by))) {
+        errors.push(`${at}.fire must be { rev, by }: the pack event that last changed it.`);
+    }
     for (const key of Object.keys(event)) {
-        if (!['id', 'name', 'summary', 'state', 'since', 'updated', 'place', 'factions', 'aka', 'rev', 'by', 'keep'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
+        if (!['id', 'name', 'summary', 'state', 'since', 'updated', 'place', 'factions', 'aka', 'rev', 'by', 'keep', 'fire'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
     }
     return errors;
 }

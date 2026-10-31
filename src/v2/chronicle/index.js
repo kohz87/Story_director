@@ -58,8 +58,12 @@ export function tail(view) {
     return line ? { lines: out.lines, optional: [...out.optional, line] } : out;
 }
 
+/** What a pack's `requires.capabilities` can name: Story Director can write a pack event's lasting change (`chronicle.lasting`). */
+export const capabilities = Object.freeze(['chronicle-lasting']);
+
 export const part = {
     features,
+    capabilities,
     domains: {
         // `dayFacts` and `seenAt` are per-reply bookkeeping (SPEC §2.2 scratch): an entry whose holder a deleted reply made is replayed all the same.
         // `round` counts the picks: a deleted pick takes its +1 away, later picks add theirs (counters, `was`).

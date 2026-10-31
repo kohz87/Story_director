@@ -26,8 +26,10 @@ A pack event's `then` step may call `chronicle.lasting` (Story Block runs steps 
   stays as it is. Anything else is INVALID.
 - It adds the world event, or updates the one with that name (any case) or a name it had (`aka`); a rename by the
   reader is kept. `since` is stamped when it is added, `updated` on every change, from the Director's clock.
-  **While the clock is not set both are null**, and a delay counted from `since` never comes due (a pack event that
-  waits on it keeps waiting, even after the clock is set later).
+  **While the clock is not set the command fails** (`NOT_YET`: "The story has no date yet; this world event waits for
+  one."). The pack event is then not claimed and is tried again on the next reply, so it happens once the story has a
+  date (its `since` is that time) and a delay counted from it can come due. A pack that starts without a calendar
+  start therefore fires its lasting events on the first reply after the story gets a date.
 - It is an ordinary world event otherwise: News on the World screen, the Chronicle screen, the Journal's world line
   on the story day of the event that wrote it, the same hidden-names rules, taken back by a swipe or delete of the
   reply that carries the event's receipt.
@@ -51,14 +53,24 @@ it with `chronicle.edit { id, keep }`. The static prompt does not change.
 
 The condition language has no sums (`since + 86400` does not parse), so a pack event asks the chronicle:
 `query('chronicle.passed', { name: 'Cracks in the seventh seal', minutes: 86400 })` is true once the clock is that many
-story minutes past the event's `since`, and false when there is no such event or either time is missing.
+story minutes past the event's `since`, and false when there is no such event or either time is missing (an entry
+saved by an older version, or written by a `world` line before the story had a date, can have no `since`: it never
+comes due).
 
 ### Older chats
 
-`by` and `keep` are written only by `chronicle.lasting`. An entry without them validates and behaves exactly as
+`by`, `keep` and `fire` are written only by `chronicle.lasting`. An entry without them validates and behaves exactly as
 before, and the queries add `locked` / `keep` to an answer only when the entry has them.
+
+### The Journal
+
+The day's world line for a lasting change is found by the receipt of the event that fired, not by the entry's current
+revision: the entry keeps `fire: { rev, by }` (the last pack event that changed it), written with its other fields, so a
+`world` line of the story or an edit of the reader after the fire does not hide the change on the day it happened.
 
 ## Tests
 
 `tests/v2/chronicle/lasting.test.js` (the command, the lock, keep, replay, the Journal) and `lasting-host.test.js` (on the
-Story Block host: a pack's two events, `chronicle.passed`, swipe, delete, rebuild and a fresh load).
+Story Block host: a pack's two events, `chronicle.passed`, an event that waits for a date, the `chronicle-lasting`
+capability, swipe, delete, rebuild and a fresh load). The delete fuzzes (`tests/v2/break/fuzz-delete*.test.js`) run a
+pack of lasting events from `tests/v2/chronicle/helpers/lasting-pack.js`.

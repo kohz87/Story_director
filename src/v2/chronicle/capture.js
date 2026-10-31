@@ -23,7 +23,8 @@
 // a `world` line may add to its summary, place and factions but not move its state ("stays ongoing (set
 // by the world's timeline)"); the reader's `chronicle.edit` and another `chronicle.lasting` may change
 // anything. `keep: true` holds an open entry in every reply's tail (pick.js). `since` and `updated` are
-// the Director's clock, null while it is not set (then a delay counted from `since` never comes due).
+// the Director's clock. While the clock is not set the command fails (NOT_YET), so the pack event waits and is
+// tried again on the next reply; an entry therefore always has a date, and a delay counted from `since` can come due.
 
 import {
     EVENT_ID, FACTION_ID, LASTING_BY, MAX_AKA, MAX_EVENTS, MAX_FACTIONS, MAX_NAME, MAX_NAMED, MAX_SUMMARY, STATES,
@@ -288,14 +289,18 @@ function readLasting(ctx, payload) {
 /**
  * `chronicle.lasting { name, state, summary?, place?, factions?, keep? }`: a pack event's lasting change to the
  * world (see the header). Refused unless a pack event calls it (`ctx.caller` is `event:<id>`). What the payload
- * leaves out stays as it is; `since` is stamped on create, `updated` on every change.
+ * leaves out stays as it is; `since` is stamped on create, `updated` on every change. Fails (NOT_YET) while the
+ * Director's clock is null.
  */
 export function lasting(ctx, payload = {}) {
     const caller = typeof ctx.caller === 'string' ? ctx.caller : '';
     if (!LASTING_BY.test(caller)) return ctx.fail('REFUSED', 'A lasting change to the world is written only by an event of the story\'s pack, never by a button, a change line or another command.');
     const fields = readLasting(ctx, payload);
-    const chronicle = ctx.draft('chronicle');
+    // Until the story has a date there is nothing to stamp `since` with, and a delay counted from it would never come
+    // due: the step fails, the pack event is not claimed and is tried again on the next reply.
     const now = clockOf(ctx);
+    if (now === null) return ctx.fail('NOT_YET', 'The story has no date yet; this world event waits for one.');
+    const chronicle = ctx.draft('chronicle');
     const rev = revOf(ctx);
     const found = findIn(chronicle.events, fields.name);
 
@@ -308,7 +313,7 @@ export function lasting(ctx, payload = {}) {
         const event = {
             id, name: fields.name, summary: fields.summary ?? '', state: fields.state, since: now, updated: now,
             place: fields.place ?? '', factions: fields.factions ?? [], aka: [], rev, by: caller,
-            ...(fields.keep === true ? { keep: true } : {}),
+            ...(fields.keep === true ? { keep: true } : {}), fire: { rev, by: caller },
         };
         chronicle.events[id] = event;
         const gone = prune(chronicle);
@@ -320,6 +325,8 @@ export function lasting(ctx, payload = {}) {
     const changes = changeEvent(chronicle, event, { summary: fields.summary, state: fields.state, place: fields.place, factions: fields.factions, by: caller, keep: fields.keep }, { now, rev });
     const gone = prune(chronicle);
     if (!changes.length) return { summary: `World: ${event.name} is unchanged.`, narrate: false, data: { event: event.id, state: event.state } };
+    // This fire's receipt is kept on the entry, so the Journal can find the change whatever else touches the entry later.
+    event.fire = { rev, by: caller };
     return { summary: sentence(eventSummary(event, false)), narrate: false, data: { event: event.id, state: event.state, ...(gone.length ? { pruned: gone } : {}) } };
 }
 
