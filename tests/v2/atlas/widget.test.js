@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MAP_CSS, atlasMapWidget, forgetViews, onLayer, readView } from '../../../src/v2/atlas/widget.js';
+import { MAP_CSS, atlasMapWidget, forgetViews, onLayer, readTrip, readView } from '../../../src/v2/atlas/widget.js';
 import { iconFor } from '../../../src/v2/atlas/map.js';
 import { KNOWN_LABEL_ZOOM, labelSize } from '../../../src/v2/atlas/view.js';
 import { installFakeDom } from '../../ui-fake-dom.js';
-import { at, command, makeState, query } from './helpers/fake-ctx.js';
+import { at, command, deepFreeze, makeState, query } from './helpers/fake-ctx.js';
 
 // The screenshot's knot (Ersveil's Bluewatch Village: places a hundredth of a unit apart) inside a
 // wider world, a hidden cellar, and a town on another layer.
@@ -91,7 +91,7 @@ test('the controls: search, zoom in and out, fit, centre on me, layers, a focusa
     assert.equal(regionShown(root), 'Core Cities');
     // Item 3: the "you are here" ring is drawn after (above) the places and the labels.
     const children = stage.children.map(child => child.className);
-    assert.deepEqual(children, ['sd-map-svg', 'sd-map-places', 'sd-map-labels', 'sd-map-here']);
+    assert.deepEqual(children, ['sd-map-svg', 'sd-map-places', 'sd-map-labels', 'sd-map-here', 'sd-map-marks']);
     assert.equal($('.sd-map-here').hidden, false);
     assert.equal(root.querySelector('.sd-map-legend-card').hidden, false);
 });
@@ -627,4 +627,137 @@ test('a phone: a click from the keyboard (Enter or Space on a focused place, det
     // The same position from a finger (detail 1) is Bravo's: the nearest dot.
     alpha.dispatch('click', { detail: 1, clientX: b.x, clientY: b.y });
     assert.equal(handle.state.picked, bravo.getAttribute('data-id'));
+});
+
+// ---- trips (feature `story-director.trip`): the route, "You", the movers and the "On the road" panel ----------------------------------
+
+import { PRESETS, makeCalendar } from '../../../src/calendar.js';
+import { line } from './helpers/fake-ctx.js';
+
+const GREGORIAN = makeCalendar(PRESETS.gregorian);
+const TRIP_T0 = GREGORIAN.toAbs({ year: 1200, month: 2, day: 3, minutes: 8 * 60 });
+const TRIP_DAY = 1440;
+
+// Bluewatch Village → Reedmere (90 km by river) → Coinwater (60 km), set out March 3; `days` later, with a courier on the first road.
+function tripDraw({ days = 1, place = 'Bluewatch Village', props = {}, withMover = true } = {}) {
+    const first = line(story(), '~ trip Coinwater | by: foot', { pack: PACK, time: TRIP_T0 });
+    assert.ok(first.ok, first.message);
+    const threads = withMover ? {
+        th_courier: {
+            id: 'th_courier', key: 'Guild courier', kind: 'event', status: 'active', summary: 'news of the Seal tremor',
+            fields: { leg: 'Reedmere → Bluewatch Village', arrive: 'March 9' }, track: { legSince: { turn: 1, time: TRIP_T0 } },
+        },
+    } : {};
+    const state = deepFreeze({
+        ...first.state,
+        domains: { ...first.state.domains, scene: { place: { name: place, kind: '', region: '' }, present: [] }, director: { time: { minutes: TRIP_T0 + days * TRIP_DAY }, threads } },
+    });
+    const trip = query(state, 'atlas.trip', {}, { pack: PACK });
+    return { ...draw({ state, props: { trip, ...props } }), trip };
+}
+
+test('a trip: its legs drawn thick over the known routes, a "You" marker on the current leg, the movers as diamonds, and the panel beside the map', () => {
+    const { root, stage, $, $$, trip, handle } = tripDraw({ days: 1 });
+    // The trip is a list of two river legs by foot: 90 km (the boat's 35 a day, 3 days), then 60 km.
+    assert.equal(trip.on, true);
+    assert.deepEqual(trip.legs.map(leg => leg.km), [90, 60]);
+    // The route runs into another region (Bluewatch Village is on Core Cities, Reedmere on Locks): the map opens on All to show it whole.
+    assert.equal(regionShown(root), 'All');
+    assert.ok(handle.state.view.k > handle.state.fitK, 'the map opens fitted to the trip\'s stops, not to the whole layer');
+    // On a layer where a stage's ends are not both shown, that stage is not drawn (and "You" is not either).
+    chooseRegion(root, 'region:core cities');
+    assert.equal($$('.sd-map-trip-leg').length, 0);
+    assert.equal($$('.sd-map-you').length, 0);
+    chooseRegion(root, 'all');
+    const legs = $$('.sd-map-trip-leg');
+    assert.deepEqual(legs.map(node => node.getAttribute('data-state')), ['now', 'next']);
+    assert.equal(legs.every(node => node.getAttribute('data-from') && node.getAttribute('data-to')), true);
+    // "You": a marker and a pin on the first leg, at the share of the road done (1 day of 3), and a diamond for the courier.
+    assert.equal($$('.sd-map-you').length, 1);
+    assert.equal($('.sd-map-pin-you').textContent, 'You · 30 of 90 km');
+    assert.equal($$('.sd-map-mover').length, 1);
+    assert.match($('.sd-map-pin-mover').textContent, /Guild courier · March 9/);
+    const [youLeft, youTop] = [parseFloat($('.sd-map-you').style.left), parseFloat($('.sd-map-you').style.top)];
+    assert.ok(Number.isFinite(youLeft) && Number.isFinite(youTop));
+    // The panel: destination, pace, each leg with its km, days and arrival, a progress bar on the current one, the movers.
+    assert.equal($('.sd-map-road').hidden, false);
+    assert.equal($('.sd-map-road').getAttribute('aria-label'), 'On the road');
+    assert.equal($('.sd-map-road h4').textContent, 'On the road');
+    assert.equal($('.sd-map-road-to').textContent, 'Bluewatch Village → Coinwater');
+    assert.equal($('.sd-map-road-by').textContent, 'on foot, 20 km/day · set out March 3');
+    const rows = $$('.sd-map-road-legs li').map(item => [item.querySelector('.sd-map-road-name').textContent, item.querySelector('.sd-map-road-when').textContent, item.getAttribute('data-state')]);
+    assert.deepEqual(rows, [
+        ['1 · Bluewatch Village → Reedmere', '90 km · 3 days · March 6', 'now'],
+        ['2 · Reedmere → Coinwater', '60 km · 2 days · March 8', 'next'],
+    ]);
+    const movers = $$('.sd-map-road-movers li').map(item => [item.querySelector('.sd-map-road-name').textContent, item.querySelector('.sd-map-road-when').textContent]);
+    assert.deepEqual(movers, [['Guild courier: news of the Seal tremor', 'Reedmere → Bluewatch Village · arrive March 9']]);
+    const bar = $('.sd-map-road-bar');
+    assert.equal(bar.getAttribute('role'), 'progressbar');
+    assert.deepEqual([bar.getAttribute('aria-valuenow'), bar.querySelector('span').style.width], ['33', '33%']);
+    assert.equal($$('.sd-map-road-bar').length, 1, 'only the current leg has a bar');
+    // The panel sits in the frame with the map (over its corner on a wide screen; under it on a phone: MAP_CSS).
+    assert.equal($('.sd-map-frame').children.map(child => child.className).join(' '), 'sd-map-stage sd-map-road');
+    assert.match(MAP_CSS, /@media \(max-width: 759\.98px\) \{\s*\.sd-map \.sd-map-road \{ position: static; width: auto;/);
+    assert.match(MAP_CSS, /\.sd-map \.sd-map-road \{ position: absolute;/);
+    // The legend names them.
+    const legend = $$('.sd-map-legend .ss-listcard-title').map(node => node.textContent);
+    assert.ok(legend.includes('Your trip') && legend.includes('Moving that you know of'), legend.join('|'));
+    // Panning moves "You" with the map.
+    stage.dispatch('keydown', { key: 'ArrowLeft' });
+    assert.notEqual(parseFloat($('.sd-map-you').style.left), youLeft);
+    handle.destroy();
+});
+
+test('a trip: the marker follows the story time, arrival is said, and a state update takes the trip away', () => {
+    const early = tripDraw({ days: 0 });
+    assert.equal(early.$('.sd-map-pin-you').textContent, 'You · 0 of 90 km');
+    const arrived = tripDraw({ days: 6, place: 'Coinwater', withMover: false });
+    assert.equal(arrived.trip.phase, 'arrived');
+    assert.equal(arrived.$('.sd-map-road-by').textContent, 'Arrived at Coinwater, March 8');
+    assert.equal(arrived.$$('.sd-map-you').length, 0, 'no "You" once arrived');
+    assert.equal(arrived.$$('.sd-map-road-bar').length, 0);
+    // A state update: the same widget, no trip any more.
+    const live = tripDraw({ days: 1 });
+    assert.equal(live.$$('.sd-map-trip-leg').length, 2);
+    live.handle.update({ value: live.data, trip: null });
+    assert.equal(live.$$('.sd-map-trip-leg').length, 0);
+    assert.equal(live.$$('.sd-map-you').length, 0);
+    assert.equal(live.$('.sd-map-road').hidden, true);
+    live.handle.update({ value: live.data, trip: live.trip });
+    assert.equal(live.$('.sd-map-road').hidden, false);
+});
+
+test('movers alone (no trip) still show: the panel lists them and their diamonds are drawn; nothing without either', () => {
+    const { root, $, $$, trip } = (() => {
+        const base = story();
+        const threads = { th_courier: { id: 'th_courier', key: 'Guild courier', kind: 'event', status: 'active', summary: 'news', fields: { leg: 'Reedmere → Bluewatch Village', arrive: 'March 9' }, track: { legSince: { turn: 1, time: TRIP_T0 } } } };
+        const state = deepFreeze({ ...base, domains: { ...base.domains, director: { time: { minutes: TRIP_T0 + TRIP_DAY }, threads } } });
+        const tripOnly = query(state, 'atlas.trip', {}, { pack: PACK });
+        return { ...draw({ state, props: { trip: tripOnly } }), trip: tripOnly };
+    })();
+    assert.equal(trip.on, false);
+    chooseRegion(root, 'all');
+    assert.equal($('.sd-map-road').hidden, false);
+    assert.equal($('.sd-map-road-to'), null, 'no trip: no destination line');
+    assert.equal($('.sd-map-road h5').textContent, 'Moving that you know of');
+    assert.match($('.sd-map-road-movers li').textContent, /^Guild courier: news/);
+    assert.equal($$('.sd-map-mover').length, 1);
+    assert.equal($$('.sd-map-trip-leg').length, 0);
+    // No trip prop at all (the feature is off): nothing drawn, the panel hidden, the frame as before.
+    const plain = draw();
+    assert.equal(plain.$('.sd-map-road').hidden, true);
+    assert.equal(plain.$$('.sd-map-trip-leg').length + plain.$$('.sd-map-you').length + plain.$$('.sd-map-mover').length, 0);
+});
+
+test('the trip prop is cleaned: junk, a missing end and a leg id the map lacks draw nothing and break nothing', () => {
+    assert.equal(readTrip(null), null);
+    assert.equal(readTrip('trip'), null);
+    assert.equal(readTrip({ on: true, legs: [] }), null);
+    assert.equal(readTrip({ on: false, movers: [{ name: 'x', fromId: '', toId: 'b' }] }), null);
+    const cleaned = readTrip({ on: true, phase: 'arrived', to: 'X', legs: [{ from: 'A', to: 'B', km: 'far', state: 'odd', fromId: 'a', toId: 'b' }, 7, null], you: { fromId: 'a', toId: '', t: 3 }, movers: [{ name: 'M', fromId: 'a', toId: 'b', t: -1 }], delays: [{ text: '1 day' }, {}] });
+    assert.deepEqual([cleaned.phase, cleaned.legs.length, cleaned.legs[0].km, cleaned.legs[0].state, cleaned.you, cleaned.movers[0].t, cleaned.delays], ['arrived', 1, null, 'next', null, 0, ['1 day']]);
+    const { $$, $ } = draw({ props: { trip: { on: true, legs: [{ index: 1, from: 'A', to: 'B', fromId: 'nope', toId: 'also-nope', state: 'now' }], you: { fromId: 'nope', toId: 'also-nope', t: 0.5 }, movers: [{ name: 'Lost', fromId: 'nope', toId: 'also-nope', t: 0.5 }] } } });
+    assert.equal($$('.sd-map-trip-leg').length + $$('.sd-map-you').length + $$('.sd-map-mover').length, 0);
+    assert.equal($('.sd-map-road').hidden, false, 'the panel still tells the trip');
 });

@@ -13,6 +13,10 @@
 //   moves the map to it and shows it;
 // * pick a place (click, tap, Enter) for its details: kind, region, visited or not, and the trip
 //   from the current place by known routes (query `atlas.place`, travel.js).
+// * a trip (feature `story-director.trip`, query `atlas.trip` as the prop `trip`): its route drawn as a thick accent line over the known
+//   routes, a "You" marker at the derived point along the current leg, the movers {{user}} knows of as diamonds on their leg, and an "On the
+//   road" panel (destination, mode and pace, each leg with a progress bar on the current one, the movers). The panel sits over the map's
+//   corner; on a phone it goes under the map.
 // The view (centre and zoom) is the reader's alone: kept in memory per layer for this page, never
 // in the story state. Picking a place writes nothing either (a screen may still pass `onSelect`).
 // Moves to a picked place are eased, except under prefers-reduced-motion.
@@ -56,6 +60,7 @@ const CSS = `
   --sd-map-raised: var(--ss-w-raised, color-mix(in srgb, var(--sd-map-fg) 8%, transparent));
   --sd-map-border: var(--ss-w-border, var(--ss-border));
   --sd-map-accent: var(--ss-w-accent, var(--ss-accent));
+  --sd-map-mover: var(--ss-w-warn, #d9a441);
   --sd-map-route: var(--ss-w-map-route, color-mix(in srgb, var(--sd-map-fg) 45%, transparent));
   --sd-map-overlay: var(--ss-overlay);
   --sd-map-strong: var(--ss-glass-strong);
@@ -128,6 +133,37 @@ const CSS = `
 .sd-map .sd-map-sample { display: inline-grid; flex: none; place-items: center; width: 28px; height: 28px; border: 2px solid var(--sd-map-border); border-radius: 50%; font-size: 0.7em; color: var(--sd-map-fg); }
 .sd-map .sd-map-sample-known { border-style: dashed; color: var(--sd-map-muted); }
 .sd-map .sd-map-sample-here { border-color: var(--sd-map-accent); }
+.sd-map .sd-map-sample-trip { border: 0; border-top: 4px solid var(--sd-map-accent); border-radius: 0; height: 0; margin: 12px 0; }
+.sd-map .sd-map-sample-mover { width: 12px; height: 12px; margin: 8px; border: 2px solid var(--sd-map-overlay); border-radius: 0; background: var(--sd-map-mover); transform: rotate(45deg); }
+.sd-map .sd-map-frame { position: relative; min-width: 0; }
+.sd-map .sd-map-trip-leg { stroke: var(--sd-map-accent); stroke-width: 4; stroke-linecap: round; fill: none; opacity: 0.95; }
+.sd-map .sd-map-trip-leg[data-state="done"] { opacity: 0.45; }
+.sd-map .sd-map-you, .sd-map .sd-map-mover { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: none; }
+.sd-map .sd-map-you { width: 16px; height: 16px; border: 3px solid var(--sd-map-overlay); border-radius: 50%; background: var(--sd-map-accent); box-shadow: 0 0 0 2px var(--sd-map-accent); }
+.sd-map .sd-map-mover { width: 13px; height: 13px; background: var(--sd-map-mover); border: 2px solid var(--sd-map-overlay); transform: translate(-50%, -50%) rotate(45deg); }
+.sd-map .sd-map-pin { position: absolute; z-index: 3; padding: 0 5px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; transform: translate(10px, -50%); }
+.sd-map .sd-map-pin.sd-map-pin-left { transform: translate(calc(-100% - 10px), -50%); }
+.sd-map .sd-map-pin-you { font-weight: 600; }
+.sd-map .sd-map-pin-mover { color: var(--sd-map-mover); }
+.sd-map .sd-map-road { position: absolute; z-index: 6; top: 10px; right: 10px; width: min(24em, 52%); max-height: calc(100% - 20px); overflow: auto; padding: 0.6em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-strong); backdrop-filter: var(--ss-blur); -webkit-backdrop-filter: var(--ss-blur); box-shadow: var(--ss-shadow); font-size: 0.85em; }
+.sd-map .sd-map-road h4, .sd-map .sd-map-road h5 { margin: 0 0 0.3em; font-size: 0.8em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sd-map-muted); }
+.sd-map .sd-map-road h5 { margin-top: 0.7em; }
+.sd-map .sd-map-road p { margin: 0.15em 0; overflow-wrap: anywhere; }
+.sd-map .sd-map-road-to { font-weight: 600; }
+.sd-map .sd-map-road-by, .sd-map .sd-map-road-note { color: var(--sd-map-muted); }
+.sd-map .sd-map-road ol, .sd-map .sd-map-road ul { margin: 0.4em 0 0; padding: 0; list-style: none; display: grid; gap: 0.5em; }
+.sd-map .sd-map-road li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.1em; overflow-wrap: anywhere; }
+.sd-map .sd-map-road li > .sd-map-road-name { min-width: 0; }
+.sd-map .sd-map-road li > .sd-map-road-when { color: var(--sd-map-muted); }
+.sd-map .sd-map-road li[data-state="done"] { opacity: 0.6; }
+.sd-map .sd-map-road li[data-state="now"] .sd-map-road-name { color: var(--sd-map-accent); font-weight: 600; }
+.sd-map .sd-map-road li[data-kind="mover"] .sd-map-road-name::before { content: "\\25C6\\00a0"; color: var(--sd-map-mover); }
+.sd-map .sd-map-road-bar { margin-top: 0.2em; height: 5px; border-radius: 3px; background: var(--sd-map-raised); overflow: hidden; }
+.sd-map .sd-map-road-bar > span { display: block; height: 100%; background: var(--sd-map-accent); }
+@media (max-width: 759.98px) {
+  .sd-map .sd-map-road { position: static; width: auto; max-height: none; margin-top: 0.6em; box-shadow: none; background: var(--sd-map-raised); }
+  .sd-map .sd-map-pin-mover { display: none; }
+}
 `;
 
 /** The widget's stylesheet (tests read it; the page gets it once, from ensureStyle). */
@@ -200,6 +236,33 @@ export function readView(props) {
     return { places, routes, layers, current, orient, kinds, layer };
 }
 
+/**
+ * The trip prop (query `atlas.trip`), cleaned: `{ on, phase, to, pace, setOut, arrive, legs, you, movers, delays }`. A leg is `{ index, from, to,
+ * km, time, arrive, state, along, fromId, toId }`; `you` `{ fromId, toId, t, along, of }` or null; a mover `{ id, name, summary, from, to, fromId,
+ * toId, arrive, t }`. Nothing (no trip, no mover) reads as `null`.
+ */
+export function readTrip(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const share = value => Math.min(1, Math.max(0, num(value) ?? 0));
+    const legs = (Array.isArray(raw.legs) ? raw.legs : []).filter(leg => leg && typeof leg === 'object').slice(0, 64).map((leg, i) => ({
+        index: num(leg.index) ?? i + 1, from: text(leg.from), to: text(leg.to), km: num(leg.km), time: text(leg.time), arrive: text(leg.arrive),
+        state: ['done', 'now', 'next'].includes(leg.state) ? leg.state : 'next', along: num(leg.along), fromId: text(leg.fromId), toId: text(leg.toId),
+    }));
+    const movers = (Array.isArray(raw.movers) ? raw.movers : []).filter(item => item && typeof item === 'object' && text(item.fromId) && text(item.toId)).slice(0, 12).map(item => ({
+        id: text(item.id), name: text(item.name), summary: text(item.summary), from: text(item.from), to: text(item.to), fromId: text(item.fromId), toId: text(item.toId),
+        arrive: text(item.arrive), t: share(item.t),
+    }));
+    const you = raw.you && typeof raw.you === 'object' && text(raw.you.fromId) && text(raw.you.toId)
+        ? { fromId: text(raw.you.fromId), toId: text(raw.you.toId), t: share(raw.you.t), along: num(raw.you.along), of: num(raw.you.of) } : null;
+    const on = raw.on === true && legs.length > 0;
+    if (!on && !movers.length) return null;
+    return {
+        on, phase: raw.phase === 'arrived' ? 'arrived' : 'road', to: text(raw.to), pace: text(raw.pace), setOut: text(raw.setOut), arrive: text(raw.arrive),
+        legs: on ? legs : [], you: on ? you : null, movers,
+        delays: (Array.isArray(raw.delays) ? raw.delays : []).map(item => text(item?.text)).filter(Boolean).slice(0, 8),
+    };
+}
+
 /** Whether a place shows on a layer: "All" shows every place off the planes; a layer its own places. */
 export const onLayer = (place, layer) => (layer === ALL ? !place.plane : place.layer === layer);
 
@@ -266,7 +329,16 @@ function render(el, props, api) {
     labelsLayer.setAttribute('aria-hidden', 'true');
     const hereRing = h(doc, 'div', 'sd-map-here');
     hereRing.setAttribute('aria-hidden', 'true');
-    stage.append(svg, placesLayer, labelsLayer, hereRing);
+    // The trip's marks above the places: "You" on the current leg, the movers on theirs, each with its pin (all drawn by paint()).
+    const markLayer = h(doc, 'div', 'sd-map-marks');
+    markLayer.setAttribute('aria-hidden', 'true');
+    markLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
+    stage.append(svg, placesLayer, labelsLayer, hereRing, markLayer);
+    const road = h(doc, 'section', 'sd-map-road');
+    road.setAttribute('aria-label', 'On the road');
+    road.hidden = true;
+    const frame = h(doc, 'div', 'sd-map-frame');
+    frame.append(stage, road);
 
     const empty = h(doc, 'p', 'sd-map-empty', 'No places to show yet.');
     const details = h(doc, 'section', 'sd-map-details');
@@ -277,7 +349,7 @@ function render(el, props, api) {
     const legendCard = h(doc, 'section', 'sd-map-legend-card ss-listcard');
     legendCard.setAttribute('aria-label', 'Legend');
     legendCard.append(h(doc, 'h4', 'ss-label ss-listcard-head', 'Legend'), legend);
-    root.append(bar, stage, empty, details, legendCard);
+    root.append(bar, frame, empty, details, legendCard);
     el.appendChild(root);
 
     // ---- state ----------------------------------------------------------------------------------
@@ -295,7 +367,9 @@ function render(el, props, api) {
     let picked = '';
     let hovered = '';
     let anim = null;
-    let lines = [];                  // [{ line, route }] on the layer
+    let lines = [];                  // [{ line, route }] on the layer (the known routes, then the trip's legs)
+    let trip = null;                 // the trip prop, cleaned (readTrip)
+    let marks = [];                  // [{ node, ids: [from, to], t }]: "You" and the movers, placed by paint()
     const nodes = new Map();         // id → place button
     const placeAt = new Map();       // id → the dot's point in the stage, as drawn last
     const labels = new Map();        // id → label span
@@ -395,6 +469,16 @@ function render(el, props, api) {
         paint();
     }
 
+    // The view fitted to the trip's stops that are on this layer (two or more), inside the zoom limits.
+    function fitTrip() {
+        const stops = new Set(trip.legs.flatMap(leg => [leg.fromId, leg.toId]));
+        const at = shown.filter(place => stops.has(place.id)).map(place => points.get(place.id)).filter(Boolean);
+        if (at.length < 2) return;
+        measure();
+        view = clampView(fitView(boundsOf(at), size.width, size.height), box, limits);
+        paint();
+    }
+
     function drawLayers() {
         const options = [{ id: ALL, name: 'All' }, ...data.layers].map(item => {
             const option = h(doc, 'option', '', item.name);
@@ -419,7 +503,18 @@ function render(el, props, api) {
             if (route.kind) line.setAttribute('data-kind', route.kind.slice(0, 64));
             return { line, route };
         });
+        // The trip's legs over the known routes (both ends on this layer), thick and in the accent.
+        for (const leg of trip?.legs ?? []) {
+            if (!ids.has(leg.fromId) || !ids.has(leg.toId) || leg.fromId === leg.toId) continue;
+            const line = doc.createElementNS(SVG_NS, 'line');
+            line.setAttribute('class', 'sd-map-trip-leg');
+            line.setAttribute('data-from', leg.fromId);
+            line.setAttribute('data-to', leg.toId);
+            line.setAttribute('data-state', leg.state);
+            lines.push({ line, route: { from: leg.fromId, to: leg.toId } });
+        }
         worldGroup.replaceChildren(...lines.map(entry => entry.line));
+        drawMarks(ids);
 
         nodes.clear();
         labels.clear();
@@ -450,6 +545,76 @@ function render(el, props, api) {
         drawLegend();
     }
 
+    // "You" and the movers: a mark and a pin each, where both ends of their leg are on this layer.
+    function drawMarks(ids) {
+        marks = [];
+        const nodesOut = [];
+        const add = (kind, ids2, t, label, title) => {
+            if (!ids2.every(id => ids.has(id) && points.get(id))) return;
+            const mark = h(doc, 'span', `sd-map-${kind}`);
+            mark.setAttribute('data-kind', kind);
+            const pin = h(doc, 'span', `sd-map-pin sd-map-pin-${kind}`, label);
+            if (title) pin.setAttribute('title', title);
+            nodesOut.push(mark, pin);
+            marks.push({ mark, pin, ids: ids2, t });
+        };
+        if (trip?.you && trip.phase === 'road') {
+            const along = trip.you.of ? `${trip.you.along ?? 0} of ${trip.you.of} km` : '';
+            add('you', [trip.you.fromId, trip.you.toId], trip.you.t, `You${along ? ` · ${along}` : ''}`, 'Where you are on the road');
+        }
+        for (const mover of trip?.movers ?? []) add('mover', [mover.fromId, mover.toId], mover.t, `${mover.name}${mover.arrive ? ` · ${mover.arrive}` : ''}`, `${mover.name}: ${mover.from} → ${mover.to}${mover.arrive ? `, arrives ${mover.arrive}` : ''}`);
+        markLayer.replaceChildren(...nodesOut);
+    }
+
+    // The "On the road" panel: the trip's stages (a progress bar on the current one) and the movers {{user}} knows of.
+    function drawRoad() {
+        road.hidden = !trip;
+        if (!trip) {
+            road.replaceChildren();
+            return;
+        }
+        const parts = [h(doc, 'h4', '', 'On the road')];
+        if (trip.on) {
+            const first = trip.legs[0];
+            parts.push(h(doc, 'p', 'sd-map-road-to', `${first?.from ?? ''} → ${trip.to}`));
+            parts.push(h(doc, 'p', 'sd-map-road-by', trip.phase === 'arrived' ? `Arrived at ${trip.to}${trip.arrive ? `, ${trip.arrive}` : ''}` : [trip.pace, trip.setOut && `set out ${trip.setOut}`].filter(Boolean).join(' · ')));
+            const list = h(doc, 'ol', 'sd-map-road-legs');
+            for (const leg of trip.legs) {
+                const item = h(doc, 'li');
+                item.setAttribute('data-state', leg.state);
+                item.append(h(doc, 'span', 'sd-map-road-name', `${leg.index} · ${leg.from} → ${leg.to}`), h(doc, 'span', 'sd-map-road-when', [leg.km !== null && `${leg.km} km`, leg.time, leg.arrive].filter(value => value !== null && value !== false && value !== '').join(' · ')));
+                if (leg.state === 'now' && trip.you?.of) {
+                    const pct = Math.round(Math.min(1, Math.max(0, (trip.you.along ?? 0) / trip.you.of)) * 100);
+                    const bar = h(doc, 'div', 'sd-map-road-bar');
+                    bar.setAttribute('role', 'progressbar');
+                    bar.setAttribute('aria-label', `Stage ${leg.index}: ${trip.you.along ?? 0} of ${trip.you.of} km`);
+                    bar.setAttribute('aria-valuemin', '0');
+                    bar.setAttribute('aria-valuemax', '100');
+                    bar.setAttribute('aria-valuenow', String(pct));
+                    const fill = h(doc, 'span');
+                    fill.style.width = `${pct}%`;
+                    bar.append(fill);
+                    item.append(bar);
+                }
+                list.append(item);
+            }
+            parts.push(list);
+            for (const delay of trip.delays) parts.push(h(doc, 'p', 'sd-map-road-note', `Delayed ${delay}`));
+        }
+        if (trip.movers.length) {
+            parts.push(h(doc, 'h5', '', 'Moving that you know of'));
+            const list = h(doc, 'ul', 'sd-map-road-movers');
+            for (const mover of trip.movers) {
+                const item = h(doc, 'li');
+                item.setAttribute('data-kind', 'mover');
+                item.append(h(doc, 'span', 'sd-map-road-name', `${mover.name}${mover.summary ? `: ${mover.summary}` : ''}`), h(doc, 'span', 'sd-map-road-when', [`${mover.from} → ${mover.to}`, mover.arrive && `arrive ${mover.arrive}`].filter(Boolean).join(' · ')));
+                list.append(item);
+            }
+            parts.push(list);
+        }
+        road.replaceChildren(...parts);
+    }
+
     function drawLegend() {
         const entries = [];
         // A legend row is a list-card row: the sample, then its words.
@@ -471,6 +636,8 @@ function render(el, props, api) {
         }
         if (shown.some(place => !place.visited)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-known'), 'Not visited yet');
         if (shown.some(place => place.id === data.current)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-here'), 'You are here');
+        if (lines.some(({ line }) => line.getAttribute('class') === 'sd-map-trip-leg')) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-trip'), 'Your trip');
+        if (marks.some(item => item.mark.getAttribute('data-kind') === 'mover')) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-mover'), 'Moving that you know of');
         legend.replaceChildren(...entries);
         legendCard.hidden = entries.length === 0;
     }
@@ -521,6 +688,17 @@ function render(el, props, api) {
             label.style.top = px(spot.y);
             label.setAttribute('data-slot', spot.slot);
             label.classList.toggle('sd-map-picked', id === picked);
+        }
+        for (const item of marks) {
+            const [a, b] = item.ids.map(id => toScreen(view, width, height, points.get(id)));
+            const x = a.x + (b.x - a.x) * item.t;
+            const y = a.y + (b.y - a.y) * item.t;
+            for (const node of [item.mark, item.pin]) {
+                node.style.left = px(x);
+                node.style.top = px(y);
+            }
+            // A pin near the right edge goes to the left of its mark, so it is not cut off.
+            item.pin.classList.toggle('sd-map-pin-left', x > width - 130);
         }
         const here = data.current && at.get(data.current);
         hereRing.hidden = !here;
@@ -817,6 +995,13 @@ function render(el, props, api) {
 
     function load(next, first) {
         data = readView(next);
+        trip = readTrip(next?.trip ?? next?.value?.trip);
+        // The map opens on the layer of the place {{user}} is at; with a trip on whose stages do not all lie there (the road runs on into
+        // another region), it opens on All, where the whole route can be seen.
+        if (first && trip?.on && data.layer !== ALL) {
+            const here = new Set(data.places.filter(place => onLayer(place, data.layer)).map(place => place.id));
+            if (!trip.legs.every(leg => here.has(leg.fromId) && here.has(leg.toId))) data.layer = ALL;
+        }
         viewKey = text(next?.viewKey) || 'map';
         onSelect = text(next?.onSelect);
         root.setAttribute('aria-label', text(next?.label) || 'Map');
@@ -832,7 +1017,12 @@ function render(el, props, api) {
             setLayer(layer, { refit: true });
             view = clampView({ ...centre, k: zoom * fitK }, box, limits);
             paint();
-        } else setLayer(data.layer);
+        } else {
+            setLayer(data.layer);
+            // The first time the map is drawn with a trip on, it shows the trip: the view fitted to the stops the trip runs through.
+            if (trip?.on && !views.has(`${viewKey}|${layer}`)) fitTrip();
+        }
+        drawRoad();
         if (picked && !byId(picked)) showDetails('');
         else if (picked) showDetails(picked);
         if (input.value) runSearch();
@@ -874,6 +1064,7 @@ export const atlasMapWidget = Object.freeze({
         current: Object.freeze({ type: 'string', default: '' }),
         kinds: Object.freeze({ type: 'object', default: null }),
         orient: Object.freeze({ type: 'object', default: null }),
+        trip: Object.freeze({ type: 'object', default: null }),
         onSelect: Object.freeze({ type: 'string', default: '' }),
         label: Object.freeze({ type: 'string', default: 'Map' }),
         viewKey: Object.freeze({ type: 'string', default: 'map' }),

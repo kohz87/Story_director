@@ -59,9 +59,11 @@ export class Rejected extends Error {
 /**
  * The queries a test host answers: the atlas's own, `scene.place`, and `packs.content` when a
  * `pack` `{ places, routes }` is given (else that query is missing, as without Story Block's packs).
+ * `extra`: other hosts' queries `{ name: (state, args) => answer }` (a test's stand-in for another module).
  */
-export function queryFor(pack = null) {
+export function queryFor(pack = null, extra = {}) {
     const run = (state, name, args) => {
+        if (Object.hasOwn(extra, name)) return structuredClone(extra[name](state, args));
         if (name === 'scene.place') return { ...state.domains.scene.place };
         if (name === 'packs.content') {
             if (!pack) throw new Rejected('NOT_FOUND', 'There is no query called "packs.content".');
@@ -75,20 +77,20 @@ export function queryFor(pack = null) {
 }
 
 /** A query against `state`, as Story Block's runQuery calls it (with `tools.query`). */
-export function query(state, name, args, { pack = null } = {}) {
-    return queryFor(pack)(state, name, args);
+export function query(state, name, args, { pack = null, extra = {} } = {}) {
+    return queryFor(pack, extra)(state, name, args);
 }
 
 /**
  * Runs `handler(ctx, payload)` as a command on `state`: `{ ok, state, result, ops }`, or
  * `{ ok: false, code, message, state }` with the state untouched.
  */
-export function runCommand(state, handler, payload, { settings = {}, seed = 7, pack = null, owned = ['atlas'], cause = 'ui', caller = null } = {}) {
+export function runCommand(state, handler, payload, { settings = {}, seed = 7, pack = null, owned = ['atlas'], cause = 'ui', caller = null, time = null, extra = {} } = {}) {
     const rev = state.meta.rev + 1;
     const drafts = {};
     const random = sfc32(seed);
     const current = () => ({ ...state, domains: { ...state.domains, ...drafts } });
-    const ask = queryFor(pack);
+    const ask = queryFor(pack, extra);
     const ctx = {
         rev,
         cause,
@@ -105,7 +107,7 @@ export function runCommand(state, handler, payload, { settings = {}, seed = 7, p
         rng: random,
         roll: () => ({ total: 0, dice: [] }),
         settings: () => structuredClone(settings),
-        time: () => null,
+        time: () => time,
         fail: (code, message) => { throw new Rejected(code, message); },
         query: (name, args) => deepFreeze(ask(current(), name, args)),
     };

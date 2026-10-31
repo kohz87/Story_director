@@ -10,6 +10,7 @@
 //   placeRefs:    { [pl_ id]: canonical place id },                 // pl_ -> the pack's content id, or itself for a place no pack has (canonical.js)
 //   danger:       { world: AreaPolicy|null, regions: {rg_: AreaPolicy}, places: {canonical id: AreaPolicy} }
 //   writes:       { [write id]: { fingerprint, result } }           // the retry ledger of the new writers (../writes.js)
+//   trips?:       { [<rev>.<n>]: trip record }                      // the trip (feature story-director.trip): absent until one is made (trip.js, trip-shape.js)
 // }
 // The last five arrived with contract P24; an older save has none of them and reads them as empty.
 // Places and routes from enabled packs (`packs.content`) are not copied in: they are read live
@@ -24,6 +25,7 @@
 // (capture.js NEW_PER_REPLY), so no count is kept that a deleted reply could leave wrong (B-b1r2-7).
 
 import { ledgerProblems } from '../writes.js';
+import { tripsProblems } from './trip-shape.js';
 
 export const PLACE_ID = /^pl_[0-9a-z]{8}$/;
 export const ROUTE_ID = /^rt_[0-9a-z]{8}$/;
@@ -206,6 +208,7 @@ function policyErrors(slice, places) {
         for (const key of Object.keys(danger)) if (!['world', 'regions', 'places'].includes(key)) errors.push(`atlas.danger has an unknown field "${key}".`);
     }
     if (slice.writes !== undefined) errors.push(...ledgerProblems(slice.writes, 'atlas.writes'));
+    if (slice.trips !== undefined) errors.push(...tripsProblems(slice.trips));
     return errors;
 }
 
@@ -233,7 +236,7 @@ export function validateAtlas(slice) {
     if (focus !== null && !packFocus && !(typeof focus === 'string' && places && Object.hasOwn(places, focus))) errors.push('atlas.focus must be null or a place on the map.');
     errors.push(...policyErrors(slice, places));
     for (const key of Object.keys(slice)) {
-        if (!['places', 'routes', 'keys', 'focus', 'regions', 'placeRegions', 'placeRefs', 'danger', 'writes'].includes(key)) errors.push(`atlas has an unknown field "${key}".`);
+        if (!['places', 'routes', 'keys', 'focus', 'regions', 'placeRegions', 'placeRefs', 'danger', 'writes', 'trips'].includes(key)) errors.push(`atlas has an unknown field "${key}".`);
     }
     return errors;
 }

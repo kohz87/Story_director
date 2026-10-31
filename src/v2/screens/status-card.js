@@ -1,7 +1,7 @@
 // Story Director v2, part screens: `story-director/status-card` (SPEC §13.1), the inline card under
 // each reply (mount `card`). Rows with no box of their own (they sit in the card's fold), labels on the
 // left: the story time, the place, its map coordinates when the atlas knows them, the weather (Story
-// Block's `scene.weather`, when the story set one), {{user}}'s rank, what they are wearing and their condition (Story Block's
+// Block's `scene.weather`, when the story set one), a Travel row while a trip is on (feature `story-director.trip`), {{user}}'s rank, what they are wearing and their condition (Story Block's
 // `scene.you`, 2.10.0 and later, when the story set them; the Rank only in a game whose pack gives one, under that pack's own word, such as
 // "Guild rank") and the current goal (the active quest touched last:
 // its goal and step, with that quest's progress). A row with no value is left out. Only what {{user}} knows (world/known.js): the next thing coming
@@ -35,6 +35,10 @@ const TEMPLATE = `
   <div class="sd-row sd-coords" data-if="q.status.coords">
     <dt><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> Coordinates</dt>
     <dd>{{ q.status.coords }}</dd>
+  </div>
+  <div class="sd-row sd-travel" data-if="q.trip.row">
+    <dt><i class="fa-solid fa-route" aria-hidden="true"></i> Travel</dt>
+    <dd>{{ q.trip.row }}</dd>
   </div>
   <div class="sd-row sd-rank" data-if="q.status.rank">
     <dt><i class="fa-solid fa-user" aria-hidden="true"></i> {{ q.status.rankLabel }}</dt>
@@ -83,6 +87,8 @@ export const statusCardScreen = Object.freeze({
         time: { query: 'director.time' },
         // The place's map coordinates, the weather, {{user}}'s rank, what they wear and their condition (screens/queries.js statusExtras).
         status: { query: 'director.status' },
+        // The reply's trip (atlas.trip, feature story-director.trip): null with none, and the row is left out.
+        trip: { query: 'atlas.trip' },
         goal: { query: 'director.goal' },
     },
     template: TEMPLATE,

@@ -29,9 +29,9 @@ test('the Map screen is a valid screen definition holding the atlas Map widget b
     assert.equal(MAP_SCREEN_ID, 'story-director/map');
     assert.deepEqual([...mapScreen.mounts], ['tab', 'screen']);
     assert.deepEqual(validateScreen(mapScreen), []);
-    assert.deepEqual(Object.values(mapScreen.data).map(binding => binding.query), ['atlas.view']);
+    assert.deepEqual(Object.values(mapScreen.data).map(binding => binding.query), ['atlas.view', 'atlas.trip']);
     for (const binding of Object.values(mapScreen.data)) assert.ok(Object.hasOwn(part.queries, binding.query));
-    assert.match(mapScreen.template, /<ss-widget name="story-director\.map" data-props='\{"bind":"q\.view","label":"Map"\}'>/);
+    assert.match(mapScreen.template, /<ss-widget name="story-director\.map" data-props='\{"bind":"q\.view","label":"Map","trip":\{\{ q\.trip \}\}\}'>/);
     // The widget is the part's own, namespaced by the module id (MODULES §F9), with a render function.
     assert.equal(MAP_WIDGET, 'story-director.map');
     assert.deepEqual(part.widgets, { [MAP_WIDGET]: atlasMapWidget });

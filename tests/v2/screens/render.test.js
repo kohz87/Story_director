@@ -155,6 +155,45 @@ test('status card: the place\'s map coordinates when the atlas knows it, and Sto
     }
 });
 
+test('status card: a Travel row (icon fa-route) after Coordinates while a trip is on, that reply\'s trip; left out with none or with the feature off', { skip }, () => {
+    const now = at('June 11, 2025, 9:00 am');
+    const leg = (from, to, km, days, start) => ({ from, to, km, kind: 'frontier road', days, start, arrive: start + days * 1440 });
+    const withTrip = (minutes, state = headState()) => ({
+        ...state,
+        domains: {
+            ...state.domains,
+            director: { ...state.domains.director, time: { minutes } },
+            atlas: {
+                places: {}, routes: {}, keys: {}, focus: null,
+                trips: { '21.0': { kind: 'go', at: now, rev: 21, to: 'Wolfmere Outpost', by: 'foot', mode: 'foot', pace: 20, unit: 'day', mount: '', short: false, setOut: now, legs: [leg('Bluewatch Village', "Hollin's Reach", 100, 5, now), leg("Hollin's Reach", 'Wolfmere Outpost', 60, 3, now + 5 * 1440)] } },
+            },
+        },
+    });
+    const queries = { ...makeQueries(), 'atlas.here': () => ({ id: 'pl_guild001', name: 'Bluewatch Village', kind: 'settlement' }), 'atlas.place': () => ({ id: 'pl_guild001', x: 64, y: 110 }) };
+    const rowsOf = el => el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
+    const { el, warnings } = draw(STATUS_CARD_ID, withTrip(now + 2 * 1440), { queries });
+    assert.deepEqual(warnings, []);
+    const rows = rowsOf(el);
+    assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Coordinates', 'Travel', 'Goal']);
+    assert.deepEqual(rows[3], ['Travel', "Bluewatch Village → Hollin's Reach → Wolfmere Outpost · on foot, 20 km/day · leg 1 of 2 · arrive Wolfmere Outpost June 19"]);
+    assert.ok(el.querySelector('.sd-travel i').classList.contains('fa-route'));
+    // Arrived: the row says so; the place has moved on elsewhere: no row.
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withTrip(now + 9 * 1440), { queries }).el).find(([label]) => label === 'Travel'), ['Travel', 'Arrived at Wolfmere Outpost, June 19']);
+    const moved = withTrip(now + 9 * 1440);
+    moved.domains.scene = { ...moved.domains.scene, place: { name: 'Eastmarch Keep', kind: '', region: '' } };
+    assert.equal(draw(STATUS_CARD_ID, moved, { queries }).el.querySelector('.sd-travel'), null);
+    // A feature that is off answers null (Story Block's feature tag on the query): no row, no warning.
+    const off = draw(STATUS_CARD_ID, withTrip(now + 2 * 1440), { queries: { ...queries, 'atlas.trip': () => null } });
+    assert.deepEqual(off.warnings, []);
+    assert.equal(off.el.querySelector('.sd-travel'), null);
+    assert.equal(draw(STATUS_CARD_ID, headState(), { queries }).el.querySelector('.sd-travel'), null, 'no trip');
+    // With Story Block's Your look too: Time, Weather, Place, Coordinates, Travel, then the rank, Wearing and Condition, then the goal.
+    const looking = { ...queries, 'scene.weather': () => ({ text: 'Light rain' }), 'scene.you': () => ({ rank: 'F-rank', rankLabel: 'Guild rank', wearing: 'oilskin coat, boots', condition: 'tired and cold' }) };
+    const both = draw(STATUS_CARD_ID, withTrip(now + 2 * 1440), { queries: looking });
+    assert.deepEqual(both.warnings, []);
+    assert.deepEqual(rowsOf(both.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Travel', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
+});
+
 test('status card: Rank, Wearing and Condition (Story Block 2.10.0\'s scene.you) come after Coordinates, one row per value, each reply\'s own', { skip }, () => {
     // The contract of Story Block's query: scene.you → { rank, wearing, condition } on the state it is given, null while its feature is off.
     const youOf = state => state?.domains?.scene?.you ?? null;

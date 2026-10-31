@@ -8,8 +8,11 @@
 import { mapSettings } from '../../places.js';
 import { packWorld, worldOf } from './world.js';
 import { travelTime } from './travel.js';
+import { TRIP_FEATURE, calendarOf, tripLines, tripView } from './trip.js';
 
 export const TAIL_BUDGET = 80;
+/** The trip's own room (feature `story-director.trip`): "On the road: …" with a few stages to come, and the reached-a-place cue. */
+export const TRIP_TAIL_BUDGET = 90;
 // Characters the line may take: Story Block estimates tokens as characters / 4.
 const MAX_CHARS = TAIL_BUDGET * 4;
 
@@ -17,6 +20,7 @@ const MAX_CHARS = TAIL_BUDGET * 4;
 export const GRAMMAR = Object.freeze({
     route: '+ route Place — Other Place | hours: 2 (or days: 1.5) | kind: road|river|trail|sea (a way between two places; - route Place — Other Place when it is gone)',
     landmark: '+ landmark Name | region: where | kind: town|ruin|cave|… | plane: underground (only off the surface)',
+    trip: '~ trip Place | by: riding|foot|wagon|boat|ship | via: Stop, Stop (the party sets out by the known routes; ~ trip stop; ~ trip delay: 1 day | because: lame horse)',
 });
 
 /** The atlas's part of the static prompt: none beyond its kinds' grammar. */
@@ -72,4 +76,21 @@ export function atlasTail(view) {
     const world = worldOf(atlas, packWorld(typeof view?.query === 'function' ? (name, args) => view.query(name, args) : null));
     const line = routesLine(world, here, { map: mapSettings(settingsOf(view).map) });
     return { lines: [], optional: line ? [line] : [] };
+}
+
+/**
+ * The trip's tail lines (a context part under feature `story-director.trip`): while a trip is on, "On the road: …", and when a stage's
+ * arrival has passed and the story has not moved the place, the cue to write `~ place` (trip.js `tripLines`). `{ lines, optional }`.
+ */
+export function tripTail(view) {
+    const none = { lines: [], optional: [] };
+    const atlas = view?.state?.domains?.atlas;
+    if (!atlas?.trips || (typeof view?.feature === 'function' && view.feature(TRIP_FEATURE) === false)) return none;
+    const query = typeof view?.query === 'function' ? (name, args) => view.query(name, args) : null;
+    let asked = null;
+    try { asked = query ? query('director.time', {}) : null; } catch { asked = null; }
+    const minutes = Number.isSafeInteger(asked?.minutes) ? asked.minutes : view?.state?.domains?.director?.time?.minutes;
+    if (!Number.isSafeInteger(minutes)) return none;
+    const shown = tripView(atlas, { now: minutes, here: scenePlace(view).name, calendar: calendarOf(query) });
+    return { lines: tripLines(shown), optional: [] };
 }

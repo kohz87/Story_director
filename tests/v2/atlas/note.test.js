@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { part } from '../../../src/v2/atlas/index.js';
-import { TAIL_BUDGET } from '../../../src/v2/atlas/note.js';
+import { TAIL_BUDGET, TRIP_TAIL_BUDGET } from '../../../src/v2/atlas/note.js';
 import { at, command, lines, makeState, queryFor } from './helpers/fake-ctx.js';
 
 // What the host puts in the static prompt for this part: each kind's one line, then its static.
@@ -20,8 +20,9 @@ function story() {
     ].join('\n')).state;
 }
 
-test('the static part is the two kinds\' grammar only, byte-identical whatever the state', () => {
-    assert.deepEqual(Object.keys(part.kinds), ['route', 'landmark']);
+test('the static part is the three kinds\' grammar only (the trip kind under its feature), byte-identical whatever the state', () => {
+    assert.deepEqual(Object.keys(part.kinds), ['route', 'landmark', 'trip']);
+    assert.equal(part.kinds.trip.feature, 'story-director.trip');
     assert.equal(part.context.static(), '');
     const before = staticOf();
     const changed = lines(story(), '+ landmark Sunken Vault | plane: Underground\n- route Bluewatch Village — Old Weir').state;
@@ -40,7 +41,7 @@ test('the tail is one optional line: the known routes from the scene\'s place wi
     const out = part.context.tail(view(story()));
     assert.deepEqual(out.lines, []);
     assert.deepEqual(out.optional, ['Routes from Bluewatch Village: Old Weir by road, 2 h · Thunder Ruins by trail, 1.5 days · Grey Fen.']);
-    assert.equal(part.context.budget, TAIL_BUDGET);
+    assert.equal(part.context.budget, TAIL_BUDGET + TRIP_TAIL_BUDGET, 'the trip has its own room (a context part under its feature)');
     assert.equal(TAIL_BUDGET, 80);
 });
 

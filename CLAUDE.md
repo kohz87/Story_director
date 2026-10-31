@@ -18,7 +18,7 @@ Story Director works without NPC State Delta. Read other modules through guarded
 - `src/v2/tracker/`: the `director` domain, its change-line kinds and grammar, the clock (`time.js`), calendar
   settings, the note (static + tail, `note.js`), seed.
 - `src/v2/time/`: settle (lapses, overdue, due now), advance, recap, records.
-- `src/v2/atlas/`: places, routes, map widget, travel. `src/v2/chronicle/`: world events, factions, day digest.
+- `src/v2/atlas/`: places, routes, map widget, travel, trips (`trip*.js`, docs/dev/trips.md). `src/v2/chronicle/`: world events, factions, day digest.
 - `src/v2/world/`: the World screen (Now / Journal), PC-known views, people widget; nothing stored.
 - `src/v2/arc/`: arc planning through `sdk.callModel`, review, Reveal/Hide (feature `story-director.arc`).
 - `src/v2/screens/`: Director, Quests, Reveal, Behind, HUD, status card.
@@ -57,7 +57,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 4. **Static prompt byte-identical** reply to reply (the grammar may depend on the module set, never on state).
    New static lines only via a Feature or a setting; tail within `TAIL_BUDGET` (500).
 5. **Every optional mechanic is a Feature (F100):** `story-director.arc`, `.world`, `.map`, `.digest`,
-   `.reveal`, `.behind`, `.people`; tag kinds, commands, queries, screens; check `ctx.feature(id)`.
+   `.reveal`, `.behind`, `.people`, `.trip`; tag kinds, commands, queries, screens; check `ctx.feature(id)`.
 6. **Story-driven:** no buttons for story actions; the reader's tools (Reveal, Plan arc, Finish) are fine.
 7. **No markup from text:** templates and widgets only; names flattened; cut by code points.
 8. **Tests for every rule,** run once after the fix. `npm test` + `npm run check` green; README/CHANGELOG updated.
