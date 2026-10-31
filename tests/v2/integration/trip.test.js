@@ -20,15 +20,10 @@ const tripLine = host => sent(host, TAIL_KEY).at(-1)?.split('\n').filter(line =>
 const trips = host => host.head().domains.atlas.trips;
 const goRecord = host => Object.values(trips(host) ?? {}).find(record => record.kind === 'go');
 
-// Story Block's mounts (R10) are not on main yet: a stand-in module answers `mounts.pace` as the interface says.
-function mountsStub(answer) {
-    return { id: 'mounts-stand-in', name: 'Mounts (test stand-in)', version: '0.0.0-test', queries: { 'mounts.pace': () => answer } };
-}
-
-async function newHost({ mounts = null, ...options } = {}) {
+async function newHost(options = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [...(mounts ? [mountsStub(mounts)] : []), module], ...options });
+    host = await createHost({ modules: [module], ...options });
     const installed = await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' });
     assert.equal(installed.ok, true, JSON.stringify(installed.errors));
     return host;
@@ -131,11 +126,12 @@ test('set out from Bluewatch Village: the legs are planned and kept, the narrato
     }
 });
 
-test('a ride goes at the mount pace Story Block answers (a stand-in for mounts.pace), and a delay moves what is ahead', async t => {
+test('a ride goes at the mount pace Story Block answers (its mounts.pace, from the mounts the party has), and a delay moves what is ahead', async t => {
     t.mock.method(console, 'warn', () => {});
-    const host = await newHost({ mounts: { pace: 25, mounts: 2, riders: 1, short: 0, slowest: 'Burr' } });
+    const host = await newHost();
     try {
-        await host.send('Hello.', reply('Bluewatch.', ['~ place Bluewatch Village', '~ time Goldwane 12, 8:00 am']));
+        await host.send('Hello.', reply('Bluewatch.', ['~ place Bluewatch Village', '~ time Goldwane 12, 8:00 am', '+ mount Grey Mare | kind: horse | pace: 35', '+ mount Burr | kind: mule | pace: 25']));
+        assert.deepEqual(host.sdk.query('mounts.pace'), { pace: 25, mounts: 2, riders: 1, short: 0, slowest: 'Burr' });
         await host.send('We set out.', reply('Riding.', ['~ trip Wolfmere Outpost | by: riding']));
         assert.deepEqual(goRecord(host).legs.map(leg => leg.days), [4, 2.5]);
         assert.equal(host.sdk.query('atlas.trip').pace, 'riding, 25 km/day (Burr sets the pace)');
