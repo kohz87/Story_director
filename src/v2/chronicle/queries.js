@@ -7,7 +7,8 @@
 // domain). Every answer is a plain copy.
 
 import { PRESETS, makeCalendar } from '../../calendar.js';
-import { findIn, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
+import { worldLineText } from './capture.js';
+import { findIn, isLocked, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
 import { DIGEST_FEATURE, dayFacts, dayOf, digestOut, entryOf, orderedDays, questLogOf, walkDays } from './days.js';
 
 // A query of the day digest only (MODULES §F100): tagged with its feature, so Story Block answers null
@@ -85,6 +86,9 @@ export function eventOut(event, { chronicle, calendar, now }) {
         updatedAgo: isInt(now) && isInt(event.updated) ? agoText(now - event.updated) : '',
         aka: [...(event.aka ?? [])],
         rev: event.rev,
+        // Only what a pack event's lasting change set, so an older entry's answer is as it was.
+        ...(isLocked(event) ? { locked: true } : {}),
+        ...(event.keep === true ? { keep: true } : {}),
     };
 }
 
@@ -183,6 +187,18 @@ export function dayBoard(state, _args, tools) {
     return { days, hasDays: days.length > 0, count: days.length, today: Number.isSafeInteger(now) ? dateText(env.calendar, now) : '' };
 }
 
+// The lasting entries a pack event wrote, by the revision of the receipt that fired it: for the Journal's world
+// lines (the event's own receipt tells only its cue; the nested `chronicle.lasting` has none).
+function lastingByRev(state) {
+    const byRev = new Map();
+    for (const event of orderedEvents(state?.domains?.chronicle)) {
+        if (!isLocked(event) || !Number.isSafeInteger(event.rev)) continue;
+        if (!byRev.has(event.rev)) byRev.set(event.rev, []);
+        byRev.get(event.rev).push({ id: event.id, by: event.by, text: worldLineText(event) });
+    }
+    return rev => byRev.get(rev) ?? [];
+}
+
 /**
  * `chronicle.dayFacts { before }`: what the stored receipts say about each story day before day
  * `before` (all days when it is not given), worked out now and saved nowhere: `{ days: [{ day, facts,
@@ -192,10 +208,11 @@ export function dayFactsQuery(state, { before = null } = {}, tools) {
     let entries = [];
     try { entries = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { entries = []; }
     const walk = walkDays(entries);
+    const lasting = lastingByRev(state);
     const limit = Number.isSafeInteger(before) ? before : null;
     const days = [...walk.days.keys()].filter(day => limit === null || day < limit).sort((a, b) => a - b).map(day => {
         const receipts = walk.days.get(day);
-        return { day, facts: dayFacts(receipts, { revDay: walk.revs, state, day }), revs: receipts.map(receipt => receipt.rev).filter(Number.isSafeInteger) };
+        return { day, facts: dayFacts(receipts, { revDay: walk.revs, state, day, lasting }), revs: receipts.map(receipt => receipt.rev).filter(Number.isSafeInteger) };
     }).filter(entry => entry.facts.count > 0);
     return { days, settle: walk.settle ? { ...walk.settle } : null, today: Number.isSafeInteger(walk.minutes) ? dayOf(walk.minutes) : null };
 }
@@ -206,11 +223,12 @@ export function dayFactsQuery(state, { before = null } = {}, tools) {
  * `{ entries: [{ day, entry }], minutes, rev, settle }` (the clock and the last revision after them,
  * and the last time settle's jump among them). The note command keeps the entries (digest.js).
  */
-export function noteFactsQuery(_state, { after = null, minutes = null } = {}, tools) {
+export function noteFactsQuery(state, { after = null, minutes = null } = {}, tools) {
     let list = [];
     try { list = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { list = []; }
     const walk = walkDays(list, { after: Number.isSafeInteger(after) ? after : null, minutes });
-    const entries = [...walk.days.keys()].sort((a, b) => a - b).map(day => ({ day, entry: entryOf(walk.days.get(day), day) }));
+    const lasting = lastingByRev(state);
+    const entries = [...walk.days.keys()].sort((a, b) => a - b).map(day => ({ day, entry: entryOf(walk.days.get(day), day, { lasting }) }));
     const revs = [...walk.revs.keys()];
     // The receipts that touched a quest or thread (their own commands' `data.quest`, their lines'
     // `data.thread`), for the quest history (quest.details), kept by the note before the trim.
@@ -246,6 +264,18 @@ export const queries = {
         const env = setup(state, tools);
         const found = findIn(env.chronicle.events, id ?? name);
         return found ? eventOut(found, env) : null;
+    },
+    /**
+     * Whether `minutes` story minutes have gone by since the world event `name` (or `id`, or a name it had)
+     * began (`since`): true or false, for a pack event's `when` (the condition language has no sums:
+     * `query('chronicle.passed', { name: 'The Siege', minutes: 86400 })`). False when there is no such event,
+     * or the Director's clock was not set when it began or is not set now.
+     */
+    'chronicle.passed': (state, { id = null, name = null, minutes = null } = {}, tools) => {
+        if (!isInt(minutes) || minutes < 0) return false;
+        const env = setup(state, tools);
+        const found = findIn(env.chronicle.events, id ?? name);
+        return Boolean(found) && isInt(found.since) && isInt(env.now) && env.now >= found.since + minutes;
     },
     /** The factions by name: `[{ id, name, summary, area, stance, events: [{ id, name, state }], eventsText, aka, rev }]`. */
     'chronicle.factions': (state, _args, tools) => {

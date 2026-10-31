@@ -14,12 +14,14 @@
 //
 // Interface for other parts and modules: the queries `chronicle.events`, `chronicle.event`,
 // `chronicle.factions`, `chronicle.faction`, `chronicle.days`, `chronicle.day` (and
-// `chronicle.board`, `chronicle.dayBoard`, the screens', and `chronicle.dayFacts`, the digest's); the
+// `chronicle.board`, `chronicle.dayBoard`, the screens', and `chronicle.dayFacts`, the digest's) and
+// `chronicle.passed` (whether a set time has gone by since an event began: for a pack event's `when`); the
 // commands `chronicle.edit` and `chronicle.remove` (the reader's, cause `ui`), `chronicle.surface`
-// and `chronicle.digest` (the hook's, cause `system`).
+// and `chronicle.digest` (the hook's, cause `system`), and `chronicle.lasting` (a pack event's step: the
+// world's lasting change, which the story's own `world` lines cannot move on, see capture.js).
 
 import { threadOutcome } from './thread-outcome.js';
-import { applyFactionLine, applyWorldLine, edit, remove } from './capture.js';
+import { applyFactionLine, applyWorldLine, edit, lasting, remove } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
 import { DIGEST_TAIL_BUDGET, NOTE, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
 import { initialChronicle, validateChronicle } from './domain.js';
@@ -67,6 +69,7 @@ export const part = {
         'chronicle.threadOutcome': threadOutcome,
         'chronicle.edit': edit,
         'chronicle.remove': remove,
+        'chronicle.lasting': lasting,
         [SURFACE]: surface,
         [DIGEST]: digestHandler,
         [NOTE]: noteHandler,
