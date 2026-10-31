@@ -31,11 +31,17 @@ trip read back (`tripOf`) is the newest `go` with the delays after it applied: a
 starts the later legs later. Because delays are records of their own, deleting the reply that made the trip leaves a later delay with nothing to
 move, and never a failing block. At most 8 delays a trip.
 
+A delay written while an earlier hold still runs waits for it: `tripOf` starts its hold where the previous one ends, so holds never overlap (the km along
+stays put until both are over) and the arrivals move by the sum.
+
+**Line order.** The kind declares `after: ['place', 'mount']` (Story Block 2.11.1): the host runs a reply's `~ trip` lines behind its place and mount
+lines, so the plan reads the place and pace they set. Other lines (time, routes) keep the order they were written in. An older host ignores `after`.
+
 ## Derived, not stored
 
 `positionOf(trip, now)`: the current leg, km along its road, at a place or between two, arrived. `tripView` adds the words; it is `null` when
-there is no trip, no clock, or the trip is **over**: it has arrived and the scene's place is a place the trip never named. "Arrived at X, <date>"
-shows until then, or until a new trip starts.
+there is no trip, no clock, or the trip is **over**: it has arrived and the scene's place is a place the trip never named, or a place it names other
+than the destination three days or more after the arrival (the party went back). "Arrived at X, <date>" shows until then, or until a new trip starts.
 
 ## What the narrator is told (`tripTail`, a `context.parts` tail under the feature, budget `TRIP_TAIL_BUDGET`)
 

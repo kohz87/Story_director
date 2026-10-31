@@ -224,6 +224,26 @@ test('~ trip delay pushes every arrival still ahead; the party stands still whil
     assert.deepEqual(replay(stateAt(T0), [first, held]).domains.atlas.trips, held.state.domains.atlas.trips, 'replaying the ops gives the same records');
 });
 
+test('two delays that overlap hold the party once each, one after the other: the km along never drops, and the arrivals are those of the sum', () => {
+    const { state } = setOut();
+    const first = run(stateAt(T0 + 2 * DAY, { base: state }), '~ trip delay: 1 day', { time: T0 + 2 * DAY });
+    const second = run(stateAt(T0 + 2.5 * DAY, { base: first.state }), '~ trip delay: 1 day', { time: T0 + 2.5 * DAY });
+    assert.ok(first.ok && second.ok, second.message);
+    const trip = tripOf(second.state.domains.atlas);
+    assert.deepEqual(trip.legs[0].holds, [{ at: T0 + 2 * DAY, minutes: DAY }, { at: T0 + 3 * DAY, minutes: DAY }], 'the second hold starts where the first ends');
+    assert.deepEqual(trip.legs.map(leg => leg.arrive), [T0 + 7 * DAY, T0 + 10 * DAY], 'the arrivals move by both days, as before');
+    const along = days => positionOf(trip, T0 + days * DAY).along;
+    assert.deepEqual([2, 2.5, 3, 3.5, 4].map(along), [40, 40, 40, 40, 40], 'held at 40 km until both holds end (it was 40, 40, 30, 30 before)');
+    assert.deepEqual([4.5, 5, 6].map(along), [50, 60, 80], 'then on, 20 km a day');
+    assert.equal(view(second.state, T0 + 3.5 * DAY).you.along, 40);
+    // Two delays written in one reply (the same story time) hold one after the other too.
+    const both = run(stateAt(T0 + 2 * DAY, { base: first.state }), '~ trip delay: 12 hours', { time: T0 + 2 * DAY });
+    const holds = tripOf(both.state.domains.atlas).legs[0].holds;
+    assert.deepEqual(holds, [{ at: T0 + 2 * DAY, minutes: DAY }, { at: T0 + 3 * DAY, minutes: 720 }]);
+    // Replaying the records gives the same trip.
+    assert.deepEqual(tripOf(replay(stateAt(T0), [setOut(), first, second]).domains.atlas), trip);
+});
+
 test('a delay needs a trip on the road: none, arrived, bad lengths and a ninth are refused', () => {
     const none = run(stateAt(T0), '~ trip delay: 1 day');
     assert.match(none.message, /no trip on the road to delay/);
@@ -239,6 +259,20 @@ test('a delay needs a trip on the road: none, arrived, bad lengths and a ninth a
         current = out.state;
     }
     assert.match(run(stateAt(T0 + DAY, { base: current }), '~ trip delay: 1 hour', { time: T0 + DAY }).message, /already delayed 8 times/);
+});
+
+test('Arrived at X ends when the party is back at a place of the trip other than the destination three days after the arrival, not before', () => {
+    const { state } = setOut();
+    const at = (days, place) => view(state, T0 + days * DAY, place);
+    assert.equal(at(8 + 2.9, 'Bluewatch Village').phase, 'arrived', 'the narrator has three days to write the arrival');
+    assert.deepEqual(tripLines(tripView(state.domains.atlas, { now: T0 + 10.9 * DAY, here: 'Bluewatch Village', calendar })), ['{{user}} has reached Wolfmere Outpost (March 11): write ~ place Wolfmere Outpost.']);
+    assert.equal(at(8 + 3, 'Bluewatch Village'), null, 'back at the start: the trip is over, and so is the cue');
+    assert.deepEqual(tripLines(tripView(state.domains.atlas, { now: T0 + 11 * DAY, here: 'Bluewatch Village', calendar })), []);
+    assert.equal(at(8 + 30, "Hollin's Reach"), null, 'an earlier stop too');
+    assert.equal(at(8 + 30, 'Wolfmere Outpost').phase, 'arrived', 'at the destination the arrival stays until the story moves on');
+    // A new trip from the start place, once over, sets out from the scene's place.
+    const next = run(stateAt(T0 + 12 * DAY, { place: 'Bluewatch Village', base: state }), '~ trip Auvoth | by: foot', { time: T0 + 12 * DAY });
+    assert.deepEqual(goRecord(next.state).legs.map(leg => [leg.from, leg.to]), [['Bluewatch Village', 'Auvoth']]);
 });
 
 test('~ trip stop ends the trip where the party is; with none it is refused', () => {

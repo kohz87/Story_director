@@ -25,6 +25,8 @@ import { KEY, MAX_DELAYS, MAX_DELAY_DAYS, MAX_LEGS } from './trip-shape.js';
 export const TRIP_FEATURE = 'story-director.trip';
 export { MAX_DELAYS, MAX_DELAY_DAYS, MAX_LEGS };
 const DAY = 1440;
+// How long after the arrival the story may leave the destination unwritten before the trip counts as over (see isOver).
+const ARRIVED_GRACE = 3 * DAY;
 const tidy = value => Math.round(value * 1e6) / 1e6;
 const isInt = value => Number.isSafeInteger(value);
 
@@ -216,13 +218,19 @@ export function tripOf(atlas) {
         legs: structuredClone(go.record.legs).map(leg => ({ ...leg, holds: [] })),
         delays: [],
     };
+    // A delay written while an earlier hold still runs waits for it: its hold starts where that one ends, so the holds never overlap and
+    // the party is held for the sum of the delays (the arrivals have always moved by that sum).
+    let heldUntil = -Infinity;
     for (const entry of entries.filter(item => item.record.kind === 'delay' && order(go, item) < 0)) {
-        const { at, minutes, because } = entry.record;
-        if (!isInt(minutes) || minutes < 1 || at >= trip.legs.at(-1).arrive) continue;
+        const { minutes, because } = entry.record;
+        if (!isInt(minutes) || minutes < 1 || entry.record.at >= trip.legs.at(-1).arrive) continue;
+        const at = Math.max(entry.record.at, heldUntil);
         for (const leg of trip.legs) {
             if (leg.arrive <= at) continue;
-            if (leg.start <= at) leg.holds.push({ at, minutes });
-            else leg.start += minutes;
+            if (leg.start <= at) {
+                leg.holds.push({ at, minutes });
+                heldUntil = at + minutes;
+            } else leg.start += minutes;
             leg.arrive += minutes;
         }
         trip.delays.push({ minutes, because: typeof because === 'string' ? because : '' });
@@ -259,11 +267,18 @@ export function positionOf(trip, now) {
 /** Every place the trip names: where it started, each stop, and where it ends. */
 export const nodesOf = trip => [...new Set(trip.legs.flatMap(leg => [leg.from, leg.to]))];
 
-/** Whether the trip is over for the story: it has arrived and {{user}}'s place is no longer one the trip names (the story moved on). */
+/**
+ * Whether the trip is over for the story: it has arrived and {{user}}'s place is no longer one the trip names (the story moved on), or it is
+ * a place the trip names other than the destination ARRIVED_GRACE or more after the arrival (the party went back the way it came; the
+ * narrator has had that long to write the arrival). At the destination the arrival stays until the story moves on.
+ */
 export function isOver(trip, now, here) {
     if (!positionOf(trip, now).arrived) return false;
     const key = keyOf(parseLocation(here).name);
-    return Boolean(key) && !nodesOf(trip).some(name => keyOf(name) === key);
+    if (!key) return false;
+    if (!nodesOf(trip).some(name => keyOf(name) === key)) return true;
+    const final = trip.legs.at(-1);
+    return keyOf(final.to) !== key && now >= final.arrive + ARRIVED_GRACE;
 }
 
 /** Where a new trip starts from, given the head state: `{ node: name }` or `{ road: { from, to, km, kind, along } }` (names), or null. */

@@ -44,7 +44,7 @@ import { fightsAmong } from './fights.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.5.0';
+export const VERSION = '2.5.1';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 export const STORY_BLOCK_RANGE = '>=2.6.0';
@@ -366,6 +366,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
                 // A kind a feature owns (MODULES §F100): Story Block leaves its grammar out, and its lines unused, while that feature is off.
                 ...(typeof spec.feature === 'string' ? { feature: spec.feature } : {}),
+                // Kinds whose lines of a reply this kind's lines run behind (Story Block 2.11.1; an older host reads the lines as written).
+                ...(Array.isArray(spec.after) ? { after: [...spec.after] } : {}),
             };
             appliers[kind] = (ctx, line) => spec.apply(partCtx(ns, ctx, shared), line);
             for (const alias of spec.aliases ?? []) appliers[alias] = appliers[kind];

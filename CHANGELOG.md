@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.1
+
+- **Delays that overlap:** a second `~ trip delay` written while the first hold is still running no longer pulls the party backwards. The km along, the "You" marker and the narrator's "N of M km" stay where they were until both holds end (the second hold starts where the first ends); the arrival dates were already right.
+- **"Arrived at X" ends:** once the party is back at a place the trip names other than the destination, three days after the arrival, the trip is over (the row, the Map panel and the "has reached X: write ~ place X" cue go). It used to stay while the scene was at the trip's starting point or at an earlier stop. At the destination the arrival still stays until the story moves on, and the narrator still has three days to write it.
+- **Line order in a reply:** `~ trip` now declares that it runs after the reply's `~ place` and `+ mount` lines, so a trip written before them plans from the place and the mount pace the same reply sets up (it used to plan from the old place, or refuse with "no place yet"). This needs Story Block 2.11.1; an older Story Block reads the lines as written, as before.
+- Nothing in saved chats changes.
+
 ## 2.5.0
 
 - **Trips (Features → Trips, on by default):** the story can set out with `~ trip Wolfmere Outpost | by: riding | via: Hollin's Reach`. Code plans the way along the known routes only (the packs' routes and the story's `+ route` lines), through each stop, the shortest by km, with each stage's days rounded up as in the travel times. A ride goes at the pace of Story Block's slowest mount (when Mounts answers), else the usual ride pace; on foot, by wagon, boat or ship at the usual paces, and a river or sea stage at its own. A trip with no known route is refused, naming the gap.
