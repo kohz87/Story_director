@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.0
+
+- **Wearing, Condition and a pack's Rank on the Status card:** the card under each reply now has up to three more rows after Coordinates, with what you were wearing (**Wearing**), how you were (**Condition**) and, in a game whose pack gives your character a rank, that rank under the pack's own word (Ersveil: **Guild rank**), as of that reply (Story Block 2.10.0's "Your look"). A row with nothing to say is left out, and each reply keeps its own. With an older Story Block, or with Your look switched off, the card is as it was.
+- Nothing in saved chats changes.
+
 ## 2.3.0
 
 - **A pack's lasting changes to the world:** a pack event can now add a world event, or change one, with the new `chronicle.lasting` command, for changes the story must not undo. The entry is locked: a reply's `world` line can still add to its summary, place and factions, but cannot change its state or name (the change card says so), while your own edits in the Chronicle and another pack event can change anything. `keep` holds up to two open entries in every reply's reminder of what is under way, within the usual three.

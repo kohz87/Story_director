@@ -290,17 +290,23 @@ export function behindView(state, args, tools) {
 /** The part's queries; `settings` is the module's settings (a function or an object). */
 const COORD_LIMIT = 1e7;
 const WEATHER_CHARS = 80;
+// {{user}}'s rank, what they wear and their condition (Story Block's `scene.you`, each at most 120 characters there).
+const YOU_CHARS = 120;
+const RANK_LABEL_CHARS = 30;
 
 // A map coordinate as the card writes it: whole map units, '' when not a usable number.
 const coordText = value => (Number.isFinite(value) && Math.abs(value) < COORD_LIMIT ? String(Math.round(value)) : '');
 
 /**
  * `director.status` → what the reply's Status card adds to Story Block's scene, all of it {{user}}'s own
- * (world/known.js: where they are, and the weather they stand in): `{ coords, weather }`.
+ * (world/known.js: where they are, the weather they stand in, their rank, what they wear and how they are): `{ coords,
+ * weather, rank, wearing, condition }`.
  * `coords`: the scene's place on the map ("59, 110", map units: the atlas's or the pack's map data),
  * '' when the atlas does not know the place or has no position for it. `weather`: Story Block's
  * `scene.weather` (`{ text } | null`, the story's `~ weather <text>` line), '' when there is none or that
- * query is not there. Read on the state it is given, so each reply's card shows its own.
+ * query is not there. `rank`, `rankLabel`, `wearing` and `condition`: Story Block's `scene.you` (`{ rank?, rankLabel?, wearing, condition } | null`, a Rank and its label only in a game whose pack gives one, the story's
+ * `~ you rank: … | wearing: … | condition: …` line), '' for a part with no words, and all '' when Story Block is older than 2.10.0
+ * (no such query) or has the feature off. Read on the state it is given, so each reply's card shows its own.
  */
 export function statusExtras(_state, _args, tools) {
     const query = queryFrom(tools);
@@ -308,9 +314,15 @@ export function statusExtras(_state, _args, tools) {
     const place = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
     const [x, y] = [coordText(place?.x), coordText(place?.y)];
     const weather = ask(query, 'scene.weather', {}, null);
+    const you = ask(query, 'scene.you', {}, null);
     return {
         coords: x && y ? `${x}, ${y}` : '',
         weather: isRecord(weather) ? cut(text(weather.text), WEATHER_CHARS) : '',
+        // The Rank only where a pack gives the game one: Story Block answers `rankLabel` (its word for it) then, and no `rank` without it.
+        rankLabel: isRecord(you) ? cut(text(you.rankLabel), RANK_LABEL_CHARS) : '',
+        rank: isRecord(you) && text(you.rankLabel) ? cut(text(you.rank), YOU_CHARS) : '',
+        wearing: isRecord(you) ? cut(text(you.wearing), YOU_CHARS) : '',
+        condition: isRecord(you) ? cut(text(you.condition), YOU_CHARS) : '',
     };
 }
 
