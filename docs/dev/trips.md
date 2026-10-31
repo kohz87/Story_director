@@ -55,5 +55,7 @@ revealed).
 
 ## Home
 
-Story Block's Home header and cards have no slot a module can add to, so Story Director cannot put the "TRAVEL …" line or an "On the road" card
-there itself. Story Block needs a few lines: bind `atlas.trip` in Home's data and show `q.trip.row` (hidden when null).
+Story Block 2.11.0's game-view header (the `ss.hero` card above every screen, which also holds Rank, Wearing and Condition) asks
+`atlas.trip` and shows its `row` as a **Travel** line under those rows, hidden when the query answers null (no trip, or Trips off) or
+is not there (an older Story Director). Story Director sends nothing to it: the query is the whole interface. An older Story Block
+has no such line.

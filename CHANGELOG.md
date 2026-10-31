@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: trip
+## 2.5.0
 
 - **Trips (Features → Trips, on by default):** the story can set out with `~ trip Wolfmere Outpost | by: riding | via: Hollin's Reach`. Code plans the way along the known routes only (the packs' routes and the story's `+ route` lines), through each stop, the shortest by km, with each stage's days rounded up as in the travel times. A ride goes at the pace of Story Block's slowest mount (when Mounts answers), else the usual ride pace; on foot, by wagon, boat or ship at the usual paces, and a river or sea stage at its own. A trip with no known route is refused, naming the gap.
 - `~ trip stop` ends the trip where the party is; `~ trip delay: 1 day | because: lame horse` pushes every arrival still ahead. A new `~ trip` while on the road goes on to the end of the stage or back to its start.
@@ -8,7 +8,12 @@
 - The **Status card** has a **Travel** row after Coordinates (that reply's trip); the World screen's Now view an "On the road" line.
 - The **Map** draws the trip's route as a thick accent line over the known routes, a "You" marker on the current stage, and an **On the road** panel (destination, how the party travels and what sets the pace, each stage with its km, days and arrival, a progress bar on the current one; under the map on a phone). The map first opens fitted to the trip, on All when the road runs into another region. **Movers you know of** (events with a `leg:` and an `arrive:`) are diamonds on their stage and listed in the panel; agendas, clocks, beats and secrets never appear.
 - A swipe, a Re-read or a delete takes a trip back exactly: the plan is kept as it was made, so a rebuild or a reload never plans again. Off, nothing new is in the prompt, the saved story or the screens. Chats saved before this read as having no trip.
-- Story Block's Home has no place a module can add a "Travel" line or an "On the road" card to; `atlas.trip` (its `row`) is what a Home line would show. See docs/dev/trips.md.
+- **Home:** Story Block 2.11.0's game-view header shows a **Travel** line (under Rank, Wearing and Condition) from `atlas.trip` (its `row`); an older Story Block shows none. See docs/dev/trips.md.
+
+## 2.4.0
+
+- **Wearing, Condition and a pack's Rank on the Status card:** the card under each reply now has up to three more rows after Coordinates, with what you were wearing (**Wearing**), how you were (**Condition**) and, in a game whose pack gives your character a rank, that rank under the pack's own word (Ersveil: **Guild rank**), as of that reply (Story Block 2.10.0's "Your look"). A row with nothing to say is left out, and each reply keeps its own. With an older Story Block, or with Your look switched off, the card is as it was.
+- Nothing in saved chats changes.
 
 ## 2.3.0
 

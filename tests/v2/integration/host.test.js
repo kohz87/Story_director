@@ -89,7 +89,7 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
 test('the module registers whole: screens instead of tabs, settings fields, capture kinds, queries', async () => {
     const host = await newHost();
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
-    assert.equal(mine.version, '2.3.0');
+    assert.equal(mine.version, '2.5.0');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
     assert.deepEqual([...mine.kinds].sort(), ['agenda', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'landmark', 'quest', 'route', 'secret', 'time', 'trip', 'world']);
     assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.lasting', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);

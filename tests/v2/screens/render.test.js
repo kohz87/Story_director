@@ -187,6 +187,57 @@ test('status card: a Travel row (icon fa-route) after Coordinates while a trip i
     assert.deepEqual(off.warnings, []);
     assert.equal(off.el.querySelector('.sd-travel'), null);
     assert.equal(draw(STATUS_CARD_ID, headState(), { queries }).el.querySelector('.sd-travel'), null, 'no trip');
+    // With Story Block's Your look too: Time, Weather, Place, Coordinates, Travel, then the rank, Wearing and Condition, then the goal.
+    const looking = { ...queries, 'scene.weather': () => ({ text: 'Light rain' }), 'scene.you': () => ({ rank: 'F-rank', rankLabel: 'Guild rank', wearing: 'oilskin coat, boots', condition: 'tired and cold' }) };
+    const both = draw(STATUS_CARD_ID, withTrip(now + 2 * 1440), { queries: looking });
+    assert.deepEqual(both.warnings, []);
+    assert.deepEqual(rowsOf(both.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Travel', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
+});
+
+test('status card: Rank, Wearing and Condition (Story Block 2.10.0\'s scene.you) come after Coordinates, one row per value, each reply\'s own', { skip }, () => {
+    // The contract of Story Block's query: scene.you → { rank, wearing, condition } on the state it is given, null while its feature is off.
+    const youOf = state => state?.domains?.scene?.you ?? null;
+    const queries = {
+        ...makeQueries(),
+        'atlas.here': () => ({ id: 'pl_guild001', name: 'Bluewatch Village', kind: 'settlement' }),
+        'atlas.place': () => ({ id: 'pl_guild001', x: 59.4, y: 110 }),
+        'scene.weather': () => ({ text: 'Light rain' }),
+        'scene.you': state => youOf(state),
+    };
+    const withYou = you => {
+        const state = headState();
+        return { ...state, domains: { ...state.domains, scene: { ...state.domains.scene, you } } };
+    };
+    const rowsOf = el => el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
+    const full = draw(STATUS_CARD_ID, withYou({ rank: 'F-rank, Adventurer Guild', rankLabel: 'Guild rank', wearing: 'oilskin coat, boots', condition: 'tired and cold' }), { queries });
+    assert.deepEqual(full.warnings, []);
+    assert.deepEqual(rowsOf(full.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
+    assert.deepEqual(rowsOf(full.el).slice(4, 7), [['Guild rank', 'F-rank, Adventurer Guild'], ['Wearing', 'oilskin coat, boots'], ['Condition', 'tired and cold']]);
+    assert.ok(full.el.querySelector('.sd-rank dt i.fa-user'), 'the user icon');
+    assert.ok(full.el.querySelector('.sd-wearing dt i.fa-user'), 'the user icon');
+    assert.ok(full.el.querySelector('.sd-condition dt i.fa-user'));
+    // A row with no value is left out; a record with neither, no query (an older Story Block), a throwing query and the feature off (null): nothing new.
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: '', rankLabel: 'Guild rank', wearing: '', condition: 'tired' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Condition', 'Goal']);
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: 'novice', rankLabel: 'Standing', wearing: 'a grey coat', condition: '  ' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Standing', 'Wearing', 'Goal']);
+    // A rank with no label (a game with no pack that gives one) is not a row, whatever the answer holds.
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: 'F-rank', wearing: 'a coat', condition: '' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Wearing', 'Goal']);
+    for (const more of [
+        { 'scene.you': () => ({ rank: '', rankLabel: 'Guild rank', wearing: '', condition: '' }) },
+        { 'scene.you': () => null },
+        { 'scene.you': () => { throw new Error('older Story Block'); } },
+        { 'scene.you': () => 'not a record' },
+    ]) {
+        const { el, warnings } = draw(STATUS_CARD_ID, headState(), { queries: { ...queries, ...more } });
+        assert.deepEqual(warnings, []);
+        assert.deepEqual(rowsOf(el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Goal']);
+    }
+    const noQuery = { ...queries };
+    delete noQuery['scene.you'];
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, headState(), { queries: noQuery }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Goal'], 'no such query: nothing new');
+    // Long words are cut at the card's cap (120), text only (no markup).
+    const long = draw(STATUS_CARD_ID, withYou({ wearing: `<b>${'w'.repeat(200)}</b>`, condition: 'ok' }), { queries });
+    assert.equal(long.el.querySelectorAll('.sd-wearing b').length, 0);
+    assert.ok(Array.from(rowsOf(long.el).find(([label]) => label === 'Wearing')[1]).length <= 125);
 });
 
 test('status card: each reply\'s card is drawn from that reply\'s state (stateAt), not the head', { skip }, () => {
