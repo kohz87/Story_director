@@ -270,9 +270,10 @@ const ENTRY_HAPPENED = MAX_HAPPENED;
  * What a run of receipts (one reply's, on one day) holds, as a day-facts entry is kept
  * (`chronicle.dayFacts`): `{ day, count, happened: [{ text, told }], more, places, fights, money,
  * npcs: [{ name, meter, from, to }], world: [{ id, text }], revs: [first, last] }`. Quests are not in
- * it: they are read from the threads' own stamps when the day is written.
+ * it: they are read from the threads' own stamps when the day is written. `lasting(rev)` (queries.js) gives
+ * the entries a pack event's `chronicle.lasting` step wrote at that revision, for the day's world lines.
  */
-export function entryOf(receipts, day = null) {
+export function entryOf(receipts, day = null, { lasting = null } = {}) {
     const candidates = [];
     const seenHappened = new Set();
     const places = [];
@@ -314,6 +315,15 @@ export function entryOf(receipts, day = null) {
                 const key = `${keyOf(data.name)}\u0000${move.meter}`;
                 const before = npcMoves.get(key);
                 npcMoves.set(key, { name: cut(data.name, MAX_NAME), meter: cut(move.meter, MAX_NAME), from: before ? before.from : textOrNull(move.from), to: textOrNull(move.to) });
+            }
+        }
+        // A pack event's lasting changes (its receipt tells the cue; `lasting(rev)` gives what it wrote).
+        if (lasting && receipt.type === 'events.fire' && Array.isArray(data.then) && data.then.includes('chronicle.lasting') && typeof data.event === 'string') {
+            for (const item of lasting(receipt.rev)) {
+                if (item.by !== `event:${data.event}` || !item.text) continue;
+                const id = cut(item.id, MAX_NAME);
+                world.delete(id);
+                world.set(id, cut(item.text, MAX_ITEM));
             }
         }
         // The chronicle's own world lines: the last summary of each event that day.
@@ -419,8 +429,8 @@ export function factsOf(entries, { state = null, day = null, dayOfRev = () => nu
  * The facts of `day` from its receipts (in order), the day of every receipt revision (`revDay`, from
  * walkDays) and the state now: what factsOf gives for one entry of those receipts.
  */
-export function dayFacts(receipts, { revDay = new Map(), state = null, day = null } = {}) {
-    return factsOf([entryOf(receipts, day)], { state, day, dayOfRev: rev => (revDay.has(rev) ? revDay.get(rev) : null) });
+export function dayFacts(receipts, { revDay = new Map(), state = null, day = null, lasting = null } = {}) {
+    return factsOf([entryOf(receipts, day, { lasting })], { state, day, dayOfRev: rev => (revDay.has(rev) ? revDay.get(rev) : null) });
 }
 
 // The quests taken on and ended on that day, by the stamps the threads keep: the day of the receipt

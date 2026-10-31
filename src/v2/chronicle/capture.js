@@ -16,10 +16,19 @@
 //
 // Commands (cause `ui`, from the Chronicle screen): `chronicle.edit { id, …fields }` and
 // `chronicle.remove { id }`, for an event (`ev_…`) or a faction (`fa_…`).
+//
+// `chronicle.lasting { name, state, summary?, place?, factions?, keep? }` (cause `system`, only as a step
+// of a pack event: `ctx.caller` is `event:<id>`) is a world's lasting change: it adds the world event or
+// updates the one with that name (or a name it had). The entry records the event (`by`), which locks it:
+// a `world` line may add to its summary, place and factions but not move its state ("stays ongoing (set
+// by the world's timeline)"); the reader's `chronicle.edit` and another `chronicle.lasting` may change
+// anything. `keep: true` holds an open entry in every reply's tail (pick.js). `since` and `updated` are
+// the Director's clock. While the clock is not set the command fails (NOT_YET), so the pack event waits and is
+// tried again on the next reply; an entry therefore always has a date, and a delay counted from `since` can come due.
 
 import {
-    EVENT_ID, FACTION_ID, MAX_AKA, MAX_EVENTS, MAX_FACTIONS, MAX_NAME, MAX_NAMED, STATES,
-    cleanName, cleanSummary, findIn, forgetSeen, isOpen, isRecord, keyOf, newId, prune, revOf,
+    EVENT_ID, FACTION_ID, LASTING_BY, MAX_AKA, MAX_EVENTS, MAX_FACTIONS, MAX_NAME, MAX_NAMED, MAX_SUMMARY, STATES,
+    cleanName, cleanSummary, findIn, forgetSeen, isLocked, isOpen, isRecord, keyOf, newId, prune, revOf,
 } from './domain.js';
 
 // The separator between a word and more text inside a label: an em or en dash, or a spaced hyphen.
@@ -99,8 +108,9 @@ function rememberName(entry, oldName) {
 }
 
 /**
- * Applies `fields` (`summary`, `state`, `place`, `factions`) to an event (on the draft): what
- * changed, as words. `updated` and `rev` move only when something did.
+ * Applies `fields` (`summary`, `state`, `place`, `factions`, and for a lasting entry `by`: the writing
+ * event or null to unlock, `keep`) to an event (on the draft): what changed, as words. `updated` and
+ * `rev` move only when something did.
  */
 function changeEvent(chronicle, event, fields, { now, rev }) {
     const changes = [];
@@ -121,6 +131,16 @@ function changeEvent(chronicle, event, fields, { now, rev }) {
         event.factions = fields.factions;
         changes.push(fields.factions.length ? `with ${fields.factions.join(', ')}` : 'no factions');
     }
+    if (fields.by !== undefined && (fields.by ?? undefined) !== event.by) {
+        if (fields.by === null) delete event.by;
+        else event.by = fields.by;
+        changes.push(fields.by === null ? 'no longer locked' : 'set by the world\'s timeline');
+    }
+    if (fields.keep !== undefined && fields.keep !== (event.keep === true)) {
+        if (fields.keep) event.keep = true;
+        else delete event.keep;
+        changes.push(fields.keep ? 'kept in mind' : 'no longer kept in mind');
+    }
     if (changes.length) {
         if (now !== null) event.updated = now;
         event.rev = rev;
@@ -137,6 +157,39 @@ function eventSummary(event, created) {
 
 // A summary text as the receipt tells it: the sentence's own full stop is not doubled.
 const sentence = text => text.replace(/([.!?…])\.$/, '$1');
+
+/** An event as the Journal's world line tells it (the same words as the receipt of a `world` line). */
+export const worldLineText = event => sentence(eventSummary(event, false));
+
+// What a locked entry's summary becomes when a `world` line adds `more`: the new words after the old ones
+// (the old ones cut at a word to make room when both do not fit).
+function addToSummary(summary, more) {
+    if (!more || summary.includes(more)) return summary;
+    if (!summary) return more;
+    const joined = `${summary} ${more}`;
+    if (joined.length <= MAX_SUMMARY) return joined;
+    const room = MAX_SUMMARY - more.length - 2;
+    if (room < 40) return more;
+    const cut = summary.slice(0, room);
+    const space = cut.lastIndexOf(' ');
+    return `${(space > room / 2 ? cut.slice(0, space) : cut).trim()}… ${more}`;
+}
+
+const HELD = 'set by the world\'s timeline';
+
+// A `world` line on a lasting entry (written by a pack event): its summary gets the line's words added and
+// its place and factions may change, but its state may not (`held` says the line asked for another one).
+function guardLocked(event, fields) {
+    if (!isLocked(event)) return { fields, held: false };
+    const held = fields.state !== undefined && fields.state !== event.state;
+    return { fields: { ...fields, state: undefined, summary: fields.summary === undefined ? undefined : addToSummary(event.summary, fields.summary) }, held };
+}
+
+// The change card of a line whose state was held back.
+function heldSummary(event, changes) {
+    const kept = `${event.name} stays ${event.state} (${HELD})`;
+    return changes.length ? `World: ${kept}; changed: ${changes.join(', ')}.` : `World: ${kept}.`;
+}
 
 /** `apply(ctx, line)` for `world` lines. */
 export function applyWorldLine(ctx, line) {
@@ -162,8 +215,10 @@ export function applyWorldLine(ctx, line) {
     if (op === '-') {
         if (!found) return ctx.fail('NOT_FOUND', `There is no world event "${name}" in the chronicle to end.`);
         const event = chronicle.events[found.id];
-        const changes = changeEvent(chronicle, event, { summary: text || undefined, state: 'resolved', place, factions }, { now, rev });
+        const { fields, held } = guardLocked(event, { summary: text || undefined, state: 'resolved', place, factions });
+        const changes = changeEvent(chronicle, event, fields, { now, rev });
         prune(chronicle);
+        if (held) return { summary: heldSummary(event, changes), narrate: false, data: { event: event.id, state: event.state, held: true } };
         return { summary: changes.length ? sentence(eventSummary(event, false)) : `World: ${event.name} had already ended.`, narrate: false, data: { event: event.id, state: event.state } };
     }
 
@@ -184,9 +239,94 @@ export function applyWorldLine(ctx, line) {
     }
 
     const event = chronicle.events[found.id];
-    const changes = changeEvent(chronicle, event, { summary: text || undefined, state: read?.state, place, factions }, { now, rev });
+    const { fields, held } = guardLocked(event, { summary: text || undefined, state: read?.state, place, factions });
+    const changes = changeEvent(chronicle, event, fields, { now, rev });
+    const gone = prune(chronicle);
+    if (held) return { summary: heldSummary(event, changes), narrate: false, data: { event: event.id, state: event.state, held: true, ...(gone.length ? { pruned: gone } : {}) } };
+    if (!changes.length) return { summary: `World: ${event.name} is unchanged.`, narrate: false, data: { event: event.id, state: event.state } };
+    return { summary: sentence(eventSummary(event, false)), narrate: false, data: { event: event.id, state: event.state, ...(gone.length ? { pruned: gone } : {}) } };
+}
+
+// ---- the world's lasting changes -------------------------------------------------------------------
+
+const LASTING_FIELDS = ['name', 'state', 'summary', 'place', 'factions', 'keep'];
+const MAX_LASTING_SUMMARY = 240;
+const MAX_LASTING_FACTIONS = 4;
+
+// The payload of `chronicle.lasting` as the entry takes it, or fails with INVALID.
+function readLasting(ctx, payload) {
+    if (!isRecord(payload)) return ctx.fail('INVALID', 'chronicle.lasting takes { name, state, summary?, place?, factions?, keep? }.');
+    const unknown = Object.keys(payload).filter(key => !LASTING_FIELDS.includes(key));
+    if (unknown.length) return ctx.fail('INVALID', `chronicle.lasting has no ${unknown.join(', ')}.`);
+    const short = (value, max, what) => {
+        if (typeof value !== 'string') return ctx.fail('INVALID', `chronicle.lasting: ${what} must be text.`);
+        if (Array.from(value.trim()).length > max) return ctx.fail('INVALID', `chronicle.lasting: ${what} has at most ${max} characters.`);
+        return value;
+    };
+    const name = cleanName(short(payload.name, MAX_NAME, 'name'));
+    if (!keyOf(name)) return ctx.fail('INVALID', 'chronicle.lasting needs a name.');
+    if (!STATES.includes(payload.state)) return ctx.fail('INVALID', `chronicle.lasting: state must be one of ${STATES.join(', ')}.`);
+    const out = { name, state: payload.state };
+    if (payload.summary !== undefined) out.summary = cleanSummary(short(payload.summary, MAX_LASTING_SUMMARY, 'summary'));
+    if (payload.place !== undefined) out.place = cleanName(short(payload.place, MAX_NAME, 'place'));
+    if (payload.factions !== undefined) {
+        if (!Array.isArray(payload.factions) || payload.factions.length > MAX_LASTING_FACTIONS) return ctx.fail('INVALID', `chronicle.lasting: factions is a list of at most ${MAX_LASTING_FACTIONS} names.`);
+        const names = [];
+        for (const given of payload.factions) {
+            const faction = cleanName(short(given, MAX_NAME, 'a faction'));
+            if (!keyOf(faction)) return ctx.fail('INVALID', 'chronicle.lasting: a faction needs a name.');
+            if (!names.some(other => keyOf(other) === keyOf(faction))) names.push(faction);
+        }
+        out.factions = names;
+    }
+    if (payload.keep !== undefined) {
+        if (typeof payload.keep !== 'boolean') return ctx.fail('INVALID', 'chronicle.lasting: keep is true or false.');
+        out.keep = payload.keep;
+    }
+    return out;
+}
+
+/**
+ * `chronicle.lasting { name, state, summary?, place?, factions?, keep? }`: a pack event's lasting change to the
+ * world (see the header). Refused unless a pack event calls it (`ctx.caller` is `event:<id>`). What the payload
+ * leaves out stays as it is; `since` is stamped on create, `updated` on every change. Fails (NOT_YET) while the
+ * Director's clock is null.
+ */
+export function lasting(ctx, payload = {}) {
+    const caller = typeof ctx.caller === 'string' ? ctx.caller : '';
+    if (!LASTING_BY.test(caller)) return ctx.fail('REFUSED', 'A lasting change to the world is written only by an event of the story\'s pack, never by a button, a change line or another command.');
+    const fields = readLasting(ctx, payload);
+    // Until the story has a date there is nothing to stamp `since` with, and a delay counted from it would never come
+    // due: the step fails, the pack event is not claimed and is tried again on the next reply.
+    const now = clockOf(ctx);
+    if (now === null) return ctx.fail('NOT_YET', 'The story has no date yet; this world event waits for one.');
+    const chronicle = ctx.draft('chronicle');
+    const rev = revOf(ctx);
+    const found = findIn(chronicle.events, fields.name);
+
+    if (!found) {
+        const events = Object.values(chronicle.events);
+        if (events.length >= MAX_EVENTS && events.every(isOpen)) {
+            return ctx.fail('REFUSED', `The chronicle already follows ${MAX_EVENTS} world events under way; resolve or remove one first.`);
+        }
+        const id = newId(ctx, 'ev', chronicle.events);
+        const event = {
+            id, name: fields.name, summary: fields.summary ?? '', state: fields.state, since: now, updated: now,
+            place: fields.place ?? '', factions: fields.factions ?? [], aka: [], rev, by: caller,
+            ...(fields.keep === true ? { keep: true } : {}), fire: { rev, by: caller },
+        };
+        chronicle.events[id] = event;
+        const gone = prune(chronicle);
+        if (!Object.hasOwn(chronicle.events, id)) return { summary: `World: ${fields.name} has ended (too old to keep).`, narrate: false, data: { event: null, pruned: gone } };
+        return { summary: sentence(eventSummary(event, true)), narrate: false, data: { event: id, created: true, state: event.state, ...(gone.length ? { pruned: gone } : {}) } };
+    }
+
+    const event = chronicle.events[found.id];
+    const changes = changeEvent(chronicle, event, { summary: fields.summary, state: fields.state, place: fields.place, factions: fields.factions, by: caller, keep: fields.keep }, { now, rev });
     const gone = prune(chronicle);
     if (!changes.length) return { summary: `World: ${event.name} is unchanged.`, narrate: false, data: { event: event.id, state: event.state } };
+    // This fire's receipt is kept on the entry, so the Journal can find the change whatever else touches the entry later.
+    event.fire = { rev, by: caller };
     return { summary: sentence(eventSummary(event, false)), narrate: false, data: { event: event.id, state: event.state, ...(gone.length ? { pruned: gone } : {}) } };
 }
 
@@ -245,7 +385,9 @@ export function applyFactionLine(ctx, line) {
 
 // ---- the reader's commands -----------------------------------------------------------------------
 
-const EVENT_FIELDS = ['id', 'name', 'summary', 'state', 'place', 'factions'];
+const EVENT_FIELDS = ['id', 'name', 'summary', 'state', 'place', 'factions', 'keep', 'locked'];
+// The text fields of an event edit (`keep` and `locked` are true/false).
+const EVENT_TEXT = ['name', 'summary', 'state', 'place', 'factions'];
 const FACTION_FIELDS = ['id', 'name', 'summary', 'area', 'stance'];
 
 // A field of an edit: undefined (keep: missing or empty), '' (clear: null or "none"), or the text.
@@ -291,10 +433,25 @@ export function edit(ctx, payload = {}) {
 
     const read = {};
     for (const key of allowed.slice(1)) {
+        if (isEvent && !EVENT_TEXT.includes(key)) continue;
         read[key] = editText(payload[key], { clearable: !['name', 'summary', 'state'].includes(key) });
         if (read[key]?.error) return ctx.fail('INVALID', `The ${key} must be text.`);
     }
-    if (Object.values(read).every(value => value === undefined)) return ctx.fail('INVALID', 'Nothing to change: every field is empty.');
+    // `keep` (hold an open event in every tail) and `locked: false` (let the story's own lines move a lasting
+    // event's state again) are the reader's to set; only a pack event locks an entry.
+    let keep;
+    let by;
+    if (isEvent) {
+        if (payload.keep !== undefined && payload.keep !== null) {
+            if (typeof payload.keep !== 'boolean') return ctx.fail('INVALID', 'keep is true or false.');
+            keep = payload.keep;
+        }
+        if (payload.locked !== undefined && payload.locked !== null) {
+            if (payload.locked !== false) return ctx.fail('INVALID', 'Only an event of the story\'s pack locks a world event; locked can be set to false.');
+            by = null;
+        }
+    }
+    if (Object.values(read).every(value => value === undefined) && keep === undefined && by === undefined) return ctx.fail('INVALID', 'Nothing to change: every field is empty.');
 
     const entry = table[payload.id];
     const rev = revOf(ctx);
@@ -312,6 +469,8 @@ export function edit(ctx, payload = {}) {
             state,
             place: read.place !== undefined ? cleanName(read.place) : undefined,
             factions: read.factions !== undefined ? readNames(read.factions) : undefined,
+            keep,
+            by,
         };
         changes.push(...changeEvent(chronicle, entry, fields, { now: clockOf(ctx), rev }));
         prune(chronicle);

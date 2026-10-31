@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.0
+
+- **A pack's lasting changes to the world:** a pack event can now add a world event, or change one, with the new `chronicle.lasting` command, for changes the story must not undo. The entry is locked: a reply's `world` line can still add to its summary, place and factions, but cannot change its state or name (the change card says so), while your own edits in the Chronicle and another pack event can change anything. `keep` holds up to two open entries in every reply's reminder of what is under way, within the usual three.
+- A pack event can wait a set time after a world event began with `query('chronicle.passed', { name, minutes })`. Dates count from the Director's clock.
+- A pack event's lasting change waits for the story to have a date: while the Director's clock is not set the change is not made, the event is not counted as happened, and it is tried again on the next reply. An event that waits a set time after another one therefore always counts from a real date.
+- Story Director now declares the pack capability `chronicle-lasting`. A pack that lists it in `requires.capabilities` installs with Story Director and is turned away, with the reason, without it (or with a version that lacks the command).
+- Chats saved before this change load and read exactly as they did.
+
 ## 2.2.0
 
 - RPG Battle is no longer supported. Its rules packs cannot be imported; existing RPG Battle chats should stay on the previous versions.

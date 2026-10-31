@@ -44,7 +44,7 @@ import { fightsAmong } from './fights.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.2.0';
+export const VERSION = '2.3.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 export const STORY_BLOCK_RANGE = '>=2.6.0';
@@ -305,6 +305,7 @@ function sectionOf(list) {
 export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const owners = { domain: {}, command: {}, query: {}, kind: {}, tab: {}, screen: {}, widget: {}, feature: {} };
     const features = [];
+    const capabilities = [];
     const screenList = [];
     const widgets = {};
     const readsByPart = {};
@@ -351,6 +352,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 return query(state, withSettingArgs(name, args, own), own);
             }, query);
         }
+        for (const name of part.capabilities ?? []) if (!capabilities.includes(name)) capabilities.push(name);
         for (const feature of part.features ?? []) {
             own(owners.feature, feature?.id, ns, 'the feature');
             features.push({ ...feature });
@@ -445,6 +447,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     };
     if (Object.keys(widgets).length) def.widgets = widgets;
     if (features.length) def.features = features;
+    // The names a pack's `requires.capabilities` can ask of this module (Story Block lists a pack as missing one that no module declares).
+    if (capabilities.length) def.capabilities = capabilities;
     if (Object.keys(kinds).length) {
         def.capture = {
             kinds,

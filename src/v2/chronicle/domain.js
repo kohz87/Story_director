@@ -2,7 +2,7 @@
 // lookups (pure).
 //
 // chronicle = {
-//   events:   { [ev_id]: { id, name, summary, state, since, updated, place, factions, aka, rev } },
+//   events:   { [ev_id]: { id, name, summary, state, since, updated, place, factions, aka, rev, by?, keep? } },
 //   factions: { [fa_id]: { id, name, summary, area, stance, aka, rev } },
 //   seen:     [{ [ev_id]: round }],             // an older chat's rounds, written whole (read, never written now)
 //   seenAt:   { [ev_id]: round },               // the round an open event was last in the tail, by key
@@ -20,6 +20,13 @@
 // set), never written by the model. `rev` is the receipt that last changed the entry. `factions`
 // are the names a line gave (a faction need not be in the chronicle to be named). `aka` keeps a
 // name the entry had before the reader renamed it, so the story's old name still finds it.
+// `by` and `keep` are written only by `chronicle.lasting` (a pack event's lasting change, capture.js): `by` is
+// the `event:<id>` that wrote the entry, which locks its state against the story's own `world` lines (the
+// reader's edits and another `chronicle.lasting` may still change it); `keep: true` puts an open entry in
+// every reply's tail (at most MAX_KEPT, pick.js). `fire` is `{ rev, by }`, the receipt of the pack event
+// that last changed the entry, so the Journal can tell the change on the day its event fired even after the entry's
+// own `rev` has moved on (a `world` line in the same reply, a reader's edit). It is written whole with the entry's
+// own fields, never kept apart. An entry no pack event wrote has none of these fields.
 // `seenAt` and `surfaced` are kept apart from the events, so an event changes only when the story
 // or the reader changes it. `seenAt` is per-reply bookkeeping (SPEC §2.2, a scratch field): each pick
 // adds its events' rounds by key and removes closed ones by key, a world line that closes an event
@@ -48,6 +55,10 @@ export const MAX_NAME = 80;
 export const MAX_SUMMARY = 300;
 export const MAX_NAMED = 6;   // factions on one event
 export const MAX_AKA = 6;
+/** Open entries `keep: true` holds in every reply's tail at most (the most recently updated). */
+export const MAX_KEPT = 2;
+/** Who wrote a lasting entry: the `event:<id>` caller of `chronicle.lasting` (Story Block's own pattern). */
+export const LASTING_BY = /^event:[A-Za-z0-9][A-Za-z0-9._/:-]{0,119}$/;
 
 const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 
@@ -121,6 +132,16 @@ export function findIn(table, ref) {
 
 export const isOpen = event => OPEN_STATES.includes(event?.state);
 
+/** Whether a pack event wrote the entry (`by`): the story's own lines may not change its state. */
+export const isLocked = event => typeof event?.by === 'string';
+
+/** The open entries held in every tail (`keep`), at most MAX_KEPT, the most recently updated first (id breaks ties). */
+export function keptEvents(chronicle) {
+    const at = event => (isInt(event.updated) ? event.updated : -Infinity);
+    return Object.values(chronicle?.events ?? {}).filter(event => event?.keep === true && isOpen(event))
+        .sort((a, b) => at(b) - at(a) || (b.rev ?? 0) - (a.rev ?? 0) || (a.id < b.id ? -1 : 1)).slice(0, MAX_KEPT);
+}
+
 /** Events in a fixed order: open first (newest news first), then resolved (newest first); id breaks ties. */
 export function orderedEvents(chronicle) {
     const at = event => (isInt(event.updated) ? event.updated : -Infinity);
@@ -173,8 +194,14 @@ function eventErrors(id, event) {
     if (!namesOk(event.factions, MAX_NAMED)) errors.push(`${at}.factions must be a list of at most ${MAX_NAMED} names.`);
     if (!namesOk(event.aka, MAX_AKA)) errors.push(`${at}.aka must be a list of at most ${MAX_AKA} names.`);
     if (!isInt(event.rev) || event.rev < 0) errors.push(`${at}.rev must be a whole number.`);
+    if (event.by !== undefined && !(typeof event.by === 'string' && LASTING_BY.test(event.by))) errors.push(`${at}.by must be the event that wrote it ("event:<id>").`);
+    if (event.keep !== undefined && event.keep !== true) errors.push(`${at}.keep must be true when it is there.`);
+    if (event.fire !== undefined && !(isRecord(event.fire) && Object.keys(event.fire).length === 2 && isInt(event.fire.rev) && event.fire.rev >= 0
+        && typeof event.fire.by === 'string' && LASTING_BY.test(event.fire.by))) {
+        errors.push(`${at}.fire must be { rev, by }: the pack event that last changed it.`);
+    }
     for (const key of Object.keys(event)) {
-        if (!['id', 'name', 'summary', 'state', 'since', 'updated', 'place', 'factions', 'aka', 'rev'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
+        if (!['id', 'name', 'summary', 'state', 'since', 'updated', 'place', 'factions', 'aka', 'rev', 'by', 'keep', 'fire'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
     }
     return errors;
 }

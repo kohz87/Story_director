@@ -13,11 +13,15 @@
 // later delete takes away (its closing is passed over, ctx.ifThere); and after each delete the clock must
 // be what the replies left say: `~ time <date>` exact (a set, ctx.absolute), moves added on top. Between replies the
 // reader sometimes accepts an arc plan (director.arc.accept, its own names) or ends the arc.
+// Lasting changes (chronicle.lasting, a pack's events: tests/v2/chronicle/helpers/lasting-pack.js): a pack whose
+// events write and move world events (one chain tried before the first reply has set the clock, so it waits),
+// replies whose world lines name them, and the reader's edits of them, from a random stream of their own.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
+import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
 const SEEDS = [1, 2, 3];
 const REPLIES = 20;
@@ -182,8 +186,10 @@ for (const seed of SEEDS) {
         const restore = seedCrypto(seed);
         const r = prng(seed);
         const ra = prng(seed ^ 0xA5C);
+        const rl = prng(seed ^ 0x1A57);
         const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
         try {
+            assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
                 ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
                 ...BASE_WORLD.map(key => `+ world ${key} — afoot | state: ongoing`)]));
@@ -191,7 +197,7 @@ for (const seed of SEEDS) {
             const times = new Map();
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
-                const lines = replyLines(r, n);
+                const lines = [...replyLines(r, n), ...lastingLines(rl)];
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
                 times.set(host.ctx.chat.at(-1), timeOf(lines));
                 if (n === COINS_AT) host.settings.set('story-block', 'coins', [{ name: 'copper bit', plural: 'copper bits', value: 1 }, { name: 'gold', value: 100 }]);
@@ -205,6 +211,8 @@ for (const seed of SEEDS) {
                 } else if (ra.chance(0.15) && host.sdk.query('director.arc')?.current?.active) {
                     assert.ok((await host.sdk.command('director.arc.end', {})).ok);
                 }
+                const edit = lastingEdit(rl, host, n);
+                if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
                 if (!DELETE_AT.includes(n)) continue;
                 // A middle exchange in the first half (so many replies come after it): never the first.
                 const chat = host.ctx.chat;
@@ -237,6 +245,8 @@ for (const seed of SEEDS) {
             }
             await host.send('And then?', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
+            assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === 'events.fire' && entry.receipt.data?.then?.includes('chronicle.lasting')), `seed ${seed}: a pack event wrote a lasting change`);
+            t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             const again = await createHost({ modules: [fakeFightRunner(), createModule()] });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));

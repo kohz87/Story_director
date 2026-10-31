@@ -5,7 +5,9 @@
 // (in picks, `chronicle.round - chronicle.seen[id]`, capped; never shown counts as the cap) plus
 // how near its place is to the scene's (the same place 3, a known route away 2, the same region
 // 1, through the atlas's queries when they are there), plus a seeded fraction below 1 that only
-// decides between equal scores. The highest three are picked.
+// decides between equal scores. The highest three are picked. Open events a pack event's lasting change
+// marked `keep` (at most two, the most recently updated: domain.js keptEvents) take their seats first and
+// the rest of the three go by score; an old chat has none, so its picks are as they were.
 //
 // Before each reply, when more than three events are open and no pick was made for this reply
 // yet, `beforeGenerate` commits `chronicle.surface` (cause `system`): it makes the pick with the
@@ -15,7 +17,7 @@
 // pick. Without the hook (a host that runs none), the tail picks the same way with a hash of the
 // head's rev and each id instead, so the same state always gives the same events.
 
-import { isOpen, isRecord, keyOf, orderedEvents, seenOf, surfacedOf } from './domain.js';
+import { isOpen, isRecord, keptEvents, keyOf, orderedEvents, seenOf, surfacedOf } from './domain.js';
 import { toSlot } from '../slot.js';
 
 export const SURFACE = 'chronicle.surface';
@@ -82,8 +84,8 @@ export function nearness(query, here) {
 }
 
 /**
- * The ids of the open events to show, best first: at most `limit`. `round` is the pick being
- * made (`chronicle.round + 1`), `near(place)` from `nearness`, `jitter(id)` → [0, 1).
+ * The ids of the open events to show, best first: at most `limit`, the kept ones (`keep`) first. `round`
+ * is the pick being made (`chronicle.round + 1`), `near(place)` from `nearness`, `jitter(id)` → [0, 1).
  */
 export function pickEvents(chronicle, { round, near = () => 0, jitter = () => 0, limit = TAIL_EVENTS } = {}) {
     const seen = seenOf(chronicle);
@@ -93,7 +95,8 @@ export function pickEvents(chronicle, { round, near = () => 0, jitter = () => 0,
         return { id: event.id, score: stale + near(event.place) + jitter(event.id) };
     });
     scored.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1));
-    return scored.slice(0, limit).map(entry => entry.id);
+    const held = keptEvents(chronicle).map(event => event.id);
+    return [...held, ...scored.map(entry => entry.id).filter(id => !held.includes(id))].slice(0, limit);
 }
 
 /** Whether `surfaced` is the pick for the reply being written now (`at`: the chat's length). */
@@ -116,7 +119,9 @@ export function tailPick(chronicle, { at = null, rev = 0, near = () => 0 } = {})
     if (open.length <= TAIL_EVENTS) return pickEvents(chronicle, { round, near, jitter: hashed });
     const surfaced = surfacedOf(chronicle);
     if (pickFresh(surfaced, at)) {
-        const kept = surfaced.ids.filter(id => isOpen(chronicle.events?.[id]));
+        // An event marked `keep` since the pick was made (or a pick made before it) still has its seat.
+        const held = keptEvents(chronicle).map(event => event.id);
+        const kept = [...held, ...surfaced.ids.filter(id => isOpen(chronicle.events?.[id]) && !held.includes(id))];
         if (kept.length >= TAIL_EVENTS) return kept.slice(0, TAIL_EVENTS);
         const more = pickEvents(chronicle, { round: surfaced.round, near, jitter: hashed, limit: open.length }).filter(id => !kept.includes(id));
         return [...kept, ...more].slice(0, TAIL_EVENTS);
