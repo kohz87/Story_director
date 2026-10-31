@@ -1,7 +1,9 @@
 // Story Director v2, part screens: `story-director/status-card` (SPEC §13.1), the inline card under
 // each reply (mount `card`). Rows with no box of their own (they sit in the card's fold), labels on the
 // left: the story time, the place, its map coordinates when the atlas knows them, the weather (Story
-// Block's `scene.weather`, when the story set one) and the current goal (the active quest touched last:
+// Block's `scene.weather`, when the story set one), {{user}}'s rank, what they are wearing and their condition (Story Block's
+// `scene.you`, 2.10.0 and later, when the story set them; the Rank only in a game whose pack gives one, under that pack's own word, such as
+// "Guild rank") and the current goal (the active quest touched last:
 // its goal and step, with that quest's progress). A row with no value is left out. Only what {{user}} knows (world/known.js): the next thing coming
 // due is not here (a planned beat or clock would spoil the story); the Director screen shows it, behind
 // Reveal. A card shows **that reply's** state: Story Block's card mount runs
@@ -33,6 +35,18 @@ const TEMPLATE = `
   <div class="sd-row sd-coords" data-if="q.status.coords">
     <dt><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> Coordinates</dt>
     <dd>{{ q.status.coords }}</dd>
+  </div>
+  <div class="sd-row sd-rank" data-if="q.status.rank">
+    <dt><i class="fa-solid fa-user" aria-hidden="true"></i> {{ q.status.rankLabel }}</dt>
+    <dd>{{ q.status.rank }}</dd>
+  </div>
+  <div class="sd-row sd-wearing" data-if="q.status.wearing">
+    <dt><i class="fa-solid fa-user" aria-hidden="true"></i> Wearing</dt>
+    <dd>{{ q.status.wearing }}</dd>
+  </div>
+  <div class="sd-row sd-condition" data-if="q.status.condition">
+    <dt><i class="fa-solid fa-user" aria-hidden="true"></i> Condition</dt>
+    <dd>{{ q.status.condition }}</dd>
   </div>
   <div class="sd-row sd-goal" data-if="q.goal" data-class="sd-new: changed(state.director.threads[q.goal.id])">
     <dt><i class="fa-solid fa-flag" aria-hidden="true"></i> Goal</dt>
@@ -67,7 +81,7 @@ export const statusCardScreen = Object.freeze({
     defaultOn: true,
     data: {
         time: { query: 'director.time' },
-        // The place's map coordinates and the weather (screens/queries.js statusExtras).
+        // The place's map coordinates, the weather, {{user}}'s rank, what they wear and their condition (screens/queries.js statusExtras).
         status: { query: 'director.status' },
         goal: { query: 'director.goal' },
     },
