@@ -12,7 +12,7 @@ import { FEATURE } from './domain.js';
 
 export const KEY_PEOPLE_WIDGET = 'story-director.key-people';
 
-const SOURCES = Object.freeze({ here: 'here now', thread: 'in a quest or lead', npc: 'a dossier' });
+const SOURCES = Object.freeze({ here: 'here now', thread: 'in a quest or lead', cast: 'met from the cast', npc: 'a dossier' });
 
 function render(el, props, api) {
     const doc = el.ownerDocument ?? globalThis.document;

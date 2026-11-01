@@ -89,6 +89,13 @@ const NOW = `
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
   </section>
+  <section class="sd-kind wv-around ss-glass" data-kind="around" aria-label="Around here" data-if="q.cast.on == true">
+    ${label('Around here', { count: '{{ q.cast.heading }}', when: 'q.cast.heading' })}
+    <div class="wv-row" data-if="q.cast.hasNear"><span>Cast whose paths may cross yours here</span><b>{{ q.cast.near }}, not yet met</b></div>
+    <div class="wv-row" data-if="q.cast.hasMet"><span>Cast you have met</span><span class="wv-row-list"><span class="wv-row-item" data-each="q.cast.metList as m">{{ m.name }}<small data-if="m.news">, last heard: {{ m.news }}</small></span></span></div>
+    <div class="wv-row"><span>Met from the {{ q.cast.packLabel }}</span><b>{{ q.cast.met }} of {{ q.cast.total }}</b></div>
+    <p class="wv-note">{{ q.cast.note }}</p>
+  </section>
   <section class="sd-kind wv-key ss-glass" data-kind="key" aria-label="Key people" data-if="q.keys.on == true">
     ${label('Key people', { count: '{{ q.keys.count }} of {{ q.keys.cap }}' })}
     <ss-widget name="${KEY_PEOPLE_WIDGET}" data-props='{"bind":"q.keys"}'></ss-widget>
@@ -213,6 +220,10 @@ const CSS = `${BASE_CSS}
 .wv-key-pick:hover { border-color: var(--sd-accent); }
 .wv-key-from { color: var(--sd-muted); }
 .wv-key-note { margin: 0; font-size: 0.8em; line-height: 1.45; color: var(--sd-muted); }
+.wv-around { display: grid; gap: 4px; padding: 12px 14px; align-content: start; min-width: 0; }
+.wv-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 6px 0; border-top: 1px solid var(--sd-border); }
+.wv-row-list { display: grid; gap: 2px; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.wv-row-item small { color: var(--sd-muted); }
 .wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
 .wv-item .ss-listcard-value { max-width: 45%; min-width: 0; }
 .wv-item .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
@@ -261,6 +272,8 @@ const DATA = Object.freeze({
     journal: Object.freeze({ query: 'director.journal' }),
     // The Key people section (keypeople part, feature `story-director.key-people`): `{ on: true, … }`, null while the feature is off.
     keys: Object.freeze({ query: 'director.keyPeople.view' }),
+    // The Around here section (cast part, feature `story-director.cast`): the numbers and the met people's news, null while off or with no cast.
+    cast: Object.freeze({ query: 'director.cast.view' }),
     // The trip (atlas.trip, feature story-director.trip), shown under the weather while one is on: null with none.
     trip: Object.freeze({ query: 'atlas.trip' }),
 });

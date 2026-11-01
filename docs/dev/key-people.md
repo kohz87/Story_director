@@ -82,6 +82,6 @@ an older Story Director has no such query (callers ask through a try).
 ## Screens
 
 World → Now: section "Key people · n of cap" (widget `story-director.key-people`, `keypeople/widget.js`; rows, Unpin, "+ Pin"
-chooser listing who is here, who the threads {{user}} knows name, who Delta tracks; the token note). The per-reply status card:
+chooser listing who is here, who the threads {{user}} knows name, who was met from the cast, who Delta tracks; the token note). The per-reply status card:
 "<name> is back" / "<name> is no longer a key person" lines in its body and at the head of its closed line, from `notes`
 (`changed(n)`). Settings → Modules → Story Director → Key people: the two numbers.

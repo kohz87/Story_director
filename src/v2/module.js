@@ -41,6 +41,7 @@ import { part as atlas } from './atlas/index.js';
 import { part as chronicle } from './chronicle/index.js';
 import { part as world } from './world/index.js';
 import { part as keypeople } from './keypeople/index.js';
+import { part as cast } from './cast/index.js';
 import { part as arc } from './arc/index.js';
 import { part as checks } from './checks/index.js';
 import { part as screens } from './screens/index.js';
@@ -55,7 +56,7 @@ export const VERSION = '2.6.0';
 export const STORY_BLOCK_RANGE = '>=2.12.0';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['arc', arc], ['checks', checks], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['arc', arc], ['checks', checks], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {
@@ -77,6 +78,11 @@ const LIVE_HOST = Object.freeze({
     substitute: text => tryLive(() => liveSdk()?.substitute?.(text), undefined),
     // Whether the reader has a feature on (Story Block's `sdk.feature`); undefined when it cannot be asked, which reads as on.
     feature: id => tryLive(() => liveSdk()?.feature?.(id), undefined),
+    // A model call for a part that needs one (the cast's planner): Story Block's `sdk.callModel`, when it has one.
+    callModel: request => liveSdk().callModel(request),
+    canCallModel: () => typeof liveSdk()?.callModel === 'function',
+    // SillyTavern's chat (the messages, for the part that reads the recent story), [] when there is none.
+    chat: () => tryLive(() => globalThis.SillyTavern?.getContext?.()?.chat, []),
 });
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -184,7 +190,12 @@ function partView(ns, view, shared) {
         ? id => view.settings(id)
         : id => (id === undefined || id === null || id === MODULE_ID ? view.settings : {});
     const own = shared(ns);
-    return Object.freeze({ ...view, fights: own.env.fights, settings: settingsFor(ns, base, { ...own, query: view.query }) });
+    return Object.freeze({
+        ...view, fights: own.env.fights, settings: settingsFor(ns, base, { ...own, query: view.query }),
+        // `model.callModel(request)` and `model.chat()`: the host's model call and the chat's messages, for a part that asks a model about the
+        // story (the cast's planner); absent where there is no model call.
+        ...(own.model ? { model: own.model } : {}),
+    });
 }
 
 // ---- stand-alone (WAVE rule 11) ----------------------------------------------------------------
@@ -273,11 +284,14 @@ const withFeature = (fn, from) => (typeof from?.feature === 'string' ? Object.as
 // hook gives the last answer that is not undefined.
 function mergeHook(name, entries, shared) {
     const partView_ = (ns, view) => partView(ns, view, shared);
+    // A hook that needs longer than the turn's default (the cast's planner answer is waited for) gives its limit (`fn.timeoutMs`); the merged one keeps the longest.
+    const limit = Math.max(0, ...entries.map(([, fn]) => (Number.isFinite(fn?.timeoutMs) ? fn.timeoutMs : 0)));
+    const withLimit = merged => (limit > 0 ? Object.assign(merged, { timeoutMs: limit }) : merged);
     if (entries.length === 1) {
         const [[ns, fn]] = entries;
-        return (view, ...rest) => fn(partView_(ns, view), ...rest);
+        return withLimit((view, ...rest) => fn(partView_(ns, view), ...rest));
     }
-    return async (view, ...rest) => {
+    return withLimit(async (view, ...rest) => {
         if (name === 'beforeGenerate' || name === 'afterCapture') {
             const lines = [];
             const commands = [];
@@ -295,7 +309,7 @@ function mergeHook(name, entries, shared) {
             if (out !== undefined) answer = out;
         }
         return answer;
-    };
+    });
 }
 
 // The settings panel's own part (`settings.section(el, api)`): a part's function, keeping its `feature`
@@ -327,7 +341,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
     };
-    const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [], env });
+    // The model call a part may ask for (the host's `callModel`); built each time the parts' views are, so a host that gains or loses it is followed.
+    const modelOf = () => (typeof host?.callModel === 'function' && (typeof host.canCallModel !== 'function' || host.canCallModel()) ? Object.freeze({ callModel: request => host.callModel(request), chat: () => (typeof host.chat === 'function' ? host.chat() : []) }) : null);
+    const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [], env, model: modelOf() });
     const domains = {};
     const commands = {};
     const queries = {};
@@ -481,7 +497,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => {
             const merged = mergeHook(name, entries, shared);
             // Before each reply: what the module set is, before the prompt is assembled.
-            return [name, name === 'beforeGenerate' ? (view, ...rest) => { learn(view); return merged(view, ...rest); } : merged];
+            return [name, name === 'beforeGenerate'
+                ? Object.assign((view, ...rest) => { learn(view); return merged(view, ...rest); }, Number.isFinite(merged.timeoutMs) ? { timeoutMs: merged.timeoutMs } : {})
+                : merged];
         })),
         settings: { defaults, schema, ...(sectionOf(sections) ? { section: sectionOf(sections) } : {}) },
         tabs,
