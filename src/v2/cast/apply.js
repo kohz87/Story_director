@@ -12,15 +12,15 @@
 // what the step does cannot differ. `env`: { now, rev, touch(key) (marks a change inside a person that a deleted reply may have
 // made, `ctx.ifThere`), note(entry) (adds a note for the reply's card; absent on a copy), packName(pack) }.
 
-import { MAX_DOING, MAX_PEOPLE, MAX_PLACE, MAX_REASON, cutPoints, isAlive, isInt, isMet, isRecord, personKey, slotOf, tables } from './domain.js';
+import { MAX_DOING, MAX_PEOPLE, MAX_PLACE, MAX_REASON, cutPoints, cutWords, isAlive, isInt, isMet, isRecord, personKey, slotOf, tables } from './domain.js';
 
 const noop = () => {};
 
 /** A person as the world first holds them: at their start, doing their routine (else working towards their goal). */
 export function newcomer(entry, { now, rev }) {
     return {
-        pack: entry.pack, eid: entry.id, name: entry.name, ...(entry.aliases.length ? { aliases: [...entry.aliases] } : {}), ver: entry.ver,
-        joined: isInt(now) ? now : null, where: entry.place, doing: cutPoints(entry.routine || entry.goal, MAX_DOING), since: isInt(now) ? now : null,
+        pack: entry.pack, eid: entry.id, name: entry.name, ...(entry.aliases.length ? { aliases: [...entry.aliases] } : {}), ver: entry.ver, ...(entry.sig ? { sig: entry.sig } : {}),
+        joined: isInt(now) ? now : null, where: entry.place, doing: cutWords(entry.routine || entry.goal, MAX_DOING), since: isInt(now) ? now : null,
         alive: true, met: null, heard: null, rev,
     };
 }
@@ -35,7 +35,7 @@ const sameAliases = (a, b) => (Array.isArray(a) ? a : []).join('\u0001') === (Ar
  */
 export function planSync(slice, cast, { now = null } = {}) {
     const { people } = tables(slice);
-    const out = { add: [], update: [], drop: [], init: false, updated: [] };
+    const out = { add: [], update: [], drop: [], init: false, updated: [], changed: new Set() };
     if (!cast?.listed) return out;
     let room = MAX_PEOPLE - Object.keys(people).length;
     for (const entry of cast.entries) {
@@ -47,9 +47,13 @@ export function planSync(slice, cast, { now = null } = {}) {
             }
             continue;
         }
-        // A met person keeps the words they were met with: only the version they were last seen at moves on.
-        if (person.ver !== entry.ver || (!isMet(person) && (person.name !== entry.name || !sameAliases(person.aliases, entry.aliases)))) {
-            out.update.push({ key: entry.key, ver: entry.ver, name: entry.name, aliases: [...entry.aliases] });
+        // A met person keeps the words they were met with: only the version and fingerprint they were last seen at move on. A version bump
+        // alone is no change: what the entry says is (its fingerprint; a person kept before fingerprints existed has it noted silently).
+        const edited = Boolean(entry.sig) && Boolean(person.sig) && person.sig !== entry.sig;
+        const noted = Boolean(entry.sig) && person.sig !== entry.sig;
+        if (person.ver !== entry.ver || noted || (!isMet(person) && (person.name !== entry.name || !sameAliases(person.aliases, entry.aliases)))) {
+            out.update.push({ key: entry.key, ver: entry.ver, ...(entry.sig ? { sig: entry.sig } : {}), name: entry.name, aliases: [...entry.aliases] });
+            if (!isMet(person) && (edited || person.name !== entry.name || !sameAliases(person.aliases, entry.aliases))) out.changed.add(entry.key);
         }
     }
     for (const [key, person] of Object.entries(people)) {
@@ -64,7 +68,7 @@ export function planSync(slice, cast, { now = null } = {}) {
         if (!had.length) continue;
         out.updated.push({
             pack, n: out.add.filter(entry => entry.pack === pack).length,
-            changed: out.update.filter(item => item.key.startsWith(`${pack}:`) && !isMet(people[item.key])).length,
+            changed: [...out.changed].filter(key => key.startsWith(`${pack}:`)).length,
             from: had[0].ver, to: cast.packs?.[pack]?.version ?? '',
         });
     }
@@ -76,7 +80,7 @@ export const syncEmpty = plan => !plan.add.length && !plan.update.length && !pla
 
 /** The payload of `cast.sync` for a plan (what the step needs, no pack text beyond a person's start). */
 export const syncPayload = plan => ({
-    ...(plan.add.length ? { add: plan.add.map(entry => ({ pack: entry.pack, id: entry.id, name: entry.name, ...(entry.aliases.length ? { aliases: entry.aliases } : {}), ver: entry.ver, place: entry.place, doing: cutPoints(entry.routine || entry.goal, MAX_DOING) })) } : {}),
+    ...(plan.add.length ? { add: plan.add.map(entry => ({ pack: entry.pack, id: entry.id, name: entry.name, ...(entry.aliases.length ? { aliases: entry.aliases } : {}), ver: entry.ver, ...(entry.sig ? { sig: entry.sig } : {}), place: entry.place, doing: cutWords(entry.routine || entry.goal, MAX_DOING) })) } : {}),
     ...(plan.update.length ? { update: plan.update } : {}),
     ...(plan.drop.length ? { drop: plan.drop } : {}),
     ...(plan.updated.length ? { updated: plan.updated.map(item => ({ pack: item.pack, n: item.n, changed: item.changed, from: item.from, to: item.to })) } : {}),
@@ -98,6 +102,7 @@ export function applySync(cast, payload, env) {
         touch(item.key);
         const person = cast.people[item.key];
         person.ver = item.ver;
+        if (item.sig) person.sig = item.sig;
         // A met person keeps the words they were met with; the entry's new ones are not copied over a dossier.
         if (!isMet(person)) {
             person.name = item.name;
@@ -148,11 +153,11 @@ export function applyAdvance(cast, payload, env) {
         if (!person || !isAlive(person)) continue;
         touch(move.key);
         if (move.where) person.where = cutPoints(move.where, MAX_PLACE);
-        if (move.doing) person.doing = cutPoints(move.doing, MAX_DOING);
+        if (move.doing) person.doing = cutWords(move.doing, MAX_DOING);
         person.since = to;
         if (isMet(person)) {
             // A slot, written whole (../slot.js): a later reply never changes inside what an earlier one wrote.
-            person.heard = [{ on: to, text: cutPoints(move.doing || move.where, MAX_DOING) }];
+            person.heard = [{ on: to, text: cutWords(move.doing || move.where, MAX_DOING) }];
             done.news.push({ name: person.name, text: person.heard[0].text });
         }
         done.moved += 1;
@@ -186,6 +191,7 @@ const lowerFirst = text => text.replace(/^(\p{Lu})(\p{Ll})/u, (_all, first, seco
 
 /** The reader's words for why two paths crossed (the card's "Why"). `reason`: the planner's sentence for a goal ('' for a place). */
 export function whyText({ name, why, reason, doing, where }) {
+    if (why === 'story') return `${name} was already in the story when the cast reached them (met in the story); no roll.`;
     if (why === 'goal') return `${cutPoints(reason, MAX_REASON - 60)} Their own goal pulls them to you, so they arrive; no roll.`.trim();
     const at = where ? ` at ${where}` : '';
     const said = lowerFirst(short(doing));
@@ -200,27 +206,34 @@ export function whyNarrator(person) {
     return `${said ? `${said}, ` : ''}they are at ${met.where || person?.where || 'this place'}, the place of this scene.`.replace(/^(\p{Ll})/u, c => c.toUpperCase());
 }
 
-/** Applies a `cast.meet` payload (`{ at, who: [{ key, why, reason }] }`). Returns the keys met. */
+/**
+ * Applies a `cast.meet` payload (`{ at, who: [{ key, why, reason, place? }] }`). Returns the keys met. `place`: the party's place. Someone
+ * who comes by their goal is where the party is, not at their start; someone the story already had in the scene (`why: 'story'`) is met at
+ * that moment and is not brought in again (no cue).
+ */
 export function applyMeet(cast, payload, env) {
     const { now = null, rev = 0, touch = noop, note = null, packName = pack => pack } = env;
     const met = [];
+    const cued = [];
     for (const item of payload.who ?? []) {
         const person = Object.hasOwn(cast.people, item.key) && isRecord(cast.people[item.key]) ? cast.people[item.key] : null;
         if (!person || !isAlive(person) || isMet(person)) continue;
         touch(item.key);
         const reason = item.why === 'goal' ? cutPoints(item.reason, MAX_REASON) : '';
+        const here = cutPoints(item.place, MAX_PLACE);
+        if (item.why !== 'place' && here) person.where = here;
         person.met = { on: isInt(now) ? now : null, where: person.where, why: item.why, reason, rev };
         const shown = cutPoints(whyText({ name: person.name, why: item.why, reason, doing: person.doing, where: person.where }), 400);
         met.push(item.key);
+        if (item.why !== 'story') cued.push(item.key);
         if (typeof note === 'function') {
             note({
-                kind: 'met', head: `Paths crossed: ${person.name}`, tag: `${packName(person.pack)} cast · first meeting`,
-                rest: `Why: ${shown} The narrator is told to bring them in; a swipe rewrites the scene, not who you meet.`,
+                kind: 'met', head: `Paths crossed: ${person.name}`, tag: `${packName(person.pack)} cast · ${item.why === 'story' ? 'met in the story' : 'first meeting'}`,
+                rest: item.why === 'story' ? `Why: ${shown}` : `Why: ${shown} The narrator is told to bring them in; a swipe rewrites the scene, not who you meet.`,
                 line: `Paths crossed: ${person.name}`,
             });
         }
     }
-    if (met.length && isInt(payload.at)) cast.meeting = [{ at: payload.at, keys: met.slice(0, 4), rev }];
+    if (cued.length && isInt(payload.at)) cast.meeting = [{ at: payload.at, keys: cued.slice(0, 4), rev }];
     return met;
 }
-

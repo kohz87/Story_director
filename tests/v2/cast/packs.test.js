@@ -94,3 +94,33 @@ test('a pack switched off keeps its people as they are (hidden, not moved or met
         host.close();
     }
 });
+
+test('a version bump alone is no change: no line, no "entries changed"; with new people the line counts only the entries that were really edited', async t => {
+    quiet(t);
+    const source = castSource([at('fenna', 'Bluewatch docks'), at('sera', 'Gwenmar')]);
+    const host = await castHost({ source });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        await host.send('Look.', said('Smoke.'));
+        source.packs[0].version = '1.2.0';
+        await host.send('Look.', said('Smoke.'));
+        assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 0, 'a bump with nothing new says nothing');
+        assert.deepEqual(Object.values(people(host)).map(person => person.ver), ['1.2.0', '1.2.0'], 'but the version they were seen at moves on');
+        // A bump, one new person, nobody edited.
+        source.packs[0].version = '1.3.0';
+        source.entries.push(at('tam', 'Kesh'));
+        await host.send('Look.', said('Smoke.'));
+        const bump = Object.values(slice(host).notes).find(item => item.kind === 'updated');
+        assert.equal(bump.rest, '1 new person now lives in the world from today, hidden until you meet them. People you have met keep their dossiers as they are.');
+        // An edit counts, once.
+        source.packs[0].version = '1.4.0';
+        source.entries = source.entries.map(item => (item.id === 'sera' ? { ...item, look: 'a new look' } : item)).concat([at('una', 'Pearlbank')]);
+        await host.send('Look.', said('Smoke.'));
+        const edit = Object.values(slice(host).notes).filter(item => item.kind === 'updated').at(-1);
+        assert.match(edit.rest, /^1 new person now lives in the world from today, hidden until you meet them\. 1 unmet person's entry changed \(kept where they are\)\./);
+        await host.send('Look.', said('Smoke.'));
+        assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 2, 'once');
+    } finally {
+        host.close();
+    }
+});

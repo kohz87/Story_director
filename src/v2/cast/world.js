@@ -76,7 +76,8 @@ export function paceOf(settings) {
 
 /** How many new faces the pace still allows at story minute `now` (people met on the same story day, or in the last `days` days). */
 export function roomLeft(slice, now, pace) {
-    const met = peopleOf(slice).filter(isMet);
+    // Someone the story already had in the scene (`why: 'story'`) is no new face: they do not use up the pace.
+    const met = peopleOf(slice).filter(person => isMet(person) && person.met.why !== 'story');
     const recent = met.filter(person => {
         const on = person.met.on;
         if (!isInt(on) || !isInt(now)) return true;
@@ -93,6 +94,7 @@ export function roomLeft(slice, now, pace) {
  */
 export function chooseMeetings(slice, cast, { now = null, party = {}, comes = [], fight = false, pace, present = new Set(), pinned = new Set() } = {}) {
     if (fight) return [];
+    const place = party?.place ?? '';
     let room = Math.min(PER_REPLY, roomLeft(slice, now, pace));
     if (room <= 0) return [];
     const eligible = movable(slice, cast, { present, pinned }).filter(item => !item.met);
@@ -100,7 +102,7 @@ export function chooseMeetings(slice, cast, { now = null, party = {}, comes = []
     for (const come of comes) {
         const item = eligible.find(candidate => candidate.key === come.key);
         if (!item || !item.entry.drawnTo.length || picks.some(pick => pick.key === item.key)) continue;
-        picks.push({ key: item.key, why: 'goal', reason: come.reason });
+        picks.push({ key: item.key, why: 'goal', reason: come.reason, place });
         if (picks.length >= room) return picks;
     }
     room -= picks.length;
@@ -117,8 +119,20 @@ export function chooseMeetings(slice, cast, { now = null, party = {}, comes = []
     return picks;
 }
 
+// Story Block's present list drops a leading article ("the scout" is listed as "scout"), so an alias is matched with it too.
+const bare = key => key.replace(/^(?:the|a|an)\s+/, '');
+
+/**
+ * The unmet people of the packs' cast the story already has in the scene under their name or an alias (`present`: keys): they are met at
+ * that moment, "met in the story", as `{ key, why: 'story', reason: '', place }` (no cue: the narrator has them already).
+ */
+export function metInTheStory(slice, cast, { present = new Set(), party = {} } = {}) {
+    return peopleOf(slice)
+        .filter(person => !isMet(person) && isAlive(person) && cast.byKey.has(person.key) && keysOfPerson(person).some(key => present.has(key) || present.has(bare(key))))
+        .map(person => ({ key: person.key, why: 'story', reason: '', place: party?.place ?? '' }));
+}
+
 /** Unmet, living people in the world's pack whose place is the party's now: how many "may cross your path here". */
 export function nearCount(slice, cast, { party = {}, present = new Set(), pinned = new Set() } = {}) {
     return movable(slice, cast, { present, pinned }).filter(item => !item.met && atParty(item.person.where, party)).length;
 }
-

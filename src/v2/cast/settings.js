@@ -17,7 +17,8 @@ const field = spec => Object.freeze({ ...spec, feature: FEATURE, group: 'The cas
 export const SCHEMA = Object.freeze({
     on: field({ type: 'bool', label: 'The pack\'s cast lives off-screen', help: 'People a pack lists move on while you are elsewhere, and you meet them by place and routine, or when their goal leads them to you. Off: nobody moves or arrives; what is kept stays.' }),
     faces: field({
-        type: 'choice', label: 'New faces at most',
+        // Compact pills (Story Block's segmented choice); a host without it draws the same choice as a dropdown.
+        type: 'choice', form: 'segmented', label: 'New faces at most',
         options: Object.entries(FACES).map(([value, face]) => ({ value, label: face.label })),
         help: 'You meet someone the first time you are at their place while they are there, or when their goal leads them to you. This keeps it to a few at a time; the rest wait. Never during a fight.',
     }),

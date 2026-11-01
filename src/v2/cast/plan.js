@@ -12,7 +12,7 @@
 //
 // The same call, asked only for the `>` lines, judges a goal touched by the story between two days (index.js `touched`).
 
-import { MAX_DOING, MAX_PLACE, MAX_REASON, cutPoints, flat } from './domain.js';
+import { MAX_DOING, MAX_PLACE, MAX_REASON, cutPoints, cutWords, flat } from './domain.js';
 
 export const MAX_ANSWER_CHARS = 8000;
 export const MAX_LINES = 60;
@@ -49,7 +49,7 @@ function personLine(person) {
         person.goal ? `goal: ${cutPoints(person.goal, 120)}` : '',
         person.routine ? `routine: ${cutPoints(person.routine, 100)}` : '',
         `now at: ${cutPoints(person.where, MAX_PLACE) || 'unknown'}`,
-        person.doing ? `doing: ${cutPoints(person.doing, MAX_DOING)}` : '',
+        person.doing ? `doing: ${cutWords(person.doing, MAX_DOING)}` : '',
         person.drawnTo?.length ? `drawn to: ${person.drawnTo.map(phrase => cutPoints(phrase, 80)).join('; ')}` : '',
         person.met ? 'has met them' : 'has not met them',
         person.mayDie ? 'may die' : '',
@@ -88,7 +88,7 @@ const LINE = /^([~>!])\s*cast\s+(.+)$/i;
 const FENCE = /^(?:```|~~~)/;
 
 // A part as one plain line: markup out, a separator the line form reads never survives inside it.
-const part = (value, points) => cutPoints(String(value ?? '').replace(/<[^>]*>/g, '').replace(/\*\*|__|`/g, '').replace(/\s[|—–]\s/g, ' ').replace(/\|/g, '/'), points);
+const part = (value, points) => cutWords(String(value ?? '').replace(/<[^>]*>/g, '').replace(/\*\*|__|`/g, '').replace(/\s[|—–]\s/g, ' ').replace(/\|/g, '/'), points);
 const refOf = value => String(value ?? '').replace(/^[\s"'`*_[(]+|[\s"'`*_\])]+$/g, '').toLowerCase();
 
 /**
@@ -193,4 +193,3 @@ export function createPlans({ size = 24, timer = { setTimeout, clearTimeout } } 
         get size() { return held.size; },
     };
 }
-

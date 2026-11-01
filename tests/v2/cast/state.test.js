@@ -220,3 +220,33 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
         again.close();
     }
 });
+
+test('a pack person the story already has in the scene (under their name or an alias) is met at that moment, "met in the story": no cue, no pace used, never skipped for good', async t => {
+    quiet(t);
+    const fenna = entry('fenna', { aliases: ['the ferrywoman'], start: { place: 'Kesh', goal: 'ferry', routine: '' } });
+    const brom = entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' } });
+    const host = await castHost({ source: castSource([fenna, brom, entry('una', { aliases: ['the diver'], start: { place: 'Pearlbank', goal: 'x', routine: '' } })]) });
+    try {
+        await host.send('Hello.', said('Dawn.', [...OPENING, '+ present the ferrywoman']));
+        await host.send('Look.', said('Smoke.'));
+        const world = people(host);
+        assert.deepEqual([world['ersveil:fenna'].met.why, world['ersveil:fenna'].met.where, world['ersveil:fenna'].met.reason], ['story', 'Harrow', ''], 'the ferrywoman is Fenna: met where the party is');
+        assert.equal(world['ersveil:una'].met, null, 'another alias, not in the scene: not met');
+        assert.equal(world['ersveil:brom'].met.why, 'place', 'and the day\'s one new face is still Brom: being in the story used none of the pace');
+        assert.match(castCue(host), /^\[Cast\] Brom comes into the scene/);
+        assert.doesNotMatch(castCue(host), /Fenna/, 'the narrator has her already: no cue for her');
+        assert.deepEqual(slice(host).meeting[0].keys, ['ersveil:brom']);
+        const note = Object.values(slice(host).notes).find(item => item.head === 'Paths crossed: Fenna');
+        assert.deepEqual([note.kind, note.tag], ['met', 'Ersveil cast · met in the story']);
+        assert.match(note.rest, /^Why: Fenna was already in the story when the cast reached them \(met in the story\); no roll\.$/);
+        assert.deepEqual(host.sdk.query('director.cast').map(person => person.id).sort(), ['brom', 'fenna']);
+        assert.deepEqual(validatorErrors(host), []);
+        await host.swipe(said('Smoke, again.'));
+        assert.equal(people(host)['ersveil:fenna'].met.why, 'story', 'a swipe keeps it');
+        const live = JSON.stringify(host.head());
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), live);
+    } finally {
+        host.close();
+    }
+});

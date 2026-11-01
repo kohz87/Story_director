@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { applyAdvance, applyMeet, applySync, planSync, syncEmpty, syncPayload, whyNarrator, whyText } from '../../../src/v2/cast/apply.js';
-import { initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
+import { cutWords, initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
 import { atParty, castOf, fightOn, leanFight, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
 import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/v2/cast/plan.js';
 import { chooseMeetings, dueMove, movable, paceOf, roomLeft } from '../../../src/v2/cast/world.js';
@@ -94,7 +94,8 @@ function synced(entries, mutate = () => {}) {
 test('sync: new entries join at the current minute at their start; a second look finds nothing to do; an unchanged entry is no update', () => {
     const { slice, cast } = synced([entry('fenna', { start: { place: 'Bluewatch docks', goal: 'ferry', routine: 'works the night ferry' } }), entry('sera', { start: { place: 'Gwenmar', goal: 'x' } })]);
     assert.deepEqual(Object.keys(slice.people).sort(), ['ersveil:fenna', 'ersveil:sera']);
-    assert.deepEqual(slice.people['ersveil:fenna'], { pack: 'ersveil', eid: 'fenna', name: 'Fenna', ver: '1.1.0', joined: SYNC_NOW, where: 'Bluewatch docks', doing: 'works the night ferry', since: SYNC_NOW, alive: true, met: null, heard: null, rev: 1 });
+    assert.match(slice.people['ersveil:fenna'].sig, /^[0-9a-f]{12}$/, 'a fingerprint of what the entry says');
+    assert.deepEqual({ ...slice.people['ersveil:fenna'], sig: undefined }, { sig: undefined, pack: 'ersveil', eid: 'fenna', name: 'Fenna', ver: '1.1.0', joined: SYNC_NOW, where: 'Bluewatch docks', doing: 'works the night ferry', since: SYNC_NOW, alive: true, met: null, heard: null, rev: 1 });
     assert.equal(slice.people['ersveil:sera'].doing, 'x', 'no routine: the goal');
     assert.deepEqual(slice.day, [{ at: SYNC_NOW, rev: 1 }]);
     assert.ok(syncEmpty(planSync(slice, cast, { now: SYNC_NOW })));
@@ -349,4 +350,37 @@ test('a Lean RPG fight: a Foes block with a named foe whose count is above 0; no
     assert.equal(leanFight(null), false);
     assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1 })), true);
     assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1 }), { leanOn: false }), false);
+});
+
+test('a pack update: a version bump alone is no change; an edited entry is, and counts once; a person kept before fingerprints existed has it noted silently', () => {
+    const { slice } = synced([entry('fenna'), entry('sera'), entry('brom')]);
+    const same = castFor({ ...entry('fenna'), packVersion: '1.2.0' }, { ...entry('sera'), packVersion: '1.2.0' }, { ...entry('brom'), packVersion: '1.2.0' }, { ...entry('tam'), packVersion: '1.2.0' });
+    const bumped = planSync(slice, same, { now: SYNC_NOW });
+    assert.deepEqual(bumped.update.map(item => item.key).sort(), ['ersveil:brom', 'ersveil:fenna', 'ersveil:sera'], 'the version moves on');
+    assert.deepEqual([...bumped.changed], [], 'but nothing was edited');
+    assert.deepEqual(bumped.updated.map(item => [item.n, item.changed]), [[1, 0]]);
+    const edited = castFor({ ...entry('fenna'), look: 'new look', packVersion: '1.2.0' }, { ...entry('sera'), packVersion: '1.2.0' }, { ...entry('brom'), packVersion: '1.2.0' }, { ...entry('tam'), packVersion: '1.2.0' });
+    const plan = planSync(slice, edited, { now: SYNC_NOW });
+    assert.deepEqual([...plan.changed], ['ersveil:fenna']);
+    assert.deepEqual(plan.updated.map(item => [item.n, item.changed]), [[1, 1]]);
+    // Applied, it settles: a second look finds nothing to do.
+    applySync(slice, syncPayload(plan), { now: SYNC_NOW, rev: 3 });
+    assert.ok(syncEmpty(planSync(slice, edited, { now: SYNC_NOW })), 'nothing left to do');
+    // Kept before fingerprints existed: noted, never counted as an edit.
+    delete slice.people['ersveil:sera'].sig;
+    const old = planSync(slice, edited, { now: SYNC_NOW });
+    assert.ok(old.update.some(item => item.key === 'ersveil:sera' && item.sig));
+    assert.ok(!old.changed.has('ersveil:sera'));
+});
+
+test('"doing" is cut at a word, not in the middle of one', () => {
+    const routine = 'Dawn to noon at the inspection quay; afternoons in the Watchhouse infirmary corner; after dusk at the Stray Oar, then the night ferry on the Branch.';
+    const cut = cutWords(routine, 120);
+    assert.ok(Array.from(cut).length <= 120 && cut.endsWith('…'));
+    assert.match(cut, /^Dawn to noon at the inspection quay; afternoons in the Watchhouse infirmary corner; after dusk at the Stray Oar, then…$/);
+    assert.equal(cutWords('short', 120), 'short');
+    assert.equal(cutWords('x'.repeat(30), 10), `${'x'.repeat(9)}…`, 'a long word with no space is cut where it is');
+    const { slice } = synced([entry('tansy', { start: { place: 'Bluewatch Village', goal: 'g', routine } })]);
+    assert.doesNotMatch(slice.people['ersveil:tansy'].doing, /\bthen t…$/);
+    assert.ok(slice.people['ersveil:tansy'].doing.endsWith('Stray Oar, then…'));
 });

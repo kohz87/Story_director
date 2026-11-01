@@ -17,7 +17,7 @@ import { cutPoints, isInt, keysOfPerson } from './domain.js';
 import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
-import { askedAbout, batchKey, chooseMeetings, dueMove, fingerprint, judgeKey, movable, paceOf, refsOf } from './world.js';
+import { askedAbout, batchKey, chooseMeetings, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf } from './world.js';
 
 const REPLY_TYPES = new Set(['normal', 'regenerate', 'swipe']);
 const normalizeType = type => String(type ?? 'normal').toLowerCase();
@@ -200,6 +200,8 @@ export function createCastHooks({ plans }) {
             const picks = chooseMeetings(world, frame.cast, {
                 now: frame.now, party: frame.party, comes, fight: fightOn(frame.query, view?.state, { leanOn: typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false }), pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
             });
+            // Someone the story already has in the scene is met at once, as they are (no cue, no pace).
+            picks.push(...metInTheStory(world, frame.cast, { present: frame.present, party: frame.party }));
             if (picks.length) {
                 const payload = { at, who: picks, names };
                 commands.push({ type: 'cast.meet', payload });
@@ -211,4 +213,3 @@ export function createCastHooks({ plans }) {
 
     return { afterReceive, beforeGenerate };
 }
-

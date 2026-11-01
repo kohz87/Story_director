@@ -9,6 +9,7 @@
 // }
 // person = { pack, eid (the entry's id; a field called `id` must be an ID like it_k3f9a2qz), name, aliases?, ver, joined, where, doing, since, alive, met, heard, rev }
 //   ver:    the pack version of the entry as last seen (a string; '' when the pack gives none)
+//   sig:    a short fingerprint of the entry's content (not its version), so an update is told apart from a version bump ('' when unknown)
 //   joined: the story minute they joined the world (null while the clock is not set)
 //   where / doing: where they are and what they do now (off-screen, kept by the planner's batches)
 //   met:    null while unmet, else { on, where, why: 'place' | 'goal', reason, rev } (a meeting is recorded on the reply)
@@ -37,7 +38,7 @@ export const MAX_KEY = 160;
 /** Replies whose notes are kept for their cards (the newest). */
 export const MAX_NOTE_REPLIES = 6;
 export const NOTE_KINDS = Object.freeze(['met', 'moved', 'updated']);
-export const WHYS = Object.freeze(['place', 'goal']);
+export const WHYS = Object.freeze(['place', 'goal', 'story']);
 
 /** The settings' defaults. `faces`: how many new faces may cross the party's path (day1, day2, week1). */
 export const FACES = Object.freeze({ day1: { label: '1 a day', count: 1, days: 1 }, day2: { label: '2 a day', count: 2, days: 1 }, week1: { label: '1 a week', count: 1, days: 7 } });
@@ -54,6 +55,16 @@ export const flat = value => (typeof value === 'string' || typeof value === 'num
 export function cutPoints(value, max) {
     const chars = Array.from(flat(value));
     return chars.length <= max ? chars.join('') : `${chars.slice(0, Math.max(0, max - 1)).join('').trimEnd()}…`;
+}
+
+/** `value` flattened and cut to `max` code points at a word boundary, with an ellipsis when it was longer. */
+export function cutWords(value, max) {
+    const chars = Array.from(flat(value));
+    if (chars.length <= max) return chars.join('');
+    const head = chars.slice(0, Math.max(0, max - 1)).join('');
+    const space = head.lastIndexOf(' ');
+    // At a space when one is past a third of the way; else the cut is where it is (a long word, no spaces).
+    return `${(space >= head.length / 3 ? head.slice(0, space) : head).trimEnd().replace(/[,;:\-–—]+$/, '')}…`;
 }
 
 /** The identity of a name (`lineKey`): lower case, punctuation squashed. '' for a name with no letters or digits. */
@@ -131,7 +142,7 @@ const timeOk = value => value === null || isInt(value);
 function personProblems(key, person) {
     const at = `cast.people.${key}`;
     if (!isRecord(person) || !textOk(person.pack, MAX_NAME) || !textOk(person.eid, MAX_NAME) || personKey(person.pack, person.eid) !== key || !textOk(person.name, MAX_NAME) || !keyOf(person.name)
-        || !textOk(person.ver, MAX_NAME) || !timeOk(person.joined) || !textOk(person.where, MAX_PLACE) || !textOk(person.doing, MAX_DOING) || !timeOk(person.since)
+        || !textOk(person.ver, MAX_NAME) || !(person.sig === undefined || textOk(person.sig, 24)) || !timeOk(person.joined) || !textOk(person.where, MAX_PLACE) || !textOk(person.doing, MAX_DOING) || !timeOk(person.since)
         || typeof person.alive !== 'boolean' || !isInt(person.rev)) return [`${at} is not { pack, eid, name, ver, joined, where, doing, since, alive, met, heard, rev }.`];
     if (person.aliases !== undefined && (!Array.isArray(person.aliases) || person.aliases.length > MAX_ALIASES || person.aliases.some(alias => !textOk(alias, MAX_NAME)))) return [`${at}.aliases is a list of at most ${MAX_ALIASES} names.`];
     const { met, heard } = person;

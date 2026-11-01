@@ -9,7 +9,7 @@ import { presetValue } from '../../vendor/story-block/src/v2/features.js';
 import { cueOf, tail, meetingFresh } from '../../../src/v2/cast/note.js';
 import { FEATURE } from '../../../src/v2/cast/domain.js';
 import { TAIL_BUDGET } from '../../../src/v2/cast/settings.js';
-import { OPENING, STATIC_KEY, TAIL_KEY, castCue, castHost, castSource, entry, people, receipts, said, sent, syncCast } from './helpers.js';
+import { OPENING, STATIC_KEY, TAIL_KEY, castCue, castHost, castSource, entry, people, receipts, said, sent, settle, syncCast } from './helpers.js';
 
 const quiet = t => t.mock.method(console, 'warn', () => {});
 
@@ -97,6 +97,70 @@ test('without a model the world still meets by place and nobody moves; a Continu
         await host.cont(said(' And on.'));
         assert.equal(host.sdk.receipts().filter(item => item.receipt.type.startsWith('cast.')).length, steps);
         assert.equal(castCue(host).includes('Fenna'), false);
+    } finally {
+        host.close();
+    }
+});
+
+// ---- the cue with real-length entries ------------------------------------------------------------------------------------------------
+
+import { readFileSync } from 'node:fs';
+import { castOf } from '../../../src/v2/cast/entries.js';
+import { whyNarrator } from '../../../src/v2/cast/apply.js';
+
+const REAL = JSON.parse(readFileSync(new URL('../../fixtures/ersveil-cast.json', import.meta.url), 'utf8')).map(item => ({ pack: 'ersveil', packVersion: '2.2.1', ...item }));
+const CLOSING = 'Bring them in naturally; do not treat them as known to {{user}} yet.';
+
+test('the cue keeps why now and how to bring them in whole for every real-length entry, a goal meeting and a place meeting alike; the descriptive fields give way', () => {
+    const cast = castOf((name, args) => (name === 'packs.content' ? (args?.kind === 'cast' ? structuredClone(REAL) : []) : null));
+    assert.equal(cast.entries.length, 12);
+    const room = TAIL_BUDGET * 4 - 8 - '[Cast] '.length;
+    let longest = 0;
+    for (const entry_ of cast.entries) {
+        for (const met of [
+            { why: 'goal', where: 'Bluewatch Village', reason: 'Someone is asking about Master Somner and the questions reached them on the road, so they came to find out who.' },
+            { why: 'place', where: entry_.place, reason: '' },
+        ]) {
+            const person = { name: entry_.name, aliases: entry_.aliases, where: entry_.place, doing: 'Dawn to noon at the inspection quay', met };
+            const cue = cueOf(person, entry_);
+            longest = Math.max(longest, Array.from(cue).length);
+            assert.ok(Array.from(cue).length <= room, `${entry_.name}: ${Array.from(cue).length} characters`);
+            assert.ok(cue.includes(`Why now: ${whyNarrator(person)}`), `${entry_.name} (${met.why}): the reason is whole`);
+            assert.ok(cue.endsWith(CLOSING), `${entry_.name}: the closing sentence is last and whole`);
+            assert.match(cue, /^[^.]+ comes into the scene in this reply\. It is their first meeting with \{\{user\}\}\./);
+        }
+    }
+    assert.ok(longest > room * 0.8, 'the real entries do fill the cue');
+});
+
+test('on the host: Siebert comes by his goal with the story\'s reason, Tansy by place; the narrator\'s line holds each reason and the closing sentence', async t => {
+    quiet(t);
+    const { createFakeModel } = await import('./helpers.js');
+    const pick = ids => REAL.filter(item => ids.includes(item.id)).map(({ pack: _pack, packVersion: _version, ...own }) => own);
+    const host = await castHost({
+        source: castSource(pick(['siebert-maas', 'tansy-millrace'])),
+        settings: { 'cast.faces': 'day2' },
+        model: createFakeModel(['> cast siebert-maas | someone is asking about Master Somner at the inn and the news reached him on the north road']),
+    });
+    try {
+        await host.send('Hello.', said('Day.', ['~ time June 3, 1200, 06:30 pm', '~ place Bluewatch Village | kind: settlement']));
+        await host.send('Look.', said('Dusk.', []));
+        // Tansy first (her routine has her at the quay after dusk), by place.
+        const tansy = castCue(host);
+        assert.match(tansy, /^\[Cast\] Tansy Millrace/);
+        assert.match(tansy, /Why now: They are at Bluewatch Village, the place of this scene\. Bring them in naturally; do not treat them as known to You yet\.$/);
+        await host.send('Next day.', said('Morning, and talk of someone asking about Master Somner.', ['~ time June 4, 1200, 08:00 am']));
+        await settle();
+        await host.send('Look.', said('Smoke.'));
+        const cue = castCue(host);
+        assert.match(cue, /^\[Cast\] Siebert Maas/);
+        assert.match(cue, /Why now: Someone is asking about Master Somner at the inn and the news reached him on the north road\. Their own goal brings them to You\./);
+        assert.ok(cue.endsWith(CLOSING.replace('{{user}}', 'You')));
+        assert.ok(Array.from(cue).length <= TAIL_BUDGET * 4 - 8);
+        // Where he is: with the party, not at his start.
+        assert.equal(people(host)['ersveil:siebert-maas'].where, 'Bluewatch Village');
+        assert.equal(people(host)['ersveil:siebert-maas'].met.where, 'Bluewatch Village');
+        assert.equal(host.sdk.query('director.cast').find(person => person.id === 'siebert-maas').where, 'Bluewatch Village');
     } finally {
         host.close();
     }

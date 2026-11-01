@@ -68,11 +68,11 @@ function checkSync(payload) {
     if (payload.names !== undefined && !(isRecord(payload.names) && Object.keys(payload.names).length <= 8 && Object.values(payload.names).every(name => textOk(name, MAX_NAME)))) return 'cast.sync: names is { pack: name }.';
     for (const item of payload.add ?? []) {
         if (!isRecord(item) || !textOk(item.pack, MAX_NAME) || !textOk(item.id, MAX_NAME) || !item.pack || !item.id || !textOk(item.name, MAX_NAME) || !item.name
-            || !textOk(item.ver, MAX_NAME) || !textOk(item.place, MAX_PLACE) || !textOk(item.doing, MAX_DOING)
+            || !textOk(item.ver, MAX_NAME) || !(item.sig === undefined || textOk(item.sig, 24)) || !textOk(item.place, MAX_PLACE) || !textOk(item.doing, MAX_DOING)
             || !(item.aliases === undefined || (Array.isArray(item.aliases) && item.aliases.length <= 6 && item.aliases.every(alias => textOk(alias, MAX_NAME))))) return 'cast.sync: each of add is { pack, id, name, aliases?, ver, place, doing }.';
     }
     for (const item of payload.update ?? []) {
-        if (!isRecord(item) || !keyOk(item.key) || !textOk(item.ver, MAX_NAME) || !textOk(item.name, MAX_NAME) || !(Array.isArray(item.aliases) && item.aliases.length <= 6 && item.aliases.every(alias => textOk(alias, MAX_NAME)))) return 'cast.sync: each of update is { key, ver, name, aliases }.';
+        if (!isRecord(item) || !keyOk(item.key) || !textOk(item.ver, MAX_NAME) || !(item.sig === undefined || textOk(item.sig, 24)) || !textOk(item.name, MAX_NAME) || !(Array.isArray(item.aliases) && item.aliases.length <= 6 && item.aliases.every(alias => textOk(alias, MAX_NAME)))) return 'cast.sync: each of update is { key, ver, sig?, name, aliases }.';
     }
     if ((payload.drop ?? []).some(key => !keyOk(key))) return 'cast.sync: drop is a list of keys.';
     for (const item of payload.updated ?? []) {
@@ -131,7 +131,7 @@ export function meet(ctx, payload = {}) {
         return ctx.fail('INVALID', 'cast.meet takes { at, who: [{ key, why, reason }] }.');
     }
     for (const item of payload.who) {
-        if (!isRecord(item) || !keyOk(item.key) || !WHYS.includes(item.why) || !textOk(item.reason ?? '', MAX_REASON)) return ctx.fail('INVALID', 'cast.meet: each of who is { key, why: place | goal, reason }.');
+        if (!isRecord(item) || !keyOk(item.key) || !WHYS.includes(item.why) || !textOk(item.reason ?? '', MAX_REASON) || !textOk(item.place ?? '', MAX_PLACE)) return ctx.fail('INVALID', 'cast.meet: each of who is { key, why: place | goal | story, reason, place? }.');
     }
     if (payload.names !== undefined && !(isRecord(payload.names) && Object.keys(payload.names).length <= 8 && Object.values(payload.names).every(name => textOk(name, MAX_NAME)))) return ctx.fail('INVALID', 'cast.meet: names is { pack: name }.');
     const cast = ctx.draft('cast');
@@ -141,4 +141,3 @@ export function meet(ctx, payload = {}) {
     const who = met.map(key => cast.people[key].name);
     return { summary: `Paths crossed: ${who.join(', ')}.`, narrate: false, data: { met: met.length, keys: met } };
 }
-

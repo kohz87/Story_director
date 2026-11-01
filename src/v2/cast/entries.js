@@ -5,6 +5,7 @@
 // goal, routine? }, drawnTo?[], meters?, stages?, fields?, secrets?, canDieUnmet? }. Here only the words the world needs to move a
 // person and to bring them in are read, cut to size; the entry itself goes to other modules whole, and only after the meeting.
 
+import { hashJson } from '../hash.js';
 import { DAY, MAX_ALIASES, MAX_NAME, MAX_PEOPLE, MAX_PLACE, cutPoints, flat, isInt, isRecord, keyOf, personKey } from './domain.js';
 
 const MIN_NAME = 3;
@@ -47,6 +48,8 @@ export function readEntry(raw) {
         routine: cutPoints(start.routine, 160),
         drawnTo: (Array.isArray(raw.drawnTo) ? raw.drawnTo : []).map(phrase => cutPoints(phrase, 80)).filter(Boolean).slice(0, 6),
         canDieUnmet: raw.canDieUnmet === true,
+        // What the entry says, not which version of the pack it came in: a bump with nothing changed is no change.
+        sig: (({ pack: _pack, packVersion: _version, ...own }) => hashJson(own).slice(0, 12))(raw),
         raw,
     };
 }

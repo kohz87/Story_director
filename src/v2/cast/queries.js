@@ -103,4 +103,3 @@ export const queries = {
     'director.cast.counts': tagged(countsQuery),
     'director.cast.view': tagged(viewQuery),
 };
-

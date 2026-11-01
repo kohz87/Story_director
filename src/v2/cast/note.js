@@ -6,7 +6,7 @@
 // no static text, so a story with no cast in its packs sends the same prompt as before.
 
 import { TAIL_BUDGET, castOn } from './settings.js';
-import { cutPoints, isInt, isRecord, slotOf, tables } from './domain.js';
+import { cutWords, isInt, isRecord, slotOf, tables } from './domain.js';
 import { whyNarrator } from './apply.js';
 import { castOf } from './entries.js';
 
@@ -19,22 +19,36 @@ export function meetingFresh(slot, at) {
 }
 
 const sentence = text => (/[.!?…]$/.test(text) ? text : `${text}.`);
-const field = (label, value, max) => {
-    const text = cutPoints(value, max);
-    return text ? sentence(`${label}: ${text}`) : '';
-};
 
-/** One person's cue. */
-export function cueOf(person, entry) {
+// The descriptive fields in the order they are kept, each with the most it may take.
+const FIELDS = [['Who', 'about', 240], ['Look', 'look', 200], ['Voice', 'voice', 140], ['Manner', 'personality', 140]];
+const CLOSING = 'Bring them in naturally; do not treat them as known to {{user}} yet.';
+const WHY_MAX = 260;
+
+/**
+ * One person's cue, at most `room` characters. What matters comes first and always survives whole: who comes (the name), why now (the
+ * reason the story gave, or where they are) and how to bring them in; the descriptive fields (who they are, how they look, how they
+ * speak, their manner, what they want) fill what is left, each cut at a word, and a field with no room is left out.
+ */
+export function cueOf(person, entry, room = TAIL_BUDGET * 4 - 8 - '[Cast] '.length) {
     const raw = entry?.raw ?? {};
     const names = [person.name, ...(Array.isArray(person.aliases) ? person.aliases.slice(0, 2) : [])];
-    const parts = [
-        `${names[0]}${names.length > 1 ? ` (also ${names.slice(1).join(', ')})` : ''} comes into the scene in this reply. It is their first meeting with {{user}}.`,
-        field('Who', raw.about, 240), field('Look', raw.look, 200), field('Voice', raw.voice, 140), field('Manner', raw.personality, 140), field('Wants', entry?.goal, 120),
-        field('Why now', whyNarrator(person), 260),
-        'Bring them in naturally; do not treat them as known to {{user}} yet.',
-    ];
-    return parts.filter(Boolean).join(' ');
+    const intro = `${names[0]}${names.length > 1 ? ` (also ${names.slice(1).join(', ')})` : ''} comes into the scene in this reply. It is their first meeting with {{user}}.`;
+    const why = sentence(`Why now: ${cutWords(whyNarrator(person), WHY_MAX)}`);
+    let left = room - [intro, why, CLOSING].reduce((sum, part) => sum + Array.from(part).length + 1, 0);
+    const kept = [];
+    for (const [label, key, max] of [...FIELDS, ['Wants', null, 120]]) {
+        const value = key === null ? entry?.goal : raw[key];
+        const flatText = cutWords(value, max);
+        if (!flatText) continue;
+        // `Label: ` and the full stop are the field's own; a field needs room for a few words at least.
+        const overhead = label.length + 3;
+        if (left - overhead < 24) continue;
+        const text = sentence(`${label}: ${cutWords(flatText, left - overhead - 1)}`);
+        kept.push(text);
+        left -= Array.from(text).length + 1;
+    }
+    return [intro, ...kept, why, CLOSING].join(' ');
 }
 
 /** `context.tail(view)` → `{ lines, optional }` (SPEC §5): the cue of who crosses the party's path in this reply. */
@@ -50,7 +64,7 @@ export function tail(view) {
     for (const key of meeting.keys.slice(0, 2)) {
         const person = isRecord(people[key]) ? people[key] : null;
         if (!person || !isRecord(person.met)) continue;
-        lines.push(`[Cast] ${cutPoints(cueOf(person, cast.byKey.get(key)), TAIL_BUDGET * 4 - 8)}`);
+        lines.push(`[Cast] ${cueOf(person, cast.byKey.get(key))}`);
     }
     return { lines, optional: [] };
 }

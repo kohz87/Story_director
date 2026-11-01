@@ -143,6 +143,7 @@ test('Settings -> Modules -> Story Director -> The cast: on/off, new faces at mo
             ['bool', 'Unmet cast can die off-screen', 'The cast', 'story-director.cast'],
             ['profile', 'Planner connection', 'The cast', 'story-director.cast'],
         ]);
+        assert.equal(field('faces').form, 'segmented', 'compact pills (the host\'s segmented choice), as in the mockup');
         assert.deepEqual(field('faces').options, [{ value: 'day1', label: '1 a day' }, { value: 'day2', label: '2 a day' }, { value: 'week1', label: '1 a week' }]);
         assert.match(field('faces').help, /Never during a fight\.$/);
         assert.match(field('unmetDie').help, /^Off: before you meet them they can be hurt, lose things or move, but not die\./);
