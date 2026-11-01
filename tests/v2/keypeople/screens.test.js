@@ -234,6 +234,7 @@ test('Settings → Modules → Story Director → Key people: the two numbers wi
         const cap = defs.schema['keypeople.cap'];
         const tokens = defs.schema['keypeople.tokens'];
         assert.deepEqual([cap.type, cap.label, cap.min, cap.feature], ['int', 'How many key people', 0, 'story-director.key-people']);
+        assert.deepEqual([cap.group, tokens.group], ['Key people', 'Key people'], 'a fold of their own (the host groups by the field\'s group)');
         assert.equal(cap.help, 'Pinned people whose off-screen story keeps going, in Lean too. Archiving a dossier or a death unpins them.');
         assert.deepEqual([tokens.type, tokens.label, tokens.min, tokens.max], ['int', 'Narrator budget for key people (tokens)', 0, undefined]);
         assert.equal(tokens.help, 'No upper limit. When those away need more, the ones returning soonest or whose story just moved are told first. Story Suite\'s overall budget (Settings → Tabs & Packs) still caps everything sent each reply.');
