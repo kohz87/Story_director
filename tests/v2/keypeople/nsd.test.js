@@ -35,10 +35,10 @@ test('the verdicts by Delta\'s Story Suite api: archived there is "archived", tr
     const slice_ = pinned(['Mara', 'Brom', 'Ren', 'Odda']);
     assert.deepEqual(nsdVerdicts(slice_, { api }), {
         released: [{ name: 'Mara', reason: 'archived' }, { name: 'Brom', reason: 'died' }],
-        known: ['Ren'],
+        known: [{ name: 'Ren' }],
     });
     // By an alias; a person Delta has never tracked ("Odda") is left alone.
-    assert.deepEqual(nsdVerdicts({ pins: { scout: { name: 'The Scout', since: null, rev: 1, aliases: ['Ren'] } }, away: {}, gone: {}, notes: {} }, { api }).known, ['The Scout']);
+    assert.deepEqual(nsdVerdicts({ pins: { scout: { name: 'The Scout', since: null, rev: 1, aliases: ['Ren'] } }, away: {}, gone: {}, notes: {} }, { api }).known, [{ name: 'The Scout' }]);
     // Delta's dossiers not loaded yet, or Delta off: nothing is said, so nobody is released.
     assert.deepEqual(nsdVerdicts(slice_, { api: fakeApi({ npcs: [] }) }), { released: [], known: [] });
     // Already noted as known: not told again.
@@ -59,11 +59,11 @@ test('the verdicts by Delta\'s queries: a pinned person it knew and no longer li
     const state = { pins: { ren: make('Ren'), brom: make('Brom'), mara: make('Mara', { nsd: true }), odda: make('Odda') }, away: {}, gone: {}, notes: {} };
     assert.deepEqual(nsdVerdicts(state, { query }), {
         released: [{ name: 'Brom', reason: 'died' }, { name: 'Mara', reason: 'archived' }],
-        known: ['Ren'],
+        known: [{ name: 'Ren' }],
     });
     // "Odda" was never known to Delta: never released. An empty answer (not loaded): nobody is.
     lists.known = [];
-    assert.deepEqual(nsdVerdicts(state, { query }), { released: [], known: [] });
+    assert.deepEqual(nsdVerdicts(state, { query, loaded: () => false }), { released: [], known: [] });
     assert.deepEqual(nsdVerdicts(state, { query: () => { throw new Error('no Delta'); } }), { released: [], known: [] });
     assert.deepEqual(nsdVerdicts(state, {}), { released: [], known: [] });
 });
@@ -174,6 +174,102 @@ test('the sync step is the system\'s: a click or the story cannot send it, and a
             assert.notEqual(out?.ok, true, JSON.stringify(payload));
         }
         assert.deepEqual(Object.keys(slice(host).pins), ['mara']);
+    } finally {
+        host.close();
+    }
+});
+
+// Delta's page api says whether its dossiers are loaded (`NPCStateDelta.uiStatus().hydrationStatus`, `isEnabled()`).
+const withPageApi = (status, fn) => async (...args) => {
+    const was = globalThis.NPCStateDelta;
+    globalThis.NPCStateDelta = { isEnabled: () => status.enabled !== false, uiStatus: () => ({ hydrationStatus: status.hydration }) };
+    try {
+        return await fn(...args);
+    } finally {
+        if (was === undefined) delete globalThis.NPCStateDelta; else globalThis.NPCStateDelta = was;
+    }
+};
+const syncs = host => host.sdk.receipts().filter(entry => entry.receipt.type === 'keypeople.sync');
+
+test('the only dossier archived: the key person leaves the list when Delta says its dossiers are loaded, and not while it is off or loading', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const status = { hydration: 'ready' };
+    await withPageApi(status, async () => {
+        const people = { Ren: {} };
+        const host = await keyHost({ delta: people });
+        try {
+            await host.send('Hello.', said('Dawn.', OPENING));
+            await pin(host, 'Ren');
+            await host.send('Next.', 'Quiet.');
+            assert.equal(slice(host).pins.ren.nsd, true, 'known to Delta');
+            assert.match(slice(host).pins.ren.npc, /^np_/, 'with its identity');
+            // Delta's dossiers are not loaded (the list is empty): nobody is released on silence.
+            delete people.Ren;
+            status.hydration = 'loading';
+            await host.send('Next.', 'Quiet.');
+            assert.deepEqual(Object.keys(slice(host).pins), ['ren']);
+            // Delta off: the same.
+            status.hydration = 'ready';
+            status.enabled = false;
+            await host.send('Next.', 'Quiet.');
+            assert.deepEqual(Object.keys(slice(host).pins), ['ren']);
+            // Loaded and on, and its only dossier gone: archived.
+            status.enabled = true;
+            await host.send('Next.', 'Quiet.');
+            assert.deepEqual(Object.keys(slice(host).pins), []);
+            assert.equal(slice(host).gone.ren.reason, 'archived');
+            assert.equal(syncs(host).length, 2);
+            assert.deepEqual(validatorErrors(host), []);
+        } finally {
+            host.close();
+        }
+    })();
+});
+
+test('a confirmed death that Delta archived reads "died" (its dossier by id says deceased), not "archived"; a person never known to Delta stays', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const people = { Ren: {}, Odda: {} };
+    const archived = {};
+    const host = await keyHost({ delta: people, archived });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        await pin(host, 'Ren');
+        await pin(host, 'Odda');
+        await pin(host, 'Stranger');
+        await host.send('Next.', 'Quiet.');
+        // Ren dies and is archived (another dossier remains), Odda is archived the ordinary way.
+        archived.Ren = { lifeState: 'deceased' };
+        archived.Odda = {};
+        delete people.Ren;
+        delete people.Odda;
+        people.Brom = {};
+        await host.send('Next.', 'Quiet.');
+        assert.deepEqual(Object.keys(slice(host).pins), ['stranger']);
+        assert.deepEqual([slice(host).gone.ren.reason, slice(host).gone.odda.reason], ['died', 'archived']);
+    } finally {
+        host.close();
+    }
+});
+
+test('a dossier renamed in Delta (the same identity) stays pinned', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const people = { Ren: { id: 'np_ren00001' }, Odda: {} };
+    const host = await keyHost({ delta: people });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        await pin(host, 'Ren');
+        await host.send('Next.', 'Quiet.');
+        assert.equal(slice(host).pins.ren.npc, 'np_ren00001');
+        people.Renard = people.Ren;
+        delete people.Ren;
+        await host.send('Next.', 'Quiet.');
+        await host.send('Next.', 'Quiet.');
+        assert.deepEqual(Object.keys(slice(host).pins), ['ren'], 'a rename is not an archive');
+        assert.deepEqual(slice(host).gone, {});
+        // Archived under the new name: it goes.
+        delete people.Renard;
+        await host.send('Next.', 'Quiet.');
+        assert.deepEqual(Object.keys(slice(host).pins), []);
     } finally {
         host.close();
     }

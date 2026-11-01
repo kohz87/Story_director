@@ -2,7 +2,7 @@
 // other file of the part reads it with. Pure.
 //
 // keypeople = {
-//   pins:  { [key]: { name, since, rev, aliases?, nsd? } },    // the key list: who is pinned (since: the story minute, or null; nsd: NPC State Delta knows them)
+//   pins:  { [key]: { name, since, rev, aliases?, nsd?, npc? } },    // the key list: who is pinned (since: the story minute, or null; nsd: NPC State Delta knows them; npc: their np_ identity there)
 //   away:  { [key]: { name, doing, since, back, steps: [{ date, text }], rev } }, // each pinned person who is away
 //   gone:  { [key]: { name, reason, on, rev } },               // who was taken off the list and why (the newest MAX_GONE)
 //   notes: { [id]: { sid, kind, name, head, rest, lead, rev } }, // what a reply changed (returned, no longer key), for its card
@@ -102,6 +102,7 @@ function pinProblems(key, pin) {
     const at = `keypeople.pins.${key}`;
     if (!isRecord(pin) || !textOk(pin.name, MAX_NAME) || !keyOf(pin.name) || keyOf(pin.name) !== key || !timeOk(pin.since) || !isInt(pin.rev)) return [`${at} is not { name, since, rev }.`];
     if (pin.nsd !== undefined && typeof pin.nsd !== 'boolean') return [`${at}.nsd is true or false.`];
+    if (pin.npc !== undefined && !/^np_[0-9a-z]{8}$/.test(pin.npc)) return [`${at}.npc is an NPC identity like np_k3f9a2qz.`];
     if (pin.aliases !== undefined && (!Array.isArray(pin.aliases) || pin.aliases.length > MAX_ALIASES || pin.aliases.some(alias => !textOk(alias, MAX_NAME)))) return [`${at}.aliases is a list of at most ${MAX_ALIASES} names.`];
     return [];
 }

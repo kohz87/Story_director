@@ -38,11 +38,31 @@ const safe = (fn, fallback) => {
 const keysOfEntry = entry => [entry?.name, ...array(entry?.aliases)].map(keyOf).filter(Boolean);
 const named = (list, keys) => list.find(entry => isRecord(entry) && keysOfEntry(entry).some(key => keys.includes(key)));
 
+/** Whether Delta has its chat's dossiers loaded (and is on), by its page api; false when it cannot be told. */
+export function deltaLoaded() {
+    try {
+        const api = globalThis.NPCStateDelta;
+        if (typeof api?.uiStatus !== 'function') return false;
+        if (typeof api.isEnabled === 'function' && api.isEnabled() === false) return false;
+        return api.uiStatus()?.hydrationStatus === 'ready';
+    } catch {
+        return false;
+    }
+}
+
+const NP_ID = /^np_[0-9a-z]{8}$/;
+
 /**
- * What Delta says about each pinned person: `{ released: [{ name, reason }], known: [name] }`. `released`: archived or dead
- * there; `known`: pinned people Delta knows now (to remember, so a later disappearance reads as archived).
+ * What Delta says about each pinned person: `{ released: [{ name, reason }], known: [{ name, id? }] }`. `released`: archived or
+ * dead there; `known`: pinned people Delta knows now (noted on the pin with their stable id, so a later disappearance reads as
+ * archived and a rename is not one).
+ *
+ * By its queries, a pinned person is looked up by the id noted on the pin first (`npc.dossier { id }`: it also answers for a
+ * confirmed death that Delta archived, whose `lifeState` says `deceased`, so that reads "died" and not "archived"); one it still
+ * knows under that id is active whatever it is called now. An empty `npc.known` is Delta off or not loaded, unless its page api
+ * says its dossiers are loaded (`loaded`): then a pin that was known is archived (the sole dossier was archived).
  */
-export function nsdVerdicts(slice, { api = suiteApi(), query = null } = {}) {
+export function nsdVerdicts(slice, { api = suiteApi(), query = null, loaded = deltaLoaded } = {}) {
     const { pins } = tables(slice);
     const released = [];
     const known = [];
@@ -57,20 +77,30 @@ export function nsdVerdicts(slice, { api = suiteApi(), query = null } = {}) {
             if (!entry) continue;
             if (entry.archived === true) released.push({ name: pin.name, reason: 'archived' });
             else if (!named(profiles, keys)) released.push({ name: pin.name, reason: 'died' });
-            else if (pin.nsd !== true) known.push(pin.name);
+            else if (pin.nsd !== true) known.push({ name: pin.name });
         }
         return { released, known };
     }
-    const names = typeof query === 'function' ? safe(() => query('npc.known', {}), null) : null;
-    if (!Array.isArray(names) || !names.length) return { released, known };
+    if (typeof query !== 'function') return { released, known };
+    const names = safe(() => query('npc.known', {}), null);
+    if (!Array.isArray(names)) return { released, known };
+    // Nothing known: Delta off or not loaded, unless it says it is loaded and a pinned person was known to it.
+    if (!names.length && !(pinned.some(pin => pin.nsd === true) && safe(() => loaded(), false) === true)) return { released, known };
     const here = names.map(keyOf).filter(Boolean);
     for (const pin of pinned) {
         const keys = keysOfPin(pin);
-        const dossier = keys.some(key => here.includes(key)) ? safe(() => query('npc.dossier', { name: pin.name }), null) : null;
-        if (dossier) {
-            if (dossier.lifeState === 'deceased') released.push({ name: pin.name, reason: 'died' });
-            else if (pin.nsd !== true) known.push(pin.name);
-        } else if (pin.nsd === true && !keys.some(key => here.includes(key))) released.push({ name: pin.name, reason: 'archived' });
+        const byName = keys.some(key => here.includes(key));
+        const byId = typeof pin.npc === 'string' && NP_ID.test(pin.npc) ? safe(() => query('npc.dossier', { id: pin.npc }), null) : null;
+        const dossier = byId ?? (byName ? safe(() => query('npc.dossier', { name: pin.name }), null) : null);
+        if (dossier?.lifeState === 'deceased') released.push({ name: pin.name, reason: 'died' });
+        else if (dossier || byName) {
+            let id = pin.npc;
+            if (typeof id !== 'string') {
+                const identity = safe(() => query('npc.identity', { name: pin.name }), null);
+                id = typeof identity?.id === 'string' && NP_ID.test(identity.id) ? identity.id : undefined;
+            }
+            if (pin.nsd !== true || (id && id !== pin.npc)) known.push({ name: pin.name, ...(id ? { id } : {}) });
+        } else if (pin.nsd === true) released.push({ name: pin.name, reason: 'archived' });
     }
     return { released, known };
 }

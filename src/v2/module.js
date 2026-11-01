@@ -322,10 +322,14 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
     // one set of modules).
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
-    const env = { fights: fightRunner() ?? true };
+    const env = { fights: fightRunner() ?? true, keyPeople: false };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
+        // Whether anyone is pinned (Key people): the feature's paragraph and grammar lines are taught only then, so a chat with no key
+        // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
+        const pins = view?.state?.domains?.keypeople?.pins;
+        if (isObject(view?.state?.domains)) env.keyPeople = isObject(pins) && Object.keys(pins).length > 0;
     };
     const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [], env });
     const domains = {};
@@ -376,7 +380,11 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             // A part's grammar may depend on the module set (`spec.grammar(env)`): read when the prompt is built.
             const grammar = spec.grammar;
             kinds[kind] = {
-                get grammar() { return typeof grammar === 'function' ? grammar({ fights: env.fights }) : grammar; },
+                // A line may be '' (the Key people's, while nobody is pinned): the host then leaves the kind out, so a function answers (the registry takes one for a kind with no line yet).
+                get grammar() {
+                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, keyPeople: env.keyPeople }) : grammar;
+                    return line === '' ? () => '' : line;
+                },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
                 // A kind a feature owns (MODULES §F100): Story Block leaves its grammar out, and its lines unused, while that feature is off.
                 ...(typeof spec.feature === 'string' ? { feature: spec.feature } : {}),
@@ -437,7 +445,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
         else grouped.push({ feature: chunk.feature, items: [chunk.static] });
     }
-    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople }) ?? '').trim()).filter(Boolean).join('\n');
     const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
         .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {

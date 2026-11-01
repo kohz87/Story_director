@@ -192,6 +192,9 @@ export function keyPeopleView(state, _args, tools) {
     const left = told.left > 0 ? ` ${told.left} more ${told.left === 1 ? 'is' : 'are'} away than fit, so ${told.left === 1 ? 'it is' : 'they are'} left out of a reply.` : '';
     return {
         on: true, cap, count: people.length, full: people.length >= cap, hasPeople: people.length > 0, people,
+        // The heading's count: "3 of 10", or "2 pinned · limit 1" when the limit was lowered under the number pinned.
+        countText: people.length > cap ? `${people.length} pinned · limit ${cap}` : `${people.length} of ${cap}`,
+        limitText: `You can have ${cap} key ${cap === 1 ? 'person' : 'people'}; unpin someone first.`,
         choices: choicesOf(slice, query, profiles),
         tokens: told.tokens, budget,
         note: `Key people who are away are told to the narrator each reply: about ${told.tokens} tokens now, of a ${budget}-token budget.${left} Pin someone with + Pin; their death, or archiving their dossier, unpins them.`,

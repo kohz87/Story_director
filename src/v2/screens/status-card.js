@@ -91,7 +91,7 @@ const CSS = `${BASE_CSS}
 // same text, from `director.status`). A host that draws the card on its own shows the title in its header, as before.
 export const STATUS_TITLE = 'Where things stand';
 // A key person's return or removal this reply leads the line ("Ren is back · 1:30 pm, Bluewatch Village"): their notes are what the reply changed in `keypeople.notes`.
-export const STATUS_SUMMARY = '<span data-each="state.keypeople.notes as n" data-if="changed(n)">{{ n.head }} · </span>{{ q.status.summary }}';
+export const STATUS_SUMMARY = '<span data-each="state.keypeople.notes as n" data-if="changed(n) && len(q.status.summary) > 0">{{ n.head }} · </span><span data-each="state.keypeople.notes as n" data-if="changed(n) && len(q.status.summary) == 0"><span data-if="n.lead != true"> · </span>{{ n.head }}</span>{{ q.status.summary }}';
 
 export const statusCardScreen = Object.freeze({
     id: STATUS_CARD_ID,
