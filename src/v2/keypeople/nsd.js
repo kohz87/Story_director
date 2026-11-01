@@ -57,9 +57,9 @@ const NP_ID = /^np_[0-9a-z]{8}$/;
  * dead there; `known`: pinned people Delta knows now (noted on the pin with their stable id, so a later disappearance reads as
  * archived and a rename is not one).
  *
- * By its queries, a pinned person is looked up by the id noted on the pin first (`npc.dossier { id }`: it also answers for a
- * confirmed death that Delta archived, whose `lifeState` says `deceased`, so that reads "died" and not "archived"); one it still
- * knows under that id is active whatever it is called now. An empty `npc.known` is Delta off or not loaded, unless its page api
+ * By its queries, a pinned person is looked up by the id noted on the pin first (`npc.dossier { id }`: it also answers for an archived
+ * dossier, with `archived: true`, and `lifeState: 'deceased'` for a confirmed death, which reads "died" and not "archived"); one it
+ * answers for that is not archived is active whatever it is called now. An empty `npc.known` is Delta off or not loaded, unless its page api
  * says its dossiers are loaded (`loaded`): then a pin that was known is archived (the sole dossier was archived).
  */
 export function nsdVerdicts(slice, { api = suiteApi(), query = null, loaded = deltaLoaded } = {}) {
@@ -92,7 +92,9 @@ export function nsdVerdicts(slice, { api = suiteApi(), query = null, loaded = de
         const byName = keys.some(key => here.includes(key));
         const byId = typeof pin.npc === 'string' && NP_ID.test(pin.npc) ? safe(() => query('npc.dossier', { id: pin.npc }), null) : null;
         const dossier = byId ?? (byName ? safe(() => query('npc.dossier', { name: pin.name }), null) : null);
+        // Delta answers `npc.dossier { id }` for an archived dossier too (`archived: true`, and `lifeState: 'deceased'` for a confirmed death).
         if (dossier?.lifeState === 'deceased') released.push({ name: pin.name, reason: 'died' });
+        else if (dossier?.archived === true) released.push({ name: pin.name, reason: 'archived' });
         else if (dossier || byName) {
             let id = pin.npc;
             if (typeof id !== 'string') {
