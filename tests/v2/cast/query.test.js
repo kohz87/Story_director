@@ -10,7 +10,7 @@ const quiet = t => t.mock.method(console, 'warn', () => {});
 
 test('director.cast: the met people only, each with where they are, the last news and the whole pack entry; copies; counts without names', async t => {
     quiet(t);
-    const brom = entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' }, aliases: ['the smith'], portrait: 'brom.webp', stages: [{ label: 'Wary' }], meters: { preset: 'townsfolk' } });
+    const brom = entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' }, aliases: ['the smith'], portrait: 'brom.webp', stages: [{ id: 'regular', name: 'Regular', needs: [{ meter: 'trust', at: 20 }] }], meters: { trust: 10 } });
     const fenna = entry('fenna', { start: { place: 'Bluewatch docks', goal: 'ferry', routine: 'works the night ferry' } });
     const host = await castHost({ source: castSource([brom, fenna]), model: createFakeModel(['~ cast brom | Kesh | selling blades at the Kesh fair']) });
     try {
@@ -22,7 +22,8 @@ test('director.cast: the met people only, each with where they are, the last new
         assert.deepEqual(Object.keys(met[0]).sort(), ['aliases', 'alive', 'doing', 'entry', 'id', 'key', 'lastHeard', 'met', 'name', 'pack', 'where']);
         assert.deepEqual([met[0].key, met[0].pack, met[0].id, met[0].name, met[0].aliases, met[0].alive, met[0].lastHeard], ['ersveil:brom', 'ersveil', 'brom', 'Brom', ['the smith'], true, null]);
         assert.deepEqual(met[0].met, { on: host.head().domains.director.time.minutes, where: 'Harrow' });
-        assert.deepEqual(met[0].entry, brom, 'the whole entry, as the pack lists it: portrait, secrets, meters, stages');
+        assert.deepEqual(met[0].entry, host.sdk.query('packs.content', { kind: 'cast' }).find(item => item.id === 'brom'), 'the whole entry, as the packs list it');
+        assert.deepEqual([met[0].entry.portrait, met[0].entry.meters, met[0].entry.stages.length, met[0].entry.secrets.length, met[0].entry.pack, met[0].entry.packVersion], ['brom.webp', { trust: 10 }, 1, 1, 'ersveil', '1.1.0'], 'portrait, secrets, meters, stages');
         // A copy: changing it changes nothing of the world or the pack.
         try { met[0].name = 'X'; met[0].entry.look = 'X'; } catch { /* frozen is as good */ }
         assert.equal(host.sdk.query('director.cast')[0].name, 'Brom');
@@ -40,6 +41,7 @@ test('director.cast: the met people only, each with where they are, the last new
         assert.equal(later.met.where, 'Harrow', 'where they were met is what it was');
         // The pack gone: still met, the entry is not there to give.
         host.source.entries = [fenna];
+        await host.send('Next.', said('Quiet.'));
         assert.equal(host.sdk.query('director.cast')[0].entry, undefined);
     } finally {
         host.close();

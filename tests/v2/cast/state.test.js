@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { leanFight } from '../../../src/v2/cast/entries.js';
 import { OPENING, castCue, castHost, castSource, createFakeModel, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
 
 const BROM = entry('brom', { start: { place: 'Harrow', goal: 'keep the forge lit', routine: 'at the forge in the morning' }, drawnTo: [] });
@@ -156,16 +157,16 @@ test('off means off: the feature switch and the setting stop every step, hook an
 
 test('a start place is the pack place\'s name, slug or alias, in any case; one the pack does not have leaves the person unplaced until the planner places them, and nothing crashes', async t => {
     quiet(t);
-    const place = (name, slug, aliases = []) => ({ id: `pack.ersveil/${slug}`, name, aliases });
+    const place = (name, slug, aliases = []) => ({ name, slug, aliases, x: 1, y: 1 });
     const at = (id, where) => entry(id, { start: { place: where, goal: `${id} goal`, routine: '' } });
-    const source = castSource([at('by-name', 'harrow'), at('by-slug', 'bluewatch-village'), at('by-alias', 'THE WATCH TOWN'), at('lost', 'Atlantis'), at('blank', '')]);
+    const source = castSource([at('by-name', 'harrow'), at('by-slug', 'bluewatch-village'), at('by-alias', 'THE WATCH TOWN'), at('lost', 'Atlantis')]);
     source.places = [place('Harrow', 'harrow'), place('Bluewatch Village', 'bluewatch-village', ['the Watch town']), place('Bluewatch Village / Guild Office', 'guild-office')];
     const model = createFakeModel(['~ cast lost | harrow | wandering in at last']);
     const host = await castHost({ source, model, settings: { 'cast.faces': 'day2' } });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
         const where = id => people(host)[`ersveil:${id}`].where;
-        assert.deepEqual(['by-name', 'by-slug', 'by-alias', 'lost', 'blank'].map(where), ['Harrow', 'Bluewatch Village', 'Bluewatch Village', '', '']);
+        assert.deepEqual(['by-name', 'by-slug', 'by-alias', 'lost'].map(where), ['Harrow', 'Bluewatch Village', 'Bluewatch Village', '']);
         assert.deepEqual(validatorErrors(host), []);
         await host.send('Look.', said('Smoke.'));
         assert.equal(people(host)['ersveil:by-name'].met.why, 'place', 'the party is at Harrow: the one placed by name (in any case) is there');
@@ -180,5 +181,42 @@ test('a start place is the pack place\'s name, slug or alias, in any case; one t
         assert.deepEqual(host.store.problems(), []);
     } finally {
         host.close();
+    }
+});
+
+test('never during a Lean RPG fight either: a Foes block with a foe in it holds the meetings back until the foes are gone; the RPG switched off is no fight', async t => {
+    quiet(t);
+    const { STANDARD_TEMPLATES } = await import('../../vendor/story-block/src/v2/lean-rpg/templates.js');
+    const host = await castHost({ source: castSource([entry('brom', { start: { place: 'Kesh', goal: 'forge', routine: '' } })]) });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        host.features.set('story-block.rpg', true);
+        const foes = STANDARD_TEMPLATES.find(item => item.name === 'Foes').definition;
+        assert.equal((await host.sdk.command('dm.define', { definition: structuredClone(foes) })).ok, true);
+        await host.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | class: 4', '~ place Kesh | kind: town']));
+        assert.equal(leanFight(host.head()), true, 'the Foes block holds a foe');
+        await host.send('Fight.', said('Steel rings.'));
+        await host.send('Fight.', said('Steel rings.'));
+        assert.equal(people(host)['ersveil:brom'].met, null, 'never during a fight');
+        // The RPG switched off: its blocks are no fight.
+        host.features.set('story-block.rpg', false);
+        await host.send('Fight.', said('Quiet at last.'));
+        assert.equal(people(host)['ersveil:brom'].met.why, 'place');
+    } finally {
+        host.close();
+    }
+    const again = await castHost({ source: castSource([entry('brom', { start: { place: 'Kesh', goal: 'forge', routine: '' } })]) });
+    try {
+        await again.send('Hello.', said('Dawn.', OPENING));
+        again.features.set('story-block.rpg', true);
+        const foes = STANDARD_TEMPLATES.find(item => item.name === 'Foes').definition;
+        await again.sdk.command('dm.define', { definition: structuredClone(foes) });
+        await again.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | class: 4', '~ place Kesh | kind: town']));
+        await again.send('Beat it.', said('It falls.', ['- dm foes — slain | kind: clear-1 | why: down']));
+        assert.equal(leanFight(again.head()), false, 'no foe left: no fight');
+        await again.send('Look.', said('Smoke.'));
+        assert.equal(people(again)['ersveil:brom'].met.why, 'place', 'when the foes are gone they come');
+    } finally {
+        again.close();
     }
 });

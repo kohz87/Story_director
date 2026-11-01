@@ -50,7 +50,7 @@ runs), so a note names the message its card goes under (`at`) rather than the re
    noon, afternoon, dusk, evening, night, daytime; one that names none holds at any hour; someone who has moved on from their start has
    no routine to keep). By goal: the planner judged a phrase of their `drawnTo` touched by the story and cited the reason (goal arrivals
    come first). At most one a reply, within the pace (setting `cast.faces`: `day1` 1 a day, `day2` 2 a day, `week1` 1 a week; the rest
-   wait), never while a fight is on (`combat.session` that has not ended), never someone in the scene or pinned as a key person.
+   wait), never while a fight is on (a `combat.session` that has not ended, or a Lean RPG Foes block with a foe in it while the RPG feature is on), never someone in the scene or pinned as a key person.
 
 The cue: the reply of a meeting gets one tail line, `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
 how they speak, what they want and why now (`note.js`). A swipe rewrites the scene, not who you meet: the steps stay, the planner's

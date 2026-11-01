@@ -283,13 +283,13 @@ for (const seed of SEEDS) {
         let host = null;
         const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat } });
         host = await createHost({ modules: [fakeFightRunner(), module], callModel: createFakeModel([], { fallback: castAnswer(rc) }), settings: { modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
-        // Story Block's packs part does not list the cast kind in the vendored copy: answer it here, the rest as it is.
-        const realQuery = host.registry.query.bind(host.registry);
-        host.registry.query = name => {
-            if (name === 'packs.content') return (state, args, tools) => (args?.kind === 'cast' ? (source.enabled ? structuredClone(source.entries) : []) : realQuery(name)(state, args, tools));
-            if (name === 'packs.list') return () => [{ id: 'ersveil', name: 'Ersveil', version: source.version, enabled: source.enabled }];
-            return realQuery(name);
+        // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
+        const installCast = async () => {
+            const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
+            assert.equal((await host.packs.packs.install(JSON.stringify(pack), { origin: 'cast-fuzz' })).ok, true);
+            await host.packs.packs.setEnabled('ersveil', source.enabled);
         };
+        await installCast();
         try {
             assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', `~ place ${BASE_PLACES[0]} | kind: town`, ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
@@ -304,6 +304,7 @@ for (const seed of SEEDS) {
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
                 await castPlans.idle();
                 castEdits(rc, source, n);
+                await installCast();
                 times.set(host.ctx.chat.at(-1), timeOf(lines));
                 if (n === COINS_AT) host.settings.set('story-block', 'coins', [{ name: 'copper bit', plural: 'copper bits', value: 1 }, { name: 'gold', value: 100 }]);
                 assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `seed ${seed}, reply ${n}: the clock (live)`);

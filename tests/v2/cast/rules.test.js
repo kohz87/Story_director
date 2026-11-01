@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { applyAdvance, applyMeet, applySync, planSync, syncEmpty, syncPayload, whyNarrator, whyText } from '../../../src/v2/cast/apply.js';
 import { initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
-import { atParty, castOf, fightOn, readEntry, routineHolds, samePlace } from '../../../src/v2/cast/entries.js';
+import { atParty, castOf, fightOn, leanFight, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
 import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/v2/cast/plan.js';
 import { chooseMeetings, dueMove, movable, paceOf, roomLeft } from '../../../src/v2/cast/world.js';
 import { entry } from './helpers.js';
@@ -331,4 +331,22 @@ test('places: the pack\'s places match by name, slug or alias in any case; with 
     assert.equal(placeMatcher(() => { throw new Error('no packs'); }).any, false);
     const cast = castOf((name, args) => (name === 'packs.content' ? (args?.kind === 'cast' ? [entry('a', { start: { place: 'Anywhere', goal: 'g', routine: '' } })] : []) : null));
     assert.equal(cast.entries[0].place, 'Anywhere', 'nothing to check against: as written');
+});
+
+test('the pack label drops a trailing parenthetical, as NPC State Delta writes it', () => {
+    assert.deepEqual(['Ersveil (open world)', 'Ersveil', 'Ersveil (a) (open world)', '(Only)', ' Pack  (x) '].map(shortName), ['Ersveil', 'Ersveil', 'Ersveil (a)', '(Only)', 'Pack']);
+    const cast = castOf((name, args) => (name === 'packs.content' ? (args?.kind === 'cast' ? [entry('a')] : []) : name === 'packs.list' ? [{ id: 'ersveil', name: 'Ersveil (open world)', version: '2.2.1', enabled: true }] : null));
+    assert.equal(cast.packs.ersveil.name, 'Ersveil');
+});
+
+test('a Lean RPG fight: a Foes block with a named foe whose count is above 0; nothing else is one', () => {
+    const state = (fields, role = 'foes') => ({ domains: { dataModules: { active: { 'pack.chat/foes': { hash: 'h' } }, pins: { h: { definition: { role } } }, instances: { 'pack.chat/foes': { chat: { fields } } } } } });
+    assert.equal(leanFight(state({ foe1: 'Drake', count1: 1 })), true);
+    assert.equal(leanFight(state({ foe1: '', count1: 2, foe3: 'Rat', count3: 0 })), false);
+    assert.equal(leanFight(state({ foe4: 'Rat', count4: 2 })), true);
+    assert.equal(leanFight(state({ foe1: 'Drake', count1: 1 }, 'character')), false, 'only a Foes block');
+    assert.equal(leanFight({ domains: {} }), false);
+    assert.equal(leanFight(null), false);
+    assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1 })), true);
+    assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1 }), { leanOn: false }), false);
 });

@@ -9,7 +9,7 @@ import { presetValue } from '../../vendor/story-block/src/v2/features.js';
 import { cueOf, tail, meetingFresh } from '../../../src/v2/cast/note.js';
 import { FEATURE } from '../../../src/v2/cast/domain.js';
 import { TAIL_BUDGET } from '../../../src/v2/cast/settings.js';
-import { OPENING, STATIC_KEY, TAIL_KEY, castCue, castHost, castSource, entry, people, receipts, said, sent } from './helpers.js';
+import { OPENING, STATIC_KEY, TAIL_KEY, castCue, castHost, castSource, entry, people, receipts, said, sent, syncCast } from './helpers.js';
 
 const quiet = t => t.mock.method(console, 'warn', () => {});
 
@@ -83,8 +83,7 @@ test('without a model the world still meets by place and nobody moves; a Continu
     const { createHost } = await import('../../vendor/story-block/testkit/index.js');
     host = await createHost({ modules: [module] });
     const source = castSource([entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' } }), entry('fenna', { start: { place: 'Kesh', goal: 'x', routine: '' } })]);
-    const real = host.registry.query.bind(host.registry);
-    host.registry.query = name => (name === 'packs.content' ? (state, args, tools) => (args?.kind === 'cast' ? structuredClone(source.entries) : real(name)(state, args, tools)) : name === 'packs.list' ? () => source.packs : real(name));
+    await syncCast(host, source);
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
         await host.send('Look.', said('Smoke.'));

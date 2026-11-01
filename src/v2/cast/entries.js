@@ -103,13 +103,16 @@ export function castOf(query) {
     for (const pack of Array.isArray(installed) ? installed : []) {
         if (!isRecord(pack) || typeof pack.id !== 'string') continue;
         if (pack.enabled === false) continue;
-        const name = cutPoints(pack.name, MAX_NAME);
+        const name = shortName(cutPoints(pack.name, MAX_NAME));
         // The version the entries were listed at wins (they are the pack's own); the pack list's fills in where they give none.
         out.packs[pack.id] = { name: name || pack.id, version: out.packs[pack.id]?.version || cutPoints(pack.version, MAX_NAME) };
         out.enabled.add(pack.id);
     }
     return out;
 }
+
+/** A pack's name without a trailing parenthetical, as NPC State Delta writes it: "Ersveil (open world)" is "Ersveil". */
+export const shortName = name => String(name ?? '').replace(/\s*\([^)]*\)\s*$/, '').trim() || String(name ?? '').trim();
 
 /** The name a pack goes by in words ("Ersveil"): its listed name, else its id. */
 export const packName = (cast, pack) => cast?.packs?.[pack]?.name || pack;
@@ -189,10 +192,30 @@ export function routineHolds(routine, now) {
 
 const ENDED = /^(?:ended|over|done|finished|won|lost|fled|resolved|closed|victory|defeat|escaped|surrendered)$/i;
 
-/** Whether a fight is on now: a module that runs fights answers `combat.session` with a session that has not ended. */
-export function fightOn(query) {
+/**
+ * Whether a Lean RPG fight is open in `state`: a Foes block (a data module with the role `foes`) with a slot that has a name and a
+ * count above 0 (Story Block's own reading of "a foe is there", lean-rpg/read.js; it offers no query for it).
+ */
+export function leanFight(state) {
+    const domain = state?.domains?.dataModules;
+    if (!isRecord(domain) || !isRecord(domain.active)) return false;
+    for (const id of Object.keys(domain.active)) {
+        const definition = domain.pins?.[domain.active[id]?.hash]?.definition;
+        const fields = domain.instances?.[id]?.chat?.fields;
+        if (!isRecord(definition) || definition.role !== 'foes' || !isRecord(fields)) continue;
+        for (let slot = 1; slot <= 4; slot += 1) {
+            if (typeof fields[`foe${slot}`] === 'string' && fields[`foe${slot}`].trim() && Number.isSafeInteger(fields[`count${slot}`]) && fields[`count${slot}`] > 0) return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Whether a fight is on now: a module that runs fights answers `combat.session` with a session that has not ended, or the Lean RPG has a
+ * foe on its Foes block (`state`, and `leanOn`: its feature is on).
+ */
+export function fightOn(query, state = null, { leanOn = true } = {}) {
     const session = ask(query, 'combat.session', {}, null);
-    if (!isRecord(session)) return false;
-    const status = typeof session.status === 'string' ? session.status.trim() : '';
-    return !ENDED.test(status);
+    if (isRecord(session) && !ENDED.test(typeof session.status === 'string' ? session.status.trim() : '')) return true;
+    return leanOn && leanFight(state);
 }

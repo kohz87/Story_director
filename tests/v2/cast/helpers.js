@@ -20,9 +20,29 @@ export function entry(id, more = {}, { pack = 'ersveil', packVersion = '1.1.0' }
     };
 }
 
-/** The cast the test packs list, changed between replies as a test needs: `source.entries`, `source.packs` (`packs.list`). */
+/**
+ * The cast the test pack lists, changed between replies as a test needs (`source.entries`, `source.places`, `source.packs[0]`: its
+ * `version` and `enabled`). It is installed as a real pack through Story Block's packs (`syncCast`), so `packs.content({ kind: 'cast' })`
+ * and `packs.list` are the host's own.
+ */
 export function castSource(entries = [], { name = 'Ersveil', version = '1.1.0' } = {}) {
-    return { entries, packs: [{ id: 'ersveil', name, version, enabled: true }] };
+    return { entries, places: null, packs: [{ id: 'ersveil', name, version, enabled: true }] };
+}
+
+/** The pack `source` describes, as the file a person would import. */
+export function packOf(source) {
+    const [meta] = source.packs;
+    // What the packs part adds itself (`pack`, `packVersion`) is not written; an empty routine is a routine left out.
+    const cast = source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) }));
+    return { id: meta.id, version: meta.version, name: meta.name, requires: { storyBlock: '^2' }, content: { ...(source.places ? { places: source.places } : {}), cast } };
+}
+
+/** Installs (or updates) `source`'s pack in the host and switches it on or off, as the reader would. A pack that is refused is an error. */
+export async function syncCast(host, source) {
+    const [meta] = source.packs;
+    const result = await host.packs.packs.install(JSON.stringify(packOf(source)), { origin: 'cast-test' });
+    if (!result.ok) throw new Error(`the test pack was refused: ${JSON.stringify(result.errors)}`);
+    await host.packs.packs.setEnabled(meta.id, meta.enabled !== false);
 }
 
 /**
@@ -38,16 +58,12 @@ export async function castHost({ source = castSource(), model = createFakeModel(
     });
     const stub = Object.keys(queries).length ? [{ id: 'cast-test-stub', name: 'Test stand-in', version: '0.0.0-test', domains: {}, commands: {}, queries }] : [];
     host = await createHost({ modules: [...stub, ...extra, module], callModel: model, settings: { modules: { 'story-director': settings }, features } });
-    // Story Block's own packs part does not know the cast kind yet in the vendored copy: answer it here, the rest as it is.
-    const real = host.registry.query.bind(host.registry);
-    host.registry.query = name => {
-        if (name === 'packs.content') {
-            const fn = real(name);
-            return (state, args, tools) => (args?.kind === 'cast' ? structuredClone(source.entries) : args?.kind === 'places' && source.places ? structuredClone(source.places) : fn?.(state, args, tools));
-        }
-        if (name === 'packs.list') return () => structuredClone(source.packs);
-        return real(name);
-    };
+    // The test cast is a real pack, installed before each reply (so a test changes `source` and the next reply sees it).
+    for (const method of ['send', 'swipe', 'regenerate', 'cont']) {
+        const original = host[method];
+        host[method] = async (...args) => { await syncCast(host, source); return original(...args); };
+    }
+    await syncCast(host, source);
     host.source = source;
     host.model = model;
     return host;

@@ -198,7 +198,7 @@ export function createCastHooks({ plans }) {
         // 3. Paths cross.
         if (at !== null) {
             const picks = chooseMeetings(world, frame.cast, {
-                now: frame.now, party: frame.party, comes, fight: fightOn(frame.query), pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
+                now: frame.now, party: frame.party, comes, fight: fightOn(frame.query, view?.state, { leanOn: typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false }), pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
             });
             if (picks.length) {
                 const payload = { at, who: picks, names };
