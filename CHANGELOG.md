@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.7.0
+
+- **Key people.** Pin up to 10 people who matter (the number is a setting) in World → Now → Key people, with **+ Pin**
+  (people in the scene, the story's threads, NPC State Delta's dossiers). A pinned person can go **away** on their own
+  business: the narrator records it (`+ away Ren — scouting the north road | back: Gw 18`, steps along the way, the
+  return), and while they are away each reply tells the narrator, in one short line, what they are doing and when they
+  are due back, within a token budget you set (300 by default, no upper limit; the overall budget still applies). A
+  passed date reads "due back" and the narrator brings them home.
+- **Removed on their own.** With NPC State Delta, a pinned person whose dossier is archived is unpinned ("archived"),
+  and one whose death is confirmed reads "died". The story can also record a death. "This reply" says so.
+- The fixed instructions about key people are sent only while someone is pinned; with nobody pinned the prompt is
+  exactly as before. A switch "Key people" (on by default, kept in Lean) turns the whole feature off.
+
 ## 2.6.0
 
 Needs Story Block 2.12.0 or later (its screen cleanup, the one "This reply" card and the Lean / Standard / Full presets).

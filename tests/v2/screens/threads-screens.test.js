@@ -113,7 +113,8 @@ test('status card: its title is "Where things stand" and its own summary slot re
     assert.equal(STATUS_TITLE, 'Where things stand');
     assert.equal(statusCardScreen.title, 'Where things stand');
     assert.equal(statusCardScreen.summary, STATUS_SUMMARY);
-    assert.equal(STATUS_SUMMARY, '{{ q.status.summary }}');
+    // A key person's return or removal this reply leads the line (tests/v2/keypeople/screens.test.js draws it); the rest is the summary.
+    assert.ok(STATUS_SUMMARY.endsWith('{{ q.status.summary }}'));
     assert.deepEqual(statusCardScreen.data.status, { query: 'director.status' });
     assert.deepEqual(statusCardScreen.mounts, ['card']);
     const tools = { query: () => null };

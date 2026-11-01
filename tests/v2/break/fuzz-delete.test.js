@@ -165,6 +165,34 @@ function tripLines(rt, n) {
     return ['~ trip stop'];
 }
 
+// Key people (own stream): the first reply's people are pinned by the reader after it (so on a reply never deleted); later the reader pins and
+// unpins now and then (on whatever reply is the latest, which a delete may take), and the replies' lines send people away, add steps, change
+// their plans, bring them back, and now and then record a death. A line may name someone no longer pinned (it is refused, quietly) or whose
+// away record a deleted reply made (a step then has nothing to join: passed over on replay, never a failing block).
+const KEY_BASE = ['Ren', 'Odda', 'Fenna'];
+function keyLines(rk, host, n) {
+    const pinned = Object.values(host.head().domains.keypeople?.pins ?? {}).map(entry => entry.name);
+    const pool = [...KEY_BASE, ...pinned, `Gone${n}`];
+    const lines = [];
+    for (let i = rk.int(0, 3); i > 0; i -= 1) {
+        const who = rk.pick(pool);
+        const roll = rk();
+        if (roll < 0.3) lines.push(`+ away ${who} — on the road number ${n} | back: June ${rk.int(4, 28)}, 1200`);
+        else if (roll < 0.5) lines.push(`! away ${who} — reached stop ${n}.${i}`);
+        else if (roll < 0.65) lines.push(`~ away ${who} — held up | back: June ${rk.int(4, 28)}, 1200`);
+        else if (roll < 0.85) lines.push(`- away ${who}`);
+        else if (roll < 0.9) lines.push(`- key ${who} | died`);
+        else lines.push(`- key ${who}`);
+    }
+    return lines;
+}
+async function keyEdits(rk, host, n) {
+    if (rk.chance(0.25)) await host.sdk.command('keypeople.pin', { name: `Key${n}` });
+    const pinned = Object.values(host.head().domains.keypeople?.pins ?? {}).map(entry => entry.name);
+    if (pinned.length && rk.chance(0.12)) await host.sdk.command('keypeople.unpin', { name: rk.pick(pinned) });
+    if (rk.chance(0.1)) await host.sdk.command('keypeople.pin', { name: rk.pick([...KEY_BASE, `Key${n}`]) });
+}
+
 const said = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
 // The clock the replies left say, without replaying anything: the first reply sets June 3, 08:00 am
@@ -208,17 +236,19 @@ for (const seed of SEEDS) {
         const ra = prng(seed ^ 0xA5C);
         const rl = prng(seed ^ 0x1A57);
         const rt = prng(seed ^ 0x7121);
+        const rk = prng(seed ^ 0x4B50);
         const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
         try {
             assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', `~ place ${BASE_PLACES[0]} | kind: town`, ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
                 ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
                 ...BASE_WORLD.map(key => `+ world ${key} — afoot | state: ongoing`)]));
+            for (const name of KEY_BASE) assert.ok((await host.sdk.command('keypeople.pin', { name })).ok);
             const start = host.head().domains.director.time.minutes;
             const times = new Map();
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
-                const lines = [...replyLines(r, n), ...lastingLines(rl), ...tripLines(rt, n)];
+                const lines = [...replyLines(r, n), ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
                 times.set(host.ctx.chat.at(-1), timeOf(lines));
                 if (n === COINS_AT) host.settings.set('story-block', 'coins', [{ name: 'copper bit', plural: 'copper bits', value: 1 }, { name: 'gold', value: 100 }]);
@@ -232,6 +262,7 @@ for (const seed of SEEDS) {
                 } else if (ra.chance(0.15) && host.sdk.query('director.arc')?.current?.active) {
                     assert.ok((await host.sdk.command('director.arc.end', {})).ok);
                 }
+                await keyEdits(rk, host, n);
                 const edit = lastingEdit(rl, host, n);
                 if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
                 if (!DELETE_AT.includes(n)) continue;
@@ -270,6 +301,9 @@ for (const seed of SEEDS) {
             const summaries = host.sdk.receipts().map(entry => entry.receipt.summary ?? '');
             const tripsMade = summaries.filter(text => /^On the road to /.test(text)).length;
             assert.ok(tripsMade >= 1, `seed ${seed}: the fuzz set out on a trip`);
+            const keyDone = summaries.filter(text => /^Key person: /.test(text));
+            assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
+            t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}), pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             const again = await createHost({ modules: [fakeFightRunner(), createModule()] });

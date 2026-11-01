@@ -6,7 +6,8 @@
 // - capture: every part's kinds with their one-line grammar; `apply` dispatches by `line.kind`
 //   to the part that owns the kind;
 // - context: statics joined in part order (the same bytes every reply for one set of modules), tails
-//   concatenated in part order, budgets summed. A part may hand a paragraph of its own static to a feature
+//   concatenated in part order, budgets summed (a part whose budget is a setting, the Key people's, gives `context.budgetOf(settings)`:
+//   the module's `context.budget` is read from the setting each time the host asks, so a larger one is not cut at the fixed sum). A part may hand a paragraph of its own static to a feature
 //   (`context.inline: [{ feature, static }]`, right after the part's static; `context.staticFeature`, the
 //   whole static): the host sends those only while that feature is on, in the same place. Parts are told `{ fights }` (statics, kinds whose
 //   grammar is a function, and `view.fights` / `ctx.fights`): whether a module runs fights, learnt
@@ -39,6 +40,7 @@ import { part as time } from './time/index.js';
 import { part as atlas } from './atlas/index.js';
 import { part as chronicle } from './chronicle/index.js';
 import { part as world } from './world/index.js';
+import { part as keypeople } from './keypeople/index.js';
 import { part as arc } from './arc/index.js';
 import { part as checks } from './checks/index.js';
 import { part as screens } from './screens/index.js';
@@ -47,13 +49,13 @@ import { fightsAmong } from './fights.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.6.0';
+export const VERSION = '2.7.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 export const STORY_BLOCK_RANGE = '>=2.12.0';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['arc', arc], ['checks', checks], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {
@@ -320,10 +322,14 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
     // one set of modules).
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
-    const env = { fights: fightRunner() ?? true };
+    const env = { fights: fightRunner() ?? true, keyPeople: false };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
+        // Whether anyone is pinned (Key people): the feature's paragraph and grammar lines are taught only then, so a chat with no key
+        // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
+        const pins = view?.state?.domains?.keypeople?.pins;
+        if (isObject(view?.state?.domains)) env.keyPeople = isObject(pins) && Object.keys(pins).length > 0;
     };
     const shared = ns => ({ defaults, reads: readsByPart[ns] ?? [], env });
     const domains = {};
@@ -344,6 +350,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const contextParts = [];
     const sections = [];
     let budget = 0;
+    // A part whose token budget is a setting (`context.budgetOf(settings)`, the Key people's): the module's budget follows it, so a
+    // larger one is not cut by the host at the sum of the fixed ones. Its own `context.budget` is what it is when the setting is unread.
+    const dynamicBudgets = [];
 
     for (const [ns, part] of parts) {
         for (const [name, domain] of Object.entries(part.domains ?? {})) {
@@ -371,7 +380,11 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             // A part's grammar may depend on the module set (`spec.grammar(env)`): read when the prompt is built.
             const grammar = spec.grammar;
             kinds[kind] = {
-                get grammar() { return typeof grammar === 'function' ? grammar({ fights: env.fights }) : grammar; },
+                // A line may be '' (the Key people's, while nobody is pinned): the host then leaves the kind out, so a function answers (the registry takes one for a kind with no line yet).
+                get grammar() {
+                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, keyPeople: env.keyPeople }) : grammar;
+                    return line === '' ? () => '' : line;
+                },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
                 // A kind a feature owns (MODULES §F100): Story Block leaves its grammar out, and its lines unused, while that feature is off.
                 ...(typeof spec.feature === 'string' ? { feature: spec.feature } : {}),
@@ -387,7 +400,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         }
         if (typeof part.context?.tail === 'function') tails.push([ns, part.context.tail]);
         for (const extra of Array.isArray(part.context?.parts) ? part.context.parts : []) contextParts.push({ ...extra });
-        if (Number.isInteger(part.context?.budget) && part.context.budget > 0) budget += part.context.budget;
+        if (typeof part.context?.budgetOf === 'function') dynamicBudgets.push([ns, part.context.budgetOf, part.context.budget]);
+        else if (Number.isInteger(part.context?.budget) && part.context.budget > 0) budget += part.context.budget;
         for (const [name, fn] of Object.entries(part.hooks ?? {})) {
             if (typeof fn !== 'function') continue;
             (hooks[name] ??= []).push([ns, fn]);
@@ -431,7 +445,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
         else grouped.push({ feature: chunk.feature, items: [chunk.static] });
     }
-    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople }) ?? '').trim()).filter(Boolean).join('\n');
     const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
         .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {
@@ -461,7 +475,15 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 }
                 return { lines, optional };
             },
-            budget: budget || 1,
+            get budget() {
+                let total = budget;
+                for (const [ns, budgetOf, fallback] of dynamicBudgets) {
+                    let own;
+                    try { own = budgetOf(settingsFor(ns, id => host.settings(id), { defaults })()); } catch { own = undefined; }
+                    total += Number.isSafeInteger(own) && own >= 0 ? own : fallback;
+                }
+                return total || 1;
+            },
             ...(staticParts.length || contextParts.length ? { parts: [...staticParts, ...contextParts] } : {}),
         },
         hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => {

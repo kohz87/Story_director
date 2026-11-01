@@ -1,0 +1,108 @@
+// Story Director v2, part **keypeople**: what NPC State Delta says about the people who are pinned (read only; nothing is
+// ever written to it). A pinned person NPC State Delta has archived or lost (a death, confirmed or inferred) leaves the key
+// list, and the hook before each reply says so in one `keypeople.sync` step (index.js). Pure apart from what it is handed.
+//
+// Two ways to ask, the first that answers wins:
+// - its Story Suite api (`StorySuite.api('npc-state-delta')`, Delta's `npcs()` and `npcProfiles()`): `npcProfiles()` lists the
+//   tracked people who are neither archived nor dead, so a pinned person `npcs()` knows who is archived is "archived", and
+//   one it knows who is missing from the profiles is "died";
+// - its queries (the way a Story Block 2 host reaches it): `npc.known` (the people not archived) and `npc.dossier` (whose
+//   `lifeState` says `deceased`). A pinned person who was known to it (`nsd`, noted by the hook the first time it sees them
+//   there) and is no longer among the known people is "archived".
+// An empty answer (Delta off, or its dossiers not loaded yet) says nothing: nobody is released on silence.
+
+import { isRecord, keyOf, keysOfPin, tables } from './domain.js';
+
+const array = value => (Array.isArray(value) ? value : []);
+
+/** Delta's Story Suite api when it is there and offers both lists, else null. */
+export function suiteApi() {
+    try {
+        const api = globalThis.StorySuite?.api?.('npc-state-delta');
+        return api && typeof api.npcs === 'function' && typeof api.npcProfiles === 'function' ? api : null;
+    } catch {
+        return null;
+    }
+}
+
+const safe = (fn, fallback) => {
+    try {
+        const value = fn();
+        return value === undefined ? fallback : value;
+    } catch {
+        return fallback;
+    }
+};
+
+// The names an entry of Delta's lists goes by, as keys.
+const keysOfEntry = entry => [entry?.name, ...array(entry?.aliases)].map(keyOf).filter(Boolean);
+const named = (list, keys) => list.find(entry => isRecord(entry) && keysOfEntry(entry).some(key => keys.includes(key)));
+
+/** Whether Delta has its chat's dossiers loaded (and is on), by its page api; false when it cannot be told. */
+export function deltaLoaded() {
+    try {
+        const api = globalThis.NPCStateDelta;
+        if (typeof api?.uiStatus !== 'function') return false;
+        if (typeof api.isEnabled === 'function' && api.isEnabled() === false) return false;
+        return api.uiStatus()?.hydrationStatus === 'ready';
+    } catch {
+        return false;
+    }
+}
+
+const NP_ID = /^np_[0-9a-z]{8}$/;
+
+/**
+ * What Delta says about each pinned person: `{ released: [{ name, reason }], known: [{ name, id? }] }`. `released`: archived or
+ * dead there; `known`: pinned people Delta knows now (noted on the pin with their stable id, so a later disappearance reads as
+ * archived and a rename is not one).
+ *
+ * By its queries, a pinned person is looked up by the id noted on the pin first (`npc.dossier { id }`: it also answers for an archived
+ * dossier, with `archived: true`, and `lifeState: 'deceased'` for a confirmed death, which reads "died" and not "archived"); one it
+ * answers for that is not archived is active whatever it is called now. An empty `npc.known` is Delta off or not loaded, unless its page api
+ * says its dossiers are loaded (`loaded`): then a pin that was known is archived (the sole dossier was archived).
+ */
+export function nsdVerdicts(slice, { api = suiteApi(), query = null, loaded = deltaLoaded } = {}) {
+    const { pins } = tables(slice);
+    const released = [];
+    const known = [];
+    const pinned = Object.values(pins).filter(isRecord);
+    if (!pinned.length) return { released, known };
+    const npcs = api ? array(safe(() => api.npcs(), [])) : [];
+    const profiles = api ? array(safe(() => api.npcProfiles(), [])) : [];
+    if (api && npcs.length) {
+        for (const pin of pinned) {
+            const keys = keysOfPin(pin);
+            const entry = named(npcs, keys);
+            if (!entry) continue;
+            if (entry.archived === true) released.push({ name: pin.name, reason: 'archived' });
+            else if (!named(profiles, keys)) released.push({ name: pin.name, reason: 'died' });
+            else if (pin.nsd !== true) known.push({ name: pin.name });
+        }
+        return { released, known };
+    }
+    if (typeof query !== 'function') return { released, known };
+    const names = safe(() => query('npc.known', {}), null);
+    if (!Array.isArray(names)) return { released, known };
+    // Nothing known: Delta off or not loaded, unless it says it is loaded and a pinned person was known to it.
+    if (!names.length && !(pinned.some(pin => pin.nsd === true) && safe(() => loaded(), false) === true)) return { released, known };
+    const here = names.map(keyOf).filter(Boolean);
+    for (const pin of pinned) {
+        const keys = keysOfPin(pin);
+        const byName = keys.some(key => here.includes(key));
+        const byId = typeof pin.npc === 'string' && NP_ID.test(pin.npc) ? safe(() => query('npc.dossier', { id: pin.npc }), null) : null;
+        const dossier = byId ?? (byName ? safe(() => query('npc.dossier', { name: pin.name }), null) : null);
+        // Delta answers `npc.dossier { id }` for an archived dossier too (`archived: true`, and `lifeState: 'deceased'` for a confirmed death).
+        if (dossier?.lifeState === 'deceased') released.push({ name: pin.name, reason: 'died' });
+        else if (dossier?.archived === true) released.push({ name: pin.name, reason: 'archived' });
+        else if (dossier || byName) {
+            let id = pin.npc;
+            if (typeof id !== 'string') {
+                const identity = safe(() => query('npc.identity', { name: pin.name }), null);
+                id = typeof identity?.id === 'string' && NP_ID.test(identity.id) ? identity.id : undefined;
+            }
+            if (pin.nsd !== true || (id && id !== pin.npc)) known.push({ name: pin.name, ...(id ? { id } : {}) });
+        } else if (pin.nsd === true) released.push({ name: pin.name, reason: 'archived' });
+    }
+    return { released, known };
+}

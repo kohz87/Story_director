@@ -20,6 +20,7 @@ Story Director works without NPC State Delta. Read other modules through guarded
 - `src/v2/time/`: settle (lapses, overdue, due now), advance, recap, records.
 - `src/v2/atlas/`: places, routes, map widget, travel, trips (`trip*.js`, docs/dev/trips.md). `src/v2/chronicle/`: world events, factions, day digest.
 - `src/v2/world/`: the World screen (Now / Journal), PC-known views, people widget; nothing stored.
+- `src/v2/keypeople/`: key people the reader pins (domain `keypeople`, kinds `away` and `key`, the tail, `director.keyPeople`, the World section's widget; docs/dev/key-people.md).
 - `src/v2/arc/`: arc planning through `sdk.callModel`, review, Reveal/Hide (feature `story-director.arc`).
 - `src/v2/screens/`: Director, Quests, Reveal, Behind, HUD, status card.
 - `src/*.js`: v1's pure rules reused by v2 (`tracker.js`, `lapses.js`, `calendar.js`, `places.js`, `routes.js`, ...).
@@ -57,7 +58,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 4. **Static prompt byte-identical** reply to reply (the grammar may depend on the module set, never on state).
    New static lines only via a Feature or a setting; tail within `TAIL_BUDGET` (500).
 5. **Every optional mechanic is a Feature (F100):** `story-director.arc`, `.world`, `.map`, `.digest`,
-   `.reveal`, `.behind`, `.people`, `.trip`, `.threads` (src/v2/threads.js: the agenda, event, clock, beat, secret, faction, world, landmark and route kinds, the Pacing and World paragraphs, their panels; `~ time`, quests, hooks and checks are not part of it; `chronicle.lasting` keeps working off); tag kinds, commands, queries, screens; check `ctx.feature(id)`.
+   `.reveal`, `.behind`, `.people`, `.key-people` (no preset: Lean keeps it), `.trip`, `.threads` (src/v2/threads.js: the agenda, event, clock, beat, secret, faction, world, landmark and route kinds, the Pacing and World paragraphs, their panels; `~ time`, quests, hooks and checks are not part of it; `chronicle.lasting` keeps working off); tag kinds, commands, queries, screens; check `ctx.feature(id)`.
 6. **Story-driven:** no buttons for story actions; the reader's tools (Reveal, Plan arc, Finish) are fine.
 7. **No markup from text:** templates and widgets only; names flattened; cut by code points.
 8. **Tests for every rule,** run once after the fix. `npm test` + `npm run check` green; README/CHANGELOG updated.
@@ -81,7 +82,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 - This repo: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, README ("The change lines", "Arc planning", ...), CHANGELOG.
 - History and decisions: `suite-notes/` in kohz87/inventory-block, branch `claude/hopeful-babbage-tipaw8`
   (README.md, WAVE_BRIEF.md, V2_LOG.md newest at the end). Area notes: `docs/dev/tracker-and-time.md`,
-  `docs/dev/world.md`.
+  `docs/dev/world.md`, `docs/dev/key-people.md`.
 
 ## Known traps
 
