@@ -274,3 +274,47 @@ test('a dossier renamed in Delta (the same identity) stays pinned', async t => {
         host.close();
     }
 });
+
+test('Delta answers npc.dossier { id } for an archived dossier too (archived: true): one archived among two dossiers leaves the list, the other stays; a confirmed death reads died', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const people = { Ren: {}, Mira: {}, Odda: {} };
+    const archived = {};
+    const host = await keyHost({ delta: people, archived });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        for (const name of ['Ren', 'Mira', 'Odda']) await pin(host, name);
+        await host.send('Next.', 'Quiet.');
+        assert.deepEqual(Object.values(slice(host).pins).map(entry => entry.nsd), [true, true, true]);
+        // What Delta answers for the archived Ren by id (the real shape), checked on the stand-in itself.
+        archived.Ren = {};
+        delete people.Ren;
+        assert.deepEqual(host.sdk.query('npc.dossier', { id: slice(host).pins.ren.npc }), { name: 'Ren', aliases: [], role: '', lifeState: 'unknown', archived: true });
+        await host.send('Next.', 'Quiet.');
+        assert.deepEqual(Object.keys(slice(host).pins), ['mira', 'odda']);
+        assert.equal(slice(host).gone.ren.reason, 'archived');
+        // A confirmed death: archived, lifeState deceased.
+        archived.Mira = { lifeState: 'deceased' };
+        delete people.Mira;
+        await host.send('Next.', 'Quiet.');
+        assert.deepEqual(Object.keys(slice(host).pins), ['odda']);
+        assert.equal(slice(host).gone.mira.reason, 'died');
+        assert.deepEqual(validatorErrors(host), []);
+    } finally {
+        host.close();
+    }
+});
+
+test('the verdicts by id: archived: true is "archived", with lifeState deceased "died", not archived stays whatever it is called now', () => {
+    const answers = {};
+    const query = (name, args) => {
+        if (name === 'npc.known') return ['Someone'];
+        if (name === 'npc.dossier') return answers[args.id] ?? null;
+        throw new Error('no such query');
+    };
+    const pin = (name, id) => ({ name, since: null, rev: 1, nsd: true, npc: id });
+    const state = { pins: { a: pin('A', 'np_aaaaaaaa'), b: pin('B', 'np_bbbbbbbb'), c: pin('C', 'np_cccccccc'), d: pin('D', 'np_dddddddd') }, away: {}, gone: {}, notes: {} };
+    answers.np_aaaaaaaa = { name: 'A', lifeState: 'unknown', archived: true };
+    answers.np_bbbbbbbb = { name: 'B', lifeState: 'deceased', archived: true };
+    answers.np_cccccccc = { name: 'Renamed', lifeState: 'alive', archived: false };
+    assert.deepEqual(nsdVerdicts(state, { query }), { released: [{ name: 'A', reason: 'archived' }, { name: 'B', reason: 'died' }, { name: 'D', reason: 'archived' }], known: [] });
+});
