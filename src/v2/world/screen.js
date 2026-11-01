@@ -240,6 +240,7 @@ export const worldScreen = Object.freeze({
     id: WORLD_ID,
     title: 'World',
     icon: 'fa-earth-americas',
+    bar: true,
     mounts: Object.freeze(['tab', 'screen']),
     feature: FEATURE,
     template: TEMPLATE,
