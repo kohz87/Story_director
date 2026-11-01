@@ -47,10 +47,10 @@ import { fightsAmong } from './fights.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.5.1';
+export const VERSION = '2.6.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-export const STORY_BLOCK_RANGE = '>=2.6.0';
+export const STORY_BLOCK_RANGE = '>=2.12.0';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);

@@ -1,4 +1,4 @@
-# Story Director 2.5.1
+# Story Director 2.6.0
 
 Story Director is the story’s memory and clock. It tracks quests and story threads, the calendar and weather, and offers a map, World, Chronicle and optional arc planning. Checks use standalone actor bonuses and can include NPC State Delta’s social context.
 
@@ -6,7 +6,7 @@ RPG Battle is no longer supported. Its rules packs cannot be imported; existing 
 
 ## Install
 
-Install [Story Block](https://github.com/kohz87/Story_block), then [Story Director](https://github.com/kohz87/Story_director), and reload SillyTavern. [NPC State Delta](https://github.com/kohz87/npc_state_delta) is optional. Story Director requires Story Block 2.6.0 or later.
+Install [Story Block](https://github.com/kohz87/Story_block), then [Story Director](https://github.com/kohz87/Story_director), and reload SillyTavern. [NPC State Delta](https://github.com/kohz87/npc_state_delta) is optional. Story Director requires Story Block 2.12.0 or later.
 
 ## Playing
 

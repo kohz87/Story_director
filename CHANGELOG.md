@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.6.0
+
+Needs Story Block 2.12.0 or later (its screen cleanup, the one "This reply" card and the Lean / Standard / Full presets).
+
+- **One scene header.** In the Game view, World → Now and the Director tab no longer repeat the place, time and weather:
+  Story Block's header above every screen shows them. The Story panel, which has no header, keeps them.
+- **"Where things stand".** The status part of Story Block's "This reply" card is titled "Where things stand" and gives
+  its one-line summary itself: the clock time and the place ("1:30 pm, Bluewatch Village").
+- **World-building threads** (new switch, on by default, off in Lean). It owns the off-screen agendas, events, clocks,
+  beats, secrets, factions, world happenings, landmarks and routes: off, the narrator is not taught them (the fixed
+  prompt drops about 420 tokens), and the Off-screen, Clocks, Beats, Secrets panels, the Chronicle tab and World's News
+  and Factions are hidden. Nothing stored is deleted; turning it back on brings everything back. Quests, hooks, time and
+  checks are not part of it. A pack's events that write lasting world changes keep working with it off.
+- **Presets.** Lean also turns off NPC initiative, trips and arc planning.
+- Quests, World and Map are in Story Block's tab bar by default (`bar: true`); Chronicle and Director start under More.
+- World → Now's "Here" heading is hidden with the scene lines in the Game view.
+- The Director tab's card grid lays out from its own width (no card can run over another).
+- Tests: the vendored Story Block is 2.12.0.
+
 ## 2.5.1
 
 - **Delays that overlap:** a second `~ trip delay` written while the first hold is still running no longer pulls the party backwards. The km along, the "You" marker and the narrator's "N of M km" stay where they were until both holds end (the second hold starts where the first ends); the arrival dates were already right.
