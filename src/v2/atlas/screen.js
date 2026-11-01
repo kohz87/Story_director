@@ -21,6 +21,7 @@ export const mapScreen = Object.freeze({
     id: MAP_SCREEN_ID,
     title: 'Map',
     icon: 'fa-map',
+    bar: true,
     mounts: Object.freeze(['tab', 'screen']),
     template: TEMPLATE,
     css: CSS,

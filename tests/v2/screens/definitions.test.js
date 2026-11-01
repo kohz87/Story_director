@@ -3,9 +3,11 @@
 // CSS within what §13.3 allows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CSS_LIMIT, resolveData, validateScreen, vendoredScreens } from './helpers/runtime.js';
+import { CSS_LIMIT, resolveData, runtime, validateScreen, vendoredScreens } from './helpers/runtime.js';
 import { headState, makeQueries, makeRunner } from './helpers/fixtures.js';
 import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createScreensPart, part, screens } from '../../../src/v2/screens/index.js';
+import { worldScreen } from '../../../src/v2/world/screen.js';
+import { mapScreen } from '../../../src/v2/atlas/screen.js';
 
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
 const utf8 = new TextEncoder();
@@ -45,6 +47,23 @@ test('the screens register in Story Block\'s screen registry and list by mount',
     assert.deepEqual(registry.list('card').map(entry => entry.id), [STATUS_CARD_ID]);
     assert.deepEqual(registry.list('hud'), [], 'no HUD strip: the time and place are in the Status fold');
     assert.deepEqual(registry.list('dialog'), []);
+});
+
+test('Quests, World and Map say `bar: true` (in the bar by default); the Director and the card do not', () => {
+    for (const screen of [byId[QUESTS_ID], worldScreen, mapScreen]) {
+        assert.equal(screen.bar, true, screen.id);
+        assert.deepEqual(validateScreen(screen, { id: screen.id }), [], screen.id);
+    }
+    assert.equal(byId[DIRECTOR_ID].bar, undefined);
+    assert.equal(byId[STATUS_CARD_ID].bar, undefined);
+    // A Story Block that knows the key (2.12.0) reads it back from the registry; an older one ignores it and the screens still register.
+    const registry = runtime.createScreens({ reader: () => ({}), saveReader() {} });
+    registry.addModule('story-director', [...part.screens, worldScreen, mapScreen]);
+    assert.deepEqual(registry.problems(), []);
+    if (typeof registry.declaredBar === 'function') {
+        assert.deepEqual([QUESTS_ID, worldScreen.id, mapScreen.id].map(id => registry.declaredBar(id)), [true, true, true]);
+        assert.equal(registry.declaredBar(DIRECTOR_ID), false);
+    }
 });
 
 test('every data binding names a query the module (or a module it reads) answers, and resolves', () => {
