@@ -49,8 +49,10 @@ test('the feature: declared, on by default, out of the Lean preset; initiative a
     assert.ok(threads.describe.length <= 240 && threads.label.length <= 60);
     assert.deepEqual(def.features.find(feature => feature.id === 'story-director.initiative').presets, { lean: false });
     assert.deepEqual(def.features.find(feature => feature.id === 'story-director.trip').presets, { lean: false });
+    // Arc planning makes the owned kinds' threads, so Lean leaves it off with them.
+    assert.deepEqual(def.features.find(feature => feature.id === 'story-director.arc').presets, { lean: false });
     // Every other feature of the module omits `presets` (it follows its default in every preset).
-    for (const feature of def.features.filter(entry => !['story-director.threads', 'story-director.initiative', 'story-director.trip'].includes(entry.id))) assert.equal(feature.presets, undefined, feature.id);
+    for (const feature of def.features.filter(entry => !['story-director.threads', 'story-director.initiative', 'story-director.trip', 'story-director.arc'].includes(entry.id))) assert.equal(feature.presets, undefined, feature.id);
     assert.deepEqual(featureProblems(def), [], 'the feature tags all name declared features');
     const tagged = Object.entries(def.capture.kinds).filter(([, spec]) => spec.feature === THREADS_FEATURE).map(([kind]) => kind).sort();
     assert.deepEqual(tagged, [...OWNED_KINDS].sort());

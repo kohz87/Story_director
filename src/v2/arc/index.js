@@ -50,6 +50,8 @@ export const part = {
         label: 'Arc planning',
         describe: `A planner model plans the next arc (beats, agendas, hooks, clocks, secrets) for you to review and accept. Needs Story Block ${ARC_NEEDS_STORY_BLOCK} or newer.`,
         default: true,
+        // Lean leaves the world-building threads off, and a plan makes exactly those threads: Lean must not create what it cannot show.
+        presets: { lean: false },
     }],
     domains: {
         arc: { initial: initialArc, validate: validateArc },
