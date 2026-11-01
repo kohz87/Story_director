@@ -72,7 +72,11 @@ test('one scene header: the Director\'s clock line and the World\'s place, weath
     const { el: here, warnings } = draw(worldScreen, {}, { q: world });
     assert.deepEqual(warnings, []);
     const scene = here.querySelectorAll('.wv-scene').map(node => node.className.split(' ')[0]).sort();
-    assert.deepEqual(scene, ['wv-place', 'wv-weather', 'wv-when']);
+    // The "Here" heading is a scene line too (it would sit bare over the people once the place and weather lines are hidden).
+    assert.deepEqual(scene, ['ss-label', 'wv-place', 'wv-weather', 'wv-when']);
+    const heading = here.querySelector('.wv-here .wv-label.wv-scene');
+    assert.equal(squash(heading.textContent), 'Here');
+    assert.equal(here.querySelectorAll('.wv-here h4').filter(node => !node.classList.contains('wv-scene')).map(node => squash(node.textContent)).join('|'), 'People here 1', 'the People heading stays');
     assert.ok(!here.querySelector('.wv-road').classList.contains('wv-scene'), 'On the road is not a scene line');
     assert.match(squash(here.querySelector('.wv-here').textContent), /People here 1/);
     assert.ok(here.querySelector('.wv-here ss-widget[name="story-director.people"]'), 'the people stay');
@@ -80,6 +84,7 @@ test('one scene header: the Director\'s clock line and the World\'s place, weath
     assert.deepEqual(css.warnings, []);
     assert.match(worldScreen.css, /\.wv-place\.wv-scene, \.wv-weather\.wv-scene \{ display: var\(--sd-line-display, flex\); \}/);
     assert.match(worldScreen.css, /\.sd-empty\.wv-scene, \.wv-when\.wv-scene \{ display: var\(--sd-line-display, block\); \}/);
+    assert.match(worldScreen.css, /\.wv-label\.wv-scene \{ display: var\(--sd-line-display, flex\); \}/);
 });
 
 test('world: News and events and Factions are drawn only while the threads feature answers; Upcoming stays', { skip }, () => {

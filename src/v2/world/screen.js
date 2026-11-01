@@ -32,10 +32,10 @@ export const DAYS_ID = 'story-director/days';
 // The one place a World section label is drawn: its words, an optional count (shown when `when` holds), and
 // the rule after it. The separator is `.wv-label::after` in CSS (a 1px hairline in the border token), so
 // changing how labels are set off is a change to that one rule. `card: true` heads a list card.
-const label = (text, { level = 'h4', count = '', when = '', show = '', card = false } = {}) => {
+const label = (text, { level = 'h4', count = '', when = '', show = '', card = false, scene = false } = {}) => {
     const tag = level === 'h5' ? 'h5' : 'h4';
     const shown = count ? ` <small${when ? ` data-if="${when}"` : ''}>${count}</small>` : '';
-    const classes = ['ss-label', 'wv-label', tag === 'h4' ? 'sd-h' : 'wv-h', card ? 'ss-listcard-head' : ''].filter(Boolean).join(' ');
+    const classes = ['ss-label', 'wv-label', tag === 'h4' ? 'sd-h' : 'wv-h', card ? 'ss-listcard-head' : '', scene ? 'wv-scene' : ''].filter(Boolean).join(' ');
     return `<${tag} class="${classes}"${show ? ` data-if="${show}"` : ''}>${text}${shown}</${tag}>`;
 };
 
@@ -79,7 +79,7 @@ const JOURNAL = `
 
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
-    ${label('Here')}
+    ${label('Here', { scene: true })}
     <p class="wv-place wv-scene" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
     <p class="sd-empty wv-scene" data-if="!q.world.here.place">Nowhere named yet.</p>
     <p class="wv-weather wv-scene" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
@@ -180,9 +180,11 @@ const CSS = `${BASE_CSS}
 .wv-kind { text-transform: capitalize; }
 .wv-weather { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
 /* The scene lines the Game view's hero header already shows (BASE_CSS sets --sd-line-display to none there): the place, the weather
-   and the empty-place note, and the date by the view switch. "On the road" is not one of them. */
+   and the empty-place note, the "Here" heading over them, and the date by the view switch. "On the road" is not one of them. */
 .wv-place.wv-scene, .wv-weather.wv-scene { display: var(--sd-line-display, flex); }
 .sd-empty.wv-scene, .wv-when.wv-scene { display: var(--sd-line-display, block); }
+/* The "Here" heading is one of them: with the place and weather lines gone, a bare heading would sit above the people. */
+.wv-label.wv-scene { display: var(--sd-line-display, flex); }
 .wv-scene[hidden] { display: none; }
 .wv-upcoming, .wv-news, .wv-factions { min-width: 0; }
 .wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
