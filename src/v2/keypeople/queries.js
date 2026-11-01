@@ -11,8 +11,8 @@
 //
 // Nothing is stored for these: every answer is worked out from the state and the other queries.
 
-import { DEFAULT_CAP, DEFAULT_TOKENS, FEATURE, MAX_CAP, cutPoints, findPin, flat, isInt, isRecord, keyOf, keysOfPin, tables } from './domain.js';
-import { awayEntries, awayLine, keyPeopleOn, keyTail, tokensOf } from './note.js';
+import { DEFAULT_CAP, FEATURE, MAX_CAP, cutPoints, findPin, flat, isInt, isRecord, keyOf, keysOfPin, tables } from './domain.js';
+import { awayEntries, keyTail, tokensOf } from './note.js';
 import { suiteApi } from './nsd.js';
 import { calendarFrom, dateText } from './time.js';
 
@@ -48,7 +48,9 @@ function presentKeys(query) {
     return out;
 }
 
-const hereOf = (pin, here) => keysOfPin(pin).some(key => here.has(key));
+// Story Block's present list drops a leading article ("the scout" is listed as "scout"), so an alias is matched with it too.
+const bare = key => key.replace(/^(?:the|a|an)\s+/, '');
+const hereOf = (pin, here) => keysOfPin(pin).some(key => here.has(key) || here.has(bare(key)));
 
 function deepFreeze(value) {
     if (value && typeof value === 'object') {
@@ -101,7 +103,7 @@ function profilesOf() {
 }
 
 /** The people the reader may pin, not pinned yet: `[{ name, aliases, source: 'here' | 'thread' | 'npc', nsd }]`. */
-function choicesOf(slice, query, here) {
+function choicesOf(slice, query, profiles) {
     const out = [];
     const seen = new Set();
     const add = (name, source, { aliases = [], nsd = false } = {}) => {
@@ -140,9 +142,8 @@ function choicesOf(slice, query, here) {
         }
     }
     // Everyone NPC State Delta tracks (not archived, not dead).
-    for (const profile of profilesOf()) add(profile.name, 'npc', { aliases: profile.aliases ?? [], nsd: true });
-    if (!profilesOf().length && nsdOn) for (const name of known) if (typeof name === 'string') add(dossierOf(name)?.name ?? name, 'npc', { aliases: dossierOf(name)?.aliases ?? [], nsd: true });
-    void here;
+    for (const profile of profiles) add(profile.name, 'npc', { aliases: profile.aliases ?? [], nsd: true });
+    if (!profiles.length && nsdOn) for (const name of known) if (typeof name === 'string') add(dossierOf(name)?.name ?? name, 'npc', { aliases: dossierOf(name)?.aliases ?? [], nsd: true });
     return out.slice(0, MAX_CHOICES);
 }
 
@@ -191,7 +192,7 @@ export function keyPeopleView(state, _args, tools) {
     const left = told.left > 0 ? ` ${told.left} more ${told.left === 1 ? 'is' : 'are'} away than fit, so ${told.left === 1 ? 'it is' : 'they are'} left out of a reply.` : '';
     return {
         on: true, cap, count: people.length, full: people.length >= cap, hasPeople: people.length > 0, people,
-        choices: choicesOf(slice, query, here),
+        choices: choicesOf(slice, query, profiles),
         tokens: told.tokens, budget,
         note: `Key people who are away are told to the narrator each reply: about ${told.tokens} tokens now, of a ${budget}-token budget.${left} Pin someone with + Pin; their death, or archiving their dossier, unpins them.`,
     };
@@ -204,5 +205,3 @@ export const queries = {
     'director.keyPeople.view': tagged(keyPeopleView),
     'director.keyPeople.on': tagged(() => ({ on: true })),
 };
-
-export { awayLine, keyPeopleOn };
