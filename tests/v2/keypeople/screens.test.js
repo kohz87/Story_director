@@ -45,7 +45,13 @@ test('the view: a row for each pinned person (Away · back, Here, Not here), wha
         const tight = host.sdk.query('director.keyPeople.view');
         assert.equal(tight.full, true);
         assert.equal(tight.tokens, 0);
+        assert.equal(tight.countText, '3 of 3');
         assert.match(tight.note, /1 more is away than fit, so it is left out of a reply\./);
+        // The limit lowered under the number pinned: said so, not "3 of 2"; one is a person.
+        host.settings.set('story-director', 'keypeople.cap', 1);
+        const low = host.sdk.query('director.keyPeople.view');
+        assert.deepEqual([low.countText, low.limitText], ['3 pinned · limit 1', 'You can have 1 key person; unpin someone first.']);
+        host.settings.set('story-director', 'keypeople.cap', 3);
         // Due back reads so, and is not "back <date>".
         host.settings.set('story-director', 'keypeople.tokens', 300);
         await host.send('Days.', said('Days pass.', ['! time +9d']));
@@ -69,7 +75,7 @@ function drawWidget(value, command = null) {
 }
 
 const VIEW = {
-    on: true, cap: 3, count: 2, full: false, hasPeople: true,
+    on: true, cap: 3, count: 2, countText: '2 of 3', limitText: 'You can have 3 key people; unpin someone first.', full: false, hasPeople: true,
     people: [
         { key: 'ren', name: 'Ren', here: false, away: true, due: false, status: 'Away · back June 9', doing: 'scouting the north road', last: 'Last news June 3: reached Wolfmere Outpost', back: 'June 9' },
         { key: 'fenna', name: 'Fenna', here: true, away: false, due: false, status: 'Here', doing: 'ferrywoman', last: '', back: '' },
@@ -189,6 +195,10 @@ test('the status card: this reply\'s key person lines in its body and its closed
     // The closed line: the changes lead, then the card's own summary.
     const line = drawCard(STATUS_SUMMARY, state, changes);
     assert.equal(squash(line.el.textContent), 'Ren is back · Mara is no longer a key person · 1:30 pm, Bluewatch Village');
+    // No clock or place to add: no dangling separator, however many lines there are.
+    const bare = { status: { summary: '' }, time: { text: '' } };
+    assert.equal(squash(drawCard(STATUS_SUMMARY, state, changes, bare).el.textContent), 'Ren is back · Mara is no longer a key person');
+    assert.equal(squash(drawCard(STATUS_SUMMARY, state, ['/domains/keypeople/notes/kn_00000001'], bare).el.textContent), 'Ren is back');
     // A reply that changed none of them: no lines, and the summary is as it was.
     const quiet = drawCard(statusCardScreen.template, state, ['/domains/director/time/minutes']);
     assert.equal(quiet.el.querySelectorAll('.sd-keynote').length, 0);
@@ -243,4 +253,9 @@ test('Settings → Modules → Story Director → Key people: the two numbers wi
     } finally {
         host.close();
     }
+});
+
+test('the World sheet keeps the Journal facts flush left (!important, as it was) and the key rows\' Unpin out of the row height', () => {
+    assert.ok(worldScreen.css.includes('.wv-facts { list-style: none; padding-left: 0 !important; }'));
+    assert.match(worldScreen.css, /\.wv-key-unpin \{ grid-column: 3; grid-row: 1 \/ span 3; align-self: start;/);
 });

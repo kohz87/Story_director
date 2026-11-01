@@ -105,31 +105,44 @@ test('on the host: the tail tells each away key person once a reply, and nobody 
     }
 });
 
-test('the prompt: the paragraph is there while the feature is on, the same bytes every reply whatever the state, and off it is gone', async () => {
+test('the prompt: nobody pinned, the prompt is what it was without the feature; once someone is pinned the paragraph and the two lines are taught, the same bytes while they move; off it is gone', async () => {
     const host = await keyHost();
+    const plain = await keyHost({ features: { [FEATURE]: false } });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
         await host.send('Go.', 'On.');
+        await plain.send('Hello.', said('Dawn.', OPENING));
+        await plain.send('Go.', 'On.');
+        const paragraph = host.sdk.substitute(STATIC_TEXT);
+        const without = sent(plain, STATIC_KEY).at(-1);
+        assert.equal(sent(host, STATIC_KEY).at(-1), without, 'nobody pinned: byte-identical to the prompt with the feature off');
+        assert.equal(without.includes(paragraph), false);
+        assert.equal(host.registry.contexts().find(entry => entry.moduleId === 'story-director').kinds.some(entry => ['away', 'key'].includes(entry.kind)), false);
         await pin(host, 'Ren');
         await host.send('Go.', said('Ren leaves.', ['+ away Ren — scouting | back: June 9, 1200']));
         await host.send('Go.', said('A step.', ['! away Ren — reached the ridge']));
-        const statics = sent(host, STATIC_KEY);
-        assert.ok(statics.length >= 4);
-        assert.equal(new Set(statics).size, 1, 'byte-identical reply to reply, with key people pinned, away and moving');
-        const paragraph = host.sdk.substitute(STATIC_TEXT);
-        assert.ok(statics[0].includes(paragraph));
-        for (const line of Object.values(GRAMMAR)) assert.ok(statics[0].includes(line), line);
+        await host.send('Go.', 'Quiet.');
+        const taught = sent(host, STATIC_KEY).slice(-3);
+        assert.equal(new Set(taught).size, 1, 'byte-identical reply to reply, with key people away and moving');
+        assert.ok(taught[0].includes(paragraph));
+        for (const line of Object.values(GRAMMAR)) assert.ok(taught[0].includes(line), line);
+        assert.equal(taught[0].replace(`${paragraph}\n`, '').split('\n').filter(line => !Object.values(GRAMMAR).includes(line)).join('\n'), without, 'only those three lines more');
+        // The last one unpinned: back to what it was.
+        await host.sdk.command('keypeople.unpin', { name: 'Ren' });
+        await host.send('Go.', 'Again.');
+        assert.equal(sent(host, STATIC_KEY).at(-1), without);
+        // Off with someone pinned: gone.
+        await pin(host, 'Odda');
         host.features.set(FEATURE, false);
         await host.send('Go.', 'Off.');
         await host.send('Go.', 'Off still.');
         const off = sent(host, STATIC_KEY).slice(-2);
         assert.equal(off[0], off[1]);
-        assert.ok(!off[0].includes(paragraph));
-        for (const line of Object.values(GRAMMAR)) assert.ok(!off[0].includes(line), `${line} is gone`);
+        assert.equal(off[0], without);
         assert.equal(tailOf(host), '', 'off: nothing in the tail either');
-        assert.equal(off[0], statics[0].replace(`${paragraph}\n`, '').split('\n').filter(line => !Object.values(GRAMMAR).includes(line)).join('\n'));
     } finally {
         host.close();
+        plain.close();
     }
 });
 

@@ -98,7 +98,7 @@ function render(el, props, api) {
         });
         if (data.full === true && !choosing) {
             pin.disabled = true;
-            pin.setAttribute('title', `You can have ${data.cap} key people; unpin someone first.`);
+            pin.setAttribute('title', data.limitText || `You can have ${data.cap} key people; unpin someone first.`);
         }
         actions.append(pin);
         parts.push(actions);

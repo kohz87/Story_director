@@ -54,11 +54,12 @@ export const part = {
     },
     queries,
     kinds: {
-        away: { grammar: GRAMMAR.away, apply: applyAwayLine, feature: FEATURE },
-        key: { grammar: GRAMMAR.key, apply: applyKeyLine, feature: FEATURE },
+        // Taught only while someone is pinned (module.js tells the parts `keyPeople`).
+        away: { grammar: env => (env?.keyPeople ? GRAMMAR.away : ''), apply: applyAwayLine, feature: FEATURE },
+        key: { grammar: env => (env?.keyPeople ? GRAMMAR.key : ''), apply: applyKeyLine, feature: FEATURE },
     },
     context: {
-        static: () => STATIC_TEXT,
+        static: env => (env?.keyPeople ? STATIC_TEXT : ''),
         staticFeature: FEATURE,
         tail: view => tail(view),
         // The tokens the tail may spend: the setting (module.js follows it, so a larger budget is not cut by the module's).

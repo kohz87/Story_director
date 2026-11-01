@@ -125,7 +125,7 @@ export function applyAwayLine(ctx, line) {
         ctx.ifThere('keypeople', awayPath(key));
         const left = dateText(calendar, existing.since);
         const here = dateText(calendar, now);
-        const span = left && here ? `away ${left} – ${here}` : left ? `away since ${left}` : 'away';
+        const span = left && here ? (left === here ? `away ${left}` : `away ${left} – ${here}`) : left ? `away since ${left}` : 'away';
         delete kp.away[key];
         addNote(ctx, kp, { kind: 'back', name: pin.name, head: `${pin.name} is back`, rest: `${existing.doing ? `from ${existing.doing} ` : ''}(key person, ${span}).` });
         return { summary: `Key person: ${pin.name} is back${existing.doing ? ` from ${existing.doing}` : ''}.`, narrate: false, data: { person: key, back: true } };
@@ -213,7 +213,7 @@ export function pin(ctx, payload = {}) {
     const found = findPin(kp, name, aliases);
     if (found) return { summary: `${found.pin.name} is already a key person.`, narrate: false, data: { person: found.key, edit: true } };
     const cap = capOf(ctx.settings());
-    if (Object.keys(kp.pins).length >= cap) return ctx.fail('LIMITED', `You can have ${cap} key people; unpin someone first (Settings, Modules, Story Director, Key people).`);
+    if (Object.keys(kp.pins).length >= cap) return ctx.fail('LIMITED', `You can have ${cap} key ${cap === 1 ? 'person' : 'people'}; unpin someone first (Settings, Modules, Story Director, Key people).`);
     const key = keyOf(name);
     kp.pins[key] = { name, since: nowOf(ctx), rev: revOf(ctx), ...(aliases.length ? { aliases } : {}), ...(payload.nsd === true ? { nsd: true } : {}) };
     delete kp.gone[key];
@@ -234,7 +234,7 @@ export function unpin(ctx, payload = {}) {
 const SYNC_REASONS = REASONS.filter(reason => reason !== 'unpinned');
 
 /**
- * `keypeople.sync { who?: [{ name, reason }], known?: [name] }` (cause `system`, from the hook before a reply): what NPC State
+ * `keypeople.sync { who?: [{ name, reason }], known?: [name | { name, id? }] }` (cause `system`, from the hook before a reply): what NPC State
  * Delta says about the pinned. `who`: archived or dead there, so they leave the list with that reason. `known`: pinned people
  * it knows now (noted on their pin, so a later disappearance reads as archived). Someone not pinned any more is skipped.
  * Refused from anywhere else.
@@ -243,7 +243,7 @@ export function sync(ctx, payload = {}) {
     if (ctx.cause !== 'system') return ctx.fail('REFUSED', 'Who leaves the key list because NPC State Delta archived or lost them is decided by Story Director itself.');
     const { who = [], known = [] } = isRecord(payload) ? payload : {};
     if (!isRecord(payload) || Object.keys(payload).some(field => !['who', 'known'].includes(field)) || !Array.isArray(who) || !Array.isArray(known) || who.length > 24 || known.length > 24) {
-        return ctx.fail('INVALID', 'keypeople.sync takes { who?: [{ name, reason }], known?: [name] }.');
+        return ctx.fail('INVALID', 'keypeople.sync takes { who?: [{ name, reason }], known?: [name | { name, id? }] }.');
     }
     const kp = ctx.draft('keypeople');
     const calendar = calendarFrom(query(ctx));
@@ -257,13 +257,16 @@ export function sync(ctx, payload = {}) {
         told.push(removePin(ctx, kp, found.key, found.pin, entry.reason, calendar, now));
         keys.push(found.key);
     }
-    for (const name of known) {
-        if (typeof name !== 'string') return ctx.fail('INVALID', 'keypeople.sync: known is a list of names.');
+    for (const entry of known) {
+        const name = typeof entry === 'string' ? entry : entry?.name;
+        const id = isRecord(entry) ? entry.id : undefined;
+        if (typeof name !== 'string' || (id !== undefined && !(typeof id === 'string' && /^np_[0-9a-z]{8}$/.test(id)))) return ctx.fail('INVALID', 'keypeople.sync: known is a list of names, or { name, id? }.');
         const found = findPin(kp, name);
-        if (!found || found.pin.nsd === true) continue;
+        if (!found || (found.pin.nsd === true && (id === undefined || found.pin.npc === id))) continue;
         // Inside a pin the reply that made it may be gone: passed over then (SPEC §2.2 rule d).
         ctx.ifThere('keypeople', `/pins/${found.key}`);
         found.pin.nsd = true;
+        if (id !== undefined) found.pin.npc = id;
     }
     return { summary: told.join(' '), narrate: false, data: { removed: keys } };
 }

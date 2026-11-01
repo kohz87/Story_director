@@ -55,7 +55,10 @@ test('Pin and Unpin: the reader\'s own commands on the latest reply; the story c
         const third = await pin(host, 'Fenna');
         assert.equal(third.ok, false);
         assert.equal(third.code, 'LIMITED');
-        assert.match(third.message, /at most|can have 2 key people/);
+        assert.match(third.message, /can have 2 key people/);
+        host.settings.set('story-director', 'keypeople.cap', 1);
+        assert.match((await pin(host, 'Fenna')).message, /can have 1 key person; unpin/);
+        host.settings.set('story-director', 'keypeople.cap', 2);
         assert.deepEqual(Object.keys(slice(host).pins), ['ren', 'odda']);
         // Not a name, not a payload.
         assert.equal((await pin(host, '   ')).ok, false);
@@ -115,6 +118,11 @@ test('the story\'s lines: a pinned person goes away, takes steps, returns; only 
         assert.deepEqual([note.kind, note.name, note.head, note.lead], ['back', 'Ren', 'Ren is back', true]);
         assert.equal(note.rest, 'from held at the border (key person, away June 3 – June 6).');
         assert.deepEqual(Object.keys(slice(host).pins), ['ren'], 'still a key person');
+        // The same day: one date, not "June 6 – June 6".
+        await pin(host, 'Odda');
+        await host.send('Go.', said('Odda leaves.', ['+ away Odda — at the mill']));
+        await host.send('Back.', said('Odda is back.', ['- away Odda']));
+        assert.equal(Object.values(slice(host).notes).at(-1).rest, 'from at the mill (key person, away June 6).');
         assert.deepEqual(validatorErrors(host), []);
     } finally {
         host.close();

@@ -21,15 +21,23 @@ export function keyTail(host) {
     return block.join('\n');
 }
 
+/** A stand-in's stable identity for a name: np_ and eight letters from it. */
+export const idOf = name => `np_${Array.from(String(name).toLowerCase().replace(/[^a-z0-9]/g, '')).concat(...'00000000').slice(0, 8).join('')}`;
+
 /**
- * NPC State Delta's queries as a test module: `people` is `{ name: { aliases?, lifeState?, role? } }`, those it tracks that are not
- * archived (`npc.known`); `npc.dossier` finds them by name or alias. `people` may change between replies.
+ * NPC State Delta's queries as a test module: `people` is `{ name: { id?, aliases?, lifeState?, role? } }`, those it tracks that are not
+ * archived (`npc.known`); `npc.dossier` finds them by name, alias or id; `npc.identity` gives `{ id, name }`. `archived` is
+ * `{ name: { id?, lifeState? } }`: dossiers archived since, which only a confirmed death (`lifeState: 'deceased'`) still answers
+ * `npc.dossier { id }` for, as Delta does. Both may change between replies (a rename moves an entry, keeping its id).
  */
-export function fakeDelta(people = {}) {
-    const find = name => {
+export function fakeDelta(people = {}, archived = {}) {
+    const entryOf = name => {
         const want = String(name ?? '').toLowerCase();
         return Object.keys(people).find(key => key.toLowerCase() === want || (people[key]?.aliases ?? []).some(alias => alias.toLowerCase() === want)) ?? null;
     };
+    const idFor = (name, entry) => entry?.id ?? idOf(name);
+    const byId = id => Object.keys(people).find(key => idFor(key, people[key]) === id) ?? null;
+    const dossier = (name, entry) => ({ name, aliases: entry.aliases ?? [], role: entry.role ?? '', lifeState: entry.lifeState ?? 'alive' });
     return {
         id: 'npc-state-delta',
         name: 'NPC State Delta (test stand-in)',
@@ -39,17 +47,30 @@ export function fakeDelta(people = {}) {
         queries: {
             'npc.known': () => Object.keys(people),
             'npc.present': () => [],
-            'npc.dossier': (_state, { name } = {}) => (find(name) ? { name: find(name), aliases: people[find(name)].aliases ?? [], role: people[find(name)].role ?? '', lifeState: people[find(name)].lifeState ?? 'alive' } : null),
+            'npc.dossier': (_state, { name, id } = {}) => {
+                if (id !== undefined) {
+                    const key = byId(id);
+                    if (key) return dossier(key, people[key]);
+                    const gone = Object.keys(archived).find(other => idFor(other, archived[other]) === id);
+                    return gone && archived[gone].lifeState === 'deceased' ? dossier(gone, archived[gone]) : null;
+                }
+                const key = entryOf(name);
+                return key ? dossier(key, people[key]) : null;
+            },
+            'npc.identity': (_state, { name, id } = {}) => {
+                const key = id !== undefined ? byId(id) : entryOf(name);
+                return key ? { id: idFor(key, people[key]), name: key } : null;
+            },
             'npc.meters': () => null,
         },
     };
 }
 
 /** A host with Story Director (and a Delta stand-in when `delta` is given); `settings`: Story Director's (dotted keys). */
-export async function keyHost({ delta = null, settings = {}, features = {}, extra = [] } = {}) {
+export async function keyHost({ delta = null, archived = {}, settings = {}, features = {}, extra = [] } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [...(delta ? [fakeDelta(delta)] : []), module, ...extra], settings: { modules: { 'story-director': settings }, features } });
+    host = await createHost({ modules: [...(delta ? [fakeDelta(delta, archived)] : []), module, ...extra], settings: { modules: { 'story-director': settings }, features } });
     return host;
 }
 

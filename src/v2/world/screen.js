@@ -97,7 +97,7 @@ const NOW = `
     <p class="wv-note">{{ q.cast.note }}</p>
   </section>
   <section class="sd-kind wv-key ss-glass" data-kind="key" aria-label="Key people" data-if="q.keys.on == true">
-    ${label('Key people', { count: '{{ q.keys.count }} of {{ q.keys.cap }}' })}
+    ${label('Key people', { count: '{{ q.keys.countText }}' })}
     <ss-widget name="${KEY_PEOPLE_WIDGET}" data-props='{"bind":"q.keys"}'></ss-widget>
   </section>
   <section class="sd-kind wv-upcoming ss-listcard ss-glass" data-kind="upcoming" aria-label="Upcoming">
@@ -211,9 +211,9 @@ const CSS = `${BASE_CSS}
 .wv-key-pill.is-here { border-color: var(--sd-good); color: var(--sd-good); }
 .wv-key-sub { grid-column: 2; font-size: 0.85em; line-height: 1.45; overflow-wrap: anywhere; }
 /* The host keeps every button at least 44px (a touch target): pills at that height here, and on a phone Unpin is a link-like button, not a circle. */
-.wv-key-unpin { margin: 0; padding: 0 16px; font: inherit; font-size: 0.8em; line-height: 1.4; cursor: pointer; color: inherit; background: none; border: 1px solid var(--sd-border); border-radius: var(--ss-radius-pill); }
+.wv-key-unpin { grid-column: 3; grid-row: 1 / span 3; align-self: start; margin: 0; padding: 0 16px; font: inherit; font-size: 0.8em; line-height: 1.4; cursor: pointer; color: inherit; background: none; border: 1px solid var(--sd-border); border-radius: var(--ss-radius-pill); }
 .wv-key-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-@media (max-width: 599px) { .wv-key-unpin { padding: 0 6px; border-color: transparent; text-decoration: underline; color: var(--sd-accent-text); } }
+@media (max-width: 599px) { .wv-key-unpin { margin-block: -8px; padding: 0 6px; border-color: transparent; text-decoration: underline; color: var(--sd-accent-text); } }
 .wv-key-actions .wv-key-pin { flex: 0 0 auto; width: 7em; padding: 0 18px; border-radius: var(--ss-radius-pill); }
 .wv-key-choices { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 260px; overflow-y: auto; }
 .wv-key-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; width: 100%; margin: 0; padding: 6px 12px; font: inherit; text-align: left; cursor: pointer; color: inherit; background: var(--sd-surface); border: 1px solid var(--sd-border); border-radius: var(--sd-radius); }
@@ -257,7 +257,7 @@ const CSS = `${BASE_CSS}
 .wv-line { display: block; margin-top: 4px; color: var(--sd-text); }
 .wv-body { display: grid; gap: 6px; padding: 0 14px 12px; overflow-wrap: anywhere; }
 .wv-body ul { margin: 0; padding-left: 1.2em; }
-.wv-facts { list-style: none; padding-left: 0; }
+.wv-facts { list-style: none; padding-left: 0 !important; }
 .wv-note { margin: 0; font-size: 0.85em; color: var(--sd-muted); }
 @media (min-width: 720px) {
   .wv-now { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
