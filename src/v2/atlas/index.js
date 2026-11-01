@@ -17,6 +17,7 @@ import { applyTripLine } from './trip-capture.js';
 import { tripQuery } from './trip-query.js';
 import { MAP_WIDGET, atlasMapWidget } from './widget.js';
 import { DEFAULT_MAP } from '../../places.js';
+import { THREADS_FEATURE } from '../threads.js';
 
 /** The atlas's optional mechanics (MODULES §F100): trips and the map's road. */
 export const features = Object.freeze([
@@ -25,6 +26,7 @@ export const features = Object.freeze([
         label: 'Trips',
         describe: 'The story sets out with ~ trip: code plans the way along the known routes, tells the narrator where the party is on the road, and the Map draws it.',
         default: true,
+        presets: { lean: false },
     }),
 ]);
 
@@ -42,8 +44,9 @@ export const part = {
     },
     queries: { ...atlasQueries, ...policyQueries, 'atlas.trip': Object.assign((state, args, tools) => tripQuery(state, args, tools), { feature: TRIP_FEATURE }) },
     kinds: {
-        route: { grammar: GRAMMAR.route, apply: applyRouteLine },
-        landmark: { grammar: GRAMMAR.landmark, apply: applyLandmarkLine },
+        // Route and landmark lines are the threads feature's (src/v2/threads.js); the map and the packs' own places stay.
+        route: { grammar: GRAMMAR.route, apply: applyRouteLine, feature: THREADS_FEATURE },
+        landmark: { grammar: GRAMMAR.landmark, apply: applyLandmarkLine, feature: THREADS_FEATURE },
         // A trip is planned from the place and the mounts the reply sets up, so its line runs behind the reply's place and mount lines.
         trip: { grammar: GRAMMAR.trip, apply: applyTripLine, feature: TRIP_FEATURE, after: ['place', 'mount'] },
     },

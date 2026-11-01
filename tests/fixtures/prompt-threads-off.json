@@ -1,0 +1,25 @@
+{
+  "static": "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nChecks: write ? check skill — attempt | dc: hard (optionally who: Name or vs: Name), without a result. Story Director rolls once; narrate the outcome told by the tail. A pre-rolled check already told under [Happened] is not rolled again.\nInitiative: when the Director note names someone under Initiative, they take the first step in this reply (approach, interrupt or ask) where the scene allows it; what {{user}} does stays theirs.",
+  "kinds": [
+    {
+      "kind": "check",
+      "grammar": "? check <a stat or skill> — what is attempted | dc: easy|normal|hard|very hard | who: Name | vs: Name"
+    },
+    {
+      "kind": "hook",
+      "grammar": "+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)"
+    },
+    {
+      "kind": "quest",
+      "grammar": "+ quest Name — a task the story follows | goal: what to do | giver: who asked"
+    },
+    {
+      "kind": "time",
+      "grammar": "~ time <date, clock time> (the scene's time) · ! time +2h (time passes)"
+    },
+    {
+      "kind": "trip",
+      "grammar": "~ trip Place | by: riding|foot|wagon|boat|ship | via: Stop, Stop (the party sets out by the known routes; ~ trip stop; ~ trip delay: 1 day | because: lame horse)"
+    }
+  ]
+}

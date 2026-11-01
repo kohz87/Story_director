@@ -9,6 +9,13 @@
 // only while that is still so). An older chat's offer, which the Quests tab no longer shows, is tagged
 // "offered" here.
 //
+// One scene header: the Game view draws the hero header above every screen (place, time, weather), so there the clock
+// line is not drawn again (the Story panel's tab has no hero and keeps it). The cards sit in one grid that sizes itself
+// to the room the screen has, whatever the width (a card never overlaps another).
+//
+// The agendas, clocks, beats and secrets behind Reveal and the World card (events) belong to the feature
+// `story-director.threads` (src/v2/threads.js): off, they are not drawn and the Reveal bar is gone. Quests and hooks stay.
+//
 // Each kind is a list card (Story Block's `ss-listcard`, view/glass.css) drawn from the template: a row
 // holds the key, what the story last said of it, its tags (offered, ready, the outcome) as pills, and the
 // fields on a meta line.
@@ -17,6 +24,7 @@ import { BASE_CSS } from './style.js';
 import { BEHIND } from './reveal.js';
 import { BEHIND_WIDGET } from './behind.js';
 import { ARC_WIDGET } from '../arc/widget.js';
+import { ownedKind } from '../threads.js';
 
 export const DIRECTOR_ID = 'story-director/director';
 
@@ -64,8 +72,10 @@ function section(kind, title) {
     const every = `q.${kind}`;
     const open = `q.${kind}_open`;
     const closed = `q.${kind}_closed`;
+    // The World card (events) is the threads feature's: `q.threads` is null while that is off.
+    const shown = ownedKind(kind) ? `q.threads.on == true && len(${every}) > 0` : `len(${every})`;
     return `
-  <section class="sd-kind ss-listcard ss-glass" data-kind="${kind}" data-if="len(${every})">
+  <section class="sd-kind ss-listcard ss-glass" data-kind="${kind}" data-if="${shown}">
     <h4 class="ss-label ss-listcard-head sd-h">${title} <small data-if="len(${open})">{{ len(${open}) }}</small></h4>
     <ul class="ss-listcard-rows sd-threads">
         ${threadItem(open, kind)}
@@ -81,7 +91,7 @@ function section(kind, title) {
 
 const TEMPLATE = `
 <div class="sd-director">
-  <header class="sd-clock" data-if="q.time.text" role="status" aria-label="Story time">
+  <header class="sd-clock sd-scene-line" data-if="q.time.text" role="status" aria-label="Story time">
     <i class="fa-solid fa-clock" aria-hidden="true"></i> <span class="sd-when">{{ q.time.text }}</span>
     <span class="sd-where" data-if="state.scene.place.name">· {{ state.scene.place.name }}</span>
   </header>
@@ -104,8 +114,12 @@ ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
 `;
 
 const CSS = `${BASE_CSS}
-.sd-director { display: grid; gap: 14px; padding: 4px 0; min-width: 0; }
-.sd-clock { margin: 0; font-size: 0.9em; overflow-wrap: anywhere; color: var(--sd-text); }
+.sd-director { display: grid; gap: 14px; padding: 4px 0; min-width: 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); align-items: start; }
+.sd-director > * { min-width: 0; }
+.sd-director > ss-widget { display: block; }
+.sd-empty, .sd-clock, .sd-wide { grid-column: 1 / -1; }
+.sd-clock { display: var(--sd-line-display, block); margin: 0; font-size: 0.9em; overflow-wrap: anywhere; color: var(--sd-text); }
+.sd-clock[hidden] { display: none; }
 .sd-clock i { color: var(--sd-accent); margin-right: 2px; }
 .sd-kind { min-width: 0; }
 .sd-threads { gap: 0; }
@@ -137,7 +151,8 @@ const CSS = `${BASE_CSS}
 .sd-arc-finding.sd-warn { border-left: 3px solid var(--sd-warn); padding-left: 6px; }
 /* Buttons keep their icon and label on one line (the block's button is a flex box with a gap). */
 .sd-arc .sd-btn, .sd-behind .sd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
-.sd-behind { display: grid; gap: 14px; min-width: 0; }
+.sd-behind { display: grid; gap: 14px; min-width: 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); align-items: start; }
+.sd-behind > * { min-width: 0; }
 .sd-lock { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 10px 12px;
   border: 1px dashed var(--sd-border); border-radius: var(--ss-radius-l); min-width: 0; }
 .sd-lock-icon { margin-top: 3px; color: var(--sd-accent); }
@@ -145,12 +160,7 @@ const CSS = `${BASE_CSS}
 .sd-lock .sd-actions { grid-column: 1 / -1; }
 .sd-unlocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.9em; color: var(--sd-muted); }
 .sd-unlocked .sd-btn { flex: 0 0 auto; }
-@media (min-width: 720px) {
-  .sd-director { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
-  .sd-empty, .sd-clock, .sd-wide { grid-column: 1 / -1; }
-  .sd-behind { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
-  .sd-unlocked, .sd-lock, .sd-behind .sd-problems-box { grid-column: 1 / -1; }
-}
+.sd-unlocked, .sd-lock, .sd-behind .sd-problems-box { grid-column: 1 / -1; }
 `;
 
 const data = {
@@ -159,7 +169,9 @@ const data = {
     // The problems about what the reader may see; those behind the scenes are in `behind`.
     problems: { query: 'director.problems', args: { behind: false } },
     arc: { query: 'director.arc' },
+    // The agendas, clocks, beats and secrets (and the World card): null while the feature `story-director.threads` is off.
     behind: { query: 'director.behind' },
+    threads: { query: 'director.threads.on' },
 };
 for (const [kind] of OPEN_KIND_GROUPS) {
     data[kind] = { query: 'director.threads', args: { kind } };

@@ -21,6 +21,7 @@
 import { lineKey } from '../../changes.js';
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { BEHIND } from '../screens/reveal.js';
+import { threadsOn } from '../threads.js';
 
 export const FEATURE = 'story-director.world';
 export const DEFAULT_UPCOMING_DAYS = 30;
@@ -334,10 +335,12 @@ function dateOf(calendar, when, now) {
 export function knownUpcoming(state, tools, { calendar, now, days }) {
     if (!isInt(now)) return [];
     const query = queryOf(tools);
+    // An event is a thread of the feature `story-director.threads`: off, only quests, hooks and holidays are coming up.
+    const kinds = threadsOn(tools) ? ['quest', 'event', 'hook'] : ['quest', 'hook'];
     const out = [];
     for (const thread of threadsOf(state)) {
         const open = thread.status === 'active' && !thread.ended && !thread.offer;
-        if (!open || !['quest', 'event', 'hook'].includes(thread.kind) || (thread.kind !== 'quest' && planned(thread))) continue;
+        if (!open || !kinds.includes(thread.kind) || (thread.kind !== 'quest' && planned(thread))) continue;
         const goal = thread.kind === 'quest' || Boolean(thread.acceptance);
         const field = goal ? 'due' : 'on';
         const when = text(thread.fields?.[field]);

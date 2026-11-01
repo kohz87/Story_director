@@ -7,18 +7,22 @@
 import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
 import { initialDirector, queries, validateDirector } from './domain.js';
-import { GRAMMAR, GRAMMAR_ALONE, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
+import { GRAMMAR, GRAMMAR_ALONE, PACING_TEXT, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
 import { threadCommands, threadReplayGuard } from './writers.js';
 import { intentCommand } from './acceptance.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
 import { DEFAULT_COOLDOWN, FEATURE as INITIATIVE_FEATURE, INITIATIVE, INITIATIVE_STATIC, MAX_COOLDOWN, initiativeCommand, initiativeHook } from './initiative.js';
 import { DEFAULT_ELSEWHERE, MAX_ELSEWHERE } from './scene.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
+import { THREADS_FEATURE, ownedKind } from '../threads.js';
 
-// A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set.
+// A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set. The agenda,
+// event, clock, beat and secret kinds belong to the feature `story-director.threads` (src/v2/threads.js): while it
+// is off the host leaves their grammar out and a line of one is a quiet FEATURE_OFF. Quests and hooks stay.
 const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
     grammar: Object.hasOwn(GRAMMAR_ALONE, kind) ? env => grammarOf(kind, env) : GRAMMAR[kind],
     apply: applyThreadLine,
+    ...(ownedKind(kind) ? { feature: THREADS_FEATURE } : {}),
 }]));
 kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
 
@@ -41,12 +45,23 @@ export const part = {
         label: 'NPC initiative',
         describe: 'Before each reply, code picks at most one person present or nearby with an open thread to take the first step (approach, interrupt or ask); the Director note names them in one line.',
         default: true,
+        presets: { lean: false },
+    }, {
+        // The world's own threads (src/v2/threads.js): what the story keeps moving behind the scene.
+        id: THREADS_FEATURE,
+        label: 'World-building threads',
+        describe: 'Agendas, events, clocks, beats and secrets, world events and factions, landmarks and routes: the narrator writes them and the Director, Chronicle and World screens show them. Quests, hooks and time are not part of it.',
+        default: true,
+        presets: { lean: false },
     }],
     commands: { [SEED]: seedCommand, ...threadCommands, 'threads.intent': intentCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
     queries,
     kinds,
     context: {
-        static: env => staticText(env),
+        // The Pacing paragraph is the threads feature's: the module (module.js) sends it right after this static, in the
+        // same place as before, as a context part under that feature, so a prompt with the feature on is unchanged.
+        static: env => staticText({ ...env, threads: false }),
+        inline: [{ feature: THREADS_FEATURE, static: () => PACING_TEXT }],
         tail: view => directorTail(view),
         budget: TAIL_BUDGET,
         parts: [{ feature: INITIATIVE_FEATURE, static: () => INITIATIVE_STATIC }],

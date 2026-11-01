@@ -57,7 +57,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
 4. **Static prompt byte-identical** reply to reply (the grammar may depend on the module set, never on state).
    New static lines only via a Feature or a setting; tail within `TAIL_BUDGET` (500).
 5. **Every optional mechanic is a Feature (F100):** `story-director.arc`, `.world`, `.map`, `.digest`,
-   `.reveal`, `.behind`, `.people`, `.trip`; tag kinds, commands, queries, screens; check `ctx.feature(id)`.
+   `.reveal`, `.behind`, `.people`, `.trip`, `.threads` (src/v2/threads.js: the agenda, event, clock, beat, secret, faction, world, landmark and route kinds, the Pacing and World paragraphs, their panels; `~ time`, quests, hooks and checks are not part of it; `chronicle.lasting` keeps working off); tag kinds, commands, queries, screens; check `ctx.feature(id)`.
 6. **Story-driven:** no buttons for story actions; the reader's tools (Reveal, Plan arc, Finish) are fine.
 7. **No markup from text:** templates and widgets only; names flattened; cut by code points.
 8. **Tests for every rule,** run once after the fix. `npm test` + `npm run check` green; README/CHANGELOG updated.

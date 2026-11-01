@@ -16,12 +16,13 @@
 
 import { makeCalendar } from '../../calendar.js';
 import { estimateTokens } from '../../relevance.js';
-import { RECAP_BUDGET } from './recap.js';
+import { RECAP_BUDGET, buildRecap } from './recap.js';
 import { DEFAULTS, calendarOf, timeSettings } from './records.js';
 import { needsSettle, recapStale, settle, settleSummary } from './settle.js';
 import { slotValue } from '../slot.js';
 import { ADVANCE, advanceCommand } from './advance.js';
 import { WEATHER_FEATURE, weatherHook } from './weather.js';
+import { ownedKind, threadsOn, withoutOwnedThreads } from '../threads.js';
 
 export const SETTLE = 'time.settle';
 
@@ -73,7 +74,9 @@ function settleCommand(ctx, payload = {}) {
     // made the thread is deleted, replay passes over that closing and keeps the rest of the settle.
     const within = id => { if (typeof ctx.ifThere === 'function') ctx.ifThere('director', `/threads/${id}`); };
     const done = settle(director, { calendar, settings, rev, at, claim: key => ctx.claim(key), within, fights: ctx.fights !== false });
-    const told = settleSummary(done.closed, { calendar, now: done.now });
+    // The receipt's words (told to the next reply) name only quests and hooks while the feature `story-director.threads` is off; the
+    // closing itself is the same, so the state does not depend on the switch.
+    const told = settleSummary(threadsOn(ctx) ? done.closed : done.closed.filter(entry => !ownedKind(entry.kind)), { calendar, now: done.now });
     return {
         summary: told || `Story time settled at ${calendar.format(done.now, { era: false })}.`,
         narrate: Boolean(told),
@@ -109,10 +112,25 @@ function recapFor(view) {
     return recapStale(recap, { at, rev: view?.state?.meta?.rev ?? null }) ? null : recap;
 }
 
+// The recap without what the feature `story-director.threads` owns (agendas, events, clocks, beats, secrets), while it is off:
+// as it is when it tells none of them, else made again from the threads that are left (the stored recap is not touched).
+function recapLines(view, recap) {
+    if (threadsOn(view)) return recap.lines;
+    const director = view?.state?.domains?.director;
+    if (!(Array.isArray(recap.threads) ? recap.threads : []).some(id => ownedKind(director?.threads?.[id]?.kind))) return recap.lines;
+    if (!isInt(recap.fromMinutes) || !isInt(recap.toMinutes)) return [];
+    const settings = timeSettings(view.settings);
+    try {
+        return buildRecap(withoutOwnedThreads(director), { calendar: calendarOf(settings), from: recap.fromMinutes, to: recap.toMinutes, minMinutes: settings.recapHours * 60, fights: view?.fights !== false })?.lines ?? [];
+    } catch {
+        return [];
+    }
+}
+
 /** `context.tail(view)`: the `[While away] …` line for the reply after the jump. */
 export function timeTail(view) {
     const recap = recapFor(view);
-    const lines = recap ? recap.lines.filter(line => typeof line === 'string' && line && estimateTokens(line) <= RECAP_BUDGET) : [];
+    const lines = recap ? recapLines(view, recap).filter(line => typeof line === 'string' && line && estimateTokens(line) <= RECAP_BUDGET) : [];
     return { lines, optional: [] };
 }
 

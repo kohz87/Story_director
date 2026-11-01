@@ -3,16 +3,18 @@
 // CSS within what §13.3 allows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CSS_LIMIT, resolveData, validateScreen, vendoredScreens } from './helpers/runtime.js';
+import { CSS_LIMIT, resolveData, runtime, validateScreen, vendoredScreens } from './helpers/runtime.js';
 import { headState, makeQueries, makeRunner } from './helpers/fixtures.js';
 import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createScreensPart, part, screens } from '../../../src/v2/screens/index.js';
+import { worldScreen } from '../../../src/v2/world/screen.js';
+import { mapScreen } from '../../../src/v2/atlas/screen.js';
 
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
 const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'director.threads.on', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -47,6 +49,23 @@ test('the screens register in Story Block\'s screen registry and list by mount',
     assert.deepEqual(registry.list('dialog'), []);
 });
 
+test('Quests, World and Map say `bar: true` (in the bar by default); the Director and the card do not', () => {
+    for (const screen of [byId[QUESTS_ID], worldScreen, mapScreen]) {
+        assert.equal(screen.bar, true, screen.id);
+        assert.deepEqual(validateScreen(screen, { id: screen.id }), [], screen.id);
+    }
+    assert.equal(byId[DIRECTOR_ID].bar, undefined);
+    assert.equal(byId[STATUS_CARD_ID].bar, undefined);
+    // A Story Block that knows the key (2.12.0) reads it back from the registry; an older one ignores it and the screens still register.
+    const registry = runtime.createScreens({ reader: () => ({}), saveReader() {} });
+    registry.addModule('story-director', [...part.screens, worldScreen, mapScreen]);
+    assert.deepEqual(registry.problems(), []);
+    if (typeof registry.declaredBar === 'function') {
+        assert.deepEqual([QUESTS_ID, worldScreen.id, mapScreen.id].map(id => registry.declaredBar(id)), [true, true, true]);
+        assert.equal(registry.declaredBar(DIRECTOR_ID), false);
+    }
+});
+
 test('every data binding names a query the module (or a module it reads) answers, and resolves', () => {
     const queries = makeQueries();
     const { run } = makeRunner(queries);
@@ -67,7 +86,9 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(director.event_closed, { query: 'director.threads', args: { kind: 'event', status: 'resolved' } });
     // Behind the scenes is the Reveal panel's (director.behind), and so are its problems.
     assert.equal(director.secret_closed, undefined);
-    const { problems, time, arc, behind, ...threads } = director;
+    const { problems, time, arc, behind, threads: threadsOn, ...threads } = director;
+    // Whether the world-building threads feature is on (null while off): the World card is drawn only then.
+    assert.deepEqual(threadsOn, { query: 'director.threads.on' });
     assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });
     assert.deepEqual([arc, behind], [{ query: 'director.arc' }, { query: 'director.behind' }]);
     // The reply's card shows no next beat (a spoiler); it adds the map coordinates and the weather.

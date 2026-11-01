@@ -11,6 +11,8 @@
 // Block's --ss-* properties, as the Director's other screens do; cards and packs may restyle or
 // replace it by its id.
 
+import { THREADS_FEATURE } from '../threads.js';
+
 export const CHRONICLE_ID = 'story-director/chronicle';
 
 const STATE_OPTIONS = `<option value="">(as it is)</option><option value="looming">looming</option><option value="ongoing">ongoing</option><option value="resolved">resolved</option>`;
@@ -155,6 +157,8 @@ export const chronicleScreen = Object.freeze({
     title: 'Chronicle',
     icon: 'fa-landmark',
     mounts: Object.freeze(['tab', 'screen']),
+    // The Chronicle is the threads feature's: with it off the tab is gone (what it holds is kept).
+    feature: THREADS_FEATURE,
     template: TEMPLATE,
     css: CSS,
     data: Object.freeze({

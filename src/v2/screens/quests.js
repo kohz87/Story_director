@@ -70,6 +70,7 @@ export const questsScreen = Object.freeze({
     id: QUESTS_ID,
     title: 'Quests',
     icon: 'fa-scroll',
+    bar: true,
     mounts: ['tab', 'screen'],
     data: { threads: { query: 'director.threads' } },
     template: TEMPLATE,

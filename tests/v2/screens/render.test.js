@@ -262,9 +262,10 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     const registry = runtime.createScreens({ reader: () => reader, saveReader: next => { reader = next; } });
     registry.addModule('story-director', part.screens);
     const compiled = new Map();
+    // Keyed by the template, not the screen id: a host that draws the card's one-line summary (a second template) uses the same id.
     const render = (el, screen, scope) => {
-        if (!compiled.has(screen.id)) compiled.set(screen.id, runtime.compileTemplate(screen.template));
-        return runtime.renderTemplate(el, compiled.get(screen.id), scope, { evaluate: runtime.evaluate, widgets: runtime.widgets, formatters });
+        if (!compiled.has(screen.template)) compiled.set(screen.template, runtime.compileTemplate(screen.template));
+        return runtime.renderTemplate(el, compiled.get(screen.template), scope, { evaluate: runtime.evaluate, widgets: runtime.widgets, formatters });
     };
     const cards = runtime.createCardMount({
         screens: registry, render, document: doc, IntersectionObserver: null,
@@ -275,10 +276,18 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     // No `enabled` given: the registry's cardsOn decides, and the status card says `defaultOn: true`.
     assert.equal(registry.cardsOn(STATUS_CARD_ID), true);
     cards.attachAll();
-    cards.toggle(1, STATUS_CARD_ID, true);
-    cards.toggle(3, STATUS_CARD_ID, true);
-    const body = index => messages[index].querySelector('.ss-card-body');
+    // Open each reply's card the way the reader does, by its header. (Story Block's card mount changed its `toggle` signature when it
+    // merged the cards into one "This reply" card, so the test does not call it: this runs against either.)
+    for (const index of [1, 3]) {
+        const head = messages[index].querySelector('.ss-card-head');
+        assert.ok(head, `reply ${index} has a card to open`);
+        head.click();
+        assert.equal(head.getAttribute('aria-expanded'), 'true');
+    }
+    // The status card's body: a section of the merged card (`data-ss-section`), or the card's own body in an older Story Block.
+    const body = index => messages[index].querySelector(`[data-ss-section="${STATUS_CARD_ID}"] .ss-card-sec-body`) ?? messages[index].querySelector('.ss-card-body');
     const text = index => squash(body(index).textContent);
+    const merged = messages[1].querySelector(`[data-ss-section="${STATUS_CARD_ID}"]`) !== null;
 
     assert.match(text(1), /June 10, 2025, 06:30 pm/);
     assert.match(text(1), /Mill Road · Eastmarch/);
@@ -291,6 +300,14 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     assert.doesNotMatch(text(3), /Harvest Fair|Bandit Raid/, 'no next beat under a reply');
     assert.equal(body(3).querySelector('.sd-place').classList.contains('sd-new'), false);
     assert.equal(body(1).getAttribute('data-ss-screen'), STATUS_CARD_ID);
+    // The merged card's closed line is the status card's own summary, read from that reply's state too.
+    if (merged) {
+        const line = index => squash(messages[index].querySelector('.ss-card-summary').textContent);
+        assert.match(line(1), /Mill Road/);
+        assert.doesNotMatch(line(1), /Bluewatch/);
+        assert.match(line(3), /Bluewatch Village/);
+        assert.doesNotMatch(line(3), /Mill Road/);
+    }
 
     // Every binding of reply 1's card ran on reply 1's state.
     const forOne = calls.filter(call => call.state === states[1]).map(call => call.name);

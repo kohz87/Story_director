@@ -6,7 +6,9 @@
 // - capture: every part's kinds with their one-line grammar; `apply` dispatches by `line.kind`
 //   to the part that owns the kind;
 // - context: statics joined in part order (the same bytes every reply for one set of modules), tails
-//   concatenated in part order, budgets summed. Parts are told `{ fights }` (statics, kinds whose
+//   concatenated in part order, budgets summed. A part may hand a paragraph of its own static to a feature
+//   (`context.inline: [{ feature, static }]`, right after the part's static; `context.staticFeature`, the
+//   whole static): the host sends those only while that feature is on, in the same place. Parts are told `{ fights }` (statics, kinds whose
 //   grammar is a function, and `view.fights` / `ctx.fights`): whether a module runs fights, learnt
 //   before each reply (fightRunner), so Story Director alone asks for no encounters (WAVE rule 11);
 //   the parts' `context.parts` (static or tail text under a feature) are passed on as the module's;
@@ -21,8 +23,9 @@
 //   is handed over as the chat uses it (the reader's, else the enabled pack's, else Gregorian);
 // - queries: called (state, args, tools) with the host's tools plus `tools.settings()` (the part's
 //   own settings: the host's tools.settings when it passes one, else Story Block's
-//   `sdk.settings('story-director')`, else the defaults) and `tools.substitute(text)` ({{user}} and
-//   {{char}} through Story Block's `sdk.substitute` when it is there). The atlas's trip queries get
+//   `sdk.settings('story-director')`, else the defaults), `tools.substitute(text)` ({{user}} and
+//   {{char}} through Story Block's `sdk.substitute` when it is there) and `tools.feature(id)` (whether
+//   the reader has a feature on, Story Block's `sdk.feature`; a query that cannot ask reads it as on). The atlas's trip queries get
 //   the reader's map settings as `map` when the caller gives none;
 // - tabs: the parts' tabs in part order (none now: the screens show quests, threads and the map);
 // - screens: every part's `screens`, in part order; widgets: every part's `widgets`. A screen id
@@ -44,10 +47,10 @@ import { fightsAmong } from './fights.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.5.1';
+export const VERSION = '2.6.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-export const STORY_BLOCK_RANGE = '>=2.6.0';
+export const STORY_BLOCK_RANGE = '>=2.12.0';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);
@@ -70,6 +73,8 @@ const tryLive = (fn, fallback) => {
 const LIVE_HOST = Object.freeze({
     settings: id => tryLive(() => liveSdk()?.settings?.(id), null),
     substitute: text => tryLive(() => liveSdk()?.substitute?.(text), undefined),
+    // Whether the reader has a feature on (Story Block's `sdk.feature`); undefined when it cannot be asked, which reads as on.
+    feature: id => tryLive(() => liveSdk()?.feature?.(id), undefined),
 });
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -211,13 +216,15 @@ export function fightRunner(view = null) {
     });
 }
 
-// The tools a part's query sees: the host's (`query`, `receipts`, …) plus settings() and substitute().
+// The tools a part's query sees: the host's (`query`, `receipts`, …) plus settings(), substitute() and feature(id).
 function partTools(ns, tools, shared, host) {
     const base = typeof tools === 'function' ? { query: tools } : isObject(tools) ? tools : {};
     const settings = typeof base.settings === 'function' ? id => base.settings(id) : id => host.settings(id);
     const substitute = typeof base.substitute === 'function' ? base.substitute : host.substitute;
+    const feature = typeof base.feature === 'function' ? base.feature : host.feature;
     return Object.freeze({
         ...base,
+        ...(typeof feature === 'function' ? { feature: id => feature(id) } : {}),
         settings: settingsFor(ns, settings, { ...shared(ns), query: base.query ?? null }),
         substitute: text => {
             let out;
@@ -328,7 +335,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const tabs = [];
     const defaults = {};
     const schema = {};
-    const statics = [];
+    // The static paragraphs in prompt order: { static, feature? }. A paragraph a feature owns is a context part of that
+    // feature; the plain ones around it stay one static each, so the bytes the host builds are the parts' in order.
+    const chunks = [];
     const tails = [];
     // Context parts under a feature (`context.parts: [{ feature, static?, tail? }]`, MODULES §F100): Story
     // Block adds their static and tail only while the feature is on.
@@ -372,7 +381,10 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             appliers[kind] = (ctx, line) => spec.apply(partCtx(ns, ctx, shared), line);
             for (const alias of spec.aliases ?? []) appliers[alias] = appliers[kind];
         }
-        if (typeof part.context?.static === 'function') statics.push(part.context.static);
+        if (typeof part.context?.static === 'function') chunks.push({ static: part.context.static, ...(typeof part.context.staticFeature === 'string' ? { feature: part.context.staticFeature } : {}) });
+        for (const inline of Array.isArray(part.context?.inline) ? part.context.inline : []) {
+            if (typeof inline?.static === 'function') chunks.push({ static: inline.static, ...(typeof inline.feature === 'string' ? { feature: inline.feature } : {}) });
+        }
         if (typeof part.context?.tail === 'function') tails.push([ns, part.context.tail]);
         for (const extra of Array.isArray(part.context?.parts) ? part.context.parts : []) contextParts.push({ ...extra });
         if (Number.isInteger(part.context?.budget) && part.context.budget > 0) budget += part.context.budget;
@@ -410,6 +422,18 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     };
     liveView.calendar = () => packCalendarOf(name => askLive(name));
     liveCalendarSettings(defaults, schema, liveView);
+    // Runs of plain paragraphs are one static; a paragraph under a feature is a context part (MODULES §F100). The first
+    // run is the module's own static, the rest follow it as parts in the same order, before the parts the module's
+    // parts declare (the NPC initiative's), so the host puts the paragraphs together exactly as they were written.
+    const grouped = [];
+    for (const chunk of chunks) {
+        const last = grouped.at(-1);
+        if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
+        else grouped.push({ feature: chunk.feature, items: [chunk.static] });
+    }
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
+        .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {
         id: MODULE_ID,
         name: MODULE_NAME,
@@ -424,8 +448,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         queries,
         replayQueries: ['director.thread'].filter(name => Object.hasOwn(queries, name)),
         context: {
-            // The same bytes every reply: each part's static is fixed text.
-            static: () => statics.map(fn => String(fn({ fights: env.fights }) ?? '').trim()).filter(Boolean).join('\n'),
+            // The same bytes every reply: each part's static is fixed text. What a feature owns is a context part of its own.
+            static: staticOf(grouped[0] && !grouped[0].feature ? grouped[0].items : []),
             tail(view) {
                 learn(view);
                 const lines = [];
@@ -438,7 +462,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 return { lines, optional };
             },
             budget: budget || 1,
-            ...(contextParts.length ? { parts: contextParts } : {}),
+            ...(staticParts.length || contextParts.length ? { parts: [...staticParts, ...contextParts] } : {}),
         },
         hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => {
             const merged = mergeHook(name, entries, shared);

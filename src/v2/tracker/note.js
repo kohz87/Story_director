@@ -19,6 +19,7 @@ import { problemList } from './domain.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
 import { elsewhereCap, elsewhereItem, elsewhereLine, knownToUser, sceneOf, splitByScene } from './scene.js';
 import { initiativeTail } from './initiative.js';
+import { threadsOn, withoutOwnedThreads } from '../threads.js';
 
 export const TAIL_BUDGET = 500;
 /**
@@ -50,16 +51,21 @@ const FIELDS_ALONE = FIELDS_LINE.replace(', encounter;', ';');
 
 /**
  * The Director's part of the static prompt: no names, counts, times or dice. The same bytes for one
- * set of modules: `fights` (a module runs fights) adds the encounter field.
+ * set of modules: `fights` (a module runs fights) adds the encounter field. `threads: false` leaves
+ * out the Pacing paragraph, which belongs to the feature `story-director.threads` (the module hands it
+ * to the host as a context part under that feature, so it is sent only while the feature is on).
  */
-export function staticText({ fights = true } = {}) {
+export function staticText({ fights = true, threads = true } = {}) {
     return [
         'Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).',
         fights ? FIELDS_LINE : FIELDS_ALONE,
         WRITE_ONLY_LINE,
-        PACING,
-    ].join('\n');
+        threads ? PACING : '',
+    ].filter(Boolean).join('\n');
 }
+
+/** The Pacing paragraph (a due item comes in only where it fits), the feature `story-director.threads`' own. */
+export const PACING_TEXT = PACING;
 
 /** The static part when an optional fight runner is present. */
 export const STATIC_TEXT = staticText();
@@ -146,7 +152,11 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     const stored = state?.domains?.director;
     if (!stored) return { lines: [], optional: [] };
     const said = typeof view?.chat?.lastUser === 'string' ? view.chat.lastUser : '';
-    const director = tailThreads(stored, { said, place: String(state?.domains?.scene?.place?.name ?? '') });
+    // Without the feature `story-director.threads` the note speaks of quests and hooks only: nothing of the
+    // agendas, events, clocks, beats and secrets the story may still hold (they are kept, not told).
+    const threads = threadsOn(view);
+    const kept = threads ? stored : withoutOwnedThreads(stored);
+    const director = tailThreads(kept, { said, place: String(state?.domains?.scene?.place?.name ?? '') });
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
     const calendar = calendarOf(settings, packCalendarOf(view.query));
     const fights = view?.fights !== false;
@@ -185,7 +195,7 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     // Who takes the initiative in this reply (initiative.js): its line is kept, so its room comes first.
     const initiative = initiativeTail(view, { scene });
     const initiativeCost = initiative ? estimateTokens(`\n${initiative}`) : 0;
-    const instruction = staticText({ fights });
+    const instruction = staticText({ fights, threads });
     const total = budget + estimateTokens(instruction);
     let parts = noteParts(selection, {
         calendar,
