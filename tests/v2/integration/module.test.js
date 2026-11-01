@@ -18,6 +18,7 @@ import { part as keyPeoplePart } from '../../../src/v2/keypeople/index.js';
 import { DEFAULT_TOKENS as KEY_PEOPLE_TOKENS } from '../../../src/v2/keypeople/domain.js';
 import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
+import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
 
 // What the host builds from a module's context (Story Block's registry contextOf): its static, then each context part that is on, trimmed,
 // the empty ones left out, one per line.
@@ -37,8 +38,8 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     assert.equal(hostStatic(def, () => true, {}), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
     assert.equal(keyPeoplePart.context.static({ keyPeople: true }), KEY_PEOPLE_STATIC);
     assert.equal(keyPeoplePart.context.static({ keyPeople: false }), '');
-    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + KEY_PEOPLE_TOKENS + ARC_TAIL_BUDGET + checksPart.context.budget);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'arc', 'checks', 'screens']);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'arc', 'checks', 'screens']);
     assert.match(def.capture.kinds.quest.grammar, /story follows/);
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;

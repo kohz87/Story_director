@@ -19,10 +19,16 @@
 // Lasting changes (chronicle.lasting, a pack's events: tests/v2/chronicle/helpers/lasting-pack.js): a pack whose
 // events write and move world events (one chain tried before the first reply has set the clock, so it waits),
 // replies whose world lines name them, and the reader's edits of them, from a random stream of their own.
+// The living cast (own stream): a pack of six people (some with a goal the story touches, some who may die) whose entries change now and
+// then (a new version, one added, one gone, the pack switched off and on) and a scripted planner that moves some of them, brings some to the
+// party and kills one on a day change; meetings by place follow the scene. A delete often takes the reply that holds the sync, a move, a
+// meeting; a later step on a person that reply made is passed over, never a failing block, and the narrator is never told an unmet person.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
+import { createFakeModel } from '../../vendor/story-block/testkit/model.js';
 import { createModule } from '../../../src/v2/module.js';
+import { castPlans } from '../../../src/v2/cast/index.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
@@ -195,6 +201,39 @@ async function keyEdits(rk, host, n) {
 
 const said = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
+// The cast (own stream): six people at the first reply's places and one elsewhere; `drawnTo` words that every reply's text holds, so the
+// story "touches" them; two may die. The pack's entries and version change now and then (castEdits); the scripted planner (castAnswer) moves
+// some people, brings one whose goal was touched and now and then kills one who may die.
+const CAST_PLACES = [...BASE_PLACES, 'Wayside4', 'Kesh'];
+const castEntry = (id, rc, version) => ({
+    pack: 'ersveil', packVersion: version, id, name: id[0].toUpperCase() + id.slice(1), about: `${id} is somebody.`, look: 'weathered',
+    start: { place: rc.pick(CAST_PLACES), goal: `${id} goal`, routine: rc.pick(['', 'works the night ferry', 'at the forge in the morning', 'sells wares by day']) },
+    drawnTo: rc.chance(0.4) ? ['the reply'] : [], canDieUnmet: rc.chance(0.3),
+});
+const CAST_IDS = ['aino', 'borka', 'cael', 'dren', 'eska', 'fotu'];
+function castEdits(rc, source, n) {
+    if (!rc.chance(0.3)) return;
+    const roll = rc();
+    if (roll < 0.3) {
+        source.version = `1.${n}.0`;
+        source.entries = source.entries.map(entryOf => ({ ...entryOf, packVersion: source.version, ...(rc.chance(0.3) ? { name: `${entryOf.name}${n}` } : {}) }));
+    } else if (roll < 0.55) source.entries.push(castEntry(`late${n}`, rc, source.version));
+    else if (roll < 0.75 && source.entries.length > 2) source.entries.splice(rc.int(0, source.entries.length - 1), 1);
+    else source.enabled = !source.enabled;
+}
+function castAnswer(rc) {
+    return call => {
+        const lines = [];
+        for (const match of String(call.prompt).matchAll(/^- (\S+) \| ([^|\n]+)(\|[^\n]*)?$/gm)) {
+            const [, ref, , rest = ''] = match;
+            if (rc.chance(0.5)) lines.push(`~ cast ${ref} | ${rc.pick(CAST_PLACES)} | doing thing ${rc.int(1, 99)}`);
+            if (/drawn to/.test(rest) && /has not met/.test(rest) && rc.chance(0.5)) lines.push(`> cast ${ref} | the story reached them ${rc.int(1, 99)}`);
+            if (/may die/.test(rest) && rc.chance(0.2)) lines.push(`! cast ${ref} | an accident`);
+        }
+        return lines.join('\n');
+    };
+}
+
 // The clock the replies left say, without replaying anything: the first reply sets June 3, 08:00 am
 // (`start`), `SET_LINE` sets June 9, 10:00 am, each move adds on top, held to the longest jump (30 days)
 // from where its reply began, as applyTimeLine does.
@@ -237,7 +276,20 @@ for (const seed of SEEDS) {
         const rl = prng(seed ^ 0x1A57);
         const rt = prng(seed ^ 0x7121);
         const rk = prng(seed ^ 0x4B50);
-        const host = await createHost({ modules: [fakeFightRunner(), createModule()] });
+        const rc = prng(seed ^ 0xCA57);
+        const source = { version: '1.0.0', enabled: true, entries: [] };
+        source.entries = CAST_IDS.map(id => castEntry(id, rc, source.version));
+        castPlans.clear();
+        let host = null;
+        const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat } });
+        host = await createHost({ modules: [fakeFightRunner(), module], callModel: createFakeModel([], { fallback: castAnswer(rc) }), settings: { modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
+        // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
+        const installCast = async () => {
+            const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
+            assert.equal((await host.packs.packs.install(JSON.stringify(pack), { origin: 'cast-fuzz' })).ok, true);
+            await host.packs.packs.setEnabled('ersveil', source.enabled);
+        };
+        await installCast();
         try {
             assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', `~ place ${BASE_PLACES[0]} | kind: town`, ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
@@ -250,6 +302,9 @@ for (const seed of SEEDS) {
             for (let n = 1; n <= REPLIES; n += 1) {
                 const lines = [...replyLines(r, n), ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
+                await castPlans.idle();
+                castEdits(rc, source, n);
+                await installCast();
                 times.set(host.ctx.chat.at(-1), timeOf(lines));
                 if (n === COINS_AT) host.settings.set('story-block', 'coins', [{ name: 'copper bit', plural: 'copper bits', value: 1 }, { name: 'gold', value: 100 }]);
                 assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `seed ${seed}, reply ${n}: the clock (live)`);
@@ -301,6 +356,13 @@ for (const seed of SEEDS) {
             const summaries = host.sdk.receipts().map(entry => entry.receipt.summary ?? '');
             const tripsMade = summaries.filter(text => /^On the road to /.test(text)).length;
             assert.ok(tripsMade >= 1, `seed ${seed}: the fuzz set out on a trip`);
+            const castDone = summaries.filter(text => /^(The cast|Paths crossed)/.test(text));
+            assert.ok(castDone.length >= 1, `seed ${seed}: the cast joined the world`);
+            const world = Object.values(host.head().domains.cast.people);
+            t.diagnostic(`seed ${seed}: cast steps ${castDone.length} (met ${castDone.filter(text => /^Paths crossed/.test(text)).length}, moved ${castDone.filter(text => /moved on/.test(text)).length}), people ${world.length}, met ${world.filter(person => person.met).length}, dead ${world.filter(person => !person.alive).length}`);
+            // The narrator hears of the cast only in a meeting's cue (a meeting a later delete took back was still told then): no other text of any prompt names them.
+            const told = host.st.promptLog.filter(entry => entry.value).flatMap(entry => String(entry.value).split('\n')).filter(line => !line.startsWith('[Cast]'));
+            for (const id of CAST_IDS) assert.ok(!told.some(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line)), `seed ${seed}: ${id} is named outside a meeting's cue`);
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}), pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);

@@ -102,7 +102,7 @@ function profilesOf() {
     return out;
 }
 
-/** The people the reader may pin, not pinned yet: `[{ name, aliases, source: 'here' | 'thread' | 'npc', nsd }]`. */
+/** The people the reader may pin, not pinned yet: `[{ name, aliases, source: 'here' | 'thread' | 'cast' | 'npc', nsd }]`. */
 function choicesOf(slice, query, profiles) {
     const out = [];
     const seen = new Set();
@@ -140,6 +140,11 @@ function choicesOf(slice, query, profiles) {
                 add(dossier?.name ?? name, 'thread', { aliases: Array.isArray(dossier?.aliases) ? dossier.aliases : [], nsd: Boolean(dossier) });
             }
         }
+    }
+    // The people met from a pack's cast (Story Director's own cast, `director.cast`: only the met are listed), alive.
+    const met = ask(query, 'director.cast', {});
+    for (const person of Array.isArray(met) ? met : []) {
+        if (isRecord(person) && person.alive !== false && typeof person.name === 'string') add(person.name, 'cast', { aliases: Array.isArray(person.aliases) ? person.aliases : [], nsd: nsdOn && Boolean(dossierOf(person.name)) });
     }
     // Everyone NPC State Delta tracks (not archived, not dead).
     for (const profile of profiles) add(profile.name, 'npc', { aliases: profile.aliases ?? [], nsd: true });

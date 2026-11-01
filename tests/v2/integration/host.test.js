@@ -89,10 +89,10 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
 test('the module registers whole: screens instead of tabs, settings fields, capture kinds, queries', async () => {
     const host = await newHost();
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
-    assert.equal(mine.version, '2.7.0');
+    assert.equal(mine.version, '2.8.0');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
     assert.deepEqual([...mine.kinds].sort(), ['agenda', 'away', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'key', 'landmark', 'quest', 'route', 'secret', 'time', 'trip', 'world']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.lasting', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'keypeople.pin', 'keypeople.sync', 'keypeople.unpin', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'cast.advance', 'cast.meet', 'cast.sync', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.lasting', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.initiative', 'director.seed', 'keypeople.pin', 'keypeople.sync', 'keypeople.unpin', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
         'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card',
@@ -101,6 +101,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     assert.deepEqual(Object.keys(defs.schema).sort(), [
         'arc.autoAccept', 'arc.genre', 'arc.keepNote', 'arc.lowThreads', 'arc.maxTokens', 'arc.note', 'arc.profile', 'arc.recent', 'arc.stallDays', 'arc.trigger',
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
+        'cast.faces', 'cast.on', 'cast.profile', 'cast.unmetDie',
         'checks.costMargin', 'checks.defaultDc', 'checks.social',
         'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail', 'keypeople.cap', 'keypeople.tokens',
         'screens.hideBehind', 'time.lapses', 'time.recapHours',

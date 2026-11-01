@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.8.0
+
+A pack's cast (Story Block 2.15.0 or later) comes alive. Without a pack that has a cast nothing changes.
+
+- **The living cast.** Each person in the pack starts at their place with a goal and a routine, and lives off-screen:
+  when the day changes or time skips they move on, one short planner line each and only where something changed. People
+  you have not met stay hidden — never named on any screen nor told to the narrator.
+- **Meeting them (no dice).** You meet someone the first time you are at their place while their routine has them there,
+  or when the story touches what draws them and they come looking. At most one new face a day by default (Settings →
+  Modules → Story Director → The cast: 1 a day, 2 a day or 1 a week); never during a fight. The narrator is told who they
+  are and why now, once, on the meeting reply; "This reply" says "Paths crossed: Fenna" with the reason. A swipe rewrites
+  the scene, not who you meet. Someone already in the scene under their name is met "in the story".
+- **World → Around here.** How many of the cast you have met, whether an unmet one may cross your path here (no names),
+  and the last news of those you have met.
+- **Pack updates.** A newer pack brings its new people into running chats from that story day, hidden until met; an unmet
+  person whose entry changed takes the new words; people you have met are never overwritten.
+- **Before they are met** they can be hurt, lose things or move, but not die — unless you turn that on or the pack
+  marks someone so.
+- Met cast can be pinned as Key people.
+
 ## 2.7.0
 
 - **Key people.** Pin up to 10 people who matter (the number is a setting) in World → Now → Key people, with **+ Pin**
