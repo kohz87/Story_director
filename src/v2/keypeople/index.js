@@ -71,11 +71,11 @@ export const part = {
         defaults: { cap: DEFAULT_CAP, tokens: DEFAULT_TOKENS },
         schema: {
             cap: {
-                type: 'int', label: 'How many key people', min: 0, max: MAX_CAP, feature: FEATURE,
+                type: 'int', label: 'How many key people', group: 'Key people', min: 0, max: MAX_CAP, feature: FEATURE,
                 help: 'Pinned people whose off-screen story keeps going, in Lean too. Archiving a dossier or a death unpins them.',
             },
             tokens: {
-                type: 'int', label: 'Narrator budget for key people (tokens)', min: 0, feature: FEATURE,
+                type: 'int', label: 'Narrator budget for key people (tokens)', group: 'Key people', min: 0, feature: FEATURE,
                 help: 'No upper limit. When those away need more, the ones returning soonest or whose story just moved are told first. Story Suite\'s overall budget (Settings → Tabs & Packs) still caps everything sent each reply.',
             },
         },

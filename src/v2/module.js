@@ -6,7 +6,8 @@
 // - capture: every part's kinds with their one-line grammar; `apply` dispatches by `line.kind`
 //   to the part that owns the kind;
 // - context: statics joined in part order (the same bytes every reply for one set of modules), tails
-//   concatenated in part order, budgets summed. A part may hand a paragraph of its own static to a feature
+//   concatenated in part order, budgets summed (a part whose budget is a setting, the Key people's, gives `context.budgetOf(settings)`:
+//   the module's `context.budget` is read from the setting each time the host asks, so a larger one is not cut at the fixed sum). A part may hand a paragraph of its own static to a feature
 //   (`context.inline: [{ feature, static }]`, right after the part's static; `context.staticFeature`, the
 //   whole static): the host sends those only while that feature is on, in the same place. Parts are told `{ fights }` (statics, kinds whose
 //   grammar is a function, and `view.fights` / `ctx.fights`): whether a module runs fights, learnt
