@@ -26,7 +26,7 @@ const TEMPLATE = `
 <div class="sd-castnotes" data-if="len(state.cast.notes) > 0">
   <div class="sd-castnote" data-each="state.cast.notes as n" data-if="n.at == index" data-kind="{{ n.kind }}">
     <span class="sd-castnote-ico" aria-hidden="true"><i class="fa-solid fa-user-plus" data-if="n.kind == 'met'"></i><i class="fa-solid fa-hourglass-half" data-if="n.kind == 'moved'"></i><i class="fa-solid fa-cloud-arrow-up" data-if="n.kind == 'updated'"></i></span>
-    <span class="sd-castnote-body"><b>{{ n.head }}</b> <span class="ss-pill ss-pill-soft">{{ n.tag }}</span><small>{{ n.rest }}</small></span>
+    <span class="sd-castnote-body"><span class="sd-castnote-head"><b>{{ n.head }}</b> <span class="ss-pill ss-pill-soft">{{ n.tag }}</span></span><small>{{ n.rest }}</small></span>
   </div>
 </div>
 <div class="sd-keynotes" data-if="len(state.keypeople.notes) > 0">
@@ -95,6 +95,7 @@ const CSS = `${BASE_CSS}
 .sd-castnote[data-kind="met"] { border-color: var(--sd-accent); background: var(--ss-accent-soft); }
 .sd-castnote-ico { color: var(--sd-accent); }
 .sd-castnote-body { display: grid; gap: 4px; min-width: 0; }
+.sd-castnote-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .sd-castnote-body small { color: var(--sd-muted); }
 .sd-keynote-star { color: var(--sd-warn); }
 .sd-progress { display: block; margin-top: 4px; }

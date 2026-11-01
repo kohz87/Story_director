@@ -1,9 +1,10 @@
 // What other modules and the World screen read: `director.cast` gives only people who have been met (with their pack entry, for NPC State
 // Delta's dossier); an unmet person is never named, not even to a module; the numbers and the "Around here" data come as counts.
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
-import { OPENING, castHost, castSource, createFakeModel, entry, said, settle } from './helpers.js';
+import { OPENING, castHost, castSource, createFakeModel, entry, receipts, said, settle, validatorErrors } from './helpers.js';
 
 const quiet = t => t.mock.method(console, 'warn', () => {});
 
@@ -89,6 +90,56 @@ test('a person met from the cast can be pinned as a key person: the Pin chooser 
         await settle();
         assert.doesNotMatch(host.model.calls.at(-1).prompt, /- brom \|/, 'a key person is not moved by the cast planner');
         assert.match(host.model.calls.at(-1).prompt, /- fenna \|/);
+    } finally {
+        host.close();
+    }
+});
+
+// ---- the order other modules rely on, and the real-size cast ------------------------------------------------------------------------
+
+const ERSVEIL = JSON.parse(readFileSync(new URL('../../fixtures/ersveil-cast.json', import.meta.url), 'utf8')).map(item => ({ pack: 'ersveil', packVersion: '2.2.1', ...item }));
+
+test('a meeting is in director.cast before the reply is written and while it is read, so a module that ticks on that reply (NPC State Delta) sees them at once, not a reply late', async t => {
+    quiet(t);
+    const seen = { tail: [], received: [], generated: [] };
+    // A stand-in for a module that reads director.cast while the reply is built (its tail) and when it has arrived (afterReceive).
+    const watcher = {
+        id: 'aaa-watcher', name: 'Watcher (test stand-in)', version: '0.0.0-test', domains: {}, commands: {}, queries: {},
+        context: { static: () => '', tail: view => { seen.tail.push(view.query('director.cast').map(person => person.name)); return { lines: [], optional: [] }; }, budget: 10 },
+        hooks: { afterReceive: view => { seen.received.push(view.query('director.cast').map(person => person.name)); } },
+    };
+    const host = await castHost({ source: castSource([entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' } })]), extra: [watcher] });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        const before = seen.tail.length;
+        await host.send('Look.', said('Smoke.'));
+        assert.deepEqual(seen.tail.at(-1), ['Brom'], 'in the tail the reply is written with');
+        assert.deepEqual(seen.received.at(-1), ['Brom'], 'and when the reply has arrived');
+        assert.ok(seen.tail.length > before);
+        // The step is stored before the reply (on the head when the hook ran), not after it.
+        const meet = receipts(host, 'cast.meet')[0];
+        assert.ok(meet.index < host.ctx.chat.length - 1, 'recorded before the reply that brings them');
+    } finally {
+        host.close();
+    }
+});
+
+test('the real-size cast (twelve Ersveil people): they join at their exact start places, the Bluewatch ones are met by place and routine at the quay, the rest stay hidden', async t => {
+    quiet(t);
+    const host = await castHost({ source: castSource(ERSVEIL), settings: { 'cast.faces': 'day2' } });
+    try {
+        await host.send('Hello.', said('Dawn.', ['~ time June 3, 1200, 06:30 am', '~ place Bluewatch Village | kind: settlement']));
+        await host.send('Look.', said('Smoke.'));
+        assert.deepEqual(host.sdk.query('director.cast').map(person => person.id), ['ruvai-ghostpass'], 'one a reply');
+        await host.send('Wait.', said('Smoke.'));
+        await host.send('Wait.', said('Smoke.'));
+        const met = host.sdk.query('director.cast').map(person => person.id);
+        assert.equal(host.sdk.query('director.cast.counts').total, 12);
+        assert.deepEqual(met, ['ruvai-ghostpass', 'tansy-millrace'], 'two a day: the Bluewatch people whose routine has them there at dawn; the third waits');
+        const first = host.sdk.query('director.cast')[1];
+        assert.deepEqual([first.name, first.aliases, first.where, first.met.where, first.entry.portrait], ['Tansy Millrace', ['Tansy', 'Millrace', 'the night-ferry woman'], 'Bluewatch Village', 'Bluewatch Village', 'tansy-millrace.webp']);
+        assert.doesNotMatch(JSON.stringify(host.sdk.query('director.cast.view')), /Siebert|Nib|Ilvane|Gundisse/);
+        assert.deepEqual(validatorErrors(host), []);
     } finally {
         host.close();
     }

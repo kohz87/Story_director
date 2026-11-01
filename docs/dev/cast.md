@@ -82,6 +82,10 @@ one, but the day is counted; meetings by place still happen.
 enabled. An unmet person never leaves Story Director, not even a name: `director.cast.counts` gives `{ met, total, unmet }`.
 `director.cast.view` (World -> Around here) is Story Director's own. All answer `null` while the feature is off.
 
+Order: a meeting is a step stored before the reply it brings the person into, so `director.cast` lists them while that reply's prompt is
+built and when it arrives; a module that ticks on that reply sees them at once (tests/v2/cast/query.test.js). To pin a met person,
+NPC State Delta's dossier runs the existing reader command `keypeople.pin { name, aliases?, nsd? }` (cause `ui`, as `sdk.command` gives).
+
 ## Screens
 
 - The reply's card: the status card leads with the notes whose `at` is the card's index (paths crossed with the reason, "While time

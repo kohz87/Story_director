@@ -40,7 +40,7 @@ test('the status card: the cast lines for this reply lead its body and its close
     assert.deepEqual(warnings, []);
     const cards = el.querySelectorAll('.sd-castnote');
     assert.deepEqual(cards.map(card => card.getAttribute('data-kind')), ['met', 'moved']);
-    const parts = card => [...card.querySelector('.sd-castnote-body').children].map(node => squash(node.textContent));
+    const parts = card => [...card.querySelector('.sd-castnote-head').children, card.querySelector('.sd-castnote-body > small')].map(node => squash(node.textContent));
     assert.deepEqual(parts(cards[0]), ['Paths crossed: Fenna', 'Ersveil cast · first meeting', 'Why: Fenna works the night ferry at Bluewatch docks, and you are there: your first time here while they are. No roll.']);
     assert.deepEqual(parts(cards[1]).slice(0, 2), ['While time passed', '3 days']);
     assert.match(parts(cards[1])[2], /^9 cast members moved on off-screen/);

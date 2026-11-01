@@ -75,7 +75,8 @@ export function castOf(query) {
         if (!isRecord(pack) || typeof pack.id !== 'string') continue;
         if (pack.enabled === false) continue;
         const name = cutPoints(pack.name, MAX_NAME);
-        out.packs[pack.id] = { name: name || pack.id, version: cutPoints(pack.version, MAX_NAME) || out.packs[pack.id]?.version || '' };
+        // The version the entries were listed at wins (they are the pack's own); the pack list's fills in where they give none.
+        out.packs[pack.id] = { name: name || pack.id, version: out.packs[pack.id]?.version || cutPoints(pack.version, MAX_NAME) };
         out.enabled.add(pack.id);
     }
     return out;
