@@ -39,6 +39,7 @@ import { part as time } from './time/index.js';
 import { part as atlas } from './atlas/index.js';
 import { part as chronicle } from './chronicle/index.js';
 import { part as world } from './world/index.js';
+import { part as keypeople } from './keypeople/index.js';
 import { part as arc } from './arc/index.js';
 import { part as checks } from './checks/index.js';
 import { part as screens } from './screens/index.js';
@@ -53,7 +54,7 @@ export const VERSION = '2.6.0';
 export const STORY_BLOCK_RANGE = '>=2.12.0';
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['arc', arc], ['checks', checks], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['arc', arc], ['checks', checks], ['screens', screens]]);
 
 // Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 function liveSdk() {
@@ -344,6 +345,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const contextParts = [];
     const sections = [];
     let budget = 0;
+    // A part whose token budget is a setting (`context.budgetOf(settings)`, the Key people's): the module's budget follows it, so a
+    // larger one is not cut by the host at the sum of the fixed ones. Its own `context.budget` is what it is when the setting is unread.
+    const dynamicBudgets = [];
 
     for (const [ns, part] of parts) {
         for (const [name, domain] of Object.entries(part.domains ?? {})) {
@@ -387,7 +391,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         }
         if (typeof part.context?.tail === 'function') tails.push([ns, part.context.tail]);
         for (const extra of Array.isArray(part.context?.parts) ? part.context.parts : []) contextParts.push({ ...extra });
-        if (Number.isInteger(part.context?.budget) && part.context.budget > 0) budget += part.context.budget;
+        if (typeof part.context?.budgetOf === 'function') dynamicBudgets.push([ns, part.context.budgetOf, part.context.budget]);
+        else if (Number.isInteger(part.context?.budget) && part.context.budget > 0) budget += part.context.budget;
         for (const [name, fn] of Object.entries(part.hooks ?? {})) {
             if (typeof fn !== 'function') continue;
             (hooks[name] ??= []).push([ns, fn]);
@@ -461,7 +466,15 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 }
                 return { lines, optional };
             },
-            budget: budget || 1,
+            get budget() {
+                let total = budget;
+                for (const [ns, budgetOf, fallback] of dynamicBudgets) {
+                    let own;
+                    try { own = budgetOf(settingsFor(ns, id => host.settings(id), { defaults })()); } catch { own = undefined; }
+                    total += Number.isSafeInteger(own) && own >= 0 ? own : fallback;
+                }
+                return total || 1;
+            },
             ...(staticParts.length || contextParts.length ? { parts: [...staticParts, ...contextParts] } : {}),
         },
         hooks: Object.fromEntries(Object.entries(hooks).map(([name, entries]) => {

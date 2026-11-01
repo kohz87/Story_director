@@ -25,6 +25,7 @@ import { BASE_CSS } from '../screens/style.js';
 import { DIGEST_FEATURE } from '../chronicle/days.js';
 import { FEATURE } from './known.js';
 import { PEOPLE_WIDGET } from './people.js';
+import { KEY_PEOPLE_WIDGET } from '../keypeople/widget.js';
 
 export const WORLD_ID = 'story-director/world';
 export const DAYS_ID = 'story-director/days';
@@ -87,6 +88,10 @@ const NOW = `
     ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
+  </section>
+  <section class="sd-kind wv-key ss-glass" data-kind="key" aria-label="Key people" data-if="q.keys.on == true">
+    ${label('Key people', { count: '{{ q.keys.count }} of {{ q.keys.cap }}' })}
+    <ss-widget name="${KEY_PEOPLE_WIDGET}" data-props='{"bind":"q.keys"}'></ss-widget>
   </section>
   <section class="sd-kind wv-upcoming ss-listcard ss-glass" data-kind="upcoming" aria-label="Upcoming">
     ${label('Upcoming', { card: true, count: 'next {{ q.world.upcomingDays }} days' })}
@@ -186,7 +191,26 @@ const CSS = `${BASE_CSS}
 /* The "Here" heading is one of them: with the place and weather lines gone, a bare heading would sit above the people. */
 .wv-label.wv-scene { display: var(--sd-line-display, flex); }
 .wv-scene[hidden] { display: none; }
-.wv-upcoming, .wv-news, .wv-factions { min-width: 0; }
+.wv-upcoming, .wv-news, .wv-factions, .wv-key { min-width: 0; }
+.wv-key { display: grid; gap: 4px; padding: 12px 14px; align-content: start; }
+.wv-key-body { display: grid; gap: 8px; min-width: 0; }
+.wv-key-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.wv-key-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--sd-border); }
+.wv-key-row:first-child { border-top: 0; padding-top: 2px; }
+.wv-key-star { color: var(--sd-warn); line-height: 1.3; }
+.wv-key-name { font-weight: 700; overflow-wrap: anywhere; }
+.wv-key-pill { display: inline-block; padding: 0 8px; border: 1px solid var(--sd-border); border-radius: var(--ss-radius-pill); font-size: 0.8em; white-space: nowrap; }
+.wv-key-pill.is-away { border-color: var(--sd-accent); color: var(--sd-accent-text); }
+.wv-key-pill.is-here { border-color: var(--sd-good); color: var(--sd-good); }
+.wv-key-sub { grid-column: 2; font-size: 0.85em; line-height: 1.45; overflow-wrap: anywhere; }
+.wv-key-unpin { min-height: 32px; margin: 0; padding: 0 12px; font: inherit; font-size: 0.8em; cursor: pointer; color: inherit; background: none; border: 1px solid var(--sd-border); border-radius: var(--ss-radius-pill); }
+.wv-key-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.wv-key-actions .wv-key-pin { flex: 0 0 auto; min-height: 36px; }
+.wv-key-choices { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 260px; overflow-y: auto; }
+.wv-key-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; width: 100%; min-height: 40px; margin: 0; padding: 6px 12px; font: inherit; text-align: left; cursor: pointer; color: inherit; background: var(--sd-surface); border: 1px solid var(--sd-border); border-radius: var(--sd-radius); }
+.wv-key-pick:hover { border-color: var(--sd-accent); }
+.wv-key-from { color: var(--sd-muted); }
+.wv-key-note { margin: 0; font-size: 0.8em; line-height: 1.45; color: var(--sd-muted); }
 .wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
 .wv-item .ss-listcard-value { max-width: 45%; min-width: 0; }
 .wv-item .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
@@ -233,6 +257,8 @@ const DATA = Object.freeze({
     // `{ on: true }` while the feature `story-director.threads` is on, null while it is off: the News and the Factions read it.
     threads: Object.freeze({ query: 'director.threads.on' }),
     journal: Object.freeze({ query: 'director.journal' }),
+    // The Key people section (keypeople part, feature `story-director.key-people`): `{ on: true, … }`, null while the feature is off.
+    keys: Object.freeze({ query: 'director.keyPeople.view' }),
     // The trip (atlas.trip, feature story-director.trip), shown under the weather while one is on: null with none.
     trip: Object.freeze({ query: 'atlas.trip' }),
 });

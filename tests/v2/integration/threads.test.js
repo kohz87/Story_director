@@ -14,6 +14,7 @@ import { createModule, storyDirectorModule } from '../../../src/v2/module.js';
 import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
 import { PACING_TEXT, staticText } from '../../../src/v2/tracker/note.js';
 import { STATIC_TEXT as WORLD_PARAGRAPHS } from '../../../src/v2/chronicle/note.js';
+import { FEATURE as KEY_PEOPLE_FEATURE } from '../../../src/v2/keypeople/domain.js';
 import { THREADS_FEATURE, THREAD_KINDS_OWNED, ownedKind, threadsOn, withoutOwnedThreads } from '../../../src/v2/threads.js';
 import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 
@@ -68,8 +69,10 @@ test('the feature: declared, on by default, out of the Lean preset; initiative a
 });
 
 test('on: the static part and the kinds are what they always were, byte for byte; off: the three paragraphs and the nine grammar lines are gone', async () => {
-    const on = await newHost();
-    const off = await newHost({ features: { [THREADS_FEATURE]: false } });
+    // The Key people feature (story-director.key-people) adds its own paragraph and two kinds to the prompt: left off here, so these bytes
+    // are the ones the fixtures hold (tests/v2/keypeople says what it adds, and that off adds nothing).
+    const on = await newHost({ features: { [KEY_PEOPLE_FEATURE]: false } });
+    const off = await newHost({ features: { [THREADS_FEATURE]: false, [KEY_PEOPLE_FEATURE]: false } });
     try {
         const was = fixture('prompt-threads-on.json');
         const now = fixture('prompt-threads-off.json');

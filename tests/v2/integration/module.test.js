@@ -14,6 +14,8 @@ import { daysScreen, worldScreen } from '../../../src/v2/world/index.js';
 import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
 import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { part as checksPart } from '../../../src/v2/checks/index.js';
+import { DEFAULT_TOKENS as KEY_PEOPLE_TOKENS } from '../../../src/v2/keypeople/domain.js';
+import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 
 // What the host builds from a module's context (Story Block's registry contextOf): its static, then each context part that is on, trimmed,
@@ -26,12 +28,13 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     // The time, atlas and screens parts add nothing to the static part.
     assert.equal(ATLAS_STATIC, '');
     // The Pacing and the two World paragraphs are the world-building threads feature's: context parts, in the place they always had.
-    const plain = id => id !== 'story-director.initiative';
+    // The Key people paragraph is that feature's: a context part too, between the World paragraphs and the checks line.
+    const plain = id => id !== 'story-director.initiative' && id !== 'story-director.key-people';
     assert.equal(hostStatic(def, plain), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
     assert.equal(hostStatic(def, id => plain(id) && id !== 'story-director.threads'), `${staticText({ threads: false })}\n${checksPart.context.static()}`);
-    assert.equal(hostStatic(def), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
-    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'arc', 'checks', 'screens']);
+    assert.equal(hostStatic(def), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${KEY_PEOPLE_STATIC}\n${checksPart.context.static()}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + KEY_PEOPLE_TOKENS + ARC_TAIL_BUDGET + checksPart.context.budget);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'arc', 'checks', 'screens']);
     assert.match(def.capture.kinds.quest.grammar, /story follows/);
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;
@@ -101,7 +104,7 @@ test('two parts claiming one name is refused', () => {
 test('screens and widgets: every part\'s, in part order; one id in two parts is refused', () => {
     assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, worldScreen, daysScreen, ...SCREENS].map(screen => screen.id));
     assert.deepEqual(storyDirectorModule.tabs, []);
-    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.arc', 'story-director.behind'], 'the atlas\'s Map, the World screen\'s people, the arc panel and behind the scenes');
+    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.key-people', 'story-director.arc', 'story-director.behind'], 'the atlas\'s Map, the World screen\'s people and key people, the arc panel and behind the scenes');
     const status = storyDirectorModule.screens.find(screen => screen.id === 'story-director/status-card');
     assert.equal(status.defaultOn, true, 'the status card is on under every reply by default (§F24)');
     const widget = { render: () => {} };
