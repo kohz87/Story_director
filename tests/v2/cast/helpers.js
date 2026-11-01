@@ -43,7 +43,7 @@ export async function castHost({ source = castSource(), model = createFakeModel(
     host.registry.query = name => {
         if (name === 'packs.content') {
             const fn = real(name);
-            return (state, args, tools) => (args?.kind === 'cast' ? structuredClone(source.entries) : fn?.(state, args, tools));
+            return (state, args, tools) => (args?.kind === 'cast' ? structuredClone(source.entries) : args?.kind === 'places' && source.places ? structuredClone(source.places) : fn?.(state, args, tools));
         }
         if (name === 'packs.list') return () => structuredClone(source.packs);
         return real(name);

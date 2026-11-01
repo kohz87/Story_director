@@ -56,6 +56,10 @@ The cue: the reply of a meeting gets one tail line, `[Cast] <Name> comes into th
 how they speak, what they want and why now (`note.js`). A swipe rewrites the scene, not who you meet: the steps stay, the planner's
 answer is kept in memory per key.
 
+A cast member's `start.place` is the name of a pack place (Story Studio writes it so); it is matched by name, slug or alias, in any case
+(`placeMatcher`, `entries.js`). A place the pack does not have leaves them unplaced (`where` empty: not met anywhere, "unknown" to the planner)
+until the planner places them; a planner's place that is one of the pack's goes by its name. With no places listed, it stays as written.
+
 ## The planner (`plan.js`)
 
 Off-screen moves are one model call (Story Block's `sdk.callModel`, setting `cast.profile`, "Same as chat" by default), asked in the

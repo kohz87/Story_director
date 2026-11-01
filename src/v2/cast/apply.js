@@ -180,13 +180,15 @@ export function applyAdvance(cast, payload, env) {
 
 // ---- meet ----------------------------------------------------------------------------------------------------------------------
 
+// A routine that runs on for several places and hours is no sentence for a card or a cue: only a short "doing" is quoted.
+const short = text => { const said = String(text ?? '').replace(/[.!?…]+$/, ''); return said.length <= 60 && !/[;]/.test(said) ? said : ''; };
 const lowerFirst = text => text.replace(/^(\p{Lu})(\p{Ll})/u, (_all, first, second) => `${first.toLowerCase()}${second}`);
 
 /** The reader's words for why two paths crossed (the card's "Why"). `reason`: the planner's sentence for a goal ('' for a place). */
 export function whyText({ name, why, reason, doing, where }) {
     if (why === 'goal') return `${cutPoints(reason, MAX_REASON - 60)} Their own goal pulls them to you, so they arrive; no roll.`.trim();
     const at = where ? ` at ${where}` : '';
-    const said = lowerFirst(String(doing ?? '').replace(/[.!?…]+$/, ''));
+    const said = lowerFirst(short(doing));
     return `${name} ${said ? `${said}${at}` : `is${at || ' here'}`}, and you are there: your first time here while they are. No roll.`;
 }
 
@@ -194,7 +196,7 @@ export function whyText({ name, why, reason, doing, where }) {
 export function whyNarrator(person) {
     const met = person?.met ?? {};
     if (met.why === 'goal') return `${cutPoints(met.reason, 200)} Their own goal brings them to {{user}}.`.trim().replace(/^(\p{Ll})/u, c => c.toUpperCase());
-    const said = lowerFirst(String(person?.doing ?? '').replace(/[.!?…]+$/, ''));
+    const said = lowerFirst(short(person?.doing));
     return `${said ? `${said}, ` : ''}they are at ${met.where || person?.where || 'this place'}, the place of this scene.`.replace(/^(\p{Ll})/u, c => c.toUpperCase());
 }
 

@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { OPENING, castCue, castHost, castSource, entry, people, receipts, said, sent, slice, validatorErrors, TAIL_KEY } from './helpers.js';
+import { OPENING, castCue, castHost, castSource, createFakeModel, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
 
 const BROM = entry('brom', { start: { place: 'Harrow', goal: 'keep the forge lit', routine: 'at the forge in the morning' }, drawnTo: [] });
 const FENNA = entry('fenna', { start: { place: 'Bluewatch docks', goal: 'keep the night ferry running', routine: 'works the night ferry' } });
@@ -149,6 +149,35 @@ test('off means off: the feature switch and the setting stop every step, hook an
         await host.send('Look.', said('Smoke.'));
         assert.equal(host.sdk.receipts().filter(item => item.receipt.type.startsWith('cast.')).length, steps, 'the setting switches it off too');
         assert.equal(host.sdk.query('director.cast'), null);
+    } finally {
+        host.close();
+    }
+});
+
+test('a start place is the pack place\'s name, slug or alias, in any case; one the pack does not have leaves the person unplaced until the planner places them, and nothing crashes', async t => {
+    quiet(t);
+    const place = (name, slug, aliases = []) => ({ id: `pack.ersveil/${slug}`, name, aliases });
+    const at = (id, where) => entry(id, { start: { place: where, goal: `${id} goal`, routine: '' } });
+    const source = castSource([at('by-name', 'harrow'), at('by-slug', 'bluewatch-village'), at('by-alias', 'THE WATCH TOWN'), at('lost', 'Atlantis'), at('blank', '')]);
+    source.places = [place('Harrow', 'harrow'), place('Bluewatch Village', 'bluewatch-village', ['the Watch town']), place('Bluewatch Village / Guild Office', 'guild-office')];
+    const model = createFakeModel(['~ cast lost | harrow | wandering in at last']);
+    const host = await castHost({ source, model, settings: { 'cast.faces': 'day2' } });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        const where = id => people(host)[`ersveil:${id}`].where;
+        assert.deepEqual(['by-name', 'by-slug', 'by-alias', 'lost', 'blank'].map(where), ['Harrow', 'Bluewatch Village', 'Bluewatch Village', '', '']);
+        assert.deepEqual(validatorErrors(host), []);
+        await host.send('Look.', said('Smoke.'));
+        assert.equal(people(host)['ersveil:by-name'].met.why, 'place', 'the party is at Harrow: the one placed by name (in any case) is there');
+        assert.equal(people(host)['ersveil:lost'].met, null, 'unplaced: nowhere to meet');
+        assert.match(model.calls.length ? model.calls[0].prompt : 'now at: unknown', /now at: unknown/);
+        // The planner places her (its words match the pack's place by name or alias).
+        await host.send('Sleep.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
+        await settle();
+        await host.send('Look.', said('Smoke.'));
+        assert.match(model.calls[0].prompt, /- lost \| Lost \| goal: lost goal \| now at: unknown/);
+        assert.equal(where('lost'), 'Harrow', 'placed by the planner, under the pack\'s own name for the place');
+        assert.deepEqual(host.store.problems(), []);
     } finally {
         host.close();
     }

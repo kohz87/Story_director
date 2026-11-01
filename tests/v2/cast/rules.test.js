@@ -10,7 +10,7 @@ import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/
 import { chooseMeetings, dueMove, movable, paceOf, roomLeft } from '../../../src/v2/cast/world.js';
 import { entry } from './helpers.js';
 
-const castFor = (...entries) => castOf(name => (name === 'packs.content' ? entries.map(item => structuredClone(item)) : name === 'packs.list' ? [{ id: 'ersveil', name: 'Ersveil', version: '1.1.0', enabled: true }] : null));
+const castFor = (...entries) => castOf((name, args) => (name === 'packs.content' ? (args?.kind === 'cast' ? entries.map(item => structuredClone(item)) : []) : name === 'packs.list' ? [{ id: 'ersveil', name: 'Ersveil', version: '1.1.0', enabled: true }] : null));
 const HOUR = 60;
 const DAY = 1440;
 
@@ -314,4 +314,21 @@ test('the state\'s validator: a person, a note, the slots and nothing else', () 
     const errors = validateCast(broken);
     assert.ok(errors.length >= 4 && errors.length <= 10);
     assert.ok(validateCast(null).length === 1 && validateCast({ people: [], notes: {} }).length === 1);
+});
+
+test('a long routine is not quoted in the card\'s or the narrator\'s words for why', () => {
+    const doing = 'Dawn to noon at the inspection quay; afternoons in the Watchhouse infirmary corner; after dusk at the Stray Oar.';
+    assert.equal(whyText({ name: 'Tansy', why: 'place', reason: '', doing, where: 'Bluewatch Village' }), 'Tansy is at Bluewatch Village, and you are there: your first time here while they are. No roll.');
+    assert.equal(whyNarrator({ doing, met: { why: 'place', where: 'Bluewatch Village', reason: '' } }), 'They are at Bluewatch Village, the place of this scene.');
+});
+
+test('places: the pack\'s places match by name, slug or alias in any case; with no places listed a start place stays as written', async () => {
+    const { placeMatcher } = await import('../../../src/v2/cast/entries.js');
+    const list = [{ id: 'pack.ersveil/bluewatch-village', name: 'Bluewatch Village', aliases: ['The Watch Town'] }, { id: 'pack.ersveil/guild-office', name: 'Bluewatch Village / Guild Office' }, { nope: true }, 'x'];
+    const matcher = placeMatcher(name => (name === 'packs.content' ? list : null));
+    assert.equal(matcher.any, true);
+    assert.deepEqual(['bluewatch village', 'BLUEWATCH-VILLAGE', 'the watch town', 'Bluewatch Village/Guild Office', 'guild-office', 'Nowhere', ''].map(matcher.match), ['Bluewatch Village', 'Bluewatch Village', 'Bluewatch Village', 'Bluewatch Village / Guild Office', 'Bluewatch Village / Guild Office', null, null]);
+    assert.equal(placeMatcher(() => { throw new Error('no packs'); }).any, false);
+    const cast = castOf((name, args) => (name === 'packs.content' ? (args?.kind === 'cast' ? [entry('a', { start: { place: 'Anywhere', goal: 'g', routine: '' } })] : []) : null));
+    assert.equal(cast.entries[0].place, 'Anywhere', 'nothing to check against: as written');
 });

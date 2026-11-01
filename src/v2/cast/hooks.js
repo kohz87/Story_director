@@ -181,7 +181,9 @@ export function createCastHooks({ plans }) {
                     const result = entry.status === 'done' && entry.result?.ok ? entry.result : { moves: [], comes: [], died: [] };
                     const allowedDeaths = new Set(list.filter(item => item.mayDie).map(item => item.key));
                     const died = result.died.filter(item => allowedDeaths.has(item.key)).map(item => ({ key: item.key }));
-                    const payload = { from: due.from, to: due.to, ...(at !== null ? { at } : {}), ...(result.moves.length ? { moves: result.moves } : {}), ...(died.length ? { died } : {}) };
+                    // A place the planner names that is one of the pack's goes by the pack's own name for it.
+                    const moves = result.moves.map(move => ({ ...move, where: frame.cast.places.match(move.where) ?? move.where }));
+                    const payload = { from: due.from, to: due.to, ...(at !== null ? { at } : {}), ...(moves.length ? { moves } : {}), ...(died.length ? { died } : {}) };
                     commands.push({ type: 'cast.advance', payload });
                     applyAdvance(world, payload, { rev });
                     comes = result.comes ?? [];

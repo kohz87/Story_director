@@ -51,6 +51,30 @@ export function readEntry(raw) {
     };
 }
 
+// ---- the pack's places ------------------------------------------------------------------------------------------------------------
+
+const placeKey = value => keyOf(String(value ?? '').replace(/\s*\/\s*/g, ' / '));
+
+/**
+ * The pack's places as a matcher: `{ any, match(text) }`. A cast member's `start.place` is written as a place's name, its slug or one of
+ * its aliases (any case); `match` gives the place's own name, or null when none fits. `any`: the packs list places at all (when they do
+ * not, nothing can be said against a place as written).
+ */
+export function placeMatcher(query) {
+    const list = ask(query, 'packs.content', { kind: 'places' }, null);
+    const byKey = new Map();
+    for (const place of Array.isArray(list) ? list : []) {
+        if (!isRecord(place) || typeof place.name !== 'string') continue;
+        const name = cutPoints(place.name, MAX_PLACE);
+        const slug = typeof place.id === 'string' ? place.id.slice(place.id.lastIndexOf('/') + 1) : typeof place.slug === 'string' ? place.slug : '';
+        for (const word of [name, slug, ...(Array.isArray(place.aliases) ? place.aliases : [])]) {
+            const key = placeKey(word);
+            if (key && !byKey.has(key)) byKey.set(key, name);
+        }
+    }
+    return { any: byKey.size > 0, match: text => byKey.get(placeKey(text)) ?? null };
+}
+
 /**
  * The cast the enabled packs list: `{ listed, entries, byKey, packs }`. `listed`: whether the packs could be asked at all (a missing
  * or throwing query is no answer: nobody is dropped on silence). `entries`: in the packs' order, a key once. `packs`: the enabled
@@ -58,7 +82,7 @@ export function readEntry(raw) {
  * not in it, so its people are kept as they are, hidden, until it is enabled again).
  */
 export function castOf(query) {
-    const out = { listed: false, entries: [], byKey: new Map(), packs: {}, enabled: new Set() };
+    const out = { listed: false, entries: [], byKey: new Map(), packs: {}, enabled: new Set(), places: { any: false, match: () => null } };
     const list = ask(query, 'packs.content', { kind: 'cast' }, null);
     if (!Array.isArray(list)) return out;
     out.listed = true;
@@ -70,6 +94,11 @@ export function castOf(query) {
         out.packs[entry.pack] ??= { name: entry.pack, version: entry.ver };
         out.enabled.add(entry.pack);
     }
+    // Where each person starts, as the pack's place (by name, slug or alias). A place the pack does not have leaves them unplaced ('') until the
+    // planner places them; with no places to check against it stays as written.
+    const places = placeMatcher(query);
+    out.places = places;
+    for (const entry of out.entries) entry.place = places.any ? places.match(entry.place) ?? '' : entry.place;
     const installed = ask(query, 'packs.list', {}, null);
     for (const pack of Array.isArray(installed) ? installed : []) {
         if (!isRecord(pack) || typeof pack.id !== 'string') continue;
