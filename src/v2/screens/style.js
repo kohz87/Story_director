@@ -23,6 +23,9 @@ export const BASE_CSS = `
   color: var(--sd-text);
   font-family: var(--ss-font);
 }
+/* The Game view draws the hero header (place, time, weather) above every screen, so a scene line is not drawn a second time
+   there; the Story panel's tabs have no hero and keep theirs. A scene line reads --sd-line-display, its own display when unset. */
+:root[data-ss-mount="screen"] { --sd-line-display: none; }
 .ss-label { color: var(--sd-text); }
 .sd-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; }
 .sd-h small { font-weight: normal; color: var(--sd-text); }

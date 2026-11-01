@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { CHANGE_INSTRUCTION, PACING } from '../../../src/note.js';
 import { estimateTokens } from '../../../src/relevance.js';
 import { part } from '../../../src/v2/tracker/index.js';
-import { STATIC_TEXT, TAIL_BUDGET } from '../../../src/v2/tracker/note.js';
+import { PACING_TEXT, STATIC_TEXT, TAIL_BUDGET, staticText } from '../../../src/v2/tracker/note.js';
 import { makeState, story } from './helpers/fake-ctx.js';
 
 const tail = (state, lastUser = '', settings = {}) => part.context.tail({ state, settings, chat: { length: 9, lastUser } });
@@ -31,7 +31,10 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     assert.equal(part.context.static({ fights: false }), alone);
     assert.doesNotMatch(alone, /encounter/);
     assert.equal(alone, empty.replace(', encounter;', ';'));
-    assert.equal(empty, STATIC_TEXT);
+    // The Pacing paragraph is the world-building threads feature's (the module sends it as a context part under it, right after).
+    assert.equal(empty, staticText({ threads: false }));
+    assert.equal(`${empty}\n${PACING_TEXT}`, STATIC_TEXT);
+    assert.deepEqual(part.context.inline.map(item => [item.feature, item.static()]), [['story-director.threads', PACING_TEXT]]);
     for (const word of ['Geva', 'Wolf', 'March', 'Bluewatch', '2026']) assert.ok(!empty.includes(word), word);
     // v1's own rules, word for word, but for the Fields line's offers (one deliberate change: a job is a
     // quest once {{user}} accepts it, and a job only offered stays in the story).
@@ -39,7 +42,7 @@ test('the static part is byte-identical whatever the tracker holds, and names no
 
     assert.ok(empty.includes(v1Fields.replace('; a job only offered: + hook with giver, reward', '')));
     assert.doesNotMatch(empty, /offer/);
-    assert.ok(empty.includes(PACING));
+    assert.ok(STATIC_TEXT.includes(PACING) && !empty.includes(PACING));
 });
 
 test('each kind has one grammar line for the change instruction', () => {

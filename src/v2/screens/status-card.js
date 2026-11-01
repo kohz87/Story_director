@@ -77,9 +77,16 @@ const CSS = `${BASE_CSS}
 .sd-met .ss-bar { --ss-bar-color: var(--sd-good); }
 `;
 
+// The card's own words: its title heads its section in Story Block's one "This reply" card, and `summary` is its part of that
+// card's one line ("1:30 pm, Bluewatch Village"), a template read in the card's scope like the body (`q.status.summary` is the
+// same text, from `director.status`). A host that draws the card on its own shows the title in its header, as before.
+export const STATUS_TITLE = 'Where things stand';
+export const STATUS_SUMMARY = '{{ q.status.summary }}';
+
 export const statusCardScreen = Object.freeze({
     id: STATUS_CARD_ID,
-    title: 'Status',
+    title: STATUS_TITLE,
+    summary: STATUS_SUMMARY,
     icon: 'fa-compass',
     mounts: ['card'],
     defaultOn: true,

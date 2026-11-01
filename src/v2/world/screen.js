@@ -14,6 +14,10 @@
 // present-cast cards (portraits, now lines, meters) when it is there, else names; each with their thought
 // from the newest reply's Inner chatter.
 //
+// One scene header: the Game view's hero header shows the place, the time and the weather above every screen, so there Here
+// shows the people (and the trip) only; the Story panel's tab has no hero and keeps the place, weather and date lines. The
+// News and events and the Factions are the feature `story-director.threads`' (src/v2/threads.js): off, they are not drawn.
+//
 // `story-director/days` (the old Days screen's id) is kept as a dialog of the Journal alone, so an older
 // layout or a reader's own copy that names it still finds a screen; it is no tab and no game-view screen.
 
@@ -76,9 +80,9 @@ const JOURNAL = `
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
     ${label('Here')}
-    <p class="wv-place" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
-    <p class="sd-empty" data-if="!q.world.here.place">Nowhere named yet.</p>
-    <p class="wv-weather" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
+    <p class="wv-place wv-scene" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
+    <p class="sd-empty wv-scene" data-if="!q.world.here.place">Nowhere named yet.</p>
+    <p class="wv-weather wv-scene" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
     <p class="wv-weather wv-road" data-if="q.trip.row"><i class="fa-solid fa-route" aria-hidden="true"></i> <span class="sd-key">On the road</span> <span>{{ q.trip.row }}</span></p>
     ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
     <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
@@ -101,7 +105,7 @@ const NOW = `
       </li>
     </ul>
   </section>
-  <section class="sd-kind wv-news ss-listcard ss-glass" data-kind="news" aria-label="News and events">
+  <section class="sd-kind wv-news ss-listcard ss-glass" data-kind="news" aria-label="News and events" data-if="q.threads.on">
     ${label('News and events', { card: true, count: '{{ q.world.newsCount }}', when: 'q.world.hasNews' })}
     <p class="ss-listcard-empty" data-if="!q.world.hasNews">No news yet.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasNews">
@@ -117,7 +121,7 @@ const NOW = `
       </li>
     </ul>
   </section>
-  <section class="sd-kind wv-factions ss-listcard ss-glass" data-kind="factions" aria-label="Factions">
+  <section class="sd-kind wv-factions ss-listcard ss-glass" data-kind="factions" aria-label="Factions" data-if="q.threads.on">
     ${label('Factions', { card: true, count: '{{ q.world.factionCount }}', when: 'q.world.hasFactions' })}
     <p class="ss-listcard-empty" data-if="!q.world.hasFactions">No factions known yet.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasFactions">
@@ -140,7 +144,7 @@ const TEMPLATE = `
       <label class="wv-view"><input type="radio" name="wv-view" data-draft="view" value="now"> <span><i class="fa-solid fa-earth-americas" aria-hidden="true"></i> Now</span></label>
       <label class="wv-view"><input type="radio" name="wv-view" data-draft="view" value="journal"> <span><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</span></label>
     </div>
-    <p class="wv-when" data-if="q.world.today"><i class="fa-solid fa-clock" aria-hidden="true"></i> {{ q.world.today }}</p>
+    <p class="wv-when wv-scene" data-if="q.world.today"><i class="fa-solid fa-clock" aria-hidden="true"></i> {{ q.world.today }}</p>
   </header>
   <div class="wv-now" data-if="draft.view != 'journal'">${NOW}
   </div>
@@ -175,6 +179,11 @@ const CSS = `${BASE_CSS}
 .wv-place.wv-moved { padding-left: 8px; border-left: 3px solid var(--sd-accent); }
 .wv-kind { text-transform: capitalize; }
 .wv-weather { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
+/* The scene lines the Game view's hero header already shows (BASE_CSS sets --sd-line-display to none there): the place, the weather
+   and the empty-place note, and the date by the view switch. "On the road" is not one of them. */
+.wv-place.wv-scene, .wv-weather.wv-scene { display: var(--sd-line-display, flex); }
+.sd-empty.wv-scene, .wv-when.wv-scene { display: var(--sd-line-display, block); }
+.wv-scene[hidden] { display: none; }
 .wv-upcoming, .wv-news, .wv-factions { min-width: 0; }
 .wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
 .wv-item .ss-listcard-value { max-width: 45%; min-width: 0; }
@@ -219,6 +228,8 @@ const CSS = `${BASE_CSS}
 
 const DATA = Object.freeze({
     world: Object.freeze({ query: 'director.world' }),
+    // `{ on: true }` while the feature `story-director.threads` is on, null while it is off: the News and the Factions read it.
+    threads: Object.freeze({ query: 'director.threads.on' }),
     journal: Object.freeze({ query: 'director.journal' }),
     // The trip (atlas.trip, feature story-director.trip), shown under the weather while one is on: null with none.
     trip: Object.freeze({ query: 'atlas.trip' }),

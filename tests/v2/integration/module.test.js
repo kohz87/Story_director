@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createModule, namespaced, partSettings, PARTS, storyDirectorModule } from '../../../src/v2/module.js';
-import { STATIC_TEXT } from '../../../src/v2/tracker/note.js';
+import { STATIC_TEXT, staticText } from '../../../src/v2/tracker/note.js';
 import { STATIC_TEXT as ATLAS_STATIC, TAIL_BUDGET as ATLAS_BUDGET, TRIP_TAIL_BUDGET } from '../../../src/v2/atlas/note.js';
 import { RECAP_BUDGET } from '../../../src/v2/time/recap.js';
 import { screens as SCREENS } from '../../../src/v2/screens/index.js';
@@ -16,11 +16,20 @@ import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { part as checksPart } from '../../../src/v2/checks/index.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 
+// What the host builds from a module's context (Story Block's registry contextOf): its static, then each context part that is on, trimmed,
+// the empty ones left out, one per line.
+const hostStatic = (def, on = () => true) => [def.context.static, ...def.context.parts.filter(part => !part.feature || on(part.feature)).map(part => part.static)]
+    .filter(fn => typeof fn === 'function').map(fn => String(fn()).trim()).filter(Boolean).join('\n');
+
 test('statics in part order, budgets summed, kinds dispatched to their part', () => {
     const def = storyDirectorModule;
     // The time, atlas and screens parts add nothing to the static part.
     assert.equal(ATLAS_STATIC, '');
-    assert.equal(def.context.static(), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
+    // The Pacing and the two World paragraphs are the world-building threads feature's: context parts, in the place they always had.
+    const plain = id => id !== 'story-director.initiative';
+    assert.equal(hostStatic(def, plain), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
+    assert.equal(hostStatic(def, id => plain(id) && id !== 'story-director.threads'), `${staticText({ threads: false })}\n${checksPart.context.static()}`);
+    assert.equal(hostStatic(def), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
     assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
     assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'arc', 'checks', 'screens']);
     assert.match(def.capture.kinds.quest.grammar, /story follows/);

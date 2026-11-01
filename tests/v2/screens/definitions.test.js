@@ -12,7 +12,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'director.threads.on', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -67,7 +67,9 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(director.event_closed, { query: 'director.threads', args: { kind: 'event', status: 'resolved' } });
     // Behind the scenes is the Reveal panel's (director.behind), and so are its problems.
     assert.equal(director.secret_closed, undefined);
-    const { problems, time, arc, behind, ...threads } = director;
+    const { problems, time, arc, behind, threads: threadsOn, ...threads } = director;
+    // Whether the world-building threads feature is on (null while off): the World card is drawn only then.
+    assert.deepEqual(threadsOn, { query: 'director.threads.on' });
     assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });
     assert.deepEqual([arc, behind], [{ query: 'director.arc' }, { query: 'director.behind' }]);
     // The reply's card shows no next beat (a spoiler); it adds the map coordinates and the weather.

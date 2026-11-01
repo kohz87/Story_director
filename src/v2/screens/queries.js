@@ -19,6 +19,7 @@ import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
 import { problemList } from '../tracker/domain.js';
 import { BEHIND, BEHIND_KINDS } from './reveal.js';
+import { THREADS_FEATURE } from '../threads.js';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -297,10 +298,31 @@ const RANK_LABEL_CHARS = 30;
 // A map coordinate as the card writes it: whole map units, '' when not a usable number.
 const coordText = value => (Number.isFinite(value) && Math.abs(value) < COORD_LIMIT ? String(Math.round(value)) : '');
 
+// The card's one-line summary, cut by code points (never inside a character).
+const SUMMARY_CHARS = 80;
+const summaryText = line => {
+    const chars = Array.from(line);
+    return chars.length > SUMMARY_CHARS ? `${chars.slice(0, SUMMARY_CHARS - 1).join('').trimEnd()}…` : line;
+};
+
+// The time of day as the card's one-line summary writes it: "1:30 pm" (no date, no leading zero).
+export function clockText(calendar, minutes) {
+    if (!calendar || !Number.isFinite(minutes)) return '';
+    try {
+        const day = Math.floor(calendar.fromAbs(minutes).minutes);
+        const hour = Math.floor(day / 60);
+        return `${hour % 12 || 12}:${String(day % 60).padStart(2, '0')} ${hour < 12 ? 'am' : 'pm'}`;
+    } catch {
+        return '';
+    }
+}
+
 /**
  * `director.status` → what the reply's Status card adds to Story Block's scene, all of it {{user}}'s own
- * (world/known.js: where they are, the weather they stand in, their rank, what they wear and how they are): `{ coords,
+ * (world/known.js: where they are, the weather they stand in, their rank, what they wear and how they are): `{ summary, coords,
  * weather, rank, wearing, condition }`.
+ * `summary`: the card's one line, "<clock time>, <place>" ("1:30 pm, Bluewatch Village"; each part is left out when the story has
+ * not set it), for the one "This reply" line Story Block draws above the reply's cards.
  * `coords`: the scene's place on the map ("59, 110", map units: the atlas's or the pack's map data),
  * '' when the atlas does not know the place or has no position for it. `weather`: Story Block's
  * `scene.weather` (`{ text } | null`, the story's `~ weather <text>` line), '' when there is none or that
@@ -308,14 +330,18 @@ const coordText = value => (Number.isFinite(value) && Math.abs(value) < COORD_LI
  * `~ you rank: … | wearing: … | condition: …` line), '' for a part with no words, and all '' when Story Block is older than 2.10.0
  * (no such query) or has the feature off. Read on the state it is given, so each reply's card shows its own.
  */
-export function statusExtras(_state, _args, tools) {
+export function statusExtras(state, _args, tools, { settings = null } = {}) {
     const query = queryFrom(tools);
+    const minutes = state?.domains?.director?.time?.minutes;
+    const clock = Number.isSafeInteger(minutes) ? clockText(calendarFrom(settings, query), minutes) : '';
+    const placeName = text(state?.domains?.scene?.place?.name);
     const here = ask(query, 'atlas.here', {}, null);
     const place = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
     const [x, y] = [coordText(place?.x), coordText(place?.y)];
     const weather = ask(query, 'scene.weather', {}, null);
     const you = ask(query, 'scene.you', {}, null);
     return {
+        summary: summaryText([clock, placeName].filter(Boolean).join(', ')),
         coords: x && y ? `${x}, ${y}` : '',
         weather: isRecord(weather) ? cut(text(weather.text), WEATHER_CHARS) : '',
         // The Rank only where a pack gives the game one: Story Block answers `rankLabel` (its word for it) then, and no `rank` without it.
@@ -328,11 +354,14 @@ export function statusExtras(_state, _args, tools) {
 
 export function screenQueries({ settings = null } = {}) {
     return {
-        'director.behind': (state, args, tools) => behindView(state, args, tools),
+        // The agendas, clocks, beats and secrets: the feature `story-director.threads`' (answers null while it is off, so the screen draws none).
+        'director.behind': Object.assign((state, args, tools) => behindView(state, args, tools), { feature: THREADS_FEATURE }),
+        // `{ on: true }` while the feature is on, null while it is off: the Director screen's World card and the World screen's News and Factions read it.
+        'director.threads.on': Object.assign(() => ({ on: true }), { feature: THREADS_FEATURE }),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'quest.board': (state, args, tools) => questBoard(state, args, tools),
         'director.next': (state, args, tools) => nextDue(state, args, tools, { settings }),
         'director.problems': (state, args, tools) => problemsList(state, args, tools),
-        'director.status': (state, args, tools) => statusExtras(state, args, tools),
+        'director.status': (state, args, tools) => statusExtras(state, args, tools, { settings }),
     };
 }

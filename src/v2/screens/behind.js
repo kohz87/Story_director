@@ -8,6 +8,7 @@
 
 import { BEHIND_KINDS, reveal as pageReveal } from './reveal.js';
 import { button, maker, plural, spaced } from './dom.js';
+import { THREADS_FEATURE } from '../threads.js';
 
 export const BEHIND_WIDGET = 'story-director.behind';
 
@@ -115,6 +116,8 @@ function render(el, props, _api, reveal) {
 /** The widget definition; `reveal` (tests): the reveal choice (the page's by default). */
 export function createBehindWidget({ reveal = pageReveal } = {}) {
     return Object.freeze({
+        // The agendas, clocks, beats and secrets are the feature `story-director.threads`': off, the host draws no Behind widget.
+        feature: THREADS_FEATURE,
         props: Object.freeze({ value: Object.freeze({ type: 'object', default: null }) }),
         primary: 'value',
         validate: props => (props?.value !== undefined && props.value !== null && typeof props.value !== 'object' ? ['value must be the director.behind data.'] : []),

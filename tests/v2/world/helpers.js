@@ -66,5 +66,5 @@ export function drawWorld(q, { draft = {}, widgets = {}, screen = worldScreen } 
     return { el, view, warnings, doc, set: next => { Object.assign(own, next); view.update(scopeOf()); } };
 }
 
-/** The World screen's data as the host answers it. */
-export const worldData = host => ({ world: host.sdk.query('director.world'), journal: host.sdk.query('director.journal') });
+/** The World screen's data as the host answers it (`threads`: null while the world-building threads feature is off). */
+export const worldData = host => ({ world: host.sdk.query('director.world'), journal: host.sdk.query('director.journal'), threads: host.sdk.query('director.threads.on') });

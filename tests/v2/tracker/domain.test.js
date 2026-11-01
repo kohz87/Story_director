@@ -11,7 +11,7 @@ const validate = director => part.domains.director.validate(director, {});
 
 test('the part has the shape MODULES §A names', () => {
     assert.deepEqual(Object.keys(part).sort(), ['commands', 'context', 'domains', 'features', 'hooks', 'kinds', 'queries', 'settings', 'tabs']);
-    assert.deepEqual(part.features.map(feature => [feature.id, feature.default]), [['story-director.initiative', true]]);
+    assert.deepEqual(part.features.map(feature => [feature.id, feature.default]), [['story-director.initiative', true], ['story-director.threads', true]]);
     assert.deepEqual(Object.keys(part.domains), ['director']);
     assert.deepEqual(Object.keys(part.queries), ['threads.hash', 'director.time', 'director.calendar', 'director.threads', 'director.thread']);
     assert.deepEqual(Object.keys(part.commands), ['director.seed', 'threads.offer', 'threads.accept', 'threads.intent', 'director.initiative']);

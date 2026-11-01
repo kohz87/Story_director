@@ -19,6 +19,7 @@ import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
 import { BEHIND_WIDGET, behindWidget } from './behind.js';
+import { THREADS_FEATURE } from '../threads.js';
 
 export { DIRECTOR_ID, KIND_GROUPS } from './director.js';
 export { QUESTS_ID } from './quests.js';
@@ -59,7 +60,8 @@ export function createScreensPart({ settings = hostSettings } = {}) {
             defaults: { hideBehind: true },
             schema: {
                 // Per chat, Reveal shows them (remembered in this browser); this hides nothing from the story.
-                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press Reveal' },
+                // Shown only while the feature `story-director.threads` is on (what it hides is that feature's).
+                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press Reveal', feature: THREADS_FEATURE },
             },
         },
     };

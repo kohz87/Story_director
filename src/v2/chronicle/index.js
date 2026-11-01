@@ -29,6 +29,7 @@ import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, chronicleTail } from './note.js';
 import { SURFACE, beforeGenerate as surfaceHook, surface } from './pick.js';
 import { queries } from './queries.js';
 import { chronicleScreen } from './screen.js';
+import { THREADS_FEATURE, threadsOn } from '../threads.js';
 
 /** The chronicle's optional mechanics (MODULES §F100). */
 export const features = Object.freeze([
@@ -44,16 +45,18 @@ export const features = Object.freeze([
 const digestHandler = Object.assign((ctx, payload) => digestCommand(ctx, payload), { feature: DIGEST_FEATURE });
 // The note keeps the quest history too, so it is not under the digest feature (it skips the day facts while that is off).
 const noteHandler = ctx => noteCommand(ctx);
+// The pick of the open events for the next reply's [World] lines is the threads feature's: with it off nothing is picked or written.
+const surfaceHandler = Object.assign((ctx, payload) => surface(ctx, payload), { feature: THREADS_FEATURE });
 
-/** `beforeGenerate(view)`: the last reply's day facts, the digest when a day ended, then the world events' pick. */
+/** `beforeGenerate(view)`: the last reply's day facts, the digest when a day ended, then the world events' pick (while the threads feature is on). */
 export function beforeGenerate(view) {
-    const commands = [...noteCommands(view), ...digestCommands(view), ...(surfaceHook(view)?.commands ?? [])];
+    const commands = [...noteCommands(view), ...digestCommands(view), ...(threadsOn(view) ? surfaceHook(view)?.commands ?? [] : [])];
     return commands.length ? { commands } : undefined;
 }
 
-/** `context.tail(view)`: the [World] lines, and the last day's line after a time skip (optional). */
+/** `context.tail(view)`: the [World] lines (while the threads feature is on), and the last day's line after a time skip (optional). */
 export function tail(view) {
-    const out = chronicleTail(view);
+    const out = threadsOn(view) ? chronicleTail(view) : { lines: [], optional: [] };
     const line = digestTailLine(view);
     return line ? { lines: out.lines, optional: [...out.optional, line] } : out;
 }
@@ -74,17 +77,20 @@ export const part = {
         'chronicle.edit': edit,
         'chronicle.remove': remove,
         'chronicle.lasting': lasting,
-        [SURFACE]: surface,
+        [SURFACE]: surfaceHandler,
         [DIGEST]: digestHandler,
         [NOTE]: noteHandler,
     },
     queries,
+    // The world and faction lines are the threads feature's (src/v2/threads.js); `chronicle.lasting` (a pack event's step) is code's and stays.
     kinds: {
-        world: { grammar: GRAMMAR.world, apply: applyWorldLine },
-        faction: { grammar: GRAMMAR.faction, apply: applyFactionLine },
+        world: { grammar: GRAMMAR.world, apply: applyWorldLine, feature: THREADS_FEATURE },
+        faction: { grammar: GRAMMAR.faction, apply: applyFactionLine, feature: THREADS_FEATURE },
     },
     context: {
+        // Both paragraphs (World lines, Under [World]) are the threads feature's: the module sends them as a context part under it.
         static: () => STATIC_TEXT,
+        staticFeature: THREADS_FEATURE,
         tail: view => tail(view),
         budget: TAIL_BUDGET + DIGEST_TAIL_BUDGET,
     },

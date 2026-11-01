@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { estimateTokens } from '../../../src/relevance.js';
 import { part } from '../../../src/v2/tracker/index.js';
-import { STATIC_TEXT, TAIL_BUDGET, directorTail } from '../../../src/v2/tracker/note.js';
+import { PACING_TEXT, STATIC_TEXT, TAIL_BUDGET, directorTail, staticText } from '../../../src/v2/tracker/note.js';
 import { DEFAULT_ELSEWHERE, elsewhereCap, sceneOf, splitByScene } from '../../../src/v2/tracker/scene.js';
 import { makeState, story } from './helpers/fake-ctx.js';
 
@@ -43,11 +43,13 @@ function withScene(state, { place = '', region = '', present = [] } = {}) {
 const view = (state, settings = {}, extra = {}) => ({ state, settings, chat: { length: 9, lastUser: '' }, ...extra });
 const tailOf = (state, settings = {}, extra = {}) => part.context.tail(view(state, settings, extra)).lines;
 const lineOf = (lines, label) => lines.find(line => line.startsWith(`${label}:`) || line.startsWith(label)) ?? '';
+// Only the NPC initiative is off (the stub used to answer false for every feature, which now also means the world-building threads are off).
+const NO_INITIATIVE = id => id !== 'story-director.initiative';
 const BEHIND = ['Smuggler Bram', 'Storm', 'Bell Tolls', 'Flood', 'Ren is the lost heir'];
 
 test('the kind lines keep what fits the scene: place, region, people present, due soon, beats whose reach is met', () => {
     const state = withScene(story(WORLD, makeState()), { place: 'Harrow', region: 'Vale', present: ['Elula'] });
-    const lines = tailOf(state, {}, { feature: () => false });
+    const lines = tailOf(state, {}, { feature: NO_INITIATIVE });
     const all = lines.join('\n');
     // Elula is present: her quest; the beat whose reach names her.
     assert.match(lineOf(lines, 'Hooks'), /Wolf Contract — wolves at the fold/);
@@ -72,7 +74,7 @@ test('the kind lines keep what fits the scene: place, region, people present, du
 
 test('the Elsewhere cap is a setting: 0 names none, a larger one names every known thread elsewhere, never more', () => {
     const state = withScene(story(WORLD, makeState()), { place: 'Harrow', region: 'Vale', present: ['Elula'] });
-    const off = { feature: () => false };
+    const off = { feature: NO_INITIATIVE };
     assert.equal(lineOf(tailOf(state, { elsewhere: 0 }, off), 'Elsewhere'), '');
     const one = lineOf(tailOf(state, { elsewhere: 1 }, off), 'Elsewhere');
     assert.equal(one.split(' · ').length, 1);
@@ -91,7 +93,7 @@ test('known only: nothing behind the scenes or planned by the arc is named elsew
     // A hook the arc planner made (track.arc): its words are the planner's, never named elsewhere.
     const planned = Object.values(state.domains.director.threads).find(thread => thread.key === 'Lost Ring');
     state.domains.director.threads[planned.id].track.arc = 'arc_00000001';
-    const lines = tailOf(state, { elsewhere: 10 }, { feature: () => false });
+    const lines = tailOf(state, { elsewhere: 10 }, { feature: NO_INITIATIVE });
     const elsewhere = lineOf(lines, 'Elsewhere');
     assert.doesNotMatch(elsewhere, /Lost Ring/);
     for (const name of BEHIND) assert.doesNotMatch(elsewhere, new RegExp(name));
@@ -101,7 +103,7 @@ test('known only: nothing behind the scenes or planned by the arc is named elsew
     assert.doesNotMatch(lines.join('\n'), /lost heir/);
     state = withScene(state, { place: 'Kesh', region: '', present: [] });
     // At Kesh the agenda there fits the scene (the narrator needs it) and the rest is elsewhere.
-    const kesh = tailOf(state, { elsewhere: 10 }, { feature: () => false });
+    const kesh = tailOf(state, { elsewhere: 10 }, { feature: NO_INITIATIVE });
     assert.match(lineOf(kesh, 'Off-screen'), /Smuggler Bram/);
     assert.doesNotMatch(lineOf(kesh, 'Elsewhere'), /Storm|Bell Tolls|Flood|Smuggler/);
 });
@@ -114,20 +116,20 @@ test('a beat whose prerequisite ended fits; people go by their NPC State Delta n
         'npc.dossier': ({ name }) => (/ferrywoman|elula/i.test(name) ? { name: 'Elula', aliases: ['the ferrywoman'] } : null),
     };
     const query = (name, args) => { if (!queries[name]) throw new Error(`no module answers ${name}`); return queries[name](args); };
-    const lines = tailOf(state, {}, { query, feature: () => false });
+    const lines = tailOf(state, {}, { query, feature: NO_INITIATIVE });
     assert.match(lineOf(lines, 'Beats'), /Bell Tolls/, 'its after: beat has ended');
     assert.match(lineOf(lines, 'Hooks'), /Wolf Contract/, 'the alias names Elula');
     const scene = sceneOf(query, state);
     assert.deepEqual(scene.people.map(person => [person.name, person.names]), [['Elula', ['Elula', 'the ferrywoman']]]);
     assert.equal(scene.nsd, true);
     // Without NSD the name stands alone: the quest's giver is not "the ferrywoman".
-    const alone = tailOf(state, {}, { feature: () => false });
+    const alone = tailOf(state, {}, { feature: NO_INITIATIVE });
     assert.doesNotMatch(lineOf(alone, 'Quests'), /Wolf Contract/);
 });
 
 test('no scene known (no place, nobody present): every thread is told as before, no Elsewhere line', () => {
     const state = story(WORLD, makeState());
-    const lines = tailOf(state, {}, { feature: () => false });
+    const lines = tailOf(state, {}, { feature: NO_INITIATIVE });
     assert.equal(lineOf(lines, 'Elsewhere'), '');
     for (const name of ['Herb run', 'Lost Ring', 'Grain Tax', 'Old Mill']) assert.match(lineOf(lines, 'Hooks'), new RegExp(name));
     const split = splitByScene([{ record: { kind: 'hook', key: 'X', fields: {} } }], { scene: { known: false } });
@@ -160,7 +162,9 @@ test('the static part is byte-identical whatever the scene, the threads or the p
     const state = withScene(story(WORLD, makeState()), { place: 'Harrow', region: 'Vale', present: ['Elula'] });
     tailOf(state);
     assert.equal(part.context.static(), before);
-    assert.equal(before, STATIC_TEXT);
+    // The Pacing paragraph is the world-building threads feature's: the module sends it as a context part right after this text.
+    assert.equal(before, staticText({ threads: false }));
+    assert.equal(`${before}\n${PACING_TEXT}`, STATIC_TEXT);
     // The initiative line is a context part under its feature: the host adds it only while the feature is on.
     assert.equal(part.context.parts.length, 1);
     assert.equal(part.context.parts[0].feature, 'story-director.initiative');
