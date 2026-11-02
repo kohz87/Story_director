@@ -15,7 +15,6 @@
 import { applyAdvance, applyMeet, applySync, planSync, syncEmpty, syncPayload } from './apply.js';
 import { cutPoints, isInt, keysOfPerson } from './domain.js';
 import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entries.js';
-import { createFollow } from './follow.js';
 import { MAX_PEOPLE_ASKED, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
 import { askedAbout, batchKey, chooseMeetings, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf } from './world.js';
@@ -89,7 +88,7 @@ const elapsedText = (from, to) => {
 };
 
 /** The plans the hooks share (in memory), and the counters tests read. */
-export function createCastHooks({ plans, follow = createFollow() }) {
+export function createCastHooks({ plans }) {
     // Asks the planner for `mode` over `people`, keeping the answer under `key`.
     function askPlanner(view, frame, key, mode, list, due) {
         const model = view?.model;
@@ -122,9 +121,6 @@ export function createCastHooks({ plans, follow = createFollow() }) {
     /** `afterReceive(view)`: asks the planner in the background when the cast is due to move or a goal may have been touched. */
     function afterReceive(view) {
         if (!castOn(view)) return undefined;
-        // A reply someone arrived in (or the cast moved on in): its card is kept in view (follow.js).
-        const arrived = Object.values(view?.state?.domains?.cast?.notes ?? {}).some(note => note?.at === (isInt(view?.chat?.length) ? view.chat.length - 1 : -1));
-        if (arrived) { try { follow(); } catch { /* no page to look at */ } }
         if (typeof view?.model?.callModel !== 'function') return undefined;
         const frame = frameOf(view);
         if (!frame.cast.listed || !frame.cast.entries.length || !isInt(frame.now)) return undefined;
