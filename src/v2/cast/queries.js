@@ -64,8 +64,9 @@ export function countsQuery(state, _args, tools) {
 }
 
 /**
- * `director.cast.view` → `{ on, total, met, near, heading, packLabel, metList: [{ key, name, news }], note }`: the World screen's
- * "Around here". `near` counts unmet people at the party's place now (a number only, no names); `metList` the met people's last news.
+ * `director.cast.view` → `{ on, total, met, near, heading, place, day, dayText, packLabel, metList: [{ key, name, news }], note }`: the World screen's
+ * "Around here". `heading` is the place and the time of day in one line; `place`, `day` (the time of day) and `dayText` (`day` led by "· " when a
+ * place goes before it) are the same in parts, so the screen can cut the place short and drop the day first. `near` counts unmet people at the party's place now (a number only, no names); `metList` the met people's last news.
  */
 export function viewQuery(state, _args, tools) {
     if (!onFor(tools)) return null;
@@ -90,7 +91,8 @@ export function viewQuery(state, _args, tools) {
         key: person.key, name: person.name, news: slotOf(person.heard)?.text ? cutPoints(slotOf(person.heard).text, 120) : '',
     }));
     return deepFreeze({
-        on: true, total, met, near, heading: [party.place, day].filter(Boolean).join(' · '), packLabel,
+        on: true, total, met, near, heading: [party.place, day].filter(Boolean).join(' · '),
+        place: party.place || '', day: day || '', dayText: day ? (party.place ? `· ${day}` : day) : '', packLabel,
         hasNear: near > 0, hasMet: metList.length > 0, metList,
         note: 'Unmet cast stays hidden. Anyone else you meet is made up by the story as today; if they matter, NPC State Delta keeps a dossier. No meetings during a fight.',
     });

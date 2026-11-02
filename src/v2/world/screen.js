@@ -78,6 +78,10 @@ const JOURNAL = `
     </li>
   </ol>`;
 
+// Around here's heading: the place on one line, cut with "…" when it is long (its full text is the tooltip), then the time of day, which goes
+// first when the two do not fit together (CSS: `.wv-around .wv-label > small`).
+const AROUND_WHERE = '<span class="wv-clip" data-if="q.cast.place" title="{{ q.cast.place }}">{{ q.cast.place }}</span> <span class="wv-day" data-if="q.cast.day">{{ q.cast.dayText }}</span>';
+
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
     ${label('Here', { scene: true })}
@@ -90,7 +94,7 @@ const NOW = `
     <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
   </section>
   <section class="sd-kind wv-around ss-glass" data-kind="around" aria-label="Around here" data-if="q.cast.on == true">
-    ${label('Around here', { count: '{{ q.cast.heading }}', when: 'q.cast.heading' })}
+    ${label('Around here', { count: AROUND_WHERE, when: 'q.cast.heading' })}
     <div class="wv-row" data-if="q.cast.hasNear"><span>Cast whose paths may cross yours here</span><b>{{ q.cast.near }}, not yet met</b></div>
     <div class="wv-row" data-if="q.cast.hasMet"><span>Cast you have met</span><span class="wv-row-list"><span class="wv-row-item" data-each="q.cast.metList as m">{{ m.name }}<small data-if="m.news">, last heard: {{ m.news }}</small></span></span></div>
     <div class="wv-row"><span>Met from the {{ q.cast.packLabel }}</span><b>{{ q.cast.met }} of {{ q.cast.total }}</b></div>
@@ -215,12 +219,19 @@ const CSS = `${BASE_CSS}
 .wv-key-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 599px) { .wv-key-unpin { margin-block: -8px; padding: 0 6px; border-color: transparent; text-decoration: underline; color: var(--sd-accent-text); } }
 .wv-key-actions .wv-key-pin { flex: 0 0 auto; width: 7em; padding: 0 18px; border-radius: var(--ss-radius-pill); }
-.wv-key-choices { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 260px; overflow-y: auto; }
+/* The Pin list stays inside the card and scrolls there (a phone keeps the card within the room under the header). */
+.wv-key-choices { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: min(260px, 32vh); overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
 .wv-key-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; width: 100%; margin: 0; padding: 6px 12px; font: inherit; text-align: left; cursor: pointer; color: inherit; background: var(--sd-surface); border: 1px solid var(--sd-border); border-radius: var(--sd-radius); }
 .wv-key-pick:hover { border-color: var(--sd-accent); }
 .wv-key-from { color: var(--sd-muted); }
 .wv-key-note { margin: 0; font-size: 0.8em; line-height: 1.45; color: var(--sd-muted); }
 .wv-around { display: grid; gap: 4px; padding: 12px 14px; align-content: start; min-width: 0; }
+/* The heading is "AROUND HERE" (never shrinks), the place cut with an ellipsis, then the time of day. The time of day wraps to a second line
+   when it does not fit beside the place, and the one-line height of the small clips it: it goes first, the place only after it. */
+.wv-around .wv-label { min-width: 0; }
+.wv-around .wv-label > small { display: flex; flex-wrap: wrap; column-gap: .35em; flex: 0 1 auto; min-width: 0; max-width: 100%; line-height: 1.3; max-height: 1.3em; overflow: hidden; }
+.wv-clip { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wv-day { flex: none; white-space: nowrap; }
 .wv-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 6px 0; border-top: 1px solid var(--sd-border); }
 .wv-row-list { display: grid; gap: 2px; text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .wv-row-item small { color: var(--sd-muted); }

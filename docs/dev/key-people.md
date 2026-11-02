@@ -89,6 +89,8 @@ an older Story Director has no such query (callers ask through a try).
 ## Screens
 
 World → Now: section "Key people · n of cap" (widget `story-director.key-people`, `keypeople/widget.js`; rows, Unpin, "+ Pin"
-chooser listing who is here, who the threads {{user}} knows name, who was met from the cast, who Delta tracks; the token note). The per-reply status card:
+chooser listing who is here, who the threads {{user}} knows name, who was met from the cast, who Delta tracks; the token note). The Pin list stays inside the
+card (`.wv-key-choices`: max height `min(260px, 32vh)`, scrolls there); opening it brings the card into view with `screens/scroll.js` `revealIn` (the page
+scroller's `scrollTop` only; the same maths as Story Block's `view/scroll.js`, which a module cannot import; never `scrollIntoView`, never a bare `focus()`). The per-reply status card:
 "<name> is back" / "<name> is no longer a key person" lines in its body and at the head of its closed line, from `notes`
 (`changed(n)`, and for a told removal also that its `gone` record is there with the rev the note names). Settings → Modules → Story Director → Key people: the two numbers.
