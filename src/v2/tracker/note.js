@@ -79,7 +79,7 @@ export const GRAMMAR = Object.freeze({
     clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
     beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
     secret: '+ secret Name — what must not be revealed yet',
-    time: '~ time <date, clock time> (the scene\'s time) · ! time +2h (time passes)',
+    time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) · ! time +2h (time passes)',
 });
 
 // The grammar lines Story Director alone writes (no fight runner): a beat is a turn of the story only.

@@ -6,6 +6,8 @@
 // Parsing is deliberately lenient because the dates come from model prose and ledger lines.
 
 const DAY_MINUTES = 1440;
+// A written year past this is not a date (its minutes would pass the exact integers).
+const MAX_PARSED_YEAR = 1e9;
 
 export const DEFAULT_PARTS_OF_DAY = Object.freeze({
     dawn: 360, morning: 540, noon: 720, afternoon: 900,
@@ -201,7 +203,8 @@ export function makeCalendar(input) {
     }
 
     function fromAbs(abs) {
-        if (!Number.isFinite(abs)) throw new RangeError(`Not a story time: ${abs}`);
+        // Past the exact integers the year search below cannot settle (year-- stops changing the number).
+        if (!Number.isFinite(abs) || Math.abs(abs) > Number.MAX_SAFE_INTEGER) throw new RangeError(`Not a story time: ${abs}`);
         const total = Math.floor(abs / DAY_MINUTES);
         const minutes = abs - total * DAY_MINUTES;
         let year = Math.floor(total / avgYear);
@@ -401,7 +404,7 @@ function makeParser(config, { toAbs, fromAbs, daysInMonth }) {
         const time = adjacentTime(text, start, start + match[0].length);
         const minutes = time ? time.minutes : 0;
         const year = written !== undefined ? Number(written) : inferYear(month, day, minutes, reference);
-        if (year === null || day > daysInMonth(year, month)) return null;
+        if (year === null || Math.abs(year) > MAX_PARSED_YEAR || day > daysInMonth(year, month)) return null;
         const from = time ? Math.min(time.index, start) : start;
         const to = time ? time.end : start + match[0].length;
         return result({ year, month, day, time, yearInferred: written === undefined, text: text.slice(from, to) });
