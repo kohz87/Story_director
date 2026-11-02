@@ -58,7 +58,7 @@ test('the Ersveil pack: its calendar, the clock seeded from its start at the fir
     const installed = await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' });
     assert.equal(installed.ok, true, JSON.stringify(installed.errors));
     assert.equal(host.sdk.query('director.calendar').era, 'CY');
-    assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '' });
+    assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '', parts: null });
 
     await host.send('I wake.', reply('Gulls over the quay.'));
     const seed = receipts(host).find(receipt => receipt.type === 'director.seed');

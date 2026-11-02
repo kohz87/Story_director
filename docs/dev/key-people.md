@@ -23,8 +23,9 @@ Tests: `tests/v2/keypeople/`, and the key people stream of `tests/v2/break/fuzz-
 pins:  { [key]: { name, since, rev, aliases?, nsd? } }   key = lineKey(name); since: story minute | null;
                                                           nsd: NPC State Delta has known them (set by the sync step)
 away:  { [key]: { name, doing, since, back, steps: [{ date, text }], rev } }   back: start of the day they are due | null
-gone:  { [key]: { name, reason, on, rev } }              the newest 30
-notes: { [id]: { sid, kind: 'back' | 'gone', name, head, rest, lead, rev } }   what a reply told its card; the newest 6 replies'
+gone:  { [key]: { name, reason, on, rev, owed? } }       the newest 30; owed: NPC State Delta's removal whose card line is not told yet
+notes: { [id]: { sid, kind: 'back' | 'gone', name, head, rest, lead, rev, key?, goneRev? } }   what a reply told its card; the newest 6 replies'
+                                                          (key + goneRev: a told removal names its `gone` record and that record's rev)
 ```
 
 Replay-safe like every domain: each thing is added whole under its key; a change inside an away record is marked
@@ -57,7 +58,13 @@ feature (the same bytes every reply).
 - `keypeople.pin { name, aliases?, nsd? }`, `keypeople.unpin { name }`: cause `ui` only, on the latest reply (`data.edit`).
 - `keypeople.sync { who?: [{ name, reason: 'died' | 'archived' }], known?: [name] }`: cause `system` only, from the
   `beforeGenerate` hook (`keypeople/nsd.js`); `who` takes people off the list, `known` notes on a pin that NPC State Delta
-  has known them. At most one step before a reply, none when there is nothing to say.
+  has known them. At most one step before a reply, none when there is nothing to say. It is stored on the reply before the one being
+  written and takes the pin off at once (the narrator is not told of them), but writes no card line: the `gone` record is marked `owed`.
+- `keypeople.tell { who: [key] }`: cause `system` only, from the `afterCapture` hook (`index.js`) once the new reply's lines have run, for
+  every `gone` record that is `owed`. It clears `owed` (marked `ctx.ifThere` on the record) and writes the card line on **the reply being
+  written** when the removal was decided, so that reply's card says it. A swipe or a Re-read of that reply runs it again; deleting it
+  leaves the record owed for the next reply. A reply with no change lines gets no `afterCapture`, so the line waits for the next reply that
+  has some. A line whose `gone` record is not there any more (the reply holding the sync step was deleted) is not drawn (`goneRev`).
 
 ## Removal by NPC State Delta (read only)
 
@@ -84,4 +91,4 @@ an older Story Director has no such query (callers ask through a try).
 World → Now: section "Key people · n of cap" (widget `story-director.key-people`, `keypeople/widget.js`; rows, Unpin, "+ Pin"
 chooser listing who is here, who the threads {{user}} knows name, who was met from the cast, who Delta tracks; the token note). The per-reply status card:
 "<name> is back" / "<name> is no longer a key person" lines in its body and at the head of its closed line, from `notes`
-(`changed(n)`). Settings → Modules → Story Director → Key people: the two numbers.
+(`changed(n)`, and for a told removal also that its `gone` record is there with the rev the note names). Settings → Modules → Story Director → Key people: the two numbers.

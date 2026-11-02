@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.0
+
+- **Set the story clock by hand.** With Story Block 2.16.0, the Game view's Edit button has the story date and time:
+  pick a day in the chat's own calendar (its months, month lengths and leap years) and a time, forward or back. The
+  change is set on the current reply, shows on its card as "Clock set to …", and follows swipes, Re-read and deletes;
+  deadlines, the cast and Key people go by the new time. A day the calendar does not have is refused in one sentence.
+- The Status card's Time row reads the time the way the Game view does ("6:00 pm").
+- **Key people:** when NPC State Delta archives someone pinned, or they die there, the line saying they were taken off
+  now shows on the reply that follows, not on the one before.
+- The cast's own scroll fix is gone: Story Block 2.16.0 keeps the newest reply card in view.
+
 ## 2.8.0
 
 A pack's cast (Story Block 2.15.0 or later) comes alive. Without a pack that has a cast nothing changes.

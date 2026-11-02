@@ -4,8 +4,8 @@
 // keypeople = {
 //   pins:  { [key]: { name, since, rev, aliases?, nsd?, npc? } },    // the key list: who is pinned (since: the story minute, or null; nsd: NPC State Delta knows them; npc: their np_ identity there)
 //   away:  { [key]: { name, doing, since, back, steps: [{ date, text }], rev } }, // each pinned person who is away
-//   gone:  { [key]: { name, reason, on, rev } },               // who was taken off the list and why (the newest MAX_GONE)
-//   notes: { [id]: { sid, kind, name, head, rest, lead, rev } }, // what a reply changed (returned, no longer key), for its card
+//   gone:  { [key]: { name, reason, on, rev, owed? } },        // who was taken off the list and why (the newest MAX_GONE); owed: NPC State Delta's removal, its card line not told yet
+//   notes: { [id]: { sid, kind, name, head, rest, lead, rev, key?, goneRev? } }, // what a reply changed (returned, no longer key), for its card; key + goneRev: the `gone` record a told removal is about
 // }
 // `key` is `lineKey(name)` (changes.js). Every thing is added whole under its key and one that goes is removed, so a
 // reply deleted in the middle never breaks the replies after it (SPEC §2.2; slot.js says why). Times are the story
@@ -117,6 +117,7 @@ function awayProblems(key, away) {
 function goneProblems(key, gone) {
     const at = `keypeople.gone.${key}`;
     if (!isRecord(gone) || !textOk(gone.name, MAX_NAME) || keyOf(gone.name) !== key || !REASONS.includes(gone.reason) || !timeOk(gone.on) || !isInt(gone.rev)) return [`${at} is not { name, reason, on, rev }.`];
+    if (gone.owed !== undefined && gone.owed !== true) return [`${at}.owed is true or left out.`];
     return [];
 }
 
@@ -124,6 +125,7 @@ function noteProblems(id, note) {
     const at = `keypeople.notes.${id}`;
     if (!isRecord(note) || !(note.sid === null || typeof note.sid === 'string') || !NOTE_KINDS.includes(note.kind) || !textOk(note.name, MAX_NAME)
         || !textOk(note.head, 200) || !textOk(note.rest, 300) || typeof note.lead !== 'boolean' || !isInt(note.rev)) return [`${at} is not { sid, kind, name, head, rest, lead, rev }.`];
+    if ((note.key === undefined) !== (note.goneRev === undefined) || (note.key !== undefined && (typeof note.key !== 'string' || !note.key || !isInt(note.goneRev)))) return [`${at}.key and .goneRev go together: the taken-off record and its rev.`];
     return [];
 }
 

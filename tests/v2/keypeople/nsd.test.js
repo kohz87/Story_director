@@ -86,7 +86,8 @@ test('on the host, by queries: Delta notes who it knows, then archives and loses
         // Mara is archived in Delta (it no longer lists her), Brom is dead there.
         delete people.Mara;
         people.Brom.lifeState = 'deceased';
-        await host.send('Next.', 'Quiet.');
+        // (The reply carries a change line: the removals' card lines are written after a reply's lines, on that reply.)
+        await host.send('Next.', said('Quiet.', ['~ time June 3, 1200, 09:00 am']));
         assert.equal(syncs().length, 2);
         assert.deepEqual(Object.keys(slice(host).pins).sort(), ['odda', 'ren', 'stranger']);
         assert.equal(slice(host).gone.mara.reason, 'archived');

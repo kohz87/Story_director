@@ -10,7 +10,11 @@
 // Commands:
 // - `keypeople.pin { name, aliases?, nsd? }` and `keypeople.unpin { name }` (cause `ui`: the reader's, on the latest reply).
 // - `keypeople.sync { who?, known? }` (cause `system`, from the hook before a reply, nsd.js): the people NPC State Delta says are
-//   archived or dead are unpinned with that reason. Nothing is ever written to NPC State Delta.
+//   archived or dead are unpinned with that reason. Nothing is ever written to NPC State Delta. The step is stored on the reply before the
+//   one being written, so its card line is not written here: the pin goes at once (the narrator must not be told of them) and the
+//   `gone` record is marked `owed`.
+// - `keypeople.tell { who }` (cause `system`, from the hook after the reply's lines, index.js): the card line of those removals, written on
+//   the reply that was being written when they were decided, so it is that reply's card that says it.
 //
 // Replay: every record is added whole under its key; a change inside an away record is marked `ctx.ifThere` (so it is
 // passed over when the reply that made the record was deleted); what a reply tells its card goes in `notes`, one new key
@@ -47,18 +51,21 @@ function lineText(line) {
     return `${line?.op ?? ''} ${line?.kind ?? ''} ${line?.name ?? ''}${line?.text ? ` — ${line.text}` : ''}${labels}`.trim();
 }
 
-// The JSON pointer of one away record, inside the domain.
+// The JSON pointer of one away record (or taken-off record), inside the domain.
 const awayPath = key => `/away/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
+const gonePath = key => `/gone/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
 
 // ---- notes and removal -------------------------------------------------------------------------------------------------
 
 // One note for the reply's card (and its closed line): a new key each time, never changed after. `lead`: the first of its reply.
-function addNote(ctx, kp, { kind, name, head, rest }) {
+// `key` and `goneRev` (a removal told after the step that made it, `keypeople.tell`): the taken-off record it is about, so the card
+// says nothing when that record is not there any more (the reply that made it was deleted).
+function addNote(ctx, kp, { kind, name, head, rest, key, goneRev }) {
     const sid = ctx.carrier?.sid ?? ctx.reply?.sid ?? null;
     const rev = revOf(ctx);
     const same = note => note.sid === sid && (sid !== null || note.rev === rev);
     const id = idFrom(ctx, 'kn', kp.notes);
-    kp.notes[id] = { sid, kind, name, head: cutPoints(head, 200), rest: cutPoints(rest, 300), lead: !Object.values(kp.notes).some(same), rev };
+    kp.notes[id] = { sid, kind, name, head: cutPoints(head, 200), rest: cutPoints(rest, 300), lead: !Object.values(kp.notes).some(same), rev, ...(key !== undefined ? { key, goneRev } : {}) };
     // The newest replies' notes only: whole replies go, oldest first, so a reply never loses its lead.
     const order = [];
     for (const [other, note] of Object.entries(kp.notes)) {
@@ -74,17 +81,23 @@ function addNote(ctx, kp, { kind, name, head, rest }) {
  * Takes `key` off the list (the draft `kp`): the pin and its away record go, `gone` records why, and the reply's card is
  * told. `reason`: died | archived | unpinned. Returns the sentence for the receipt.
  */
-function removePin(ctx, kp, key, pin, reason, calendar, now) {
+function removePin(ctx, kp, key, pin, reason, calendar, now, { defer = false } = {}) {
     delete kp.pins[key];
     if (Object.hasOwn(kp.away, key)) delete kp.away[key];
     delete kp.gone[key];
-    kp.gone[key] = { name: pin.name, reason, on: now, rev: revOf(ctx) };
+    // `owed`: the card line is for the reply that follows this step (`keypeople.tell`), not the reply that holds it.
+    kp.gone[key] = { name: pin.name, reason, on: now, rev: revOf(ctx), ...(defer ? { owed: true } : {}) };
     const keys = Object.keys(kp.gone);
     for (const old of keys.slice(0, Math.max(0, keys.length - MAX_GONE))) delete kp.gone[old];
-    const day = dateText(calendar, now);
-    const why = reason === 'died' ? `died${day ? `, ${day}` : ''}` : reason === 'archived' ? 'archived in NPC State Delta' : 'unpinned';
-    addNote(ctx, kp, { kind: 'gone', name: pin.name, head: `${pin.name} is no longer a key person`, rest: `(${why}).` });
+    const why = whyText(reason, calendar, now);
+    if (!defer) addNote(ctx, kp, { kind: 'gone', name: pin.name, head: `${pin.name} is no longer a key person`, rest: `(${why}).` });
     return `${pin.name} is no longer a key person (${why}).`;
+}
+
+/** Why a person left the list, in words: "died, Goldwane 18", "archived in NPC State Delta", "unpinned". */
+function whyText(reason, calendar, now) {
+    const day = dateText(calendar, now);
+    return reason === 'died' ? `died${day ? `, ${day}` : ''}` : reason === 'archived' ? 'archived in NPC State Delta' : 'unpinned';
 }
 
 // ---- the story's lines ------------------------------------------------------------------------------------------------
@@ -254,7 +267,7 @@ export function sync(ctx, payload = {}) {
         if (!isRecord(entry) || typeof entry.name !== 'string' || !SYNC_REASONS.includes(entry.reason)) return ctx.fail('INVALID', `keypeople.sync: each of who is { name, reason: ${SYNC_REASONS.join(' | ')} }.`);
         const found = findPin(kp, entry.name);
         if (!found) continue;
-        told.push(removePin(ctx, kp, found.key, found.pin, entry.reason, calendar, now));
+        told.push(removePin(ctx, kp, found.key, found.pin, entry.reason, calendar, now, { defer: true }));
         keys.push(found.key);
     }
     for (const entry of known) {
@@ -269,4 +282,32 @@ export function sync(ctx, payload = {}) {
         if (id !== undefined) found.pin.npc = id;
     }
     return { summary: told.join(' '), narrate: false, data: { removed: keys } };
+}
+
+/**
+ * `keypeople.tell { who: [key] }` (cause `system`, from the hook after a reply's story lines): the card line of removals that
+ * `keypeople.sync` made on the reply before (their `gone` record is `owed`). It is written on the reply being written when they were decided.
+ * Someone not owed any more (told already, or taken off the list again) is skipped; nothing is said for them twice.
+ */
+export function tell(ctx, payload = {}) {
+    if (ctx.cause !== 'system') return ctx.fail('REFUSED', 'The card line of a removal NPC State Delta made is written by Story Director itself.');
+    if (!isRecord(payload) || Object.keys(payload).some(field => field !== 'who') || !Array.isArray(payload.who) || payload.who.length > 24 || payload.who.some(key => typeof key !== 'string')) {
+        return ctx.fail('INVALID', 'keypeople.tell takes { who: [key] }.');
+    }
+    const kp = ctx.draft('keypeople');
+    const calendar = calendarFrom(query(ctx));
+    const told = [];
+    const keys = [];
+    for (const key of payload.who) {
+        const entry = Object.hasOwn(kp.gone, key) ? kp.gone[key] : null;
+        if (!isRecord(entry) || entry.owed !== true) continue;
+        // The record may be gone when the reply that made it was deleted: passed over then (SPEC §2.2 rule d).
+        ctx.ifThere('keypeople', gonePath(key));
+        delete entry.owed;
+        const why = whyText(entry.reason, calendar, entry.on);
+        addNote(ctx, kp, { kind: 'gone', name: entry.name, head: `${entry.name} is no longer a key person`, rest: `(${why}).`, key, goneRev: entry.rev });
+        told.push(`${entry.name} is no longer a key person (${why}).`);
+        keys.push(key);
+    }
+    return { summary: told.length ? `Key person: ${told.join(' ')}` : '', narrate: false, data: { told: keys } };
 }

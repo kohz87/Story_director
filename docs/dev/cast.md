@@ -94,9 +94,8 @@ NPC State Delta's dossier runs the existing reader command `keypeople.pin { name
 
 - The reply's card: the status card leads with the notes whose `at` is the card's index (paths crossed with the reason, "While time
   passed", "pack updated") and its closed line.
-- The card of the reply someone arrived in is kept in view (`follow.js`): SillyTavern scrolls to the newest message as it lands and Story Block draws
-  its "This reply" card a moment later, which can leave a card under the newest reply just below the visible chat until the next reply. When a reply with a
-  cast note for it lands and the reader was at the bottom, the chat is scrolled down again once the card is there (never after the reader scrolls up).
+- Keeping the card of the newest reply in view is Story Block's (its "This reply" card mount scrolls the chat when the reader was at the bottom);
+  the cast does not scroll the page.
 - World -> Now -> Around here: "Cast whose paths may cross yours here: n, not yet met" (only when some are at this place), the met people's
   last news, "Met n of N from the <pack> cast" always.
 - Settings -> Modules -> Story Director -> The cast: on/off, new faces at most, unmet can die, planner connection.

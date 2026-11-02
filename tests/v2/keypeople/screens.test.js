@@ -210,6 +210,24 @@ test('the status card: this reply\'s key person lines in its body and its closed
     assert.equal(squash(drawCard(STATUS_SUMMARY, doc({ director: {} }), []).el.textContent), '1:30 pm, Bluewatch Village');
 });
 
+test('the status card: a removal told after its step shows only while the taken-off record it is about is there', () => {
+    const doc = gone => ({ v: 2, meta: { rev: 9, claims: {} }, domains: { keypeople: { pins: {}, away: {}, gone, notes: {
+        kn_00000004: { sid: 'sr_2', kind: 'gone', name: 'Mara', head: 'Mara is no longer a key person', rest: '(archived in NPC State Delta).', lead: true, rev: 8, key: 'mara', goneRev: 7 },
+    } }, director: { time: { minutes: 1 } }, scene: { place: { name: '' } } } });
+    const changes = ['/domains/keypeople/notes/kn_00000004'];
+    const bare = { status: { summary: '' }, time: { text: '' } };
+    const shown = state => [drawCard(statusCardScreen.template, state, changes).el.querySelectorAll('.sd-keynote').length, squash(drawCard(STATUS_SUMMARY, state, changes).el.textContent), squash(drawCard(STATUS_SUMMARY, state, changes, bare).el.textContent)];
+    // The record is there with the rev the line names: the line, in the body and on the closed line.
+    const there = doc({ mara: { name: 'Mara', reason: 'archived', on: 1, rev: 7 } });
+    assert.deepEqual(shown(there), [1, 'Mara is no longer a key person · 1:30 pm, Bluewatch Village', 'Mara is no longer a key person']);
+    assert.deepEqual(drawCard(statusCardScreen.template, there, changes).warnings, []);
+    // The reply that made the record was deleted (no record), or she was taken off again since (another rev): nothing.
+    assert.deepEqual(shown(doc({})), [0, '1:30 pm, Bluewatch Village', '']);
+    assert.deepEqual(shown(doc({ mara: { name: 'Mara', reason: 'died', on: 2, rev: 12 } })), [0, '1:30 pm, Bluewatch Village', '']);
+    // Not changed on this reply: nothing, whatever the record says.
+    assert.equal(drawCard(statusCardScreen.template, there, ['/domains/director/time/minutes']).el.querySelectorAll('.sd-keynote').length, 0);
+});
+
 test('on the host: the lines are on the reply that did it and only that one; a return and an unpin are told, and the state agrees after a rebuild', async () => {
     const host = await keyHost();
     try {

@@ -105,7 +105,7 @@ test('status card: time, place, goal and step, progress, with what this reply ch
     const { el } = draw(STATUS_CARD_ID, headState(), { changes });
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
     assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Goal']);
-    assert.deepEqual(rows[0], ['Time', 'June 11, 2025, 09:00 am']);
+    assert.deepEqual(rows[0], ['Time', 'June 11, 2025, 9:00 am']);
     assert.deepEqual(rows[1], ['Place', 'Bluewatch Village · Eastmarch']);
     // The goal row holds the progress bar (its text is the bar's own label, not part of the goal line).
     assert.ok(rows[2][1].startsWith('East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'), rows[2][1]);
@@ -137,7 +137,7 @@ test('status card: the place\'s map coordinates when the atlas knows it, and Sto
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
     // Time, Weather, Place, Coordinates (its own row; the place does not carry the coordinates any more).
     assert.deepEqual(rows.slice(0, 4), [
-        ['Time', 'June 11, 2025, 09:00 am'],
+        ['Time', 'June 11, 2025, 9:00 am'],
         ['Weather', 'Light rain over the sluices'],
         ['Place', 'Bluewatch Village · Eastmarch'],
         ['Coordinates', '59, 110'],
@@ -289,13 +289,13 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     const text = index => squash(body(index).textContent);
     const merged = messages[1].querySelector(`[data-ss-section="${STATUS_CARD_ID}"]`) !== null;
 
-    assert.match(text(1), /June 10, 2025, 06:30 pm/);
+    assert.match(text(1), /June 10, 2025, 6:30 pm/);
     assert.match(text(1), /Mill Road · Eastmarch/);
     assert.match(text(1), /Tanner Pelts — Bring 5 wolf pelts/);
     assert.doesNotMatch(text(1), /Bluewatch|Wolves 8\/3|Bandit Raid/);
     assert.ok(body(1).querySelector('.sd-place').classList.contains('sd-new'), 'reply 1 moved the place');
 
-    assert.match(text(3), /June 11, 2025, 09:00 am/);
+    assert.match(text(3), /June 11, 2025, 9:00 am/);
     assert.match(text(3), /Bluewatch Village/);
     assert.doesNotMatch(text(3), /Harvest Fair|Bandit Raid/, 'no next beat under a reply');
     assert.equal(body(3).querySelector('.sd-place').classList.contains('sd-new'), false);
