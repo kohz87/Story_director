@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.1
+
+- World → Now: a long place in "Around here" is shortened with "…" (the whole place shows when you point at it), and
+  the time of day gives way first; the heading no longer runs into the next card.
+- Key people: the Pin list stays inside its card and scrolls there when it is long.
+
 ## 2.9.0
 
 - **Set the story clock by hand.** With Story Block 2.16.0, the Game view's Edit button has the story date and time:
