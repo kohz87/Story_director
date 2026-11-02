@@ -80,7 +80,7 @@ Full suite: about 980 tests, about 1–2 minutes. Skills: `.claude/skills/run-te
   §4.4 change lines (the Director's v1 grammar kept under `<Changes>`), §5 prompt, §6 modules / Features, §10, §13.
 - Story Block `docs/v2/MODULES.md`: **§C Story Director** (C1 `director` …), **§F decisions** (override older
   text: F21 While away, F83 met goals, F88 held offers, F100 features, ...), §G `sdk.callModel` (arc).
-- This repo: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, README ("The change lines", "Arc planning", ...), CHANGELOG.
+- This repo: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, AI-README.md ("Reply format the model writes", "Data the model sees", "Reader features", which holds the arc panel), `docs/dev/` area notes, CHANGELOG.
 - History and decisions: `suite-notes/` in kohz87/inventory-block, branch `claude/hopeful-babbage-tipaw8`
   (README.md, WAVE_BRIEF.md, V2_LOG.md newest at the end). Area notes: `docs/dev/tracker-and-time.md`,
   `docs/dev/world.md`, `docs/dev/key-people.md`, `docs/dev/cast.md`.

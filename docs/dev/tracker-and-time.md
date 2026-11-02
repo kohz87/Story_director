@@ -3,7 +3,7 @@
 The `director` domain: threads written by the story's change lines, and the story clock. Detail: Story
 Block MODULES.md §C1 (the domain), §C2 (quests), §F (F21 While away, F83 met goals, F88 held offers, the
 maxJump and Continue decisions); SPEC §2.2 (counters, `ctx.absolute`, `ctx.ifThere`, rules a–d), §4.4;
-this repo's README "The change lines", "The note".
+this repo's AI-README "Reply format the model writes" and "Data the model sees" (the note).
 
 ## Rules
 
@@ -74,5 +74,5 @@ this repo's README "The change lines", "The note".
 ## When you change it
 
 - A new kind or label: grammar line (static, module-set only), validator, refusal tests, fuzz generator,
-  README "The change lines" and CHANGELOG.
+  AI-README "Reply format the model writes" and CHANGELOG.
 - Keep the standalone integration test green (`integration/alone.test.js`).
