@@ -74,7 +74,7 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
     assert.notEqual(tails[0], tails.at(-1), 'the tail changes with the state');
 
     const text = statics[0];
-    assert.match(text, /~ time <date, clock time>/);
+    assert.match(text, /~ time <date, clock time such as 9:30 am>/);
     assert.match(text, /Director lines:/);
     // No offers to accept: a hook is an open thread, and + quest is written once the reader accepts.
     assert.doesNotMatch(text, /a job only offered: \+ hook with giver, reward/);
