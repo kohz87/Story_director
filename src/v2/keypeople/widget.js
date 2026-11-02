@@ -5,9 +5,11 @@
 // person's `doing`, else the dossier's role) and the last news of an away person, and an Unpin button. Under the rows `+ Pin`
 // opens the people {{user}} may pin (who is here, who the story's threads name, who NPC State Delta tracks), and a quiet note
 // says what the narrator is told and what it costs. Pin and Unpin are the reader's own tools (cause `ui`, on the latest reply):
-// not story actions. Text goes in as text only (WAVE rule 7).
+// not story actions. Text goes in as text only (WAVE rule 7). The Pin list stays inside the card (a max height, scrolling there); opening it
+// brings the card into view by moving its own scroller only (screens/scroll.js; never scrollIntoView).
 
 import { button, maker } from '../screens/dom.js';
+import { revealIn } from '../screens/scroll.js';
 import { FEATURE } from './domain.js';
 
 export const KEY_PEOPLE_WIDGET = 'story-director.key-people';
@@ -24,6 +26,7 @@ function render(el, props, api) {
     let error = '';
     let busy = false;
     let gone = false;
+    let reveal = false;
 
     async function run(type, payload) {
         if (busy || typeof api?.command !== 'function') return;
@@ -94,6 +97,7 @@ function render(el, props, api) {
         const actions = make('div', 'wv-key-actions');
         const pin = button(make, choosing ? 'Close' : '+ Pin', 'ss-button-quiet wv-key-pin', null, () => {
             choosing = !choosing;
+            reveal = choosing;
             draw();
         });
         if (data.full === true && !choosing) {
@@ -106,6 +110,10 @@ function render(el, props, api) {
         if (error) parts.push(make('p', 'sd-reason', error, { role: 'alert' }));
         if (data.note) parts.push(make('p', 'wv-key-note', data.note));
         root.replaceChildren(...parts);
+        if (reveal) {
+            reveal = false;
+            if (choosing) revealIn(null, root.closest?.('.wv-key') ?? root, 'nearest');
+        }
     }
 
     draw();

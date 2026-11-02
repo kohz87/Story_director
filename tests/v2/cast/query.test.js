@@ -61,6 +61,8 @@ test('director.cast.view: Around here\'s numbers: met n of N always, how many un
         // 8:00 am: the forge people are not at the forge yet (their routine is the evening): both are near, neither met.
         let view = host.sdk.query('director.cast.view');
         assert.deepEqual([view.on, view.met, view.total, view.near, view.hasNear, view.hasMet, view.heading, view.packLabel], [true, 0, 3, 2, true, false, 'Harrow · morning', 'Ersveil cast']);
+        // The heading also comes in parts, so the screen can cut the place short and drop the time of day first.
+        assert.deepEqual([view.place, view.day, view.dayText], ['Harrow', 'morning', '· morning']);
         assert.deepEqual(view.metList, []);
         assert.match(view.note, /^Unmet cast stays hidden\./);
         // The party goes where nobody is: no "near".

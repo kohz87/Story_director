@@ -81,7 +81,7 @@ test('on the host: the note is for the reply they come in (its card, not the one
 
 const world = { today: '', here: { place: null, moved: false, weather: '', hasPeople: false, people: [], chatter: [], nsd: false }, clockSet: true, upcomingDays: 30, hasUpcoming: false, upcoming: [], news: [], hasNews: false, factions: [], hasFactions: false };
 const drawWorld = cast => draw(worldScreen.template, { state: {}, q: { world, journal: { on: false, hasDays: false, days: [] }, threads: { on: true }, keys: null, cast }, draft: { view: 'now' }, settings: {}, mount: 'tab', screenId: 'story-director/world', api: {} });
-const VIEW = { on: true, total: 14, met: 3, near: 2, hasNear: true, heading: 'Bluewatch docks · evening', packLabel: 'Ersveil cast', hasMet: true, metList: [{ key: 'ersveil:fenna', name: 'Fenna', news: 'upriver at Ashford' }], note: 'Unmet cast stays hidden.' };
+const VIEW = { on: true, total: 14, met: 3, near: 2, hasNear: true, heading: 'Bluewatch docks · evening', place: 'Bluewatch docks', day: 'evening', dayText: '· evening', packLabel: 'Ersveil cast', hasMet: true, metList: [{ key: 'ersveil:fenna', name: 'Fenna', news: 'upriver at Ashford' }], note: 'Unmet cast stays hidden.' };
 
 test('World -> Now: "Around here" under Here: how many may cross your path here (only when some are), who you met and their news, "Met n of N" always; gone with no cast', () => {
     const { el, warnings } = drawWorld(VIEW);
@@ -97,7 +97,7 @@ test('World -> Now: "Around here" under Here: how many may cross your path here 
     ]);
     assert.equal(squash(section.querySelector('.wv-note').textContent), 'Unmet cast stays hidden.');
     assert.deepEqual(el.querySelectorAll('section').map(node => node.getAttribute('data-kind')).slice(0, 3), ['here', 'around', 'upcoming']);
-    const far = drawWorld({ ...VIEW, near: 0, hasNear: false, hasMet: false, metList: [], met: 0, heading: '' });
+    const far = drawWorld({ ...VIEW, near: 0, hasNear: false, hasMet: false, metList: [], met: 0, heading: '', place: '', day: '', dayText: '' });
     assert.deepEqual(rows(far.el.querySelector('.wv-around')), [['Met from the Ersveil cast', '0 of 14']]);
     assert.equal(squash(far.el.querySelector('.wv-around h4').textContent), 'Around here');
     const off = drawWorld(null);

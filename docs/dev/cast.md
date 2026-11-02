@@ -97,6 +97,7 @@ NPC State Delta's dossier runs the existing reader command `keypeople.pin { name
 - Keeping the card of the newest reply in view is Story Block's (its "This reply" card mount scrolls the chat when the reader was at the bottom);
   the cast does not scroll the page.
 - World -> Now -> Around here: "Cast whose paths may cross yours here: n, not yet met" (only when some are at this place), the met people's
-  last news, "Met n of N from the <pack> cast" always.
+  last news, "Met n of N from the <pack> cast" always. The heading after the words is one line: the place (`director.cast.view` `place`, cut with "…", the full
+  place as its tooltip), then the time of day (`dayText`, "· morning"), which goes first when the two do not fit; `heading` is the same in one string.
 - Settings -> Modules -> Story Director -> The cast: on/off, new faces at most, unmet can die, planner connection.
 - Key people: the Pin chooser lists the people met from the cast.
