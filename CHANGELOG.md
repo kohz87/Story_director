@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.2
+
+- **No more freeze on a nonsense date.** A date the model wrote with an absurd year (17 digits or more) in a plan, a
+  trip or a thread could freeze the page while it was shown; such a date is now not read as a date.
+- **Clearer time lines.** The narrator's time rule shows a clock-time example (`~ time <date, clock time such as
+  9:30 am>`), so it writes a real time instead of "midday".
+
 ## 2.9.1
 
 - World → Now: a long place in "Around here" is shortened with "…" (the whole place shows when you point at it), and
