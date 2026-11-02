@@ -30,6 +30,7 @@ import { createFakeModel } from '../../vendor/story-block/testkit/model.js';
 import { createModule } from '../../../src/v2/module.js';
 import { castPlans } from '../../../src/v2/cast/index.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
+import { fakeDelta } from '../keypeople/helpers.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
 const SEEDS = [1, 2, 3];
@@ -174,7 +175,9 @@ function tripLines(rt, n) {
 // Key people (own stream): the first reply's people are pinned by the reader after it (so on a reply never deleted); later the reader pins and
 // unpins now and then (on whatever reply is the latest, which a delete may take), and the replies' lines send people away, add steps, change
 // their plans, bring them back, and now and then record a death. A line may name someone no longer pinned (it is refused, quietly) or whose
-// away record a deleted reply made (a step then has nothing to join: passed over on replay, never a failing block).
+// away record a deleted reply made (a step then has nothing to join: passed over on replay, never a failing block). A stand-in for NPC State
+// Delta lists the base people and loses one now and then (archived there): the sync step takes it off the list before the next reply, and the
+// tell step after that reply's lines writes its card line on the reply (a delete may take either; a swipe of the reply says it again).
 const KEY_BASE = ['Ren', 'Odda', 'Fenna'];
 function keyLines(rk, host, n) {
     const pinned = Object.values(host.head().domains.keypeople?.pins ?? {}).map(entry => entry.name);
@@ -192,7 +195,12 @@ function keyLines(rk, host, n) {
     }
     return lines;
 }
-async function keyEdits(rk, host, n) {
+async function keyEdits(rk, host, n, delta) {
+    if (rk.chance(0.3)) {
+        const known = Object.keys(delta);
+        if (known.length) delete delta[rk.pick(known)];
+    }
+    if (rk.chance(0.2)) delta[rk.pick([...KEY_BASE, `Key${n}`])] ??= {};
     if (rk.chance(0.25)) await host.sdk.command('keypeople.pin', { name: `Key${n}` });
     const pinned = Object.values(host.head().domains.keypeople?.pins ?? {}).map(entry => entry.name);
     if (pinned.length && rk.chance(0.12)) await host.sdk.command('keypeople.unpin', { name: rk.pick(pinned) });
@@ -281,8 +289,9 @@ for (const seed of SEEDS) {
         source.entries = CAST_IDS.map(id => castEntry(id, rc, source.version));
         castPlans.clear();
         let host = null;
+        const delta = Object.fromEntries(KEY_BASE.map(name => [name, {}]));
         const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat } });
-        host = await createHost({ modules: [fakeFightRunner(), module], callModel: createFakeModel([], { fallback: castAnswer(rc) }), settings: { modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
+        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc) }), settings: { modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
         // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
         const installCast = async () => {
             const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
@@ -317,7 +326,7 @@ for (const seed of SEEDS) {
                 } else if (ra.chance(0.15) && host.sdk.query('director.arc')?.current?.active) {
                     assert.ok((await host.sdk.command('director.arc.end', {})).ok);
                 }
-                await keyEdits(rk, host, n);
+                await keyEdits(rk, host, n, delta);
                 const edit = lastingEdit(rl, host, n);
                 if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
                 if (!DELETE_AT.includes(n)) continue;
@@ -365,7 +374,7 @@ for (const seed of SEEDS) {
             for (const id of CAST_IDS) assert.ok(!told.some(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line)), `seed ${seed}: ${id} is named outside a meeting's cue`);
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
-            t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}), pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
+            t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             const again = await createHost({ modules: [fakeFightRunner(), createModule()] });

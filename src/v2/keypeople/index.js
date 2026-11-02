@@ -8,13 +8,14 @@
 //   Wolfmere Outpost`, `- away Ren` (back), `- key Ren | died`. Only a pinned person may be away. The tail (note.js) tells one
 //   line per away key person within the token budget; a back date that passes moves nobody ("due back").
 // * Removal: a pinned person NPC State Delta has archived or lost (a death) leaves the list before the next reply, with the
-//   reason (nsd.js, the hook below); the story's `- key Name | died` and the reader's Unpin do the same. Never written to NSD.
+//   reason (nsd.js, the hook below); the story's `- key Name | died` and the reader's Unpin do the same. Never written to NSD. NSD's
+//   removal is stored on the reply before the one being written, but its card line goes on the reply that followed (`keypeople.tell`).
 // * Reader: World → Now's Key people section (widget.js, the world part's screen) pins and unpins (cause `ui`).
 // * Interface for other modules: the query `director.keyPeople` (queries.js). Settings: how many key people (10) and the
 //   narrator budget for them (300 tokens, no upper limit).
 // Works without NPC State Delta (a death is the story's line, or Unpin).
 
-import { pin, sync, unpin, applyAwayLine, applyKeyLine, capOf } from './capture.js';
+import { pin, sync, tell, unpin, applyAwayLine, applyKeyLine, capOf } from './capture.js';
 import { DEFAULT_CAP, DEFAULT_TOKENS, FEATURE, MAX_CAP, initialKeyPeople, validateKeyPeople } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, keyPeopleOn, tail, tokensOf } from './note.js';
 import { nsdVerdicts } from './nsd.js';
@@ -35,6 +36,19 @@ export function beforeGenerate(view) {
     return { commands: [{ type: 'keypeople.sync', payload: { ...(released.length ? { who: released } : {}), ...(known.length ? { known } : {}) } }] };
 }
 
+/**
+ * `afterCapture(view)`: one `keypeople.tell` step on the reply just read when NPC State Delta's removals of the step before it are not told
+ * on a card yet. The removal itself was stored on the reply before (it ran before the reply was written, so the narrator is not told of
+ * the person); its card line belongs to the reply that followed. A swipe, a Re-read or a delete of this reply takes the line back and
+ * the next one says it again.
+ */
+export function afterCapture(view) {
+    if (!keyPeopleOn(view)) return undefined;
+    const gone = view?.state?.domains?.keypeople?.gone;
+    const who = Object.entries(gone && typeof gone === 'object' ? gone : {}).filter(([, entry]) => entry?.owed === true).map(([key]) => key).slice(0, 24);
+    return who.length ? { commands: [{ type: 'keypeople.tell', payload: { who } }] } : undefined;
+}
+
 /** The most the narrator is told of key people, in tokens, for a part's own settings: the module's budget follows it (module.js). */
 const budgetOf = settings => tokensOf(settings);
 
@@ -51,6 +65,7 @@ export const part = {
         'keypeople.pin': tagged((ctx, payload) => pin(ctx, payload)),
         'keypeople.unpin': tagged((ctx, payload) => unpin(ctx, payload)),
         'keypeople.sync': tagged((ctx, payload) => sync(ctx, payload)),
+        'keypeople.tell': tagged((ctx, payload) => tell(ctx, payload)),
     },
     queries,
     kinds: {
@@ -66,7 +81,7 @@ export const part = {
         budget: DEFAULT_TOKENS,
         budgetOf,
     },
-    hooks: { beforeGenerate: tagged(beforeGenerate) },
+    hooks: { beforeGenerate: tagged(beforeGenerate), afterCapture: tagged(afterCapture) },
     settings: {
         section: 'Key people',
         defaults: { cap: DEFAULT_CAP, tokens: DEFAULT_TOKENS },

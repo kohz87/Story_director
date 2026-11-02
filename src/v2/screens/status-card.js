@@ -30,7 +30,7 @@ const TEMPLATE = `
   </div>
 </div>
 <div class="sd-keynotes" data-if="len(state.keypeople.notes) > 0">
-  <p class="sd-keynote" data-each="state.keypeople.notes as n" data-if="changed(n)" data-kind="{{ n.kind }}"><span class="sd-keynote-star" aria-hidden="true">★</span> <span><b>{{ n.head }}</b> {{ n.rest }}</span></p>
+  <p class="sd-keynote" data-each="state.keypeople.notes as n" data-if="changed(n) && (n.key == null || state.keypeople.gone[n.key].rev == n.goneRev)" data-kind="{{ n.kind }}"><span class="sd-keynote-star" aria-hidden="true">★</span> <span><b>{{ n.head }}</b> {{ n.rest }}</span></p>
 </div>
 <dl class="sd-status">
   <div class="sd-row sd-time" data-if="q.time.text" data-class="sd-new: changed('state.director.time')">
@@ -108,7 +108,7 @@ const CSS = `${BASE_CSS}
 // same text, from `director.status`). A host that draws the card on its own shows the title in its header, as before.
 export const STATUS_TITLE = 'Where things stand';
 // A key person's return or removal this reply leads the line ("Ren is back · 1:30 pm, Bluewatch Village"): their notes are what the reply changed in `keypeople.notes`.
-export const STATUS_SUMMARY = '<span data-each="state.cast.notes as n" data-if="n.at == index">{{ n.line }}<span data-if="len(q.status.summary) > 0"> · </span></span><span data-each="state.keypeople.notes as n" data-if="changed(n) && len(q.status.summary) > 0">{{ n.head }} · </span><span data-each="state.keypeople.notes as n" data-if="changed(n) && len(q.status.summary) == 0"><span data-if="n.lead != true"> · </span>{{ n.head }}</span>{{ q.status.summary }}';
+export const STATUS_SUMMARY = '<span data-each="state.cast.notes as n" data-if="n.at == index">{{ n.line }}<span data-if="len(q.status.summary) > 0"> · </span></span><span data-each="state.keypeople.notes as n" data-if="changed(n) && (n.key == null || state.keypeople.gone[n.key].rev == n.goneRev)"><span data-if="n.lead != true && len(q.status.summary) == 0"> · </span>{{ n.head }}<span data-if="len(q.status.summary) > 0"> · </span></span>{{ q.status.summary }}';
 
 export const statusCardScreen = Object.freeze({
     id: STATUS_CARD_ID,
