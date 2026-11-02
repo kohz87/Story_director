@@ -57,10 +57,10 @@ export const MAX_DATE = 80;
 export const MAX_NAME = 80;
 export const MAX_MET = 8;
 
-// Receipts that set the clock (module story-director, `data.minutes`). `director.advance` called by
-// another module's command has no receipt of its own; the time part's settle before the next reply
-// sets the clock right again.
-const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'time.settle', 'director.advance']);
+// Receipts that set the clock (module story-director, `data.minutes`; `director.clock` is the reader's own edit of it).
+// `director.advance` called by another module's command has no receipt of its own; the time part's settle before the
+// next reply sets the clock right again.
+const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'director.clock', 'time.settle', 'director.advance']);
 // Receipts that are bookkeeping only: never a fact of the day.
 const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed']);
 // The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's

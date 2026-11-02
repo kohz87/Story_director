@@ -33,6 +33,7 @@
 // order problems by rev and number.
 
 import { threadProjection } from './thread-writes.js';
+import { partsOf } from './clock-set.js';
 import { hashJson } from './hash.js';
 import { closed, cursor, hash, map, minute, recordId, source } from './thread-shape.js';
 import { lineKey } from '../../changes.js';
@@ -276,16 +277,19 @@ export const queries = {
         return found ? hashJson(threadProjection(found)) : null;
     },
     /**
-     * `{ minutes, text }`: the story time (null until the story sets it) and that time written on the
-     * chat's calendar ("Goldwane 12, 611, 06:40 am"; '' while unset).
+     * `{ minutes, text, parts }`: the story time (null until the story sets it), that time written on the
+     * chat's calendar ("Goldwane 12, 611, 06:40 am"; '' while unset) and the same time as `{ year, month, day,
+     * minutes }` (month and day from 1, `minutes` 0..1439 of the day), or null while unset: what the clock editor
+     * shows and `director.clock` takes.
      */
     'director.time': (state, _args, tools) => {
         const minutes = state?.domains?.director?.time?.minutes ?? null;
-        if (!Number.isInteger(minutes)) return { minutes: null, text: '' };
+        if (!Number.isInteger(minutes)) return { minutes: null, text: '', parts: null };
         const { settings, pack } = queryCalendar(tools);
+        const calendar = calendarOf(settings, pack);
         let text = '';
-        try { text = calendarOf(settings, pack).format(minutes); } catch { text = ''; }
-        return { minutes, text };
+        try { text = calendar.format(minutes); } catch { text = ''; }
+        return { minutes, text, parts: partsOf(calendar, minutes) };
     },
     /**
      * The calendar the chat runs on, as plain data (calendar.js normalizeCalendar's shape: `preset`,

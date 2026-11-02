@@ -19,6 +19,8 @@
 // Lasting changes (chronicle.lasting, a pack's events: tests/v2/chronicle/helpers/lasting-pack.js): a pack whose
 // events write and move world events (one chain tried before the first reply has set the clock, so it waits),
 // replies whose world lines name them, and the reader's edits of them, from a random stream of their own.
+// The reader's clock edits (director.clock, own stream): now and then, after a reply, the reader sets the date and time by hand, forward or back
+// (a rewind) inside June 1200; the edit rides on that reply, so a delete of it takes it back, a later `~ time` set stays exact and later moves add on top.
 // The living cast (own stream): a pack of six people (some with a goal the story touches, some who may die) whose entries change now and
 // then (a new version, one added, one gone, the pack switched off and on) and a scripted planner that moves some of them, brings some to the
 // party and kills one on a day change; meetings by place follow the scene. A delete often takes the reply that holds the sync, a move, a
@@ -29,6 +31,7 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createFakeModel } from '../../vendor/story-block/testkit/model.js';
 import { createModule } from '../../../src/v2/module.js';
 import { castPlans } from '../../../src/v2/cast/index.js';
+import { PRESETS, makeCalendar } from '../../../src/calendar.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
@@ -240,6 +243,13 @@ function castAnswer(rc) {
 const SET_LINE = '~ time June 9, 1200, 10:00 am';
 const SET_AFTER = (6 * 24 + 2) * 60;
 const MAX_JUMP = 30 * 24 * 60;
+const GREGORIAN = makeCalendar(PRESETS.gregorian);
+// A reader's edit of the clock: a date in June 1200 (day, minutes of the day), as the command takes it and as the model reads it.
+const editOf = rr => {
+    const day = rr.int(1, 28);
+    const minutes = rr.int(0, 1439);
+    return { payload: { year: 1200, month: 6, day, minutes }, abs: GREGORIAN.toAbs({ year: 1200, month: 5, day, minutes }) };
+};
 const timeOf = lines => lines.map(line => {
     if (line === SET_LINE) return { set: true };
     const move = /^! time \+(\d+)([hd])$/.exec(line);
@@ -250,7 +260,8 @@ function expectedClock(chat, times, start) {
     for (const message of chat) {
         const from = clock;
         for (const step of times.get(message) ?? []) {
-            if (step.set) clock = start + SET_AFTER;
+            if (step.edit !== undefined) clock = step.edit;
+            else if (step.set) clock = start + SET_AFTER;
             else clock = Math.min(clock + step.move, Math.max(clock, from + MAX_JUMP));
         }
     }
@@ -277,6 +288,7 @@ for (const seed of SEEDS) {
         const rt = prng(seed ^ 0x7121);
         const rk = prng(seed ^ 0x4B50);
         const rc = prng(seed ^ 0xCA57);
+        const re = prng(seed ^ 0xC10C);
         const source = { version: '1.0.0', enabled: true, entries: [] };
         source.entries = CAST_IDS.map(id => castEntry(id, rc, source.version));
         castPlans.clear();
@@ -298,6 +310,7 @@ for (const seed of SEEDS) {
             for (const name of KEY_BASE) assert.ok((await host.sdk.command('keypeople.pin', { name })).ok);
             const start = host.head().domains.director.time.minutes;
             const times = new Map();
+            let editsMade = 0;
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
                 const lines = [...replyLines(r, n), ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
@@ -318,6 +331,15 @@ for (const seed of SEEDS) {
                     assert.ok((await host.sdk.command('director.arc.end', {})).ok);
                 }
                 await keyEdits(rk, host, n);
+                // The reader sets the clock by hand now and then, forward or back; the model follows (a set, exact).
+                if (re.chance(0.3)) {
+                    const edit = editOf(re);
+                    const done = await host.sdk.command('director.clock', edit.payload);
+                    assert.ok(done.ok, `seed ${seed}, reply ${n}: ${done.message}`);
+                    times.get(host.ctx.chat.at(-1)).push({ edit: edit.abs });
+                    editsMade += 1;
+                    assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `seed ${seed}, reply ${n}: the clock after the reader's edit`);
+                }
                 const edit = lastingEdit(rl, host, n);
                 if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
                 if (!DELETE_AT.includes(n)) continue;
@@ -352,6 +374,8 @@ for (const seed of SEEDS) {
             }
             await host.send('And then?', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
+            assert.ok(editsMade >= 1, `seed ${seed}: the reader set the clock by hand`);
+            t.diagnostic(`seed ${seed}: clock edits ${editsMade}`);
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === 'events.fire' && entry.receipt.data?.then?.includes('chronicle.lasting')), `seed ${seed}: a pack event wrote a lasting change`);
             const summaries = host.sdk.receipts().map(entry => entry.receipt.summary ?? '');
             const tripsMade = summaries.filter(text => /^On the road to /.test(text)).length;
