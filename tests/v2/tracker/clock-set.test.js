@@ -11,6 +11,7 @@ import { part } from '../../../src/v2/tracker/index.js';
 import { CLOCK, clockCommand, clockProblem, heroDate, partsOf } from '../../../src/v2/tracker/clock-set.js';
 import { calendarOf, settingsDefaults } from '../../../src/v2/tracker/time.js';
 import { makeState, reply, runCommand } from './helpers/fake-ctx.js';
+import { statusExtras } from '../../../src/v2/screens/queries.js';
 import { formatStoryTime } from '../../vendor/story-block/src/v2/view/clock.js';
 
 const MONTHS = ['Dawnwane', 'Rainmoot', 'Greengale', 'Highsun', 'Goldwane', 'Haywane', 'Emberwane', 'Nightfall', 'Frostfall', 'Deepwinter', 'Icewane', 'Yearsend']
@@ -208,4 +209,10 @@ test('the card line and its tooltip write the time the way the Game view hero do
     assert.equal(run.result.data.date, formatStoryTime(minutes(run.state), calendar.config));
     assert.equal(run.result.data.date, 'CY 611, Goldwane 12, 7:40 pm');
     assert.equal(heroDate(calendar, minutes(run.state), { year: false }), 'Goldwane 12, 7:40 pm');
+    // The Status card's Time row (director.status `when`) is that text; unset: nothing. director.time's text is not touched.
+    const tools = { query: name => (name === 'packs.calendar' ? ERSVEIL : null), settings: () => settingsDefaults() };
+    const shown = { ...tools, query: name => (name === 'director.calendar' ? part.queries['director.calendar'](run.state, {}, tools) : tools.query(name)) };
+    assert.equal(statusExtras(run.state, {}, shown).when, 'CY 611, Goldwane 12, 7:40 pm');
+    assert.equal(statusExtras(makeState(), {}, shown).when, '');
+    assert.equal(part.queries['director.time'](run.state, {}, tools).text, 'CY 611, Goldwane 12, 07:40 pm');
 });

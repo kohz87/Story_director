@@ -18,6 +18,7 @@
 import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
 import { problemList } from '../tracker/domain.js';
+import { heroDate } from '../tracker/clock-set.js';
 import { BEHIND, BEHIND_KINDS } from './reveal.js';
 import { THREADS_FEATURE } from '../threads.js';
 
@@ -319,8 +320,10 @@ export function clockText(calendar, minutes) {
 
 /**
  * `director.status` → what the reply's Status card adds to Story Block's scene, all of it {{user}}'s own
- * (world/known.js: where they are, the weather they stand in, their rank, what they wear and how they are): `{ summary, coords,
+ * (world/known.js: where they are, the weather they stand in, their rank, what they wear and how they are): `{ summary, when, coords,
  * weather, rank, wearing, condition }`.
+ * `when`: the story time as the Game view hero writes it ("CY 611, Goldwane 14, 6:00 pm"), for the card's Time row; '' while the clock is unset.
+ * Display only: `director.time`'s `text` and the Director note keep their own words.
  * `summary`: the card's one line, "<clock time>, <place>" ("1:30 pm, Bluewatch Village"; each part is left out when the story has
  * not set it), for the one "This reply" line Story Block draws above the reply's cards.
  * `coords`: the scene's place on the map ("59, 110", map units: the atlas's or the pack's map data),
@@ -333,7 +336,10 @@ export function clockText(calendar, minutes) {
 export function statusExtras(state, _args, tools, { settings = null } = {}) {
     const query = queryFrom(tools);
     const minutes = state?.domains?.director?.time?.minutes;
-    const clock = Number.isSafeInteger(minutes) ? clockText(calendarFrom(settings, query), minutes) : '';
+    const calendar = Number.isSafeInteger(minutes) ? calendarFrom(settings, query) : null;
+    const clock = calendar ? clockText(calendar, minutes) : '';
+    let when = '';
+    try { when = calendar ? heroDate(calendar, minutes) : ''; } catch { when = ''; }
     const placeName = text(state?.domains?.scene?.place?.name);
     const here = ask(query, 'atlas.here', {}, null);
     const place = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
@@ -342,6 +348,7 @@ export function statusExtras(state, _args, tools, { settings = null } = {}) {
     const you = ask(query, 'scene.you', {}, null);
     return {
         summary: summaryText([clock, placeName].filter(Boolean).join(', ')),
+        when,
         coords: x && y ? `${x}, ${y}` : '',
         weather: isRecord(weather) ? cut(text(weather.text), WEATHER_CHARS) : '',
         // The Rank only where a pack gives the game one: Story Block answers `rankLabel` (its word for it) then, and no `rank` without it.

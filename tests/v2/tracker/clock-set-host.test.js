@@ -198,7 +198,10 @@ test('Ersveil: the pack\'s months and era are the ones checked and written; repl
         const sets = await mustSet(host, 611, 5, 14, 18 * 60);
         assert.equal(sets.receipt.summary, 'Clock set to Goldwane 14, 6:00 pm', 'era and year left out while the year is the same');
         assert.equal(sets.receipt.data.date, 'CY 611, Goldwane 14, 6:00 pm');
-        assert.equal(clock(host).text, 'CY 611, Goldwane 14, 06:00 pm');
+        assert.equal(clock(host).text, 'CY 611, Goldwane 14, 06:00 pm', 'director.time keeps its own words (the prompt note is built from them)');
+        // The Status card's Time row is display only and reads as the hero does.
+        assert.equal(host.sdk.query('director.status').when, 'CY 611, Goldwane 14, 6:00 pm');
+        assert.equal(host.sdk.query('director.status').summary.startsWith('6:00 pm'), true);
         await host.send('Dusk.', reply('Dusk falls.'));
         // A change of year (Yearsend 30 is the last day: no leap days on Ersveil) writes year and era in.
         const year = await mustSet(host, 612, 12, 30, 1439);
