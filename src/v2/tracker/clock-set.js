@@ -101,6 +101,7 @@ export function clockCommand(ctx, payload) {
         summary: `Clock set to ${sameYear ? short : full}`,
         // The Director note gives the time every reply, and a jump forward is told as While away: nothing more to narrate.
         narrate: false,
-        data: { minutes: abs, from: before, date: full },
+        // `edit: true` is what Story Block's reply card lists under "Changed this reply" as the reader's own edit (reply-cards.js replyEdits).
+        data: { minutes: abs, from: before, date: full, edit: true },
     };
 }

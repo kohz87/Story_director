@@ -139,7 +139,7 @@ test('it sets the clock as a set (ctx.absolute), tells the host not to narrate, 
     assert.equal(minutes(run.state), GREGORIAN.toAbs({ year: 2023, month: 5, day: 5, minutes: 18 * 60 + 30 }));
     assert.equal(run.result.summary, 'Clock set to June 5, 6:30 pm', 'the year did not change: left out');
     assert.equal(run.result.narrate, false);
-    assert.deepEqual(run.result.data, { minutes: minutes(run.state), from: minutes(start), date: 'June 5, 2023, 6:30 pm' });
+    assert.deepEqual(run.result.data, { minutes: minutes(run.state), from: minutes(start), date: 'June 5, 2023, 6:30 pm', edit: true });
     // The same date again is a set too (written even when the clock holds it).
     const same = click(run.state, at(2023, 6, 5, 18 * 60 + 30));
     assert.deepEqual(same.marked, ['director/time/minutes']);

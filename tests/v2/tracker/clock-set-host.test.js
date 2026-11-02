@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
+import { replyEdits } from '../../vendor/story-block/src/v2/reply-cards.js';
 import { castPlans } from '../../../src/v2/cast/index.js';
 import { OPENING, castHost, castSource, entry, people, receipts as castReceipts, said, settle, slice, validatorErrors as castValidatorErrors } from '../cast/helpers.js';
 
@@ -74,6 +75,9 @@ test('the edit is a receipt on the head reply: the clock reads it at once, the p
         assert.equal(sets.receipt.cause, 'ui');
         assert.equal(sets.receipt.summary, 'Clock set to March 5, 10:00 am');
         assert.equal(sets.receipt.narrate, false);
+        // Story Block's reply card lists a receipt as the reader's edit by `data.edit`: the tile reads the receipt's own line.
+        assert.equal(sets.receipt.data.edit, true);
+        assert.deepEqual(replyEdits({ receipts: host.sdk.receipts().filter(entry => entry.index === host.ctx.chat.length - 1).map(entry => entry.receipt) }), [{ text: 'Clock set to March 5, 10:00 am' }]);
         assert.deepEqual(clock(host), { minutes: sets.receipt.data.minutes, text: 'March 5, 1200, 10:00 am', parts: { year: 1200, month: 3, day: 5, minutes: 600 } });
         // The next reply's note and the story's own moves start from the edited clock.
         await host.send('We walk.', reply('Two hours on foot.', ['! time +2h']));
