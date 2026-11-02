@@ -16,6 +16,16 @@ this repo's README "The change lines", "The note".
   absolute set (`ctx.absolute`). One reply moves the clock at most `maxJump` days (setting, default
   `MAX_JUMP_DAYS` 30), counted from the clock when the reply's first Director line was read; a Continue is the
   same reply (same `sid`), so the limit holds across it. Invalid times are refused as Problems.
+- **The reader's clock edit** (`tracker/clock-set.js`, command `director.clock { year, month, day, minutes }`, cause `ui` only):
+  month and day from 1, `minutes` 0..1439 of the day. Checked on the chat's calendar (leap years included); a bad one is
+  refused (`INVALID`) with one plain sentence that names the field ("Goldwane has 30 days.", "Pick a date and a time.") and
+  saves nothing. A good one is a set (`ctx.absolute`) on the head reply, like `~ time <date>`: a swipe or delete of that reply
+  takes it back, replay == live == reload. It may go back (a rewind) and is not held to `maxJump`. The cast only follows a
+  clock that went back (`cast/world.js dueMove` `reset`), the time part's settle follows it (no recap on a backward step; what
+  time already closed stays closed, claimed once), the digest drops the days the clock is no longer past. The receipt is a
+  clock receipt for the day digest (`chronicle/days.js` `CLOCK_TYPES`). `director.time` also gives `parts` (the same
+  `{ year, month, day, minutes }`, or null while unset), what the editor shows. Tests: `tests/v2/tracker/clock-set*.test.js`,
+  the clock stream of `fuzz-delete.test.js`, `tests/v2/break/fuzz-clock-edit.test.js`.
 - Calendar: the reader's, else the enabled pack's (`packs.calendar`), else Gregorian; read-only while "pack".
 - **Per-reply bookkeeping:** `turn.now` is a slot written whole for each reply. Later replies do not write inside an earlier reply's slot.
 - **Quests:** the story records quests as threads and tells their goals and rewards. Earlier quest extensions are read-only.

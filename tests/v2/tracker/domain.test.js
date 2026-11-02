@@ -14,7 +14,7 @@ test('the part has the shape MODULES §A names', () => {
     assert.deepEqual(part.features.map(feature => [feature.id, feature.default]), [['story-director.initiative', true], ['story-director.threads', true]]);
     assert.deepEqual(Object.keys(part.domains), ['director']);
     assert.deepEqual(Object.keys(part.queries), ['threads.hash', 'director.time', 'director.calendar', 'director.threads', 'director.thread']);
-    assert.deepEqual(Object.keys(part.commands), ['director.seed', 'threads.offer', 'threads.accept', 'threads.intent', 'director.initiative']);
+    assert.deepEqual(Object.keys(part.commands), ['director.seed', 'director.clock', 'threads.offer', 'threads.accept', 'threads.intent', 'director.initiative']);
     assert.equal(part.commands['director.initiative'].feature, 'story-director.initiative');
     assert.deepEqual(Object.keys(part.hooks), ['beforeGenerate', 'replayGuard']);
     // The Director screen is the screens part's `story-director/director`.
@@ -106,6 +106,6 @@ test('queries: time, threads by kind, status and offer, one thread by key, alias
     assert.equal(wolf.track, undefined, 'bookkeeping stays inside');
     wolf.fields.step = 'changed';
     assert.equal(state.domains.director.threads[wolf.id].fields.step, 'tracking');
-    assert.deepEqual(part.queries['director.time'](makeState()), { minutes: null, text: '' });
+    assert.deepEqual(part.queries['director.time'](makeState()), { minutes: null, text: '', parts: null });
     assert.deepEqual(part.queries['director.threads'](makeState(), { kind: 'hook' }), []);
 });

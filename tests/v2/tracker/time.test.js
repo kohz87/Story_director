@@ -39,7 +39,7 @@ test('~ time sets the clock; ! time moves it on; ctx.time() reads it', () => {
     assert.equal(gregorian.format(minutes(state)), 'March 6, 2026, 07:00 am');
     state = reply(state, '~ time noon').state;
     assert.equal(gregorian.format(minutes(state)), 'March 6, 2026, 12:00 pm');
-    assert.deepEqual(part.queries['director.time'](state), { minutes: minutes(state), text: 'March 6, 2026, 12:00 pm' });
+    assert.deepEqual(part.queries['director.time'](state), { minutes: minutes(state), text: 'March 6, 2026, 12:00 pm', parts: { year: 2026, month: 3, day: 6, minutes: 720 } });
     assert.deepEqual(part.domains.director.validate(state.domains.director, state), []);
 });
 

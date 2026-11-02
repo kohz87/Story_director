@@ -33,9 +33,9 @@ const TEMPLATE = `
   <p class="sd-keynote" data-each="state.keypeople.notes as n" data-if="changed(n) && (n.key == null || state.keypeople.gone[n.key].rev == n.goneRev)" data-kind="{{ n.kind }}"><span class="sd-keynote-star" aria-hidden="true">★</span> <span><b>{{ n.head }}</b> {{ n.rest }}</span></p>
 </div>
 <dl class="sd-status">
-  <div class="sd-row sd-time" data-if="q.time.text" data-class="sd-new: changed('state.director.time')">
+  <div class="sd-row sd-time" data-if="q.status.when" data-class="sd-new: changed('state.director.time')">
     <dt><i class="fa-solid fa-clock" aria-hidden="true"></i> Time</dt>
-    <dd>{{ q.time.text }}</dd>
+    <dd>{{ q.status.when }}</dd>
   </div>
   <div class="sd-row sd-weather" data-if="q.status.weather">
     <dt><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> Weather</dt>

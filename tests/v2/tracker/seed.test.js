@@ -87,7 +87,7 @@ test('director.seed sets the clock once, under its claim, without narrating', ()
 test('director.time writes the time on the chat\'s calendar; director.calendar gives it as data', () => {
     const run = runCommand(makeState(), seedCommand, {}, { queries: packs() });
     const tools = { query: name => (name === 'packs.calendar' ? ERSVEIL : null), settings: () => settingsDefaults() };
-    assert.deepEqual(part.queries['director.time'](run.state, {}, tools), { minutes: minutes(run.state), text: 'CY 611, Goldwane 12, 06:40 am' });
+    assert.deepEqual(part.queries['director.time'](run.state, {}, tools), { minutes: minutes(run.state), text: 'CY 611, Goldwane 12, 06:40 am', parts: { year: 611, month: 5, day: 12, minutes: 400 } });
     assert.equal(part.queries['director.calendar'](run.state, {}, tools).era, 'CY');
     assert.equal(part.queries['director.calendar'](run.state, {}, { ...tools, settings: () => OWN }).months.length, 2);
     assert.equal(part.queries['director.calendar'](run.state, {}, {}).preset, 'gregorian');
