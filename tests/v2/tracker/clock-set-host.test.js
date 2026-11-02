@@ -192,8 +192,8 @@ test('Ersveil: the pack\'s months and era are the ones checked and written; repl
         assert.equal(clock(host).text, 'CY 611, Goldwane 12, 06:40 am', 'nothing saved');
 
         const sets = await mustSet(host, 611, 5, 14, 18 * 60);
-        assert.equal(sets.receipt.summary, 'Clock set to Goldwane 14, 06:00 pm', 'era and year left out while the year is the same');
-        assert.equal(sets.receipt.data.date, 'CY 611, Goldwane 14, 06:00 pm');
+        assert.equal(sets.receipt.summary, 'Clock set to Goldwane 14, 6:00 pm', 'era and year left out while the year is the same');
+        assert.equal(sets.receipt.data.date, 'CY 611, Goldwane 14, 6:00 pm');
         assert.equal(clock(host).text, 'CY 611, Goldwane 14, 06:00 pm');
         await host.send('Dusk.', reply('Dusk falls.'));
         // A change of year (Yearsend 30 is the last day: no leap days on Ersveil) writes year and era in.

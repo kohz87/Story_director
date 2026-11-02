@@ -8,9 +8,10 @@ import assert from 'node:assert/strict';
 
 import { PRESETS, makeCalendar } from '../../../src/calendar.js';
 import { part } from '../../../src/v2/tracker/index.js';
-import { CLOCK, clockCommand, clockProblem, partsOf } from '../../../src/v2/tracker/clock-set.js';
+import { CLOCK, clockCommand, clockProblem, heroDate, partsOf } from '../../../src/v2/tracker/clock-set.js';
 import { calendarOf, settingsDefaults } from '../../../src/v2/tracker/time.js';
 import { makeState, reply, runCommand } from './helpers/fake-ctx.js';
+import { formatStoryTime } from '../../vendor/story-block/src/v2/view/clock.js';
 
 const MONTHS = ['Dawnwane', 'Rainmoot', 'Greengale', 'Highsun', 'Goldwane', 'Haywane', 'Emberwane', 'Nightfall', 'Frostfall', 'Deepwinter', 'Icewane', 'Yearsend']
     .map(name => ({ name, days: 30 }));
@@ -121,10 +122,10 @@ test('a pack calendar (Ersveil): its months, its length of a month, its era in t
 
     // The first set writes the year (the clock had none); with the year unchanged the line leaves year and era out.
     const first = click(makeState(), at(611, 5, 12, 6 * 60 + 40), { queries });
-    assert.equal(first.result.summary, 'Clock set to CY 611, Goldwane 12, 06:40 am');
+    assert.equal(first.result.summary, 'Clock set to CY 611, Goldwane 12, 6:40 am');
     const same = click(first.state, at(611, 5, 14, 18 * 60), { queries });
-    assert.equal(same.result.summary, 'Clock set to Goldwane 14, 06:00 pm');
-    assert.equal(same.result.data.date, 'CY 611, Goldwane 14, 06:00 pm', 'the card\'s tooltip: the full date');
+    assert.equal(same.result.summary, 'Clock set to Goldwane 14, 6:00 pm');
+    assert.equal(same.result.data.date, 'CY 611, Goldwane 14, 6:00 pm', 'the card\'s tooltip: the full date');
     // A change of year writes year and era in.
     const next = click(same.state, at(612, 1, 2, 0), { queries });
     assert.equal(next.result.summary, 'Clock set to CY 612, Dawnwane 2, 12:00 am');
@@ -136,9 +137,9 @@ test('it sets the clock as a set (ctx.absolute), tells the host not to narrate, 
     assert.equal(run.ok, true, run.message);
     assert.deepEqual(run.marked, ['director/time/minutes']);
     assert.equal(minutes(run.state), GREGORIAN.toAbs({ year: 2023, month: 5, day: 5, minutes: 18 * 60 + 30 }));
-    assert.equal(run.result.summary, 'Clock set to June 5, 06:30 pm', 'the year did not change: left out');
+    assert.equal(run.result.summary, 'Clock set to June 5, 6:30 pm', 'the year did not change: left out');
     assert.equal(run.result.narrate, false);
-    assert.deepEqual(run.result.data, { minutes: minutes(run.state), from: minutes(start), date: 'June 5, 2023, 06:30 pm' });
+    assert.deepEqual(run.result.data, { minutes: minutes(run.state), from: minutes(start), date: 'June 5, 2023, 6:30 pm' });
     // The same date again is a set too (written even when the clock holds it).
     const same = click(run.state, at(2023, 6, 5, 18 * 60 + 30));
     assert.deepEqual(same.marked, ['director/time/minutes']);
@@ -184,4 +185,27 @@ test('clockProblem is pure: a calendar and a date in, a sentence or nothing out'
     const one = makeCalendar({ preset: 'custom', months: [{ name: 'Only', days: 10 }], leapYears: true });
     assert.equal(clockProblem(one, at(5, 1, 11, 0)), 'Only has 10 days in 5.', 'a one-month calendar: its only month is the leap month');
     assert.equal(clockProblem(one, at(5, 2, 1, 0)), 'Pick a month from the list.');
+});
+
+test('the card line and its tooltip write the time the way the Game view hero does (Story Block\'s fmt.time): no leading zero, every hour of the day', () => {
+    const calendars = [
+        PRESETS.gregorian,
+        { preset: 'custom', era: 'CY', months: MONTHS, leapYears: false },
+        { preset: 'custom', era: '', months: MONTHS.slice(0, 3), leapYears: true },
+    ];
+    for (const config of calendars) {
+        const calendar = makeCalendar(config);
+        for (const year of [611, 1900, 2024]) {
+            for (let hour = 0; hour < 24; hour += 1) {
+                const abs = calendar.toAbs({ year, month: 1, day: 3, minutes: hour * 60 + (hour * 7) % 60 });
+                assert.equal(heroDate(calendar, abs), formatStoryTime(abs, calendar.config), `${config.era || 'no era'} ${year} ${hour}h`);
+            }
+        }
+    }
+    // Through the command: the tooltip date is the hero's text for the clock now, the line its short form.
+    const run = click(makeState(), at(611, 5, 12, 19 * 60 + 40), { queries: packs() });
+    const calendar = calendarOf(settingsDefaults(), ERSVEIL);
+    assert.equal(run.result.data.date, formatStoryTime(minutes(run.state), calendar.config));
+    assert.equal(run.result.data.date, 'CY 611, Goldwane 12, 7:40 pm');
+    assert.equal(heroDate(calendar, minutes(run.state), { year: false }), 'Goldwane 12, 7:40 pm');
 });

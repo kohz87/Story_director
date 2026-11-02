@@ -35,6 +35,20 @@ export function partsOf(calendar, abs) {
     }
 }
 
+// The clock as the Game view's hero writes it (Story Block's `fmt.time`): "6:00 pm", no leading zero.
+const clockText = minutes => `${Math.floor(minutes / 60) % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${minutes < 720 ? 'am' : 'pm'}`;
+
+/**
+ * Story minute `abs` written as the hero shows it: "CY 611, Goldwane 12, 7:40 pm" ("Goldwane 12, 611, 7:40 pm" for a calendar
+ * without an era); `year: false` leaves out the era and the year ("Goldwane 12, 7:40 pm").
+ */
+export function heroDate(calendar, abs, { year = true } = {}) {
+    const date = calendar.fromAbs(abs);
+    const day = `${calendar.config.months[date.month].name} ${date.day}`;
+    const dated = !year ? day : calendar.config.era ? `${calendar.config.era} ${date.year}, ${day}` : `${day}, ${date.year}`;
+    return `${dated}, ${clockText(date.minutes)}`;
+}
+
 /**
  * What is wrong with a date and time on `calendar`, in one plain sentence that names the field, or '' when it is a date there.
  * `{ year, month, day, minutes }` as the command takes them.
@@ -81,8 +95,8 @@ export function clockCommand(ctx, payload) {
 
     // The short form leaves out the year (and era) while the year did not change, as the Director's own note does.
     const sameYear = before !== null && partsOf(calendar, before)?.year === year;
-    const short = calendar.format(abs, { era: false });
-    const full = calendar.format(abs);
+    const full = heroDate(calendar, abs);
+    const short = heroDate(calendar, abs, { year: false });
     return {
         summary: `Clock set to ${sameYear ? short : full}`,
         // The Director note gives the time every reply, and a jump forward is told as While away: nothing more to narrate.
