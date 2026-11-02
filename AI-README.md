@@ -14,7 +14,7 @@ standalone checks. Code sets every number; the story only proposes them in chang
 
 | Repo | Module id | Version | Owns |
 |---|---|---|---|
-| kohz87/Story_block | `story-block` | 2.16.1 | The host: store, replay, command bus, `<Changes>` capture, prompt assembly, module registry, settings window, Game view, packs and portraits, save points. Core domains `scene` and `inventory`. |
+| kohz87/Story_block | `story-block` | 2.16.4 | The host: store, replay, command bus, `<Changes>` capture, prompt assembly, module registry, settings window, Game view, packs and portraits, save points. Core domains `scene` and `inventory`. |
 | kohz87/Story_director (this) | `story-director` | 2.9.2 | Clock and calendar, threads and quests, map and trips, Chronicle, World and Journal, Key people, the living cast, arc planning, checks. Needs Story Block >= 2.12.0. |
 | kohz87/npc_state_delta | `npc-state-delta` | 1.7.1 | NPC dossiers, meters, stages, secrets, cast portraits. Needs Story Block; with Story Director it also follows the cast and Key people. |
 | kohz87/Story_studio | (not an extension) | 0.6.0 | An offline single HTML page that writes and checks packs. No install. |
