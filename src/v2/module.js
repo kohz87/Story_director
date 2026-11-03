@@ -51,12 +51,12 @@ import { rareKindsUsed } from './rare.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.9.3';
+export const VERSION = '2.10.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 // PLACEHOLDER: the Story Block release that reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own).
 // The lead gives the number; set it here and nothing else changes. Until then it is the old minimum, so the module still loads.
-export const STORY_BLOCK_WITH_HEADS = '2.12.0';
+export const STORY_BLOCK_WITH_HEADS = '2.19.0';
 export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */

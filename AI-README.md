@@ -1,4 +1,4 @@
-# AI-README: Story Director 2.9.3
+# AI-README: Story Director 2.10.0
 
 For AI assistants that read this repository. Plain facts, no marketing. For people, read [README.md](README.md). For rules every
 change must keep, read [CLAUDE.md](CLAUDE.md). Depth lives in `docs/`; this file points there instead of copying.
@@ -15,7 +15,7 @@ standalone checks. Code sets every number; the story only proposes them in chang
 | Repo | Module id | Version | Owns |
 |---|---|---|---|
 | kohz87/Story_block | `story-block` | 2.16.6 | The host: store, replay, command bus, `<Changes>` capture, prompt assembly, module registry, settings window, Game view, packs and portraits, save points. Core domains `scene` and `inventory`. |
-| kohz87/Story_director (this) | `story-director` | 2.9.3 | Clock and calendar, threads and quests, map and trips, Chronicle, World and Journal, Key people, the living cast, arc planning, checks. Needs Story Block >= 2.12.0. |
+| kohz87/Story_director (this) | `story-director` | 2.10.0 | Clock and calendar, threads and quests, map and trips, Chronicle, World and Journal, Key people, the living cast, arc planning, checks. Needs Story Block >= 2.19.0. |
 | kohz87/npc_state_delta | `npc-state-delta` | 1.7.1 | NPC dossiers, meters, stages, secrets, cast portraits. Needs Story Block; with Story Director it also follows the cast and Key people. |
 | kohz87/Story_studio | (not an extension) | 0.6.0 | An offline single HTML page that writes and checks packs. No install. |
 
@@ -32,7 +32,7 @@ Delta (`tests/v2/integration/alone.test.js` guards that). NPC State Delta reads 
 - `manifest.json`: `loading_order` 30, `js: index.js`, `dependencies: ["third-party/Story_block"]`, no `requires`.
 - `index.js` waits up to ten seconds for `globalThis.StoryBlock` (`apiVersion` 2, `ready`), then calls `sdk.registerModule`
   with `src/v2/module.js`. With no v2 host it shows one notice line in the extensions drawer and does nothing else.
-- Module `requires.storyBlock` is `>=2.12.0` (`STORY_BLOCK_RANGE`). Used later: `scene.you` (rank, wearing, condition) 2.10.0;
+- Module `requires.storyBlock` is `>=2.19.0` (`STORY_BLOCK_RANGE`). Used later: `scene.you` (rank, wearing, condition) 2.10.0;
   the header's Travel line 2.11.0; `after:` line order 2.11.1; a pack's cast (`packs.content({ kind: 'cast' })`) 2.15.0; the
   hero Edit's clock fields (`director.clock`) 2.16.0. An older host leaves that one thing out.
 - Node 24 in CI, 22 or later works locally. `npm test`, `npm run check`, `git diff --check` (see "File map").
@@ -307,5 +307,5 @@ Delta checked out beside this repo.
 
 ## Version
 
-Story Director 2.9.3 (`manifest.json`, `package.json`, `src/v2/module.js` `VERSION`). Built and tested with Story Block 2.16.1 and
+Story Director 2.10.0 (`manifest.json`, `package.json`, `src/v2/module.js` `VERSION`). Built and tested with Story Block 2.16.1 and
 NPC State Delta 1.7.1. History: [CHANGELOG.md](CHANGELOG.md).

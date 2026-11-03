@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.10.0
+
+- **Shorter Director text** (about 3.1k → 1.5–1.7k characters a reply): one grammar line per family, merged rules, the Checks rule only without an RPG, route/landmark/trip taught on first use. Needs Story Block 2.19.0 (kind heads keep stray lines working).
+
 ## 2.9.3
 
 - **Someone you never saw is no longer "met".** The living cast picks who crosses your path before a reply and asks
