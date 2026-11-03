@@ -39,7 +39,7 @@ import { createTimeline, withRuleOverlay } from './timeline/index.js';
 import { createStore as realStore } from './store.js';
 import { createTurn, substituteNames } from './turn.js';
 
-export const VERSION = '2.16.1';
+export const VERSION = '2.16.6';
 
 /**
  * Settings where Story Block's `currency` (and `currencyShort`, `currencyPlural`, `coins`) fall back to
@@ -429,6 +429,14 @@ export function createRuntime({
                     [ASSIST_SETTING.extractor]: registry.featureOn(CORE_FEATURE.extractor),
                 }),
                 grammar: () => registry.contexts().flatMap(context => context.kinds.map(kind => kind.grammar)),
+                // The scene's place, the map's places (the atlas's when Story Director is on, else the packs') and the story's date and
+                // time, for the safety net (assist/where.js). A query that is not there or throws is none of it.
+                where: () => {
+                    const ask = (name, args) => { try { return sdk?.query(name, args); } catch { return null; } };
+                    const clock = ask('director.time', {});
+                    return { here: ask('scene.place', {}), places: [...(ask('atlas.places', {}) ?? []), ...(ask('packs.content', { kind: 'places' }) ?? [])],
+                        time: typeof clock?.text === 'string' ? clock.text : '' };
+                },
                 chat: () => ctx.chat,
                 chatId: () => ctx.getCurrentChatId?.() ?? ctx.chatId ?? '',
                 hasKind: kind => {
@@ -499,7 +507,7 @@ export function createRuntime({
     };
     const made = createSdk({ store, bus, registry, settings, events, chat: () => ctx.chat, onRegister: def => onRegister?.(def), rewind,
         substitute: text => substituteNames(text, ctx), dialog: (screenId, opts) => dialogOpener?.(screenId, opts) ?? null,
-        dialogCurrent: () => dialogCurrent?.() ?? null, reread: index => turn?.reread(index), callModel: modelCalls.callModel, timeline });
+        dialogCurrent: () => dialogCurrent?.() ?? null, reread: index => turn?.reread(index), callModel: modelCalls.callModel, timeline, seed: () => turn?.seed() });
     sdk = made.sdk;
     const initial = () => initialWithStart(registry);
     turn = createTurn({ ctx, live, store, bus, timeline, registry, settings, events, onBlocked, initial, ownPrompt: eventData => ownCalls.owns(eventData), ...(notify ? { notify } : {}) });

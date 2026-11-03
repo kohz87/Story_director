@@ -455,7 +455,7 @@ export function preflight({ store, registry, chat = () => [], apiVersion = 2 }, 
  * Returns { sdk, events, markReady }:
  * `sdk.ready` resolves to the sdk once the host calls markReady().
  */
-export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null, callModel = null, timeline = null }) {
+export function createSdk({ store, bus, registry, settings, events = createEvents(), chat = () => [], check = checkModule, onRegister = null, rewind = null, substitute = text => String(text ?? ''), dialog = null, dialogCurrent = null, reread = null, callModel = null, timeline = null, seed = null }) {
     let markReady;
     const ready = new Promise(resolve => { markReady = () => resolve(sdk); });
     const refused = message => ({ ok: false, code: 'REFUSED', message });
@@ -477,6 +477,10 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
     // not whether a change was announced: a view may have announced it already. A quiet host costs a scan.
     const settle = () => {
         timeline?.settle();
+        // A chat with a message but no state yet (Story Block has not heard of the chat, turn.seed): the state starts first.
+        if (typeof seed === 'function' && !store.head?.()) {
+            try { seed(); } catch (error) { console.warn('[Story Suite] the chat\'s state could not be started', error); }
+        }
         announceModules(registry, events);
         if (registry.restore?.().state === 'pending' || store.headIndex?.() < 0) return null;
         const head = store.head?.();

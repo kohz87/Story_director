@@ -376,6 +376,57 @@ export function markerNodes(root) {
 // The marker text a panel took out of the story (placeAtMarker), kept on the panel itself.
 const CONSUMED = Symbol('consumed marker');
 
+// A marker line with no panel to stand for (the reply has no recorded rolls, the feature is off) is hidden, never shown as
+// text: a paragraph that holds only it is hidden, else the line is put in a hidden span of its own. It stays in the message,
+// so a panel drawn later still finds it (markerNodes walks into it; placeAtMarker shows it again first).
+export const MARKER_HIDDEN = 'rpg-battle-marker';
+const isHiddenMarker = node => node?.nodeType === 1 && String(node.className ?? '').split(/\s+/).includes(MARKER_HIDDEN);
+const onlyMarker = node => textOf(node).split(/\r?\n/).every(line => !line.trim() || MARKER_LINE.test(line));
+
+/** Hides every marker line under `root` (see above). */
+export function hideMarkers(doc, root) {
+    for (const node of markerNodes(root)) {
+        const parent = node.parentNode;
+        if (!parent || isHiddenMarker(parent)) continue;
+        if (parent !== root && parent.tagName === 'P' && nodesOf(parent).every(child => child === node || blank(child)) && onlyMarker(node)) {
+            parent.hidden = true;
+            parent.classList?.add?.(MARKER_HIDDEN) ?? (parent.className = `${parent.className ?? ''} ${MARKER_HIDDEN}`.trim());
+            continue;
+        }
+        const lines = textOf(node).split(/\r?\n/);
+        // (A line break drawn right after a marker that stood alone in its text goes into the hidden span with it, so no empty line is left.)
+        const next = lines.length === 1 && node.nextSibling?.tagName === 'BR' ? node.nextSibling : null;
+        lines.forEach((line, i) => {
+            if (MARKER_LINE.test(line)) {
+                const span = doc.createElement('span');
+                span.className = MARKER_HIDDEN;
+                span.hidden = true;
+                span.appendChild(doc.createTextNode(line));
+                if (next) span.appendChild(next);
+                parent.insertBefore(span, node);
+            } else if (line) parent.insertBefore(doc.createTextNode(line), node);
+            if (i < lines.length - 1) parent.insertBefore(doc.createTextNode('\n'), node);
+        });
+        node.remove();
+    }
+}
+
+// Shows again the marker lines hideMarkers hid under `root`.
+function showMarkers(doc, root) {
+    const hidden = [];
+    const walk = node => { for (const child of nodesOf(node)) if (child.nodeType === 1) { if (isHiddenMarker(child)) hidden.push(child); else walk(child); } };
+    walk(root);
+    for (const node of hidden) {
+        if (node.tagName === 'SPAN') {
+            for (const child of nodesOf(node)) node.parentNode?.insertBefore(child, node);
+            node.remove();
+        } else {
+            node.hidden = false;
+            node.classList?.remove?.(MARKER_HIDDEN) ?? (node.className = String(node.className ?? '').split(/\s+/).filter(name => name && name !== MARKER_HIDDEN).join(' '));
+        }
+    }
+}
+
 /**
  * Takes a panel out of the message. An inline panel that stood in the place of a marker line leaves that line behind, so the place
  * is kept for the next time (switching the RPG off and on again draws the panel where the narrator wrote it).
@@ -400,6 +451,7 @@ const textOf = node => String(node.data ?? node.textContent ?? '');
  * marker line is taken out of the text.
  */
 export function placeAtMarker(doc, root, panel) {
+    showMarkers(doc, root);
     const found = markerNodes(root);
     if (!found.length) return false;
     const [first, ...extra] = found;
@@ -462,7 +514,7 @@ export function createFoldStore(doc) {
  * → { refresh(index, element?), refreshAll({ recent }), modelAt(index), latest(), destroy() }.
  * Draws, redraws or removes the panel of every drawn reply that has recorded rolls; `featureOn()` false removes them all.
  */
-export function createBattleLog({ ctx, doc = globalThis.document, store, events = null, featureOn = () => true, roleOf, messageElement = null } = {}) {
+export function createBattleLog({ ctx, doc = globalThis.document, store, events = null, featureOn = () => true, roleOf, messageElement = null, Observer = doc?.defaultView?.MutationObserver ?? globalThis.MutationObserver } = {}) {
     const chat = () => (Array.isArray(ctx?.chat) ? ctx.chat : []);
     const elementOf = messageElement ?? (index => doc.querySelector(`.mes[mesid="${index}"]`));
     const folds = createFoldStore(doc);
@@ -517,6 +569,8 @@ export function createBattleLog({ ctx, doc = globalThis.document, store, events 
         const shown = modelAt(index);
         if (!shown) {
             for (const node of old) releasePanel(doc, node);
+            const text = message.querySelector('.mes_text');
+            if (text) hideMarkers(doc, text);
             return null;
         }
         const text = message.querySelector('.mes_text');
@@ -555,6 +609,40 @@ export function createBattleLog({ ctx, doc = globalThis.document, store, events 
     }
 
     const offs = [];
+    // Another extension may draw a reply's text again after the panel was drawn (SillyTavern's updateMessageBlock, which no
+    // event follows: NPC State Delta does it on CHARACTER_MESSAGE_RENDERED after taking its own block out), so the panel is
+    // gone and the raw marker is back until something redraws the reply. A watch on the chat's message texts draws that
+    // reply again whenever a marker shows in it (a consumed or hidden one does not count, so drawing never feeds itself).
+    const shownMarkers = text => markerNodes(text).filter(node => !isHiddenMarker(node.parentNode));
+    if (typeof Observer === 'function' && doc) {
+        const waiting = new Map();
+        let queued = false;
+        const flush = () => {
+            queued = false;
+            const list = [...waiting.values()];
+            waiting.clear();
+            for (const message of list) {
+                const index = Number(message.getAttribute?.('mesid'));
+                const text = message.querySelector?.('.mes_text');
+                if (Number.isInteger(index) && text && shownMarkers(text).length) refresh(index, messageElement ? null : message);
+            }
+        };
+        try {
+            const watch = new Observer(records => {
+                for (const record of records) {
+                    const target = record.target?.nodeType === 1 ? record.target : record.target?.parentNode;
+                    const message = target?.closest?.('.mes[mesid]');
+                    if (message && target.closest?.('.mes_text')) waiting.set(message, message);
+                }
+                if (waiting.size && !queued) { queued = true; Promise.resolve().then(flush); }
+            });
+            const root = doc.querySelector?.('#chat') ?? doc.body ?? null;
+            if (root) {
+                watch.observe(root, { childList: true, subtree: true });
+                offs.push(() => watch.disconnect());
+            }
+        } catch { /* no watch: the events below still draw the panel */ }
+    }
     const source = ctx?.eventSource;
     const types = ctx?.eventTypes ?? ctx?.event_types ?? {};
     if (typeof source?.on === 'function') {
@@ -579,7 +667,11 @@ export function createBattleLog({ ctx, doc = globalThis.document, store, events 
         refresh, refreshAll, modelAt, latest,
         destroy() {
             offs.splice(0).forEach(off => off());
-            for (const node of doc.querySelectorAll(`.${BATTLE_ROOT}`)) releasePanel(doc, node);
+            for (const node of doc.querySelectorAll(`.${BATTLE_ROOT}`)) {
+                const text = node.parentNode;
+                releasePanel(doc, node);
+                if (text) hideMarkers(doc, text);
+            }
         },
     };
 }

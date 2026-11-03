@@ -1061,6 +1061,16 @@ export function inventoryEditGuard({ state, hash }, { guard, source, operation }
     return { ok: true };
 }
 
+// What the narrator is told after an edit's line under [Happened] (a receipt's `data.told`, added by prompt.js; the reader's
+// card does not show it). A starting purse or kit (a saved character's, from the wizard: `starting: true`) and the reader's own
+// corrections are the state as it stands, so the narrator must not read them as money or things that moved in the story.
+export const TOLD = Object.freeze({
+    startPurse: 'Starting purse, set before the story began: not money paid or received in the story.',
+    startKit: 'Starting kit, set before the story began: not found, bought or used in the story.',
+    editPurse: 'The reader\'s own correction: the purse is this now, not money paid or received in the story.',
+    editKit: 'The reader\'s own correction: the party has this now, not found, bought or used in the story.',
+});
+
 /** The inventory commands; `env` = { hooks: name => fn[], settings: () => this module's settings }. */
 export function createInventoryCommands(env) {
     return {
@@ -1116,7 +1126,8 @@ export function createInventoryCommands(env) {
             guardReaderEdit(ctx, 'inventory.add', null, null, { def: def.id, witness: addDecision(prefix, payload, def.id) });
             readerCarry(ctx, [{ defId: def.id, qty }], owner);
             const stacks = grantInto(ctx, inv, def, qty, owner, note);
-            return { summary: fill(E.itemAdded, { item: itemText(def.name, qty) }), data: { edit: true, def: def.id, qty, owner, stacks, created }, narrate: true };
+            return { summary: fill(E.itemAdded, { item: itemText(def.name, qty) }),
+                data: { edit: true, def: def.id, qty, owner, stacks, created, told: payload.starting === true ? TOLD.startKit : TOLD.editKit }, narrate: true };
         },
 
         'inventory.edit'(ctx, payload = {}) {
@@ -1146,7 +1157,7 @@ export function createInventoryCommands(env) {
                 if (!editPiece) {
                     const remaining = Object.values(inv.stacks).find(item => item.def === original.id && item.owner === stack.owner);
                     return { summary: fill(E.itemSet, { detail: fill(E.itemCount, { name: original.name, qty }) }),
-                        data: { edit: true, stack: remaining.id }, narrate: true };
+                        data: { edit: true, stack: remaining.id, told: TOLD.editKit }, narrate: true };
                 }
                 groupQty = qty;
             }
@@ -1197,7 +1208,7 @@ export function createInventoryCommands(env) {
             const detail = groupQty !== undefined && name !== oldName
                 ? fill(E.itemGroupRenamed, { name: oldName, qty: groupQty, renamed: name })
                 : payload.qty !== undefined ? fill(E.itemCount, { name, qty: groupQty ?? current.qty }) : payload.note !== undefined ? fill(E.itemNote, { name }) : name;
-            return { summary: fill(E.itemSet, { detail }), data: { edit: true, stack: resultStack }, narrate: true };
+            return { summary: fill(E.itemSet, { detail }), data: { edit: true, stack: resultStack, told: TOLD.editKit }, narrate: true };
         },
 
         'inventory.consume'(ctx, payload = {}) {
@@ -1363,7 +1374,7 @@ export function createInventoryCommands(env) {
             const from = wallet[WALLET_KEY] ?? 0;
             wallet[WALLET_KEY] = payload.amount;
             return { summary: fill(E.purseSet, { amount: formatAmount(payload.amount, currencyIn(ctx)) }),
-                data: { edit: true, from, to: payload.amount }, narrate: true };
+                data: { edit: true, from, to: payload.amount, told: payload.starting === true ? TOLD.startPurse : TOLD.editPurse }, narrate: true };
         },
 
         // { owner, amount, note? }, amount in whole units of the one currency. Like inventory.grant, not
@@ -2024,6 +2035,9 @@ function pack(label, phrases, room) {
     return { lines, taken, used };
 }
 
+// The wallet line says it is the purse BEFORE this reply, so a payment the story makes in this reply is not read as already counted.
+export const WALLET_NOTE = 'before this reply: write a coin line for any money paid or received in it';
+
 /**
  * The inventory's tail: what is worn and the wallet always; carried items in `lines` while
  * they fit in `chars` characters, the rest in `optional` (dropped first by the host) up to
@@ -2044,7 +2058,7 @@ export function inventoryTail(state, { currency, chars, optionalChars }) {
     for (const owner of Object.keys(wallets).filter(key => key !== 'party').sort()) {
         if (Object.values(wallets[owner]).some(Boolean)) purse.push(`${ownerName(state, owner)} ${formatWallet(wallets[owner], currency)}`);
     }
-    lines.push(`Wallet: ${purse.join('; ')}`);
+    lines.push(`Wallet: ${purse.join('; ')} (${WALLET_NOTE})`);
     const carried = items.filter(item => item.equipped === null);
     if (!carried.length) {
         lines.push('Carried: nothing');

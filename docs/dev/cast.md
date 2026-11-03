@@ -52,6 +52,14 @@ runs), so a note names the message its card goes under (`at`) rather than the re
    come first). At most one a reply, within the pace (setting `cast.faces`: `day1` 1 a day, `day2` 2 a day, `week1` 1 a week; the rest
    wait), never while a fight is on (a `combat.session` that has not ended, or a Lean RPG Foes block with a foe in it while the RPG feature is on), never someone in the scene or pinned as a key person.
 
+4. `cast.withdraw { at, keys }` (from `afterCapture`, stored on the reply): a planned meeting counts only if the reply shows the person. After the
+   reply's change lines, a person the meeting brought in (`why` place or goal) whose name or alias (whole word, any case; a title alone is not
+   a name) is not in the reply's shown words (hidden comments and the change block out) and is in no `+ present` line is unmet again: a goal
+   arrival goes back to where they were (`met.was`), the "Paths crossed" card line goes, the pace is not used up, they may come again. `why:
+   'story'` is never withdrawn. It runs before NPC State Delta's step after the reply (its `npc.tick` follows the `turn` event), so no dossier is
+   made for a withdrawn meeting; a swipe or Re-read decides again. The hook opts in (`hook.always`, Story Block's afterCapture) to run for a
+   reply with no change lines too; module.js then runs only the parts that opted in. Needs a Story Block with that option (the vendored testkit has it).
+
 The cue: the reply of a meeting gets one tail line, `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
 how they speak, what they want and why now (`note.js`). A swipe rewrites the scene, not who you meet: the steps stay, the planner's
 answer is kept in memory per key.

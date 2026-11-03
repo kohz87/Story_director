@@ -16,7 +16,7 @@ test('director.cast: the met people only, each with where they are, the last new
     try {
         assert.deepEqual(host.sdk.query('director.cast'), [], 'no one met yet');
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const met = host.sdk.query('director.cast');
         assert.equal(met.length, 1);
         assert.deepEqual(Object.keys(met[0]).sort(), ['aliases', 'alive', 'doing', 'entry', 'id', 'key', 'lastHeard', 'met', 'name', 'pack', 'where']);
@@ -34,7 +34,7 @@ test('director.cast: the met people only, each with where they are, the last new
         // The news of a met person comes with the planner's batch.
         await host.send('Sleep.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
         await settle();
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const later = host.sdk.query('director.cast')[0];
         assert.deepEqual([later.where, later.doing], ['Kesh', 'selling blades at the Kesh fair']);
         assert.deepEqual(later.lastHeard, { on: host.head().domains.director.time.minutes, text: 'selling blades at the Kesh fair' });
@@ -57,7 +57,7 @@ test('director.cast.view: Around here\'s numbers: met n of N always, how many un
     try {
         assert.equal(host.sdk.query('director.cast.view'), null, 'no one in the world yet');
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         // 8:00 am: the forge people are not at the forge yet (their routine is the evening): both are near, neither met.
         let view = host.sdk.query('director.cast.view');
         assert.deepEqual([view.on, view.met, view.total, view.near, view.hasNear, view.hasMet, view.heading, view.packLabel], [true, 0, 3, 2, true, false, 'Harrow · morning', 'Ersveil cast']);
@@ -85,7 +85,7 @@ test('a person met from the cast can be pinned as a key person: the Pin chooser 
     });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const choices = host.sdk.query('director.keyPeople.view').choices;
         assert.deepEqual(choices.map(choice => [choice.name, choice.source, choice.aliases]), [['Brom', 'cast', ['the smith']]]);
         assert.ok((await host.sdk.command('keypeople.pin', { name: 'Brom', aliases: ['the smith'] })).ok);
@@ -116,7 +116,7 @@ test('a meeting is in director.cast before the reply is written and while it is 
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
         const before = seen.tail.length;
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.deepEqual(seen.tail.at(-1), ['Brom'], 'in the tail the reply is written with');
         assert.deepEqual(seen.received.at(-1), ['Brom'], 'and when the reply has arrived');
         assert.ok(seen.tail.length > before);
@@ -133,10 +133,10 @@ test('the real-size cast (twelve Ersveil people): they join at their exact start
     const host = await castHost({ source: castSource(ERSVEIL), settings: { 'cast.faces': 'day2' } });
     try {
         await host.send('Hello.', said('Dawn.', ['~ time June 3, 1200, 06:30 am', '~ place Bluewatch Village | kind: settlement']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.deepEqual(host.sdk.query('director.cast').map(person => person.id), ['ruvai-ghostpass'], 'one a reply');
-        await host.send('Wait.', said('Smoke.'));
-        await host.send('Wait.', said('Smoke.'));
+        await host.send('Wait.', said(`Smoke. ${host.everyone()}`));
+        await host.send('Wait.', said(`Smoke. ${host.everyone()}`));
         const met = host.sdk.query('director.cast').map(person => person.id);
         assert.equal(host.sdk.query('director.cast.counts').total, 12);
         assert.deepEqual(met, ['ruvai-ghostpass', 'tansy-millrace'], 'two a day: the Bluewatch people whose routine has them there at dawn; the third waits');

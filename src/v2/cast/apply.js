@@ -221,8 +221,10 @@ export function applyMeet(cast, payload, env) {
         touch(item.key);
         const reason = item.why === 'goal' ? cutPoints(item.reason, MAX_REASON) : '';
         const here = cutPoints(item.place, MAX_PLACE);
+        // A goal arrival leaves where they were, in case the reply does not show them (`applyWithdraw`).
+        const was = item.why !== 'place' && here && person.where !== here ? person.where : undefined;
         if (item.why !== 'place' && here) person.where = here;
-        person.met = { on: isInt(now) ? now : null, where: person.where, why: item.why, reason, rev };
+        person.met = { on: isInt(now) ? now : null, where: person.where, why: item.why, reason, rev, ...(was === undefined ? {} : { was }) };
         const shown = cutPoints(whyText({ name: person.name, why: item.why, reason, doing: person.doing, where: person.where }), 400);
         met.push(item.key);
         if (item.why !== 'story') cued.push(item.key);
@@ -236,4 +238,31 @@ export function applyMeet(cast, payload, env) {
     }
     if (cued.length && isInt(payload.at)) cast.meeting = [{ at: payload.at, keys: cued.slice(0, 4), rev }];
     return met;
+}
+
+// ---- withdraw ------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Applies a `cast.withdraw` payload (`{ at, keys }`): the reply did not show these people, so the meeting recorded for it is taken back. They
+ * are unmet again (a goal arrival back where they were), the reply's "Paths crossed" card line for them goes, and the pace is not used up.
+ * Someone met in the story (`why: 'story'`) is never withdrawn. Returns the keys withdrawn. `env.touchNote(id)` marks a note's removal.
+ */
+export function applyWithdraw(cast, payload, env) {
+    const { touch = noop, touchNote = noop } = env;
+    const out = [];
+    for (const key of payload.keys ?? []) {
+        const person = Object.hasOwn(cast.people, key) && isRecord(cast.people[key]) ? cast.people[key] : null;
+        if (!person || !isMet(person) || person.met.why === 'story') continue;
+        touch(key);
+        if (typeof person.met.was === 'string') person.where = person.met.was;
+        person.met = null;
+        for (const [id, note] of Object.entries(cast.notes ?? {})) {
+            if (isRecord(note) && note.kind === 'met' && note.at === payload.at && note.head === `Paths crossed: ${person.name}`) {
+                touchNote(id);
+                delete cast.notes[id];
+            }
+        }
+        out.push(key);
+    }
+    return out;
 }

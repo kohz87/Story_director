@@ -596,13 +596,28 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
             actor: true, imports: Object.keys(definition.imports), decision: { inputs }, bound: true });
         return finish(ctx, prefix, draft, recorded, { pin: true, result: { subject }, summary: `${definition.name}: attached ${subject}.` });
     }
+    // A story line with no `kind:` (a model often leaves it out, or puts a label like `letter: F` where `kind: promote` belongs): when exactly
+    // one kind of this module, written with the line's op, accepts the line's labels as they are, that is its kind; with none or several
+    // the line is refused as before (kind must be …), never guessed. → the line's labels, with `kind` added when it was found.
+    function withKind(definition, line) {
+        const labels = line.labels ?? {};
+        if (dmOwn(labels, 'kind')) return labels;
+        const fits = Object.keys(definition.kinds).filter(name => {
+            if (definition.kinds[name].op !== line.op) return false;
+            try { parseLabels(definition, definition.kinds[name], { ...labels, kind: name }, { text: true }); return true; } catch (error) {
+                if (error instanceof DataModuleError) return false;
+                throw error;
+            }
+        });
+        return fits.length === 1 ? { ...labels, kind: fits[0] } : labels;
+    }
     function act(ctx, payload, line = null, call = {}) {
         if (ctx.caller !== null) refuse('REFUSED', '', 'A data action cannot be called by another module.');
         const prefix = stateOf(ctx), module = resolveModule(prefix, line?.name ?? payload.module), definition = activeDefinition(prefix, module);
         call.label = definition?.name ?? module;
         if (!definition) refuse('DM_SCHEMA', '', 'Unsupported or damaged pin.');
         dependency(definition, prefix);
-        const labels = line?.labels ?? { ...payload.labels, kind: payload.kind, ...(payload.who !== undefined ? { who: payload.who } : {}) };
+        const labels = line ? withKind(definition, line) : { ...payload.labels, kind: payload.kind, ...(payload.who !== undefined ? { who: payload.who } : {}) };
         const kind = dmOwn(definition.kinds, labels.kind) && definition.kinds[labels.kind];
         if (!kind) refuse('DM_LABEL', 'kind', `kind must be ${orList(Object.keys(definition.kinds))}`);
         if (line ? line.op !== kind.op : ctx.cause !== 'ui' || !kind.ui) refuse('REFUSED', '', line ? `${labels.kind} is written with ${kind.op}, not ${line.op}` : `${labels.kind} is a story line; a screen may only use kinds that allow it`);

@@ -86,10 +86,10 @@ test('without a model the world still meets by place and nobody moves; a Continu
     await syncCast(host, source);
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. Brom, Fenna`));
         assert.equal(people(host)['ersveil:brom'].met.why, 'place');
         await host.send('Sleep.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. Brom, Fenna`));
         assert.equal(people(host)['ersveil:fenna'].where, 'Kesh', 'no planner: no one moved');
         assert.equal(receipts(host, 'cast.advance').length, 0, 'and no step says they did');
         // A Continue (the same reply goes on) commits no step of its own.
@@ -151,7 +151,7 @@ test('on the host: Siebert comes by his goal with the story\'s reason, Tansy by 
         assert.match(tansy, /Why now: They are at Bluewatch Village, the place of this scene\. Bring them in naturally; do not treat them as known to You yet\.$/);
         await host.send('Next day.', said('Morning, and talk of someone asking about Master Somner.', ['~ time June 4, 1200, 08:00 am']));
         await settle();
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const cue = castCue(host);
         assert.match(cue, /^\[Cast\] Siebert Maas/);
         assert.match(cue, /Why now: Someone is asking about Master Somner at the inn and the news reached him on the north road\. Their own goal brings them to You\./);

@@ -273,7 +273,7 @@ export const STRINGS = deepFreeze({
     card: {
         title: 'Changed this reply',
         editHint: 'Your edits ride on this reply: swipe or delete it to undo them; deleting the oldest remaining reply carries them forward.',
-        rule: 'Rule: {name}',
+        ruleField: '{block} {label}: {value}',
         itemNow: 'now ×{qty}',
         equipped: 'equipped: {slot}',
         wallet: 'Wallet: now {coin} {money}',

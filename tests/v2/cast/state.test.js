@@ -46,7 +46,7 @@ test('a first meeting by place and routine: the party is at their place while th
     const host = await castHost({ source: castSource([BROM, FENNA]), settings: { 'cast.faces': 'day2' } });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look around.', said('Smoke rises.'));
+        await host.send('Look around.', said(`Smoke rises. ${host.everyone()}`));
         // Brom is at Harrow in the morning: he comes in this reply.
         const brom = people(host)['ersveil:brom'];
         assert.equal(brom.met.why, 'place');
@@ -69,7 +69,7 @@ test('a first meeting by place and routine: the party is at their place while th
         await host.send('Wait.', said('Gulls.'));
         assert.equal(people(host)['ersveil:fenna'].met, null, 'at noon the ferry is not running');
         await host.send('Wait till dark.', said('Dusk falls.', ['~ time June 3, 1200, 09:30 pm']));
-        await host.send('Look.', said('Lamps.'));
+        await host.send('Look.', said(`Lamps. ${host.everyone()}`));
         const fenna = people(host)['ersveil:fenna'];
         assert.equal(fenna.met.why, 'place');
         assert.match(castCue(host), /^\[Cast\] Fenna comes into the scene/);
@@ -86,7 +86,7 @@ test('new faces at most: one a day by default (the rest wait for the next day), 
     const run = async (settings, queries = {}) => {
         const host = await castHost({ source: castSource(two), settings, queries });
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         return host;
     };
     const metCount = host => Object.values(people(host)).filter(person => person.met).length;
@@ -96,13 +96,13 @@ test('new faces at most: one a day by default (the rest wait for the next day), 
         await host.send('Wait.', said('Quiet.'));
         assert.equal(metCount(host), 1, 'the others wait the same day');
         await host.send('Next day.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(metCount(host), 2, 'the next day another');
     } finally { host.close(); }
     host = await run({ 'cast.faces': 'day2' });
     try {
         assert.equal(metCount(host), 1);
-        await host.send('Wait.', said('Quiet.'));
+        await host.send('Wait.', said(`Quiet. ${host.everyone()}`));
         assert.equal(metCount(host), 2, '2 a day: a second the next reply');
         await host.send('Wait.', said('Quiet.'));
         assert.equal(metCount(host), 2);
@@ -110,10 +110,10 @@ test('new faces at most: one a day by default (the rest wait for the next day), 
     host = await run({ 'cast.faces': 'week1' });
     try {
         await host.send('Next day.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(metCount(host), 1, '1 a week: not the next day');
         await host.send('Next week.', said('A week on.', ['~ time June 11, 1200, 08:00 am']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(metCount(host), 2, 'a week later');
     } finally { host.close(); }
     // A fight on: no one comes; when it ends, they do.
@@ -125,7 +125,7 @@ test('new faces at most: one a day by default (the rest wait for the next day), 
         await host.send('Look.', said('Smoke.'));
         assert.equal(metCount(host), 0, 'never during a fight');
         fight.status = 'ended';
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(metCount(host), 1);
     } finally { host.close(); }
 });
@@ -168,14 +168,14 @@ test('a start place is the pack place\'s name, slug or alias, in any case; one t
         const where = id => people(host)[`ersveil:${id}`].where;
         assert.deepEqual(['by-name', 'by-slug', 'by-alias', 'lost'].map(where), ['Harrow', 'Bluewatch Village', 'Bluewatch Village', '']);
         assert.deepEqual(validatorErrors(host), []);
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(people(host)['ersveil:by-name'].met.why, 'place', 'the party is at Harrow: the one placed by name (in any case) is there');
         assert.equal(people(host)['ersveil:lost'].met, null, 'unplaced: nowhere to meet');
         assert.match(model.calls.length ? model.calls[0].prompt : 'now at: unknown', /now at: unknown/);
         // The planner places her (its words match the pack's place by name or alias).
         await host.send('Sleep.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
         await settle();
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.match(model.calls[0].prompt, /- lost \| Lost \| goal: lost goal \| now at: unknown/);
         assert.equal(where('lost'), 'Harrow', 'placed by the planner, under the pack\'s own name for the place');
         assert.deepEqual(host.store.problems(), []);
@@ -200,7 +200,7 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
         assert.equal(people(host)['ersveil:brom'].met, null, 'never during a fight');
         // The RPG switched off: its blocks are no fight.
         host.features.set('story-block.rpg', false);
-        await host.send('Fight.', said('Quiet at last.'));
+        await host.send('Fight.', said(`Quiet at last. ${host.everyone()}`));
         assert.equal(people(host)['ersveil:brom'].met.why, 'place');
     } finally {
         host.close();
@@ -214,7 +214,7 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
         await again.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | class: 4', '~ place Kesh | kind: town']));
         await again.send('Beat it.', said('It falls.', ['- dm foes — slain | kind: clear-1 | why: down']));
         assert.equal(leanFight(again.head()), false, 'no foe left: no fight');
-        await again.send('Look.', said('Smoke.'));
+        await again.send('Look.', said(`Smoke. ${again.everyone()}`));
         assert.equal(people(again)['ersveil:brom'].met.why, 'place', 'when the foes are gone they come');
     } finally {
         again.close();
@@ -228,7 +228,7 @@ test('a pack person the story already has in the scene (under their name or an a
     const host = await castHost({ source: castSource([fenna, brom, entry('una', { aliases: ['the diver'], start: { place: 'Pearlbank', goal: 'x', routine: '' } })]) });
     try {
         await host.send('Hello.', said('Dawn.', [...OPENING, '+ present the ferrywoman']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const world = people(host);
         assert.deepEqual([world['ersveil:fenna'].met.why, world['ersveil:fenna'].met.where, world['ersveil:fenna'].met.reason], ['story', 'Harrow', ''], 'the ferrywoman is Fenna: met where the party is');
         assert.equal(world['ersveil:una'].met, null, 'another alias, not in the scene: not met');
@@ -241,7 +241,7 @@ test('a pack person the story already has in the scene (under their name or an a
         assert.match(note.rest, /^Why: Fenna was already in the story when the cast reached them \(met in the story\); no roll\.$/);
         assert.deepEqual(host.sdk.query('director.cast').map(person => person.id).sort(), ['brom', 'fenna']);
         assert.deepEqual(validatorErrors(host), []);
-        await host.swipe(said('Smoke, again.'));
+        await host.swipe(said(`Smoke, again. ${host.everyone()}`));
         assert.equal(people(host)['ersveil:fenna'].met.why, 'story', 'a swipe keeps it');
         const live = JSON.stringify(host.head());
         host.store.rebuild();

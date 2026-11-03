@@ -73,17 +73,25 @@ export function createPacksPart({ settings, readLorebook = async () => ({ charac
     // The character lorebook's market lines, read when a chat opens and from the Packs panel.
     const lore = { markets: [], character: '', problem: '' };
     let reading = null;
+    let asked = false;   // asked again while a read was on its way: that read may be of the chat before
     /** Reads the open character's lorebook again for its `market:` lines; resolves to how many places it gave. */
     const refreshLore = () => {
+        if (reading) asked = true;
         reading ??= (async () => {
             try {
-                const got = await readLorebook();
-                lore.markets = marketEntries(got?.entries);
-                lore.character = String(got?.character ?? '');
-                lore.problem = String(got?.problem ?? '');
-            } catch (error) {
-                lore.markets = [];
-                lore.problem = `The lorebook could not be read: ${error?.message ?? error}`;
+                // A read that ended after another chat asked is dropped and the lorebook read again: the answer is for the one open now.
+                do {
+                    asked = false;
+                    let next = null;
+                    try {
+                        const got = await readLorebook();
+                        next = { markets: marketEntries(got?.entries), character: String(got?.character ?? ''), problem: String(got?.problem ?? '') };
+                    } catch (error) {
+                        next = { markets: [], character: lore.character, problem: `The lorebook could not be read: ${error?.message ?? error}` };
+                    }
+                    if (asked) continue;
+                    Object.assign(lore, next);
+                } while (asked);
             } finally {
                 reading = null;
             }

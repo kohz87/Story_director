@@ -12,7 +12,8 @@
 //   sig:    a short fingerprint of the entry's content (not its version), so an update is told apart from a version bump ('' when unknown)
 //   joined: the story minute they joined the world (null while the clock is not set)
 //   where / doing: where they are and what they do now (off-screen, kept by the planner's batches)
-//   met:    null while unmet, else { on, where, why: 'place' | 'goal', reason, rev } (a meeting is recorded on the reply)
+//   met:    null while unmet, else { on, where, why: 'place' | 'goal' | 'story', reason, rev, was? } (a meeting is recorded on the reply; `was`: where
+//           a goal arrival was before it came to the party, so a meeting the reply did not show (`cast.withdraw`) puts them back there)
 //   heard:  the last news of a met person: null | [{ on, text }] (a slot: written whole each time)
 // The pack entry itself (look, voice, history, secrets...) is never copied here: it is read from the pack when needed,
 // and only for a person who has been met. Nothing stored here is read by a reader before the person is met.
@@ -146,7 +147,7 @@ function personProblems(key, person) {
         || typeof person.alive !== 'boolean' || !isInt(person.rev)) return [`${at} is not { pack, eid, name, ver, joined, where, doing, since, alive, met, heard, rev }.`];
     if (person.aliases !== undefined && (!Array.isArray(person.aliases) || person.aliases.length > MAX_ALIASES || person.aliases.some(alias => !textOk(alias, MAX_NAME)))) return [`${at}.aliases is a list of at most ${MAX_ALIASES} names.`];
     const { met, heard } = person;
-    if (met !== null && !(isRecord(met) && timeOk(met.on) && textOk(met.where, MAX_PLACE) && WHYS.includes(met.why) && textOk(met.reason, MAX_REASON) && isInt(met.rev))) return [`${at}.met is null or { on, where, why, reason, rev }.`];
+    if (met !== null && !(isRecord(met) && timeOk(met.on) && textOk(met.where, MAX_PLACE) && WHYS.includes(met.why) && textOk(met.reason, MAX_REASON) && isInt(met.rev) && (met.was === undefined || textOk(met.was, MAX_PLACE)))) return [`${at}.met is null or { on, where, why, reason, rev, was? }.`];
     const news = slotOf(heard);
     if (heard !== null && !(news && Array.isArray(heard) && timeOk(news.on) && textOk(news.text, MAX_DOING))) return [`${at}.heard is null or [{ on, text }].`];
     return [];

@@ -331,7 +331,7 @@ test('a rewind and the cast: the routine is read on the rewound clock, the cast 
         // Back to the night of June 3: the cast only follows the clock back, with no planner call and no move.
         await mustSet(host, 1200, 6, 3, 21 * 60 + 30);
         const backTo = host.head().domains.director.time.minutes;
-        await host.send('Wait for the ferry.', said('Lamps are lit.'));
+        await host.send('Wait for the ferry.', said('Lamps are lit, and Fenna waits.'));
         await settle();
         assert.equal(host.model.calls.length, calls, 'a rewind asks no one');
         assert.equal(castReceipts(host, 'cast.advance').length, moved + 1, 'one step that only moves the cast\'s minute');

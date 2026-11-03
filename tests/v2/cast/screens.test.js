@@ -61,13 +61,13 @@ test('on the host: the note is for the reply they come in (its card, not the one
     const host = await castHost({ source: castSource([entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' } })]) });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const replyIndex = host.ctx.chat.length - 1;
         const noteAt = () => Object.values(host.head().domains.cast.notes).map(note => note.at);
         assert.deepEqual(noteAt(), [replyIndex], 'under the reply they came in');
         // The step itself is stored on the reply before (the head when the hook ran): a card reads the note\'s `at`, not where it is stored.
         assert.ok((host.store.at(replyIndex - 2)?.ops ?? host.ctx.chat[replyIndex - 2].extra.storySuite.ops).some(op => String(op.path).startsWith('/domains/cast/notes/')));
-        await host.swipe(said('Smoke, another way.'));
+        await host.swipe(said(`Smoke, another way. ${host.everyone()}`));
         assert.deepEqual(noteAt(), [replyIndex], 'a swipe of that reply: still under it');
         const live = JSON.stringify(host.head());
         host.store.rebuild();
@@ -113,10 +113,10 @@ test('on the host: the screen\'s data is the view; unmet cast is counted, never 
     });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         await host.send('Sleep.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
         await settle();
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const view = host.sdk.query('director.cast.view');
         const drawn = drawWorld(view);
         assert.deepEqual(drawn.warnings, []);

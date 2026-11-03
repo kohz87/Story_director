@@ -19,11 +19,11 @@ test('an update: new people join from today, hidden, with one line on the reply 
     const host = await castHost({ source, model });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(people(host)['ersveil:brom'].met.why, 'place', 'Brom is met');
         await host.send('Sleep.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
         await settle();
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(people(host)['ersveil:fenna'].where, 'Ashford');
         const syncs = receipts(host, 'cast.sync').length;
         // The pack is updated: 1.1.0 -> 1.2.0.
@@ -33,7 +33,7 @@ test('an update: new people join from today, hidden, with one line on the reply 
             v({ ...at('fenna', 'Bluewatch docks'), name: 'Fenna Marsh' }, '1.2.0'),
             v(at('tam', 'Kesh'), '1.2.0'), v(at('una', 'Ashford'), '1.2.0'),
         ];
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const world = people(host);
         assert.equal(receipts(host, 'cast.sync').length, syncs + 1);
         assert.deepEqual(Object.keys(world).sort(), ['ersveil:brom', 'ersveil:fenna', 'ersveil:tam', 'ersveil:una'], 'Sera\'s entry left: she is gone, quietly');
@@ -49,12 +49,12 @@ test('an update: new people join from today, hidden, with one line on the reply 
         assert.equal(note.rest, '2 new people now live in the world from today, hidden until you meet them. 1 unmet person\'s entry changed (kept where they are). People you have met keep their dossiers as they are.');
         assert.doesNotMatch(JSON.stringify(note), /Tam|Una|Fenna/);
         // Once: the next reply adds no step and no line.
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(receipts(host, 'cast.sync').length, syncs + 1);
         assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 1);
         // Brom's entry leaves the pack: he is met, so he stays.
         source.entries = source.entries.filter(item => item.id !== 'brom');
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(people(host)['ersveil:brom'].met.why, 'place');
         assert.deepEqual(validatorErrors(host), []);
         assert.deepEqual(host.store.problems(), []);
@@ -73,21 +73,21 @@ test('a pack switched off keeps its people as they are (hidden, not moved or met
     const host = await castHost({ source });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 0, 'a first sight is not an update');
         assert.equal(people(host)['ersveil:fenna'].met.why, 'place');
         const kept = JSON.stringify(slice(host));
         source.packs[0].enabled = false;
         source.entries = [];
         await host.send('Next day.', said('Morning.', ['~ time June 4, 1200, 08:00 am']));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.deepEqual(Object.keys(people(host)).sort(), ['ersveil:fenna', 'ersveil:sera'], 'nobody is dropped');
         assert.equal(JSON.stringify(people(host)['ersveil:sera']), JSON.stringify(JSON.parse(kept).people['ersveil:sera']));
         assert.equal(host.sdk.query('director.cast')[0].entry, undefined, 'a met person of a pack that is off has no entry to give');
         // Back on: they are as they were, and no line says the pack was updated.
         source.packs[0].enabled = true;
         source.entries = [at('fenna', 'Harrow'), at('sera', 'Gwenmar')];
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 0);
         assert.ok(host.sdk.query('director.cast')[0].entry);
     } finally {
@@ -101,24 +101,24 @@ test('a version bump alone is no change: no line, no "entries changed"; with new
     const host = await castHost({ source });
     try {
         await host.send('Hello.', said('Dawn.', OPENING));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         source.packs[0].version = '1.2.0';
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 0, 'a bump with nothing new says nothing');
         assert.deepEqual(Object.values(people(host)).map(person => person.ver), ['1.2.0', '1.2.0'], 'but the version they were seen at moves on');
         // A bump, one new person, nobody edited.
         source.packs[0].version = '1.3.0';
         source.entries.push(at('tam', 'Kesh'));
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const bump = Object.values(slice(host).notes).find(item => item.kind === 'updated');
         assert.equal(bump.rest, '1 new person now lives in the world from today, hidden until you meet them. People you have met keep their dossiers as they are.');
         // An edit counts, once.
         source.packs[0].version = '1.4.0';
         source.entries = source.entries.map(item => (item.id === 'sera' ? { ...item, look: 'a new look' } : item)).concat([at('una', 'Pearlbank')]);
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const edit = Object.values(slice(host).notes).filter(item => item.kind === 'updated').at(-1);
         assert.match(edit.rest, /^1 new person now lives in the world from today, hidden until you meet them\. 1 unmet person's entry changed \(kept where they are\)\./);
-        await host.send('Look.', said('Smoke.'));
+        await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         assert.equal(Object.values(slice(host).notes).filter(item => item.kind === 'updated').length, 2, 'once');
     } finally {
         host.close();

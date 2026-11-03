@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.3
+
+- **Someone you never saw is no longer "met".** The living cast picks who crosses your path before a reply and asks
+  the narrator to bring them in. When the reply did not show them (their name or an alias in the story, or a
+  `+ present` line), they stayed recorded as met anyway, with a "Paths crossed" note and an NPC State Delta dossier.
+  Now such a meeting is withdrawn after the reply: no note, no dossier, the day's pace is not used up, and they can
+  still come later. A swipe that shows them makes the meeting stand; Re-read decides again. Needs Story Block 2.16.6
+  for replies without a change block.
+
 ## 2.9.2
 
 - **No more freeze on a nonsense date.** A date the model wrote with an absurd year (17 digits or more) in a plan, a

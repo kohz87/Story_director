@@ -4,13 +4,14 @@
 // - `cast.sync { add?, update?, drop?, updated?, init? }`: the packs' cast joined, changed or left (apply.js).
 // - `cast.advance { from, to, moves?, died? }`: the planner's batch after a day change or a time skip.
 // - `cast.meet { at, who: [{ key, why, reason }] }`: the party meets someone for the first time (no dice).
+// - `cast.withdraw { at, keys }`: the reply did not show a person it was told to bring in, so their meeting is taken back (after the reply).
 //
 // Replay: a person is added whole under its key; a change inside a person is marked `ctx.ifThere` (passed over when the reply that
 // made the person was deleted); a note is a new key each time, never changed after, the oldest replies' dropped. A step's summary
 // and data never name or count an unmet person beyond what the reader's card says.
 
 import { idFrom } from '../writes.js';
-import { applyAdvance, applyMeet, applySync } from './apply.js';
+import { applyAdvance, applyMeet, applySync, applyWithdraw } from './apply.js';
 import { MAX_DOING, MAX_KEY, MAX_NAME, MAX_NOTE_REPLIES, MAX_PEOPLE, MAX_PLACE, MAX_REASON, WHYS, cutPoints, isInt, isRecord } from './domain.js';
 
 const revOf = ctx => (isInt(ctx?.rev) ? ctx.rev : 0);
@@ -46,6 +47,7 @@ function envOf(ctx, cast, packNames = {}, at = null) {
     return {
         now: nowOf(ctx), rev: revOf(ctx),
         touch: key => { if (typeof ctx.ifThere === 'function') ctx.ifThere('cast', personPath(key)); },
+        touchNote: id => { if (typeof ctx.ifThere === 'function') ctx.ifThere('cast', `/notes/${String(id).replace(/~/g, '~0').replace(/\//g, '~1')}`); },
         note: entry => addNote(ctx, cast, at, entry),
         packName: pack => packNames[pack] || pack,
     };
@@ -140,4 +142,21 @@ export function meet(ctx, payload = {}) {
     if (!met.length) return { summary: 'No one new crossed your path.', narrate: false, data: { met: 0 } };
     const who = met.map(key => cast.people[key].name);
     return { summary: `Paths crossed: ${who.join(', ')}.`, narrate: false, data: { met: met.length, keys: met } };
+}
+
+// ---- cast.withdraw -----------------------------------------------------------------------------------------------------------
+
+/**
+ * `cast.withdraw` (cause `system`, from the hook after the reply's lines): the reply did not name the people it was told to bring in. It is
+ * stored on that reply, so a swipe, a Re-read or a delete of the reply takes it back or decides again.
+ */
+export function withdraw(ctx, payload = {}) {
+    only(ctx, 'Whose meeting the reply did not show');
+    if (!isRecord(payload) || Object.keys(payload).some(field => !['at', 'keys'].includes(field)) || !isInt(payload.at) || payload.at < 0
+        || !Array.isArray(payload.keys) || !payload.keys.length || payload.keys.length > 4 || !payload.keys.every(keyOk)) {
+        return ctx.fail('INVALID', 'cast.withdraw takes { at, keys: [key] }.');
+    }
+    const cast = ctx.draft('cast');
+    const out = applyWithdraw(cast, payload, envOf(ctx, cast, {}, payload.at));
+    return { summary: out.length ? 'The reply did not show the people it was to bring in; their meeting is taken back.' : 'No meeting to take back.', narrate: false, data: { withdrawn: out.length } };
 }
