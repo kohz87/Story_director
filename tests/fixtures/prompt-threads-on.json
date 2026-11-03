@@ -12,6 +12,10 @@
     {
       "kind": "time",
       "grammar": "~ time <date, clock time such as 9:30 am> (the scene's time) · ! time +2h (time passes)"
+    },
+    {
+      "kind": "world",
+      "grammar": "+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place | factions (~ world Name — what changed; - world Name — how it ended); + faction Name — who they are, what they want | area | stance: toward {{user}} (~ faction Name to change it; - faction Name when gone)"
     }
   ]
 }

@@ -33,8 +33,7 @@ test('the static part is the same bytes whatever the state; it names no event, c
     assert.equal(empty, busy);
     assert.equal(empty, STATIC_TEXT);
     assert.equal(part.context.static({ chronicle: false }), '');
-    assert.equal(part.kinds.world.grammar({ chronicle: false }), '');
-    assert.equal(part.kinds.world.grammar({ chronicle: true }), GRAMMAR.world);
+    assert.equal(part.kinds.world.grammar, GRAMMAR.world, 'the world and faction line is always taught');
     assert.equal(STATIC_TEXT.split('\n').length, 2);
     assert.doesNotMatch(STATIC_TEXT, /\d/);
     assert.match(GRAMMAR.world, /^\+ world Name — /);

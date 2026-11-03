@@ -84,7 +84,7 @@ export const part = {
     queries,
     // The world and faction lines are the threads feature's (src/v2/threads.js); `chronicle.lasting` (a pack event's step) is code's and stays.
     kinds: {
-        world: { grammar: env => (env?.chronicle ? GRAMMAR.world : ''), apply: applyWorldLine, feature: THREADS_FEATURE },
+        world: { grammar: GRAMMAR.world, apply: applyWorldLine, feature: THREADS_FEATURE },
         faction: { grammar: GRAMMAR.faction, apply: applyFactionLine, feature: THREADS_FEATURE },
     },
     context: {

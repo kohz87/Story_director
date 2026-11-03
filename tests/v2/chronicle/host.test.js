@@ -117,9 +117,10 @@ test('on the host: more than three under way — one pick per reply, kept on a s
     assert.deepEqual([click.ok, click.code], [false, 'REFUSED']);
 
     // The static part: the world grammar and paragraphs are taught once the story keeps a world event (the lean diet), so the first reply's prompt
-    // (sent before any) lacks them and every later one is the same bytes.
+    // (sent before any) lacks the paragraphs and every later one is the same bytes.
     const statics = sent(host, STATIC_KEY);
-    assert.doesNotMatch(statics[0], /\+ world Name/);
+    assert.match(statics[0], /\+ world Name/, 'the world line is always taught');
+    assert.doesNotMatch(statics[0], /Events under \[World\]/);
     assert.equal(new Set(statics.slice(1)).size, 1);
     assert.match(statics.at(-1), /\+ world Name — what is changing in the wider world/);
     assert.match(statics.at(-1), /Events under \[World\] are under way/);

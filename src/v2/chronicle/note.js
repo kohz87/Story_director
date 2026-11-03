@@ -18,11 +18,11 @@ const MAX_ITEM = 130;
 export const TAIL_HEADER = '[World] Under way off-screen:';
 
 /**
- * The chronicle kinds' grammar: the world line carries the faction's (one line for the family), taught only while the story keeps
- * a world event or a faction (the lean diet, 3 Nov).
+ * The chronicle kinds' grammar: the world line carries the faction's (one line for the family), always taught, so the narrator can record the first world event
+ * (the two World paragraphs, STATIC_TEXT, only while the story keeps a world event or a faction: the lean diet, 3 Nov).
  */
 export const GRAMMAR = Object.freeze({
-    world: '+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place: where | factions: who (~ world Name — what changed; - world Name — how it ended); + faction Name — who they are, what they want | area: where they hold sway | stance: toward {{user}} (~ faction Name to change it; - faction Name when it is gone)',
+    world: '+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place | factions (~ world Name — what changed; - world Name — how it ended); + faction Name — who they are, what they want | area | stance: toward {{user}} (~ faction Name to change it; - faction Name when gone)',
     faction: '',
 });
 

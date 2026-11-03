@@ -33,12 +33,14 @@ test('a quiet story: the Director prompt is one line per family and well under t
             await host.send('Hello.', reply('Dawn.', ['~ time June 3, 1200, 08:00 am']));
             await host.send('Again.', 'More.');
             const text = promptOf(host);
-            assert.ok(text.length < 1500, `${text.length} characters`);
+            assert.ok(text.length < 1800, `${text.length} characters`);
             assert.match(text, /^\+ agenda\|event\|clock\|beat\|secret Name — summary/m);
             assert.match(text, /^\+ hook\|quest Name — /m);
             assert.match(text, /^~ time <date, clock time/m);
             // The rare kinds are not taught to a story that uses none of them.
-            assert.doesNotMatch(text, /\+ world|\+ faction|\+ route|\+ landmark|~ trip|World lines|\[World\]/);
+            assert.doesNotMatch(text, /\+ route|\+ landmark|~ trip|World lines|\[World\]/);
+            // The world and faction line is always taught, one line, so the first world event can be recorded.
+            assert.match(text, /^\+ world Name — .*; \+ faction Name — /m);
             // The statics of the replies are the same bytes (the cache keeps its prefix).
             assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
         } finally {
@@ -70,7 +72,7 @@ test('the check rule is said once, with no fight runner; with one, the planner a
     }
 });
 
-test('the rare kinds are taught from the reply after the story keeps one, and every family line is still read', async () => {
+test('route, landmark, trip and the World paragraphs are taught from the reply after the story keeps one, and every family line is still read', async () => {
     const host = await newHost();
     try {
         await host.send('Hello.', reply('Dawn.', EVERY_KIND));
@@ -84,10 +86,10 @@ test('the rare kinds are taught from the reply after the story keeps one, and ev
         // The next prompt teaches the world, faction, route, landmark and trip lines and the two World paragraphs.
         await host.send('Go on.', 'The day.');
         const text = promptOf(host);
-        for (const line of [/^\+ world Name — .*; \+ faction Name — /m, /^\+ route Place — Other Place .*; \+ landmark Name \| region/m, /^~ trip Place \| by: /m, /World lines are for what changes the wider world/, /Events under \[World\] are under way/]) assert.match(text, line);
+        for (const line of [/^\+ route Place — Other Place .*; \+ landmark Name \| region/m, /^~ trip Place \| by: /m, /World lines are for what changes the wider world/, /Events under \[World\] are under way/]) assert.match(text, line);
         const statics = sent(host, STATIC_KEY);
-        assert.doesNotMatch(statics[0], /\+ world|\+ route|~ trip/);
-        assert.match(statics.at(-1), /\+ world Name/);
+        assert.doesNotMatch(statics[0], /\+ route|~ trip|World lines/);
+        assert.match(statics.at(-1), /World lines/);
         // A rebuild reads the same lines to the same state.
         const live = JSON.stringify(host.head());
         host.store.rebuild();

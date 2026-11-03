@@ -81,13 +81,13 @@ test('on: the static part and the kinds are what the fixtures hold, byte for byt
         assert.deepEqual(got, was, 'with the feature on the prompt is unchanged');
         const gone = { static: contextOf(off).static(), kinds: contextOf(off).kinds };
         assert.deepEqual(gone, now);
-        // A fresh story keeps no world event or faction, so the World paragraphs and their grammar are not taught on either side (the lean diet).
+        // A fresh story keeps no world event or faction, so the World paragraphs are not taught on either side (the lean diet).
         assert.ok(got.static.includes(PACING_TEXT));
         assert.ok(!gone.static.includes(PACING_TEXT));
         for (const paragraph of WORLD_PARAGRAPHS.split('\n')) assert.ok(!got.static.includes(paragraph) && !gone.static.includes(paragraph));
         // The thread kinds ride on the `agenda` line; a fresh story has no route, landmark or world entry, and the check line is the RPG-off one.
         assert.deepEqual(gone.kinds.map(entry => entry.kind), ['hook', 'time']);
-        assert.deepEqual(got.kinds.map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind)).sort(), ['agenda']);
+        assert.deepEqual(got.kinds.map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind)).sort(), ['agenda', 'world']);
         // What stays: the Director lines and the hook, quest and time line (the fields are in the grammar lines).
         assert.ok(gone.static.startsWith(staticText({ threads: false }).split('\n')[0]));
         assert.match(gone.kinds[0].grammar, /goal \| giver \| reward \| step \| due \| difficulty \| type/);
