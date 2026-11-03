@@ -6,6 +6,6 @@
   "dependencies": ["third-party/Story_block"],
   "js": "index.js",
   "author": "kohz87",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "homePage": "https://github.com/kohz87/Story_director"
 }

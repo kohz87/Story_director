@@ -1,4 +1,4 @@
-# Story Director 2.9.2
+# Story Director 2.9.3
 
 Story Director is an extension for SillyTavern that gives your story a clock and a memory. It keeps the date and time, the weather, your quests, the open leads, the map and the wider world. It also keeps people you follow while they are away, and, if a pack has a cast, it lets that cast live off-screen. The narrator writes what changed at the end of each reply. Story Director keeps it and shows you the result in plain words.
 
@@ -90,8 +90,8 @@ Open the settings with the **Suite** button above the message box. Story Directo
 
 The Story Suite has four parts.
 
-- **Story Block** (2.16.4) is the hub. It keeps the story's state, runs the packs and draws the reader's screens.
-- **Story Director** (2.9.2) adds the story clock, the map, quests, the world's events and the pack's living cast. It needs Story Block.
+- **Story Block** (2.16.6) is the hub. It keeps the story's state, runs the packs and draws the reader's screens.
+- **Story Director** (2.9.3) adds the story clock, the map, quests, the world's events and the pack's living cast. It needs Story Block.
 - **NPC State Delta** (1.7.1) adds a dossier for each person you meet, with meters, stages and secrets. It needs Story Block; with Story Director it also follows the cast and Key people.
 - **Story Studio** (0.6.0) is a separate page where you write packs. It is not an extension.
 

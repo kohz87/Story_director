@@ -371,7 +371,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
     const cardLines = (index, state, changes, before = null) => {
         const lines = [
             ...replyCardLines(registry.hookEntries?.('replyCard') ?? [], { index, state, changes }),
-            ...replyRules(recordAt(index), store.problems?.() ?? [], index),
+            ...replyRules(recordAt(index), store.problems?.() ?? [], index, { state, before }),
         ];
         // The RPG's own lines (rolls, class and rank rises), only while its screens are mounted.
         return rpg ? mergeRpgLines(lines, rpg.cardLines({ state, before, record: recordAt(index), problems: (store.problems?.() ?? []).filter(item => item?.index === index) })) : lines;

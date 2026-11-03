@@ -30,7 +30,7 @@ import { STRINGS } from '../strings.js';
 import { compile } from '../events/condition.js';
 import { checkCast } from './cast.js';
 
-export const HOST_VERSION = '2.16.5';
+export const HOST_VERSION = '2.16.6';
 
 /** A slug for a display name: "Iron Sword (old)" → "iron-sword-old". */
 export function slugify(name) {
