@@ -1,17 +1,90 @@
 {
-  "static": "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Never write or decide what {{user}} does.\nPacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).\nInitiative: whoever the note names under Initiative takes the first step (approach, interrupt or ask) where the scene allows; {{user}}'s part stays theirs.",
+  "static": "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.\nPacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).\nInitiative: whoever the note names under Initiative takes the first step (approach, interrupt or ask) where the scene allows; {{user}}'s part stays theirs.",
   "kinds": [
     {
       "kind": "agenda",
-      "grammar": "+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); only on, due and arrive take a date, as <date, clock time>; a secret is what must not be revealed yet"
+      "grammar": "+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); a secret is what must not be revealed yet"
+    },
+    {
+      "kind": "beat",
+      "grammar": "",
+      "heads": [
+        "+ beat"
+      ]
+    },
+    {
+      "kind": "check",
+      "grammar": "? check <skill or stat> — what is tried | dc: easy|normal|hard|very hard | who: Name | vs: Name (no result: code rolls once, tell its outcome from the tail; one under [Happened] is not rolled again)",
+      "heads": [
+        "? check"
+      ]
+    },
+    {
+      "kind": "clock",
+      "grammar": "",
+      "heads": [
+        "+ clock"
+      ]
+    },
+    {
+      "kind": "event",
+      "grammar": "",
+      "heads": [
+        "+ event"
+      ]
+    },
+    {
+      "kind": "faction",
+      "grammar": "",
+      "heads": [
+        "+ faction",
+        "~ faction",
+        "- faction"
+      ]
     },
     {
       "kind": "hook",
-      "grammar": "+ hook|quest Name — a hook is an open thread or lead (also a job only offered); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type"
+      "grammar": "+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type"
+    },
+    {
+      "kind": "landmark",
+      "grammar": "",
+      "heads": [
+        "+ landmark"
+      ]
+    },
+    {
+      "kind": "quest",
+      "grammar": "",
+      "heads": [
+        "+ quest"
+      ]
+    },
+    {
+      "kind": "route",
+      "grammar": "",
+      "heads": [
+        "+ route",
+        "- route"
+      ]
+    },
+    {
+      "kind": "secret",
+      "grammar": "",
+      "heads": [
+        "+ secret"
+      ]
     },
     {
       "kind": "time",
       "grammar": "~ time <date, clock time such as 9:30 am> (the scene's time) · ! time +2h (time passes)"
+    },
+    {
+      "kind": "trip",
+      "grammar": "",
+      "heads": [
+        "~ trip"
+      ]
     },
     {
       "kind": "world",

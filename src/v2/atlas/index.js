@@ -45,7 +45,7 @@ export const part = {
     queries: { ...atlasQueries, ...policyQueries, 'atlas.trip': Object.assign((state, args, tools) => tripQuery(state, args, tools), { feature: TRIP_FEATURE }) },
     kinds: {
         // Route and landmark lines are the threads feature's (src/v2/threads.js); the map and the packs' own places stay.
-        route: { grammar: env => (env?.map ? GRAMMAR.route : ''), apply: applyRouteLine, feature: THREADS_FEATURE },
+        route: { grammar: env => (env?.map ? GRAMMAR.route : ''), heads: ['+ route', '- route'], apply: applyRouteLine, feature: THREADS_FEATURE },
         landmark: { grammar: GRAMMAR.landmark, heads: ['+ landmark'], apply: applyLandmarkLine, feature: THREADS_FEATURE },
         // A trip is planned from the place and the mounts the reply sets up, so its line runs behind the reply's place and mount lines.
         trip: { heads: ['~ trip'], grammar: env => (env?.routes ? GRAMMAR.trip : ''), apply: applyTripLine, feature: TRIP_FEATURE, after: ['place', 'mount'] },

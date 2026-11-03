@@ -43,7 +43,9 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     // v1's Fields: every field is still named, now in the grammar lines (agenda carries the five thread kinds, hook the hook and quest).
     const lines = [GRAMMAR.agenda, GRAMMAR.hook].join('\n');
     for (const field of ['now', 'then', 'on', 'due', 'leg', 'arrive', 'shown', 'encounter', 'reach', 'type', 'giver', 'goal', 'reward', 'step', 'difficulty']) assert.match(lines, new RegExp(`\\b${field}\\b`), field);
-    assert.match(GRAMMAR.agenda, /only on, due and arrive take a date, as <date, clock time>/);
+    // The date rule is in the rules, so it is said with the threads feature off too (not in the agenda line).
+    assert.match(empty, /Only on, due and arrive take a date, as <date, clock time>/);
+    assert.doesNotMatch(GRAMMAR.agenda, /take a date/);
     assert.match(GRAMMAR.hook, /done or failed: - it/);
 });
 
@@ -64,7 +66,7 @@ test('each kind has one grammar line for the change instruction, a family on its
     }
     assert.match(part.kinds.agenda.grammar({ fights: true }), /encounter \(the foes, for a fight\)/);
     // A hook is an open thread, no job offer with a giver and a reward; + quest is written once {{user}} accepts.
-    assert.match(part.kinds.hook.grammar, /a hook is an open thread or lead \(also a job only offered\); a quest is a job \{\{user\}\} accepted/);
+    assert.match(part.kinds.hook.grammar, /a hook is an open thread or lead \(a job only offered stays in the story; \+ quest once \{\{user\}\} accepts it\); a quest is a job \{\{user\}\} accepted/);
     assert.doesNotMatch(part.kinds.agenda.grammar({ fights: false }), /encounter|fight|foe/);
 });
 

@@ -83,14 +83,17 @@ test('on: the static part and the kinds are what the fixtures hold, byte for byt
         assert.deepEqual(gone, now);
         // A fresh story keeps no world event or faction, so the World paragraphs are not taught on either side (the lean diet).
         assert.ok(got.static.includes(PACING_TEXT));
+        // The date rule is in the Director lines, so it is said with the threads feature off too.
+        assert.match(gone.static, /Only on, due and arrive take a date, as <date, clock time>/);
         assert.ok(!gone.static.includes(PACING_TEXT));
         for (const paragraph of WORLD_PARAGRAPHS.split('\n')) assert.ok(!got.static.includes(paragraph) && !gone.static.includes(paragraph));
         // The thread kinds ride on the `agenda` line; a fresh story has no route, landmark or world entry, and the check line is the RPG-off one.
-        assert.deepEqual(gone.kinds.map(entry => entry.kind), ['hook', 'time']);
-        assert.deepEqual(got.kinds.map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind)).sort(), ['agenda', 'world']);
+        // (Story Block 2.19.0 lists a kind that has only `heads` too: quest and trip carry heads, no grammar line.)
+        assert.deepEqual(gone.kinds.filter(entry => entry.grammar).map(entry => entry.kind), ['check', 'hook', 'time']);
+        assert.deepEqual(got.kinds.filter(entry => entry.grammar).map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind && entry.grammar)).sort(), ['agenda', 'world']);
         // What stays: the Director lines and the hook, quest and time line (the fields are in the grammar lines).
         assert.ok(gone.static.startsWith(staticText({ threads: false }).split('\n')[0]));
-        assert.match(gone.kinds[0].grammar, /goal \| giver \| reward \| step \| due \| difficulty \| type/);
+        assert.match(gone.kinds.find(entry => entry.kind === 'hook').grammar, /goal \| giver \| reward \| step \| due \| difficulty \| type/);
     } finally {
         on.close();
         off.close();

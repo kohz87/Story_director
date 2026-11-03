@@ -193,7 +193,7 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
         host.features.set('story-block.rpg', true);
         const foes = STANDARD_TEMPLATES.find(item => item.name === 'Foes').definition;
         assert.equal((await host.sdk.command('dm.define', { definition: structuredClone(foes) })).ok, true);
-        await host.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | class: 4', '~ place Kesh | kind: town']));
+        await host.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | level: 4', '~ place Kesh | kind: town']));
         assert.equal(leanFight(host.head()), true, 'the Foes block holds a foe');
         await host.send('Fight.', said('Steel rings.'));
         await host.send('Fight.', said('Steel rings.'));
@@ -211,7 +211,7 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
         again.features.set('story-block.rpg', true);
         const foes = STANDARD_TEMPLATES.find(item => item.name === 'Foes').definition;
         await again.sdk.command('dm.define', { definition: structuredClone(foes) });
-        await again.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | class: 4', '~ place Kesh | kind: town']));
+        await again.send('A drake!', said('A drake lands.', ['+ dm foes — a drake | kind: set-slot-1 | name: Weir-drake | count: 1 | level: 4', '~ place Kesh | kind: town']));
         await again.send('Beat it.', said('It falls.', ['- dm foes — slain | kind: clear-1 | why: down']));
         assert.equal(leanFight(again.head()), false, 'no foe left: no fight');
         await again.send('Look.', said(`Smoke. ${again.everyone()}`));

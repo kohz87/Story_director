@@ -1,16 +1,16 @@
 // The Skills view (mockup section 3): a character's skills in place of the Party cards, like the Spend points sheet. Each skill shows
 // its name, a rank pill toned by rank, "STAT · Uses", what it does, a four-cell mastery bar (`ss.meter`) and the roll it makes from
-// the live sheet ("Rolls with it: d20 +12 = VIT 12 → +6 · Expert +2 · Soul Class II +4"). Empty slots are a dashed line. Rank and
+// the live sheet ("Rolls with it: d20 +12 = VIT 12 → +6 · Expert +2 · Lv 14 ÷ 5 +2"). Empty slots are a dashed line. Rank and
 // practice only move through play, so the pencil edits the name and the description and nothing else, in ONE multi-field `dm.set`.
 // Every node is built with createElement and textContent.
 
 import { h, iconNode } from '../../view/widgets/dom.js';
 import { meter } from '../../view/widgets/meter.js';
 import { refusalText } from '../../strings.js';
-import { FORMULA, RANK_NAMES, SKILL_SLOTS } from '../names.js';
+import { LEVEL, FORMULA, RANK_NAMES, SKILL_SLOTS } from '../names.js';
 import { RPG_STRINGS, fill } from '../strings.js';
-import { isStandard, statShare } from '../rules.js';
-import { statPart } from '../formula.js';
+import { classTerm, hasLevels, isStandard, statShare } from '../rules.js';
+import { levelBonus, statPart } from '../formula.js';
 
 const K = RPG_STRINGS.skills;
 
@@ -29,12 +29,14 @@ export function masteryOf(skill) {
 }
 
 /**
- * The roll a skill makes from the live sheet: d20 + floor(stat / 2) + rank + 2 × Soul Class (Standard: the pair of the stat and half of DEX, halved, in place of floor(stat / 2)). → { total, stat, value, half, rank, bonus } with
- * `stat` the stat's label (null for a skill that names none: the story then picks the stat, so only the rank and class are known).
+ * The roll a skill makes from the live sheet: d20 + floor(stat / 2) + rank + floor(level / divisor) (before levels, classWeight x Soul Class; Standard: the pair of the stat and half of DEX, halved, in place of floor(stat / 2)). → { total, stat, value, half, rank, bonus } with
+ * `stat` the stat's label (null for a skill that names none: the story then picks the stat, so only the rank and level are known).
  */
 export function rollOf(skill, character, rules = FORMULA) {
     const entry = character.stats.find(stat => stat.key === skill.stat) ?? null;
-    const bonus = rules.classWeight * character.soul;
+    // (numbers with a divisor are the levelled ones: floor(level / divisor), a block made before levels at the level its class stands for; numbers without keep the
+    // Soul Class term; a Level block under numbers with none reads the default divisor)
+    const bonus = character.levelled && !hasLevels(rules) ? levelBonus(character.level, LEVEL.divisor) : classTerm(rules, character).classBonus;
     if (isStandard(rules) && entry) {
         // The Standard formula: the skill's stat in the main slot with half of DEX (a Mana skill is magic, a Stamina skill physical), halved once.
         const stats = Object.fromEntries(character.stats.map(stat => [stat.key, stat.value]));
@@ -177,7 +179,7 @@ export function renderSkills(parent, { character, session = null, api = {}, onBa
         row.appendChild(bar);
         handles.push(meter.render(bar, { label: K.mastery, value: mastery.value, max: mastery.max, segments: mastery.max, tone: mastery.tone, text: mastery.text, icon: 'fa-book-open' }, {}));
         const line = h(doc, 'p', 'rpg-skill-roll');
-        const rank = { rank: skill.rankName, n: skill.rank, soul: character.soulName, label: character.soulLabel, bonus: roll.bonus };
+        const rank = { rank: skill.rankName, n: skill.rank, level: character.level, divisor: rules().levelDivisor ?? LEVEL.divisor, bonus: roll.bonus };
         if (roll.stat) {
             line.appendChild(h(doc, 'b', '', fill(K.rolls, { total: roll.total })));
             line.appendChild(doc.createTextNode(' '));
@@ -194,7 +196,7 @@ export function renderSkills(parent, { character, session = null, api = {}, onBa
         const head = h(doc, 'div', 'rpg-sheet-head');
         head.appendChild(h(doc, 'h3', 'rpg-sheet-name', fill(K.title, { name: character.name })));
         const pills = h(doc, 'div', 'rpg-pills');
-        pills.appendChild(h(doc, 'span', 'ss-pill', fill(RPG_STRINGS.party.soul, { label: character.soulLabel, name: character.soulName })));
+        pills.appendChild(h(doc, 'span', 'ss-pill rpg-level-pill', character.levelText));
         pills.appendChild(h(doc, 'span', 'ss-pill rpg-slots', fill(K.slots, { n: character.skills.length, max: SKILL_SLOTS })));
         head.appendChild(pills);
         root.appendChild(head);

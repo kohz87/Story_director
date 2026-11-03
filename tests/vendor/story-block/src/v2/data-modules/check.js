@@ -1,6 +1,6 @@
 // Pure data-modules-v1 checker. The pack validator and Studio share these entry points.
 import { DM_DESCRIPTORS as D, DM_LIMITS as L, DM_BLOCK_BARS, DATA_MODULES_CAPABILITY, dmObject, dmOwn, dmSlug, dmInt, dmId, dmKindWritesHidden } from './schema.js';
-import { ROLES } from '../lean-rpg/index.js';
+import { ROLES } from '../lean-rpg/names.js';
 import { HASH_BASIS_V1 } from './hash-basis-v1.js';
 import { fieldType, compatible, expressionType, conditionType, pathType } from './expressions.js';
 import { byteLength, checkPlain } from '../packs/safety.js';

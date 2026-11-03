@@ -51,7 +51,10 @@ export function createInventoryAddWidget() {
                     if (event.key === 'Escape') { event.preventDefault?.(); close(); }
                     else if (event.key === 'Enter') { event.preventDefault?.(); submit(); }
                 });
-                const update = () => { open.hidden = typeof api?.command !== 'function'; };
+                // With Gear in fights on (the screen's `q.gx` answers) the button is the slim pill of the filter row on a phone too: the compact pill
+                // (`ss-tap-pill`: about 30px drawn with a 44px tap area) in place of the 44px block every phone button is.
+                const slim = () => { try { return api?.resolve?.('q.gx') != null; } catch { return false; } };
+                const update = () => { open.hidden = typeof api?.command !== 'function'; if (slim()) open.classList.add('ss-tap-pill'); else open.classList.remove('ss-tap-pill'); };
                 update();
                 return { update, destroy() { alive = false; } };
             });

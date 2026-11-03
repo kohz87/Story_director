@@ -38,8 +38,9 @@ import { createRewind } from './rewind.js';
 import { createTimeline, withRuleOverlay } from './timeline/index.js';
 import { createStore as realStore } from './store.js';
 import { createTurn, substituteNames } from './turn.js';
+import { createRpgLoader } from './rpg-lazy.js';
 
-export const VERSION = '2.16.6';
+export const VERSION = '2.19.0';
 
 /**
  * Settings where Story Block's `currency` (and `currencyShort`, `currencyPlural`, `coins`) fall back to
@@ -346,7 +347,8 @@ export function saveOnUnload(store, page, { fits = () => true } = {}) {
  * profile, system, signal }) → text (the assist helpers' and sdk.callModel's model call), modelTimeoutMs? (sdk.callModel's default limit),
  * live?() (SillyTavern's live getContext(); default: globalThis.SillyTavern's, else ctx), fetch?, page? (for
  * beforeunload; default: globalThis.window), timelineFaults? ({ at(phase) }, a test seam: called at every phase of a save
- * point, a restore and a native change) }) → { registry, settings, features, store, bus, events, sdk, turn,
+ * point, a restore and a native change), rpgLoad?() → the RPG's library (default: import('./lean-rpg/index.js'); the code is fetched only when the
+ * feature is on or the chat holds the RPG's records, rpg-lazy.js) }) → { registry, settings, features, store, bus, events, sdk, turn,
  * markReady, initial, packs, setDialog, ownCalls, timeline }. `timeline` is the host's side of sdk.timeline
  * (src/v2/timeline/, docs/v2/TIMELINE.md): `host` (prepare, activate, abort, recover, nativeEvent, registerParticipant, with the
  * host's authority bound) and `capability`; it is never given to a module. `ownCalls` marks Story Suite's own model calls on the chat's connection (model-call.js). `features` is createFeatureStore() (the reader's choices). `ctx` is SillyTavern's context (or the testkit's fake); `packs` a
@@ -355,7 +357,7 @@ export function saveOnUnload(store, page, { fits = () => true } = {}) {
 export function createRuntime({
     ctx, packs = null, core = true, modules = [], createStore = realStore, createCommandBus = realBus,
     notify, onBlocked = null, onSaveError = null, onRegister = null, branch = null, callModel = null, modelTimeoutMs = undefined,
-    live = () => globalThis.SillyTavern?.getContext?.() ?? ctx, fetch = null, page = globalThis.window ?? null, timelineFaults = null,
+    live = () => globalThis.SillyTavern?.getContext?.() ?? ctx, fetch = null, page = globalThis.window ?? null, timelineFaults = null, rpgLoad = undefined,
 } = {}) {
     let features = null;
     let events = null;
@@ -399,7 +401,7 @@ export function createRuntime({
             // The chatter the reader may send back to the story (its setting): the replies and how to read one.
             // The head reply's index too, for `scene.moved` (the store is made below; asked only later).
             // Whether Story Director's World screen is there (it shows the chatter; else Scene does: `scene.chatter`).
-            extras: { promptChat: () => chatterReaders.prompt.messages(ctx.chat), headChat: () => chatterReaders.head.messages(ctx.chat), sceneChat: () => chatterReaders.scene.messages(ctx.chat), display, headIndex: () => store.headIndex(), proofs: () => store.proofs(), rpgOn: () => registry.featureOn(CORE_FEATURE.leanRpg), worldShown: () => registry.screens().some(screen => screen.id === DEFAULT_HIDDEN[SCENE_SCREEN_ID]) },
+            extras: { promptChat: () => chatterReaders.prompt.messages(ctx.chat), headChat: () => chatterReaders.head.messages(ctx.chat), sceneChat: () => chatterReaders.scene.messages(ctx.chat), display, headIndex: () => store.headIndex(), proofs: () => store.proofs(), rpgOn: () => registry.featureOn(CORE_FEATURE.leanRpg), gearOn: () => registry.featureOn('story-block.gear') && registry.featureOn(CORE_FEATURE.leanRpg), persona: () => { try { return (live() ?? ctx)?.name1 ?? ''; } catch { return ctx?.name1 ?? ''; } }, worldShown: () => registry.screens().some(screen => screen.id === DEFAULT_HIDDEN[SCENE_SCREEN_ID]) },
             version: VERSION,
             timeline: () => timeline,
             dataModules: { state: () => store.head(), lifecycle: id => registry.lifecycle(id), restore: () => registry.restore(), persona: () => { try { return (live() ?? ctx)?.name1 ?? ''; } catch { return ctx?.name1 ?? ''; } } },
@@ -428,7 +430,7 @@ export function createRuntime({
                     [ASSIST_SETTING.classifier]: registry.featureOn(CORE_FEATURE.preroll),
                     [ASSIST_SETTING.extractor]: registry.featureOn(CORE_FEATURE.extractor),
                 }),
-                grammar: () => registry.contexts().flatMap(context => context.kinds.map(kind => kind.grammar)),
+                grammar: () => registry.contexts().flatMap(context => context.kinds.map(kind => kind.grammar)).filter(Boolean),
                 // The scene's place, the map's places (the atlas's when Story Director is on, else the packs') and the story's date and
                 // time, for the safety net (assist/where.js). A query that is not there or throws is none of it.
                 where: () => {
@@ -510,11 +512,17 @@ export function createRuntime({
         dialogCurrent: () => dialogCurrent?.() ?? null, reread: index => turn?.reread(index), callModel: modelCalls.callModel, timeline, seed: () => turn?.seed() });
     sdk = made.sdk;
     const initial = () => initialWithStart(registry);
-    turn = createTurn({ ctx, live, store, bus, timeline, registry, settings, events, onBlocked, initial, ownPrompt: eventData => ownCalls.owns(eventData), ...(notify ? { notify } : {}) });
+    // The RPG's code comes in before a chat that needs it is read (the turn awaits `prepare`), and the moment the reader switches the feature on.
+    const rpgLoader = createRpgLoader({
+        ...(rpgLoad ? { load: rpgLoad } : {}),
+        featureOn: () => registry.featureOn(CORE_FEATURE.leanRpg), chat: () => ctx.chat, metadata: chatMetadata, problem: entry => turn?.report(entry),
+    });
+    events.on('feature', () => { rpgLoader.ensure({ scan: false }); });
+    turn = createTurn({ ctx, live, store, bus, timeline, registry, settings, events, onBlocked, initial, prepare: options => rpgLoader.ensure(options), ownPrompt: eventData => ownCalls.owns(eventData), ...(notify ? { notify } : {}) });
     // The UI (ui-host.js) plugs its dialog mount in here, for sdk.dialog.open (and .current).
     const setDialog = (fn, current = null) => {
         dialogOpener = typeof fn === 'function' ? fn : null;
         dialogCurrent = typeof current === 'function' ? current : null;
     };
-    return { registry, settings, features, store, bus, events, sdk, turn, markReady: made.markReady, initial, packs: packPart, setDialog, display, ownCalls, callQueue, timeline };
+    return { registry, settings, features, store, bus, events, sdk, turn, rpgLoader, markReady: made.markReady, initial, packs: packPart, setDialog, display, ownCalls, callQueue, timeline };
 }

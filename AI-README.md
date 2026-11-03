@@ -307,5 +307,5 @@ Delta checked out beside this repo.
 
 ## Version
 
-Story Director 2.10.0 (`manifest.json`, `package.json`, `src/v2/module.js` `VERSION`). Built and tested with Story Block 2.16.1 and
+Story Director 2.10.0 (`manifest.json`, `package.json`, `src/v2/module.js` `VERSION`). Built and tested with Story Block 2.19.0 and
 NPC State Delta 1.7.1. History: [CHANGELOG.md](CHANGELOG.md).

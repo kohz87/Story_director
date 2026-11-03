@@ -15,7 +15,7 @@ export const part = {
         checks: { initial: initialChecks, validate: slice => validateChecks(slice, TOPIC_NAMES) },
     },
     context: {
-        // The check rule is the `? check` grammar line's (capture.js), said once and only while no module runs fights.
+        // The check rule is the `? check` grammar line's (capture.js), said once, and not while Story Block's RPG is on without a fight module.
         static: () => '',
         tail: () => ({ lines: [], optional: [] }),
         budget: 1,

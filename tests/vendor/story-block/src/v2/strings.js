@@ -129,6 +129,7 @@ export const STRINGS = deepFreeze({
         itemPiecesChanged: 'The separate pieces for this edit have changed.', itemDecisionChanged: 'The item or stack chosen for this edit has changed.',
         itemGroupLimit: 'Keep at most {max} pieces of this item.',
         itemGroupEquipped: 'Unequip pieces before removing them.',
+        bound: 'Bound to {name}: {item} stays with them.',
         itemCannotMerge: '{name} cannot be combined with this stack.', itemQuantityLarge: 'That quantity is too large.',
         purseAmount: 'The amount must be a whole number of at least 0.', purseSet: 'You set the purse to {amount}.',
         moneyEmpty: 'Enter an amount of money.', moneyWhole: 'Enter whole amounts of the coins used here.',
@@ -242,7 +243,7 @@ export const STRINGS = deepFreeze({
         readerOnly: 'Only the reader changes a mount by hand.',
         which: 'Which mount?',
         edit: 'mount',
-        editName: 'Name', editKind: 'Kind', editCount: 'How many', editPace: 'Pace (km/day)', editCondition: 'Condition', editWhere: 'Where',
+        editName: 'Name', editKind: 'Kind', editCount: 'How many', editPace: 'Pace (km/day)', editCondition: 'Condition', editWhere: 'Where', editCarry: 'Carry (empty: the kind\'s usual)',
         perDay: 'km/day',
         // The two notes under the Home card, round the number they show (the template binds it).
         noteBefore: 'The party travels at the slowest: ', noteAfter: ' km/day riding.',
@@ -254,6 +255,8 @@ export const STRINGS = deepFreeze({
         choices: 'Choices',
         choiceTitle: 'Put this in your message box (it is not sent)',
         inPrompt: 'Send the last reply\'s thoughts back to the story',
+        chatterMax: 'Most chatter lines per reply',
+        chatterMaxHelp: 'From 1 to 10. The story is asked for one thought from each person in the scene who has something on their mind, up to this many. 3 to 5 reads best.',
         inPromptHelp: 'Off: inner chatter never reaches a later prompt, so it cannot steer the story. On: the thoughts of the reply you answered go with your next message as one short note, dropped first when the notes are full.',
     },
 
@@ -388,6 +391,20 @@ export const STRINGS = deepFreeze({
         lootPick: 'Tick what to take, then Take selected.',
         lootTake: 'Take selected',
         lootTakeTitle: 'Put the things you ticked in the party\'s bag',
+        // Gear in fights is on (Settings -> RPG): the Carry card, the sections' order, the rows' chips and the item Edit's two choices.
+        gear: {
+            carry: 'Carry', heavy: 'Heavy load', over: 'Encumbered: AGI and DEX \u2212{n}', carryLabel: 'Carried',
+            equippedBy: 'Equipped \u00b7 {name}', equippedByTitle: 'Worn by {name}', slotTitle: 'The slot it is worn in',
+            words: { good: 'Good', worn: 'Worn', torn: 'Torn', broken: 'Broken' }, noBonus: 'no bonus', brokenNoBonus: '\u2014 no bonus',
+            condTitle: 'Condition: Good, Worn, Torn or Broken. A broken piece gives no bonus.',
+            editSlot: 'Slot', editBy: 'Equipped by', none: 'None',
+            // A cast member's signature piece (bound): the chip, its title and the line under a locked Edit.
+            bound: 'Bound', boundBy: 'Bound \u00b7 {name}', boundTitle: 'Bound to {name}: it cannot be unequipped, given away, sold or dropped',
+            boundHint: 'Bound to {name}: it stays in this slot and leaves with {name}. Only the note can change.',
+            slots: {
+                head: 'Head', body: 'Body', cloak: 'Cloak', feet: 'Feet', weapon: 'Weapon', 'off-hand': 'Off-hand', 'accessory-1': 'Accessory 1', 'accessory-2': 'Accessory 2',
+            },
+        },
     },
 
     // `story-block/scene`.

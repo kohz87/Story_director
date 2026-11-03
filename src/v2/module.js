@@ -49,13 +49,15 @@ import { calendarConfig, packCalendarOf } from './tracker/time.js';
 import { fightsAmong } from './fights.js';
 import { rareKindsUsed } from './rare.js';
 
+/** Story Block's RPG feature: while it is on, its planner asks for the checks. */
+const RPG_FEATURE = 'story-block.rpg';
+
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
 export const VERSION = '2.10.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-// PLACEHOLDER: the Story Block release that reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own).
-// The lead gives the number; set it here and nothing else changes. Until then it is the old minimum, so the module still loads.
+// 2.19.0 reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own).
 export const STORY_BLOCK_WITH_HEADS = '2.19.0';
 export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
@@ -348,10 +350,12 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
     // `chronicle`, `map`, `routes`: whether the story uses the rare kinds (world and faction lines; landmark and route lines; trip lines),
     // so their grammar is taught only then (the lean diet, 3 Nov). All start false and are learnt from the state before each reply.
-    const env = { fights: fightRunner() ?? true, keyPeople: false, chronicle: false, map: false, routes: false };
+    const env = { fights: fightRunner() ?? true, rpg: false, keyPeople: false, chronicle: false, map: false, routes: false };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
+        // Story Block's RPG feature (off by default): while it is on its planner asks for the checks.
+        if (typeof view?.feature === 'function') env.rpg = tryLive(() => view.feature(RPG_FEATURE), false) === true;
         if (isObject(view?.state?.domains)) Object.assign(env, rareKindsUsed(view));
         // Whether anyone is pinned (Key people): the feature's paragraph and grammar lines are taught only then, so a chat with no key
         // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
@@ -412,7 +416,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             kinds[kind] = {
                 // A line may be '' (the Key people's, while nobody is pinned): the host then leaves the kind out, so a function answers (the registry takes one for a kind with no line yet).
                 get grammar() {
-                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) : grammar;
+                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, rpg: env.rpg, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) : grammar;
                     return line === '' ? () => '' : line;
                 },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),

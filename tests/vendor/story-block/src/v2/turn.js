@@ -21,11 +21,11 @@
 // turn.js receives the SillyTavern context and the host parts; it never imports the store or
 // the command bus (their interfaces are docs/v2/SPEC.md §12).
 
-import { LEGACY_PROBLEM, adoptLegacy, assistSections, continuation, cutLine, defangMarker, extractBlock, grammarHeads, hasHidden, hasLegacy, hideBlock, legacyRead, markOff, parseChanges, sameChangeLine, strayLines, stripBlock, withAssist } from './capture.js';
+import { LEGACY_PROBLEM, adoptLegacy, assistSections, continuation, cutLine, defangMarker, extractBlock, grammarHeads, hasHidden, hasLegacy, hideBlock, legacyRead, markCaps, markOff, parseChanges, sameChangeLine, strayLines, stripBlock, withAssist } from './capture.js';
 import { notWritten } from './assist/extractor.js';
 import { PRECHECK } from './assist/classifier.js';
 import { refusedWhy } from './assist/safety.js';
-import { displayLines, readDisplayLine } from './extras.js';
+import { CHATTER_MAX, displayLines, readDisplayLine } from './extras.js';
 import { occurrenceOf, operationKey, replacedProofs, reusePlan } from './evidence.js';
 import { hash, readRecord, swipeLoading } from './persist.js';
 import { CAPTURE_PREFIX, HOST_MODULE } from './registry.js';
@@ -34,7 +34,7 @@ import { MAX_CHANGE_LINES, ensureModules, makeView } from './sdk.js';
 import { cutAt } from '../text.js';
 import { CORE_FEATURE } from './features.js';
 import { RESOLVE as RPG_RESOLVE } from './lean-rpg/names.js';
-import { NO_ROLLS_LINE } from './lean-rpg/cue.js';
+import { NO_ROLLS_LINE, receiptCue, receiptWithCue } from './lean-rpg/cue.js';
 
 export const STATIC_KEY = 'story_suite_static';
 export const TAIL_KEY = 'story_suite_tail_1';
@@ -64,6 +64,8 @@ export const REPLY_BUSY_MAX_MS = 5 * 60_000;
 // How long a send waits for the Assist safety net still reading the last reply (MODULES §F123): briefly.
 // Lines that come later are kept on that reply and applied on the next one, right after its own lines.
 export const ASSIST_WAIT_MS = 1500;
+// How long the RPG's code (rpg-lazy.js) may take to load before a reply or a chat goes on without it: a stalled import never holds a generation or a chat open.
+export const RPG_LOAD_WAIT_MS = 4000;
 const TIMED_OUT = Symbol('timed out');
 
 // `value`, or TIMED_OUT when it is a promise that has not settled within `ms`.
@@ -224,7 +226,7 @@ export function restoreMissing(chat, staticText, tailText) {
  * onChatChanged, seed, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems, blocked, blockers, unblock,
  * session, replyBusy, whenIdle }.
  */
-export function createTurn({ ctx, live = () => ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState(), ownPrompt = () => false, timeline = null }) {
+export function createTurn({ ctx, live = () => ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState(), ownPrompt = () => false, timeline = null, prepare = null }) {
     const types = () => ctx?.extension_prompt_types ?? ctx?.extensionPromptTypes ?? {};
     const roles = () => ctx?.extension_prompt_roles ?? ctx?.extensionPromptRoles ?? {};
     const position = place => (place === 'static' ? types().IN_PROMPT ?? IN_PROMPT : types().IN_CHAT ?? IN_CHAT);
@@ -437,7 +439,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
                 // The RPG's rolls move bars (hits, heals, skill costs): the tail's block lines are read from the state they leave, so they say what the cue says.
                 if (preludeType === RPG_RESOLVE && result.state) previewState = result.state;
                 prechecks.push({ type: preludeType, payload, seed: result.receipt.seed });
-                const told = `[Happened]\n${result.receipt.summary}`;
+                const told = `[Happened]\n${receiptCue(result.receipt)}`;
                 cues[moduleId] = [...(cues[moduleId] ?? []), preludeType === RPG_RESOLVE ? { text: told, keep: true } : told];
             } else problem({ module: moduleId, code: result?.code ?? 'FAILED', message: `The cue "${preludeType}" was not prepared: ${result?.message ?? 'unknown error'}` });
         }
@@ -485,7 +487,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const current = state ? makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader, state }) : view();
         const own = sentByModules(current);
         const ownTokens = own.reduce((sum, part) => sum + part.tokens, 0);
-        const result = assemble({ registry, view: current, untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow(), ownTokens });
+        const result = assemble({ registry, view: current, untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow(), ownTokens, rolled: state !== null });
         for (const message of result.problems) problem({ code: 'FAILED', message });
         return { ...result, own, untold };
     }
@@ -593,6 +595,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             return;
         }
         if (!ctx?.chat) return;
+        // The feature switched on a moment ago: its code is waited for (no pass over the chat; onChatChanged did that).
+        if (typeof prepare === 'function') { try { const waiting = prepare({ scan: false }); if (waiting) await within(waiting, RPG_LOAD_WAIT_MS); } catch { /* the loader reports its own failure */ } }
         // The safety net still reading the last reply: waited for briefly, so its lines are in this prompt.
         if (assistPending) await within(assistPending, ASSIST_WAIT_MS);
         markBusy();
@@ -843,6 +847,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         let now = live ? store.head() : state;
         // A Re-read has stored nothing yet: the proof its lines and earlier steps planned is what the hooks and steps see.
         const planned = () => (live || !plan ? [] : [...plan.blocks.flatMap(piece => piece.block?.evidence ?? []), ...steps.flatMap(step => step.block?.evidence ?? [])]);
+        // The reply's own receipts as far as this run knows them (`info.receipts`, read only when a hook asks): the store's for a live reply, a Re-read's planned ones.
+        const replyReceipts = () => (live ? (store.receipts?.() ?? []).filter(entry => entry.index === index).map(entry => entry.receipt) : [...(plan?.blocks ?? []).map(piece => piece.receipt), ...steps.map(step => step.receipt)].filter(Boolean)).map(receiptWithCue);
         const hooks = [
             ...(prechecks.length ? [{ moduleId: HOST_MODULE, precheck: true, fn: () => ({ commands: prechecks }) }] : []),
             ...(onlyPrechecks ? [] : registry.hookEntries('afterCapture').filter(entry => !alwaysOnly || entry.fn.always === true)),
@@ -850,7 +856,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         for (const { moduleId, fn, precheck = false } of hooks) {
             const seen = live ? view() : makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader, state: now, reply, pendingProofs: () => planned().map(proof => ({ proof, block: null })) });
             let out;
-            try { out = await within(fn(seen, { index, type, ...(alwaysOnly ? { always: true } : {}) }), HOOK_TIMEOUT_MS); } catch (error) {
+            try { out = await within(fn(seen, Object.defineProperty({ index, type, ...(alwaysOnly ? { always: true } : {}) }, 'receipts', { get: replyReceipts })), HOOK_TIMEOUT_MS); } catch (error) {
                 problems.push(problem({ module: moduleId, index, code: 'FAILED', message: `afterCapture failed: ${error?.message ?? error}` }));
                 continue;
             }
@@ -867,6 +873,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
                     problems.push(problem({ module: moduleId, index, code: result?.code ?? 'FAILED', message: `The step "${command?.type}" after the reply's lines was not run: ${result?.message ?? 'unknown error'}` }));
                     continue;
                 }
+                // Done, but not all of what was asked (a clamp, a line of the story that was not used): the step says why, and it goes to the Problems list.
+                if (typeof result.problem === 'string' && result.problem) problems.push(problem({ module: moduleId, index, code: 'LIMITED', message: result.problem }));
                 let replan = result.receipt.replan;
                 if (!replan) { try { replan = { payload: structuredClone(payload) }; } catch { replan = undefined; } }
                 const receipt = { ...result.receipt, afterCapture: true, ...(precheck ? { beforeGenerate: true } : {}), ...(replan ? { replan } : {}) };
@@ -928,6 +936,20 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     // { ops } for store.replaceStory, nothing stored.
     // `plan` ({ blocks: [], pending: 0 }, a Re-read's, shared by its calls): the guarded blocks planned so far
     // (REPLAY.md), so each line's block gets the next ordinal and replaceStory stores each as a block of its own.
+    // How many Inner chatter lines this reply could show, kept in its hidden comment when the reader's setting is not the
+    // usual 3 (capture.js markCaps): the reply shows the same lines whatever the setting becomes. Every reply without a
+    // mark was read at 3.
+    function keptCaps() {
+        let entry = null;
+        try { entry = registry.capture('chatter'); } catch { entry = null; }
+        const cap = entry && !entry.off ? entry.display?.perReply : undefined;
+        return Number.isInteger(cap) && cap > 0 && cap !== CHATTER_MAX ? { chatter: cap } : {};
+    }
+    const withCaps = (mes, from = 0, always = false) => {
+        const caps = keptCaps();
+        return always || Object.keys(caps).length ? markCaps(mes, caps, from) : mes;
+    };
+
     async function captureEach(index, lines, receipts, found, base = null, seeds = null, shown = new Map(), assist = null, plan = null) {
         const collected = [];
         const firstProblem = found.length;
@@ -1182,7 +1204,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         }
         // The lines it left in the story are listed in the hidden comment (capture.js), and every comment's
         // display lines are marked as this read found their features (markOff).
-        const hidden = markOff(hideBlock(mes, 'Changes', { heads, legacy: adopted.legacy === 'read' }), off, 0);
+        const hidden = withCaps(markOff(hideBlock(mes, 'Changes', { heads, legacy: adopted.legacy === 'read' }), off, 0), 0, true);
         if (hidden !== stored) {
             message.mes = hidden;
             if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
@@ -1268,6 +1290,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             // Re-read leaves them too (B-a1-3, B-a1-10).
             let hidden = hideBlock(message.mes, 'Changes', { ...(at ?? {}), stopped, heads, legacy: adopted.legacy === 'read' });
             if (result.off.length) hidden = markOff(hidden, result.off, at?.from ?? 0);
+            hidden = withCaps(hidden, at?.from ?? 0);
             if (hidden !== message.mes) {
                 message.mes = hidden;
                 if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
@@ -1342,7 +1365,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             // reply's comment holds besides its block, the lines left in the story, stays as it was).
             const base = String(message.mes ?? '');
             const from = base.trimEnd().length;
-            const mes = markOff(hideBlock(`${base}\n\n<Changes>\n${parsed.lines.map(line => line.raw).join('\n')}\n</Changes>`, 'Changes', { from }), result.off, from);
+            const mes = withCaps(markOff(hideBlock(`${base}\n\n<Changes>\n${parsed.lines.map(line => line.raw).join('\n')}\n</Changes>`, 'Changes', { from }), result.off, from), from);
             message.mes = mes;
             if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = mes;
         }
@@ -1390,7 +1413,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         if (!kept.length) return { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] };
         const used = block === null ? 0 : readBlock(index, block).lines.length;
         const result = await captureLines(index, [], mes, 'late', { assist: kept, used });
-        store1(markOff(withAssist(mes, kept.map(line => line.raw)), result.off, mes.trimEnd().length));
+        store1(withCaps(markOff(withAssist(mes, kept.map(line => line.raw)), result.off, mes.trimEnd().length), mes.trimEnd().length));
         if (store.dirty()) {
             if (store.saveIdle?.() !== true) await trySave('after the safety net\'s lines');
         } else await saveText();
@@ -1402,9 +1425,13 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
 
     /** CHAT_CHANGED: a new chat (or the same one reloaded). */
     async function onChatChanged() {
+        // The old chat's session and prompts go at once, before anything is awaited: a generation started while the RPG's code loads is the new chat's.
         session = null;
         markIdle();
         clearPrompts();
+        // The RPG's code, when this chat needs it (the feature is on, or it holds the RPG's records), before anything is replayed (rpg-lazy.js); a stalled
+        // import is waited for only RPG_LOAD_WAIT_MS (the guard mark then says the code is missing, so a later load makes the chat look again).
+        if (typeof prepare === 'function') { try { await within(prepare(), RPG_LOAD_WAIT_MS); } catch { /* the loader reports its own failure */ } }
         rebuild({ publish: false });
         timeline?.settle();
         // A1-2: read-backs of a write that timed out before a reload of the page go on.

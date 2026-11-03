@@ -8,6 +8,8 @@ import { headReply } from './commands.js';
 import { KEY as RECORD_KEY, isCarrier, recordFault } from './persist.js';
 import { cutAt } from '../text.js';
 import { MODEL_CALL_ERRORS, MODEL_CALL_TEXT, profileName } from './model-call.js';
+import { RESOLVE as RPG_RESOLVE } from './lean-rpg/names.js';
+import { receiptCue, entriesWithCue } from './lean-rpg/cue.js';
 
 // sdk.check comes from check.js (SB-commands); the sdk still loads without it.
 const checkModule = await import('./check.js').catch(() => null);
@@ -201,13 +203,17 @@ export function createSettings({ root, registry, save = () => {} }) {
  * tools.reply ({ index, sid } or null, the `reply` option): the reply the state is the head of, as a
  * command's ctx.reply (commands.js).
  */
+// A roll's receipt keeps no cue text (stage 51: it is rebuilt from the record); a reader of the receipts (Story Director's chronicle) is given the text in
+// `summary`, computed here and not stored, so the day facts of a roll are still there.
+const withCue = entriesWithCue;
+
 export function runQuery(registry, state, name, args, { receipts = () => [], reply = null, pendingProofs = null } = {}) {
     const query = registry.query(name);
     if (!query) throw new Error(`Story Suite: no module answers the query "${name}".`);
     const tools = Object.freeze({
         reply,
         query: (other, otherArgs) => runQuery(registry, state, other, otherArgs, { receipts, reply, pendingProofs }),
-        receipts: () => receipts() ?? [],
+        receipts: () => withCue(receipts() ?? []),
         // The proof a Re-read has planned but not stored (evidence.js), for story.evidence; none otherwise.
         ...(typeof pendingProofs === 'function' ? { pendingProofs } : {}),
     });
@@ -224,7 +230,7 @@ export const mountQuery = (registry, receipts = () => []) => (name, args, state)
 
 /**
  * What modules read (§6): { state (frozen head), query(name, args), settings(id), feature(id), chat:
- * { length, lastUser } }. `chat`: SillyTavern's chat array (or nothing). `feature(id)`: whether the
+ * { length, lastUser, readers (how many messages are the reader's) } }. `chat`: SillyTavern's chat array (or nothing). `feature(id)`: whether the
  * reader has that feature on (MODULES §F100); false for an id no module declares. `state` and `reply`
  * (optional): another state than the head and the reply it stands for (`tools.reply`), for a Re-read's
  * afterCapture hook, which reads the reply's state after its new story lines (turn.js).
@@ -232,13 +238,16 @@ export const mountQuery = (registry, receipts = () => []) => (name, args, state)
 export function makeView({ store, registry, settings, chat = [], active = null, state = store.head(), reply = headReply(store), pendingProofs = null }) {
     const messages = Array.isArray(chat) ? chat : [];
     // (`active`: the timeline's reader of earlier messages, so a faded message of the reader's is not the last one a module sees)
-    const lastUser = [...(active ? active.messages(messages) : messages)].reverse().find(message => message?.is_user);
+    const seen = active ? active.messages(messages) : messages;
+    const lastUser = [...seen].reverse().find(message => message?.is_user);
     return Object.freeze({
         state,
         query: (name, args) => runQuery(registry, state, name, args, { receipts: () => store.receipts?.() ?? [], reply, pendingProofs }),
         settings,
         feature: id => featureOn(registry, id),
-        chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? '') }),
+        chat: Object.freeze({ length: messages.length, lastUser: String(lastUser?.mes ?? ''), readers: seen.filter(message => message?.is_user).length }),
+        // The state before the reply this view stands for (the one its lines start from), or null: asked by a step that compares the reply with it (the RPG's fight XP).
+        before: () => { try { return Number.isInteger(reply?.index) ? store.before?.(reply.index) ?? null : null; } catch { return null; } },
     });
 }
 
@@ -540,7 +549,7 @@ export function createSdk({ store, bus, registry, settings, events = createEvent
         commit: async token => saved(committed(await bus.commit(token))),
         query: (name, args) => { timeline?.settle(); return runQuery(registry, store.head(), name, args, { receipts: () => store.receipts?.() ?? [], reply: headReply(store) }); },
         /** The stored receipts on the current line of history, in chat order: [{ index, receipt }]. */
-        receipts: () => store.receipts?.() ?? [],
+        receipts: () => withCue(store.receipts?.() ?? []),
         /**
          * Return in time (MODULES §F17): a SillyTavern branch of the chat at carrier `index`, without
          * that carrier's receipts from `beforeRev` on, opened as the current chat. → Promise<{ ok, … }>.

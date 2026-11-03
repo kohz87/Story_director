@@ -41,9 +41,9 @@ const DATED = ['due', 'on', 'arrive'];
 
 // The Director's rules, merged into as few lines as keep every rule (the lean diet, 3 Nov): v1's change-line instruction
 // (note.js) stays v1's own; v2 words it here. The change ops are Story Block's header's, so only what is the Director's is said.
-// Dates go only in on, due and arrive; a quest is a job {{user}} accepted (its fields are in the hook|quest grammar line).
+// The date rule is here, not in a grammar line, so it is said while the threads feature is off too.
 const RULES = [
-    'Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Never write or decide what {{user}} does.',
+    'Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.',
 ];
 // Pacing, shortened: the "never decide what {{user}} does" rule is in the line above.
 const PACING_V2 = 'Pacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).';
@@ -70,12 +70,12 @@ export const STATIC_TEXT = staticText();
  * `agenda` carries the five world-building threads, `hook` the hook and the quest, `time` itself.
  */
 export const GRAMMAR = Object.freeze({
-    agenda: '+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); only on, due and arrive take a date, as <date, clock time>; a secret is what must not be revealed yet',
+    agenda: '+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); a secret is what must not be revealed yet',
     event: '',
     clock: '',
     beat: '',
     secret: '',
-    hook: '+ hook|quest Name — a hook is an open thread or lead (also a job only offered); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type',
+    hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type',
     quest: '',
     time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) · ! time +2h (time passes)',
 });

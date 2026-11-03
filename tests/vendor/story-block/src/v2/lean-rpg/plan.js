@@ -23,6 +23,7 @@
 import { FOE_SLOTS, FORMULA, LIMITS, PACE, STATS, USES } from './names.js';
 import { matchCharacter, matchFoe, matchSkill } from './read.js';
 import { ROLL_TYPES } from './formula.js';
+import { openErrors } from './open.js';
 
 /** The roll types a plan may name for an action (a defence is never planned: a foe's attack makes it). */
 const PLAN_TYPES = Object.freeze(ROLL_TYPES.filter(type => type !== 'defence'));
@@ -41,6 +42,7 @@ export function validatePlan(plan) {
     if (!isObject(plan)) return { ok: false, errors: ['A plan must be an object.'] };
     if (plan.formula !== undefined && plan.formula !== 'standard') errors.push('formula must be standard when a plan has one.');
     const std = plan.formula === 'standard';
+    if (plan.open !== undefined) errors.push(...openErrors(plan.open));
     if (!Object.hasOwn(PACE, plan.pace)) errors.push('pace must be careful, normal or all.');
     const lists = [['acts', LIMITS.acts], ['foes', LIMITS.foes], ['checks', LIMITS.checks]];
     for (const [key, max] of lists) {
@@ -107,6 +109,16 @@ export function validatePlan(plan) {
     return errors.length ? { ok: false, errors } : { ok: true, errors: [] };
 }
 
+/** The foes an answer lists as new (`foe <name> | new | count: n | level: N | rank: R`; an old `class: X` is still read), as written: [{ name, count?, level?, rank?, class? }]. */
+export function openLinesOf(answer) {
+    const out = [];
+    for (const raw of String(answer ?? '').split(/\r?\n/)) {
+        const line = lineOf(raw);
+        if (line?.head === 'foe' && line.labels.new) out.push({ name: line.name, count: line.labels.count, ...(line.labels.level !== undefined ? { level: line.labels.level } : {}), ...(line.labels.rank !== undefined ? { rank: line.labels.rank } : {}), ...(line.labels.class !== undefined ? { class: line.labels.class } : {}) });
+    }
+    return out;
+}
+
 /** Whether a plan has anything to roll. */
 export const planIsEmpty = plan => !(plan?.acts?.length || plan?.checks?.length || plan?.foes?.some(foe => !foe.hold));
 
@@ -126,7 +138,7 @@ function lineOf(raw) {
     for (const part of rest) {
         const at = part.indexOf(':');
         if (at < 0) {
-            const flag = /^\s*(hold|area|magic|support)\s*$/i.exec(part);
+            const flag = /^\s*(hold|area|magic|support|new)\s*$/i.exec(part);
             if (flag) labels[flag[1].toLowerCase()] = true;
             continue;
         }
@@ -225,6 +237,8 @@ export function parsePlanAnswer(answer, sheet, { formula = 'classic' } = {}) {
             if (!who || !(stat || skill.named) || !target || plan.acts.length >= LIMITS.acts) { dropped += 1; continue; }
             plan.acts.push({ who: who.who, ...skill.entry, target: target.name, ...edgeOf(labels.edge) });
         } else if (head === 'foe') {
+            // A foe listed as new (open.js) is read apart (openLinesOf): a line that asks for one is not a line to place.
+            if (labels.new) continue;
             const foe = matchFoe(sheet, name);
             if (!foe || plan.foes.some(entry => entry.slot === foe.slot) || plan.foes.length >= LIMITS.foes) { dropped += 1; continue; }
             if (labels.hold) { plan.foes.push({ slot: foe.slot, hold: true }); continue; }

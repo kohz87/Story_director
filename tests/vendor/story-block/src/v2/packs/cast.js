@@ -9,6 +9,7 @@
 
 import { CAST_BUILT_IN_METERS, CAST_FIELDS, CAST_LIMITS, CAST_SECRET_FIELDS, CAST_START_FIELDS, METER_LIMITS, METER_RESERVED, METER_STAGE_FIELDS, PORTRAIT_LIMITS, PORTRAIT_NAME, SLUG } from './limits.js';
 import { foldKey, oneLine } from '../../text.js';
+import { slotWordOf } from '../domains/gear.js';
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 // Markup and brace characters never belong in a person's text; `|` splits a change line, so the short lines refuse it too.
@@ -18,9 +19,10 @@ const whole = value => Number.isInteger(value) && value >= METER_LIMITS.min && v
 
 /**
  * The normalized cast of one pack. `add(code, path, message)` collects problems. At most
- * `CAST_LIMITS.entries` entries and `PORTRAIT_LIMITS.perPack` different portrait files.
+ * `CAST_LIMITS.entries` entries and `PORTRAIT_LIMITS.perPack` different portrait files. `items`: the pack's own normalized
+ * items, which a person's `gear` is checked against (it is kept as their item ids).
  */
-export function checkCast(list, packId, add) {
+export function checkCast(list, packId, add, items = []) {
     if (!Array.isArray(list)) {
         add('BAD_CONTENT', 'content.cast', 'content.cast must be a list of people like [{ "id": "fenna", "name": "Fenna", "about": "…", "look": "…", "start": { "place": "…", "goal": "…" } }].');
         return [];
@@ -219,6 +221,31 @@ export function checkCast(list, packId, add) {
 
         if (record.canDieUnmet !== undefined && typeof record.canDieUnmet !== 'boolean') say('canDieUnmet', 'canDieUnmet must be true or false.');
 
+        // Signature gear (`story-block.gear`): at most CAST_LIMITS.gear of this pack's equipment, one item per slot (an accessory may take two).
+        let gear;
+        if (record.gear !== undefined) {
+            if (!Array.isArray(record.gear) || record.gear.length > CAST_LIMITS.gear) say('gear', `gear must be a list of at most ${CAST_LIMITS.gear} item names or slugs from this pack's items.`);
+            else {
+                const kept = [];
+                const used = new Map();
+                record.gear.forEach((entry, n) => {
+                    const at = `gear[${n}]`;
+                    const wanted = typeof entry === 'string' ? entry.trim() : '';
+                    const item = wanted ? gearItem(items, wanted) : null;
+                    if (!item) return say(at, `${at} must name an item of this pack (its slug or name)${wanted ? `; "${oneLine(wanted, 60)}" is not one` : ''}.`, 'UNKNOWN_REF');
+                    const slot = slotWordOf(item.slot);
+                    if (item.kind !== 'equipment' || !slot) return say(at, `${at}: "${item.name}" is not equipment with a gear slot (weapon, body, off-hand, head, cloak, feet or accessory).`);
+                    if (kept.includes(item.id)) return say(at, `${at}: "${item.name}" is listed twice.`, 'DUPLICATE');
+                    const base = slot.replace(/-\d+$/, '');
+                    const taken = used.get(base) ?? [];
+                    if (taken.length >= (base === 'accessory' ? 2 : 1)) return say(at, `${at}: "${item.name}" and "${taken[0]}" both take the ${base} slot${base === 'accessory' ? ' (a person wears two accessories at most)' : ' (one item to a slot)'}.`, 'DUPLICATE');
+                    used.set(base, [...taken, item.name]);
+                    kept.push(item.id);
+                });
+                gear = kept;
+            }
+        }
+
         if (name) {
             for (const each of [name, ...aliases]) {
                 const key = foldKey(each);
@@ -238,6 +265,7 @@ export function checkCast(list, packId, add) {
             ...(fields && Object.keys(fields).length ? { fields } : {}),
             ...(secrets?.length ? { secrets } : {}),
             ...(record.canDieUnmet !== undefined ? { canDieUnmet: record.canDieUnmet } : {}),
+            ...(gear?.length ? { gear } : {}),
             pack: packId,
         });
     });
@@ -246,4 +274,14 @@ export function checkCast(list, packId, add) {
         add('BAD_CONTENT', 'content.cast', `A pack may name at most ${PORTRAIT_LIMITS.perPack} different portrait files; this one names ${portraits.size}.`);
     }
     return ok ? out : [];
+}
+
+// The pack item a `gear` entry means: its slug, its name or alias (folded), or its full id.
+function gearItem(items, wanted) {
+    const list = Array.isArray(items) ? items : [];
+    const key = foldKey(wanted);
+    return list.find(item => item.slug === wanted || item.id === wanted)
+        ?? list.find(item => foldKey(item.name) === key)
+        ?? list.find(item => (item.aliases ?? []).some(alias => foldKey(alias) === key))
+        ?? null;
 }
