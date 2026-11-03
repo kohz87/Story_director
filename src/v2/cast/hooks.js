@@ -17,7 +17,7 @@ import { cutPoints, isInt, keysOfPerson } from './domain.js';
 import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
-import { askedAbout, batchKey, chooseMeetings, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf } from './world.js';
+import { askedAbout, batchKey, chooseMeetings, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf, unshown } from './world.js';
 
 const REPLY_TYPES = new Set(['normal', 'regenerate', 'swipe']);
 const normalizeType = type => String(type ?? 'normal').toLowerCase();
@@ -25,6 +25,9 @@ const queryOf = view => (typeof view?.query === 'function' ? (name, args) => vie
 
 // The hidden parts of a message out, as the arc planner reads the story.
 const MARKUP = /<!--[\s\S]*?-->|<(think|thinking|reasoning|Changes|Changes-assist|Changes-assist-next)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+
+/** The words of a message as the reader sees them: hidden comments and the change block out. */
+export const shownText = mes => String(mes ?? '').replace(MARKUP, ' ');
 
 /** The last few messages of the story as plain text, the newest characters kept. */
 export function recentStory(chat, { messages = 3, chars = 3500 } = {}) {
@@ -212,5 +215,21 @@ export function createCastHooks({ plans }) {
         return commands.length ? { commands } : undefined;
     }
 
-    return { afterReceive, beforeGenerate };
+    /**
+     * `afterCapture(view, info)` (once the reply's change lines have run, and again on a Re-read): a person the meeting brought into this reply
+     * who the reply does not show (their name or an alias in its words, or a `+ present` line) has their meeting taken back, as one
+     * `cast.withdraw` step on the reply. It runs before NPC State Delta's step after the reply, so no dossier is made for them.
+     */
+    function afterCapture(view, info = {}) {
+        if (!castOn(view)) return undefined;
+        const slice = view?.state?.domains?.cast;
+        if (!slice?.meeting || !isInt(info?.index)) return undefined;
+        const chat = typeof view?.story?.chat === 'function' ? view.story.chat() : null;
+        const message = Array.isArray(chat) ? chat[info.index] : null;
+        if (!message || typeof message.mes !== 'string') return undefined;
+        const keys = unshown(slice, { index: info.index, text: shownText(message.mes), present: presentKeys(queryOf(view), view?.state) });
+        return keys.length ? { commands: [{ type: 'cast.withdraw', payload: { at: info.index, keys } }] } : undefined;
+    }
+
+    return { afterReceive, afterCapture, beforeGenerate };
 }

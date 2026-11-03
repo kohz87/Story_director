@@ -8,12 +8,15 @@
 //     day; one that names none holds at any hour; a person who has moved away from their start has no routine to keep);
 //   - by goal: the planner judged that a phrase of their `drawnTo` is touched by the story and cites the reason.
 //   Goal meetings come first (they carry a reason the story gave), then place meetings in the order people joined the world.
+// * A meeting counts only if the reply shows the person (`unshown`, after the reply: `cast.withdraw`): the narration (not its hidden
+//   comments) names them (name or alias, whole word) or a `+ present` line does; else they stay unmet, the pace is not used up and
+//   they may come again later. Someone met in the story is no planned meeting and is never withdrawn.
 // * People the narrator already has in the scene (present), people the reader pinned as Key people, the dead and people whose pack
 //   is not enabled now are left alone.
 
 import { sha256 } from '../hash.js';
 import { atParty, routineHolds, samePlace } from './entries.js';
-import { DAY, FACES, DEFAULT_FACES, dayAt, dayOf, isAlive, isInt, isMet, keysOfPerson, peopleOf } from './domain.js';
+import { DAY, FACES, DEFAULT_FACES, dayAt, dayOf, isAlive, isInt, isMet, isRecord, keysOfPerson, peopleOf, slotOf, tables } from './domain.js';
 
 /** A stretch of time that moves the cast even inside one day: six story hours. */
 export const SKIP_MINUTES = 360;
@@ -130,6 +133,40 @@ export function metInTheStory(slice, cast, { present = new Set(), party = {} } =
     return peopleOf(slice)
         .filter(person => !isMet(person) && isAlive(person) && cast.byKey.has(person.key) && keysOfPerson(person).some(key => present.has(key) || present.has(bare(key))))
         .map(person => ({ key: person.key, why: 'story', reason: '', place: party?.place ?? '' }));
+}
+
+// ---- the reply shows the person ----------------------------------------------------------------------------------------------------
+
+const escapeRe = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Whether `text` (the reply's shown words, hidden comments out) names the person: their name or one of their aliases as a whole word,
+ * in any case. A title alone ("Sister") is not a name, and a name inside a longer word is not the name.
+ */
+export function namedIn(person, text) {
+    const said = String(text ?? '');
+    if (!said) return false;
+    const names = [person?.name, ...(Array.isArray(person?.aliases) ? person.aliases : [])].map(name => String(name ?? '').trim()).filter(Boolean);
+    return names.some(name => new RegExp(`(?<![\\p{L}\\p{N}_])${name.split(/\s+/).map(escapeRe).join('\\s+')}(?![\\p{L}\\p{N}_])`, 'iu').test(said));
+}
+
+/**
+ * The people the meeting recorded for reply `index` brought in who the reply did not show, as keys: `slice.meeting` is for that reply, the
+ * person was met by it (their `rev` is the meeting's) for place or goal (someone met in the story is never withdrawn), and neither the
+ * shown `text` names them nor `present` (keys of the scene's present list, `+ present` lines) does.
+ */
+export function unshown(slice, { index = null, text = '', present = new Set() } = {}) {
+    const meeting = slotOf(slice?.meeting);
+    if (!meeting || !isInt(index) || meeting.at !== index) return [];
+    const { people } = tables(slice);
+    const out = [];
+    for (const key of meeting.keys) {
+        const person = isRecord(people[key]) ? people[key] : null;
+        if (!person || !isMet(person) || person.met.why === 'story' || person.met.rev !== meeting.rev) continue;
+        if (namedIn(person, text) || keysOfPerson(person).some(name => present.has(name) || present.has(bare(name)))) continue;
+        out.push(key);
+    }
+    return out;
 }
 
 /** Unmet, living people in the world's pack whose place is the party's now: how many "may cross your path here". */
