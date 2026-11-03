@@ -174,3 +174,33 @@ test('someone met in the story is never withdrawn', async t => {
         host.close();
     }
 });
+
+test('a reply with no change lines at all is judged too: not showing her withdraws the meeting, naming her keeps it; Re-read and rebuild agree', async t => {
+    quiet(t);
+    const host = await castHost({ source: castSource([TEMIWA]) });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        await host.send('Look around.', 'Smoke rises over the yard.');
+        assert.equal(receipts(host, 'cast.meet').length, 1);
+        assert.equal(receipts(host, 'cast.withdraw').length, 1);
+        assert.equal(people(host)['ersveil:temiwa'].met, null);
+        assert.deepEqual(notes(host), []);
+        assert.deepEqual(host.sdk.query('director.cast'), []);
+        const gone = JSON.stringify(host.head());
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), gone);
+        await host.swipe('Temiwa kneels by the well.');
+        assert.equal(people(host)['ersveil:temiwa'].met.why, 'place');
+        assert.equal(host.sdk.query('director.cast').length, 1);
+        const index = host.ctx.chat.length - 1;
+        const message = host.ctx.chat[index];
+        message.mes = 'Only smoke.';
+        if (Array.isArray(message.swipes)) message.swipes[message.swipe_id] = message.mes;
+        assert.equal((await host.sdk.reread(index)).ok, true);
+        assert.equal(people(host)['ersveil:temiwa'].met, null, 'Re-read of a reply without her withdraws');
+        assert.deepEqual(validatorErrors(host), []);
+        assert.deepEqual(host.store.problems(), []);
+    } finally {
+        host.close();
+    }
+});

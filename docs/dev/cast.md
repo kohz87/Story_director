@@ -57,8 +57,8 @@ runs), so a note names the message its card goes under (`at`) rather than the re
    a name) is not in the reply's shown words (hidden comments and the change block out) and is in no `+ present` line is unmet again: a goal
    arrival goes back to where they were (`met.was`), the "Paths crossed" card line goes, the pace is not used up, they may come again. `why:
    'story'` is never withdrawn. It runs before NPC State Delta's step after the reply (its `npc.tick` follows the `turn` event), so no dossier is
-   made for a withdrawn meeting; a swipe or Re-read decides again. Limit: Story Block runs `afterCapture` only for a reply with at least one
-   change line, so a reply with none keeps its meeting.
+   made for a withdrawn meeting; a swipe or Re-read decides again. The hook opts in (`hook.always`, Story Block's afterCapture) to run for a
+   reply with no change lines too; module.js then runs only the parts that opted in. Needs a Story Block with that option (the vendored testkit has it).
 
 The cue: the reply of a meeting gets one tail line, `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
 how they speak, what they want and why now (`note.js`). A swipe rewrites the scene, not who you meet: the steps stay, the planner's

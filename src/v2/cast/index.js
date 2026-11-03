@@ -55,7 +55,8 @@ export const part = {
         beforeGenerate: Object.assign(tagged((view, info) => hooks.beforeGenerate(view, info)), { timeoutMs: HOOK_MS }),
         afterReceive: tagged(view => { hooks.afterReceive(view); }),
         // After the reply's lines: a planned meeting counts only if the reply shows the person (hooks.js).
-        afterCapture: tagged((view, info) => hooks.afterCapture(view, info)),
+        // (`always`: it runs for a reply with no change lines too, which Story Block's afterCapture otherwise skips.)
+        afterCapture: Object.assign(tagged((view, info) => hooks.afterCapture(view, info)), { always: true }),
     },
     settings: { section: 'The cast', defaults: { ...DEFAULTS }, schema: { ...SCHEMA } },
     tabs: [],

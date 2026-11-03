@@ -65,6 +65,8 @@ export async function castHost({ source = castSource(), model = createFakeModel(
     }
     await syncCast(host, source);
     host.source = source;
+    // A reply that shows everyone the pack lists (a meeting counts only if the reply shows the person): for replies a meeting is expected in.
+    host.everyone = () => source.entries.map(item => item.name).join(', ');
     host.model = model;
     return host;
 }

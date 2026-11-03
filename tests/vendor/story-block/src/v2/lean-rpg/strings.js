@@ -176,6 +176,8 @@ export const RPG_STRINGS = Object.freeze({
         madeButNot: '{name} is in the party. Not added: {list}. {why} {hint}',
         finish: 'Done',
         failedFirst: 'Could not make the character: {why}',
+        // Create in a chat with no message at all: the story's state starts on the character's first message, so there is nothing to add a block to yet.
+        noChat: 'Start the chat first: the character\'s first message holds the story\'s state.',
         failedSecond: 'Could not make the skills: {why} Nothing was created.',
         failedBoth: 'Could not make the skills ({why}) and could not take the character back. Remove "{name}" in Settings → Blocks.',
         generic: 'That did not work.',

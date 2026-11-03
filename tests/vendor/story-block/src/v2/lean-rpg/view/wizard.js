@@ -522,13 +522,13 @@ export function createWizard({ headState = () => null, readerName = () => '', re
             async function addImported(file, draftNow, call) {
                 const owner = ownerFor(draftNow), failed = [];
                 for (const item of file.items ?? []) {
-                    const added = await call('inventory.add', { name: item.name, qty: item.qty, owner, ...(item.note ? { note: item.note } : {}),
+                    const added = await call('inventory.add', { name: item.name, qty: item.qty, owner, starting: true, ...(item.note ? { note: item.note } : {}),
                         ...(item.kind ? { kind: item.kind } : {}), ...(item.rarity ? { rarity: item.rarity } : {}) });
                     if (!added.ok) failed.push(fill(W.notAdded, { what: `${item.name}${item.qty === 1 ? '' : ` ×${item.qty}`}`, why: refusalText(added, W.generic) }));
                 }
                 if (file.money > 0) {
                     const purse = safe(() => api?.query?.('inventory.wallet', { owner: 'party' }), null)?.coin;
-                    const set = await call('wallet.set', { owner: 'party', amount: (Number.isSafeInteger(purse) ? purse : 0) + file.money });
+                    const set = await call('wallet.set', { owner: 'party', amount: (Number.isSafeInteger(purse) ? purse : 0) + file.money, starting: true });
                     if (!set.ok) failed.push(fill(W.moneyNotAdded, { why: refusalText(set, W.generic) }));
                 }
                 return failed;
@@ -552,7 +552,8 @@ export function createWizard({ headState = () => null, readerName = () => '', re
                 const definitions = buildDefinitions(now, { used: where.used });
                 let failure = '';
                 const first = await call('dm.define', { definition: definitions.character });
-                if (!first.ok) failure = fill(W.failedFirst, { why: refusalText(first, W.generic) });
+                // Still no state after the host tried to start one (sdk.command): the chat has no message to hold it, said in one plain sentence.
+                if (!first.ok) failure = safe(headState, null) ? fill(W.failedFirst, { why: refusalText(first, W.generic) }) : W.noChat;
                 else {
                     const second = await call('dm.define', { definition: definitions.skills });
                     if (!second.ok) {

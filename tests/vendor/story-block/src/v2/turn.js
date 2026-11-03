@@ -21,7 +21,7 @@
 // turn.js receives the SillyTavern context and the host parts; it never imports the store or
 // the command bus (their interfaces are docs/v2/SPEC.md §12).
 
-import { assistSections, continuation, cutLine, defangMarker, extractBlock, grammarHeads, hasHidden, hideBlock, markOff, parseChanges, strayLines, stripBlock, withAssist } from './capture.js';
+import { LEGACY_PROBLEM, adoptLegacy, assistSections, continuation, cutLine, defangMarker, extractBlock, grammarHeads, hasHidden, hasLegacy, hideBlock, legacyRead, markOff, parseChanges, sameChangeLine, strayLines, stripBlock, withAssist } from './capture.js';
 import { notWritten } from './assist/extractor.js';
 import { PRECHECK } from './assist/classifier.js';
 import { refusedWhy } from './assist/safety.js';
@@ -81,6 +81,10 @@ export const MAX_NAME = 80;
 // Stripped history texts kept between prompts (each is read again for every later prompt).
 const STRIP_CACHE = 500;
 const HAS_BLOCK = /<changes/i;
+// Story Block v1's envelope (capture.js adoptLegacy): never sent to the model. In a text completion prompt only a closed
+// one, and never across another comment's start, so one left open cannot take the rest of the prompt with it.
+const HAS_LEGACY = /<!--\s*(?:STORY_BLOCKS_V1|INVENTORY_BLOCK_V05)/i;
+const LEGACY_IN_PROMPT = /\s*<!--\s*(?:STORY_BLOCKS_V1_CUT|STORY_BLOCKS_V1|INVENTORY_BLOCK_V05)\b(?:(?!<!--)[\s\S])*?-->/gi;
 // The RPG's battle-log marker: a line `[battle]` of its own in a reply (src/v2/lean-rpg/view/battle-log.js draws the panel there).
 // It is for the reader's eyes only, so it leaves the prompt history like the change blocks do: the narrator never sees its own old
 // markers. The line goes with one blank line after it, so no gap is left.
@@ -217,7 +221,7 @@ export function restoreMissing(chat, staticText, tailText) {
  * call on the chat's connection (model-call.js createOwnCalls().owns): never taken for the reply's }.
  * `settings` is createSettings() (settings() → host settings, settings(id) → a module's).
  * Returns { interceptor, install, uninstall, onPromptReady, onTextPromptReady, onMessageReceived,
- * onChatChanged, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems, blocked, blockers, unblock,
+ * onChatChanged, seed, onChatRenamed, onTimelineChanged, onGenerationEnded, preview, report, problems, clearProblems, blocked, blockers, unblock,
  * session, replyBusy, whenIdle }.
  */
 export function createTurn({ ctx, live = () => ctx, store, bus, registry, settings, events = null, onBlocked = null, notify = defaultNotify, initial = () => registry.initialState(), ownPrompt = () => false, timeline = null }) {
@@ -645,11 +649,11 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     // text with no "<changes" in it at all is passed by without reading it further.
     const stripped = new Map();
     function strippedText(text) {
-        if (!HAS_BLOCK.test(text)) return text;
+        if (!HAS_BLOCK.test(text) && !HAS_LEGACY.test(text)) return text;
         let out = stripped.get(text);
         if (out === undefined) {
-            // (A hidden comment may hold only lines left in the story, B-a1-3: it goes too.)
-            out = extractBlock(text) === null && !hasHidden(text) ? text : stripBlock(text);
+            // (A hidden comment may hold only lines left in the story, B-a1-3: it goes too. So does a v1 envelope.)
+            out = extractBlock(text) === null && !hasHidden(text) && !hasLegacy(text) ? text : stripBlock(text);
             if (stripped.size >= STRIP_CACHE) stripped.delete(stripped.keys().next().value);
             stripped.set(text, out);
         }
@@ -690,6 +694,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         // Only the hidden form: the static text's own example block must stay.
         const hidden = new RegExp(`\\s*<!--\\s*STORY_SUITE_V2\\b[\\s\\S]*?-->`, 'g');
         eventData.prompt = eventData.prompt.replace(hidden, '');
+        if (HAS_LEGACY.test(eventData.prompt)) eventData.prompt = eventData.prompt.replace(LEGACY_IN_PROMPT, '');
         if (battleOn()) eventData.prompt = stripBattleMarker(eventData.prompt);
         if (backgroundPrompt() || !session || session.prompted) return;
         session.prompted = true;
@@ -726,9 +731,14 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         try { return grammarHeads(registry.contexts().flatMap(context => context.kinds ?? [])); } catch { return new Set(); }
     }
     // The story's change lines that were not taken (too far up, written another way) as Problems.
-    function strayProblems(index, text, heads, options) {
-        return strayLines(text, heads, options).problems.map(({ line, reason }) => problem({ index, line, code: 'STRAY', message: `"${line}" was not used: ${reason}.` }));
+    // (A line that repeats one the reply's block holds, `read` (raw), was used: it is not told.)
+    function strayProblems(index, text, heads, options, read = []) {
+        const used = new Set(read.map(sameChangeLine));
+        return strayLines(text, heads, options).problems.filter(({ line }) => !used.has(sameChangeLine(line)))
+            .map(({ line, reason }) => problem({ index, line, code: 'STRAY', message: `"${line}" was not used: ${reason}.` }));
     }
+    // The one Problem of a reply whose changes were read from a v1 envelope (capture.js adoptLegacy).
+    const legacyProblem = index => problem({ index, code: 'LEGACY_FORMAT', message: LEGACY_PROBLEM });
 
     function capped(index, all, found) {
         const cap = lineCap();
@@ -806,6 +816,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             }
             // A pre-roll is part of this reply even when its narration has no Changes block.
             if (receipts.length || prepared.length) steps = [...prepared, ...await afterCapture(index, { type, problems: found })];
+            // A reply with no story lines runs only the hooks that opted in (`hook.always === true`).
+            else steps = await afterCapture(index, { type, problems: found, alwaysOnly: true });
         });
         return { receipts, problems: found, off, steps: steps.map(step => step.receipt) };
     }
@@ -825,7 +837,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
      * each gets its own ordinal). The same runner stores Assist's seeded pre-roll prelude with
      * `beforeGenerate: true`; Re-read plans that prelude before the story lines and replaces it too.
      */
-    async function afterCapture(index, { type = 'normal', problems = [], state = null, reply = null, seeds = null, plan = null, prechecks = [], onlyPrechecks = false } = {}) {
+    async function afterCapture(index, { type = 'normal', problems = [], state = null, reply = null, seeds = null, plan = null, prechecks = [], onlyPrechecks = false, alwaysOnly = false } = {}) {
         const steps = [];
         const live = state === null;
         let now = live ? store.head() : state;
@@ -833,12 +845,12 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         const planned = () => (live || !plan ? [] : [...plan.blocks.flatMap(piece => piece.block?.evidence ?? []), ...steps.flatMap(step => step.block?.evidence ?? [])]);
         const hooks = [
             ...(prechecks.length ? [{ moduleId: HOST_MODULE, precheck: true, fn: () => ({ commands: prechecks }) }] : []),
-            ...(onlyPrechecks ? [] : registry.hookEntries('afterCapture')),
+            ...(onlyPrechecks ? [] : registry.hookEntries('afterCapture').filter(entry => !alwaysOnly || entry.fn.always === true)),
         ];
         for (const { moduleId, fn, precheck = false } of hooks) {
             const seen = live ? view() : makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader, state: now, reply, pendingProofs: () => planned().map(proof => ({ proof, block: null })) });
             let out;
-            try { out = await within(fn(seen, { index, type }), HOOK_TIMEOUT_MS); } catch (error) {
+            try { out = await within(fn(seen, { index, type, ...(alwaysOnly ? { always: true } : {}) }), HOOK_TIMEOUT_MS); } catch (error) {
                 problems.push(problem({ module: moduleId, index, code: 'FAILED', message: `afterCapture failed: ${error?.message ?? error}` }));
                 continue;
             }
@@ -1078,11 +1090,15 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         if (!readRecord(message)) return refusal('REFUSED', 'This reply keeps no story record, so there is nothing to read again.');
         const base = store.before?.(index);
         if (!base) return refusal('FAILED', 'This chat has no story state yet.');
-        const mes = String(message.mes ?? '');
+        const stored = String(message.mes ?? '');
+        // A v1 envelope is read as the live capture reads it (an older reply that wrote its changes only there gets them now).
+        const adopted = adoptLegacy(stored);
+        const mes = adopted.text;
         const heads = changeHeads();
         const block = extractBlock(mes, 'Changes', null, { heads });
         const parsed = block === null ? { lines: [], problems: [] } : readBlock(index, block);
-        const problems = [...parsed.problems, ...strayProblems(index, mes, heads)];
+        const problems = [...parsed.problems, ...strayProblems(index, mes, heads, {}, parsed.lines.map(line => line.raw))];
+        if (adopted.legacy === 'read' || legacyRead(mes)) problems.push(legacyProblem(index));
         const receipts = [];
         const lines = capped(index, parsed.lines, problems);
         // The safety net's stored lines (MODULES §F123): the previous reply's late ones, then this reply's
@@ -1141,6 +1157,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
                 }
                 // The reply's afterCapture steps, run again after its new story lines (none when none was kept).
                 if (receipts.length) steps = await afterCapture(index, { type: 'reread', problems, state: after, reply, seeds: stepSeeds(readRecord(message)), plan });
+                else steps = await afterCapture(index, { type: 'reread', problems, state: after, reply, seeds: stepSeeds(readRecord(message)), plan, alwaysOnly: true });
                 const unsure = plan.reuse.ambiguous([...plan.blocks, ...steps]);
                 if (!unsure.length) { settled = true; break; }
                 retire = new Set([...retire, ...unsure]);
@@ -1152,7 +1169,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             // time: what was read is no longer this reply's, so nothing is stored (not even on the
             // message that now stands at `index`).
             const live = ctx?.chat ?? [];
-            if (live[index] !== message || message.swipe_id !== swipe || String(message.mes ?? '') !== mes || session) {
+            if (live[index] !== message || message.swipe_id !== swipe || String(message.mes ?? '') !== stored || session) {
                 return refusal('CONFLICT', 'The chat changed while the reply was read again (a message was deleted, swiped, edited or added); nothing was changed. Press Re-read again.');
             }
             // A kept system step marked `replan` (B-a1-13) runs again on the new story changes, as it ran
@@ -1165,8 +1182,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         }
         // The lines it left in the story are listed in the hidden comment (capture.js), and every comment's
         // display lines are marked as this read found their features (markOff).
-        const hidden = markOff(hideBlock(mes, 'Changes', { heads }), off, 0);
-        if (hidden !== mes) {
+        const hidden = markOff(hideBlock(mes, 'Changes', { heads, legacy: adopted.legacy === 'read' }), off, 0);
+        if (hidden !== stored) {
             message.mes = hidden;
             if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = hidden;
             redraw(index, message);
@@ -1216,7 +1233,9 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             const at = typeof current.base === 'string' ? continuation(current.base, written) : null;
             // C2-7: a copy of the hidden comment's marker the model wrote itself is defanged first, so the
             // reply is read live as Re-read will read the saved message.
-            const text = defangMarker(written, at?.from ?? 0);
+            // A v1 envelope (capture.js adoptLegacy): read as the reply's block when it has none, else taken out unread.
+            const adopted = adoptLegacy(defangMarker(written, at?.from ?? 0), { at });
+            const text = adopted.text;
             let edited = false;
             if (text !== written) {
                 message.mes = text;
@@ -1229,7 +1248,8 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             const heads = changeHeads();
             const block = extractBlock(text, 'Changes', at, { stopped, heads });
             const parsed = block === null ? { lines: [], problems: [] } : readBlock(id, block);
-            const problems = [...parsed.problems, ...strayProblems(id, text, heads, { from: at?.from ?? 0, tail: at?.tail === true, stopped })];
+            const problems = [...parsed.problems, ...strayProblems(id, text, heads, { from: at?.from ?? 0, tail: at?.tail === true, stopped }, parsed.lines.map(line => line.raw))];
+            if (adopted.legacy === 'read') problems.push(legacyProblem(id));
             const cut = block === null ? null : cutLine(text, 'Changes', at);
             if (cut) problems.push(problem({ index: id, line: cut, code: 'CUT_OFF', message: `The reply ended in the middle of the change line "${cutAt(cut, 80)}" (nothing after it on its line, and the block was not closed), so it was not used. Continue finishes it; or end the line and close the block by hand, then Re-read.` }));
             // The previous reply's safety-net lines that came after the reader sent (not for a Continue).
@@ -1246,7 +1266,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
 
             // Also with no block: the change lines left in the story are listed in the hidden comment, so a
             // Re-read leaves them too (B-a1-3, B-a1-10).
-            let hidden = hideBlock(message.mes, 'Changes', { ...(at ?? {}), stopped, heads });
+            let hidden = hideBlock(message.mes, 'Changes', { ...(at ?? {}), stopped, heads, legacy: adopted.legacy === 'read' });
             if (result.off.length) hidden = markOff(hidden, result.off, at?.from ?? 0);
             if (hidden !== message.mes) {
                 message.mes = hidden;
@@ -1307,9 +1327,9 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
     }
 
     /** Change lines found after the reply (afterReply): captured on it and kept in its hidden block. */
-    async function captureLate({ index, swipe } = {}, text = '', { assist = false } = {}) {
+    async function captureLate({ index, swipe } = {}, text = '', { assist = false, refused = [] } = {}) {
         const message = ctx?.chat?.[index];
-        if (assist) return captureAssist({ index, swipe }, text, message);
+        if (assist) return captureAssist({ index, swipe }, text, message, refused);
         if (!isCarrier(message) || store.headIndex() !== index || (Number.isInteger(message.swipe_id) ? message.swipe_id : 0) !== swipe || session) {
             return { receipts: [], problems: ['The reply changed before its late change lines arrived; they were not used.'] };
         }
@@ -1342,9 +1362,13 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
      * <Changes-assist-next>, through the stricter wall, for the next reply to apply after its own lines;
      * nothing changes now. Anything else (swiped, deleted, the next reply already in): not used.
      */
-    async function captureAssist({ index, swipe }, text, message) {
+    async function captureAssist({ index, swipe }, text, message, refused = []) {
         const same = isCarrier(message) && store.headIndex() === index && (Number.isInteger(message.swipe_id) ? message.swipe_id : 0) === swipe;
         if (!same) return { receipts: [], problems: ['The reply changed before the safety net\'s lines arrived; they were not used.'], dropped: true };
+        // Lines the safety net wrote that code refused (an unknown name for a place the map has, a time with no clock time): a
+        // Problems line each, so the reader sees what was left out and why; they are not applied and not kept on the reply.
+        const refusals = (Array.isArray(refused) ? refused : []).filter(item => typeof item?.line === 'string' && item.line)
+            .map(item => problem({ index, line: item.line, code: 'REFUSED', message: `"${item.line}" was not used: ${String(item.why ?? '').slice(0, 240)}.` }));
         const heads = changeHeads();
         const mes = String(message.mes ?? '');
         const block = extractBlock(mes, 'Changes', null, { heads });
@@ -1357,13 +1381,13 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = mes2;
         };
         if (session || replyBusy) {
-            if (!kept.length) return { receipts: [], problems: [], deferred: true };
+            if (!kept.length) return { receipts: [], problems: refusals, deferred: true };
             // Saved with the next reply (its own save writes the chat).
             store1(withAssist(mes, kept.map(line => line.raw), { next: true }));
             redraw(index, message);
-            return { receipts: [], problems: [], deferred: true, lines: kept.map(line => line.raw) };
+            return { receipts: [], problems: refusals, deferred: true, lines: kept.map(line => line.raw) };
         }
-        if (!kept.length) return { index, type: 'late', receipts: [], steps: [], problems: [], told: [] };
+        if (!kept.length) return { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] };
         const used = block === null ? 0 : readBlock(index, block).lines.length;
         const result = await captureLines(index, [], mes, 'late', { assist: kept, used });
         store1(markOff(withAssist(mes, kept.map(line => line.raw)), result.off, mes.trimEnd().length));
@@ -1371,7 +1395,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
             if (store.saveIdle?.() !== true) await trySave('after the safety net\'s lines');
         } else await saveText();
         redraw(index, message);
-        const turn = { index, type: 'late', receipts: result.receipts, steps: result.steps, problems: result.problems, told: [] };
+        const turn = { index, type: 'late', receipts: result.receipts, steps: result.steps, problems: [...refusals, ...result.problems], told: [] };
         events?.emit('turn', turn);
         return turn;
     }
@@ -1393,6 +1417,21 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         }
         await ensureModules({ store, bus, registry, events });
         events?.emit('head', { index: store.headIndex() });
+    }
+
+    /**
+     * A reader's action in a chat that has a message but no state yet (sdk.command): the state starts on its first carrier now, as
+     * onChatChanged would. SillyTavern shows a new chat's greeting before it tells of the chat (CHAT_CHANGED comes after its save, and
+     * after every listener ahead of Story Block's), and a message added with no event Story Block reads (/sendas into an empty chat)
+     * starts nothing. No open chat, or no carrier: nothing to start. → true when the chat has a state.
+     */
+    function seed() {
+        if (store.head()) return true;
+        let open = true;
+        try { open = typeof ctx?.getCurrentChatId !== 'function' || !!ctx.getCurrentChatId(); } catch { open = true; }
+        if (!open || !hasCarrier()) return false;
+        rebuild();
+        return !!store.head();
     }
 
     /**
@@ -1506,6 +1545,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         onTextPromptReady,
         onMessageReceived,
         onChatChanged,
+        seed,
         onChatRenamed,
         onTimelineChanged,
         onGenerationEnded,

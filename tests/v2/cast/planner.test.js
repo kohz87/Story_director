@@ -47,7 +47,7 @@ test('a day passes: one planner call after the reply that moved the clock, appli
         assert.match(call.prompt, /Recent story:\n[\s\S]*Morning\./);
         assert.doesNotMatch(call.prompt, /Hidden thing|Never said|weathered/, 'secrets and looks are not the planner\'s business');
         assert.doesNotMatch(call.prompt, /fenna[^\n]*may die/, 'death is allowed for no one');
-        await host.send('Where is everyone?', said('Nobody knows.'));
+        await host.send('Where is everyone?', said(`Nobody knows. ${host.everyone()}`));
         assert.equal(model.calls.length, 1, 'used, not asked again');
         const world = people(host);
         assert.deepEqual([world['ersveil:fenna'].where, world['ersveil:fenna'].doing], ['Ashford', 'took the ferry upriver to Ashford for the guild']);
@@ -81,12 +81,12 @@ test('a swipe and a Re-read of the reply that used the answer give the same worl
     try {
         await host.send('Sleep.', said('Morning.', DAY2));
         await settle();
-        await host.send('Where is everyone?', said('Nobody knows.'));
+        await host.send('Where is everyone?', said(`Nobody knows. ${host.everyone()}`));
         const plain = () => JSON.stringify(people(host), (key, value) => (key === 'rev' ? undefined : value));
         const before = plain();
         const cue = castCue(host);
         assert.match(cue, /Sera/);
-        await host.swipe(said('Nobody knows, another take.'));
+        await host.swipe(said(`Nobody knows, another take. ${host.everyone()}`));
         assert.equal(model.calls.length, 1, 'a swipe rewrites the scene, not who the cast brings');
         assert.equal(plain(), before, 'the same world (the steps ran again on the rewritten reply)');
         assert.equal(people(host)['ersveil:sera'].met.why, 'goal');
@@ -115,7 +115,7 @@ test('a death off-screen only where the setting or the entry allows it; the dead
             await host.send('Sleep.', said('Morning.', DAY2));
             await settle();
             assert.match(model.calls[0].prompt, /brom[^\n]*may die/, label);
-            await host.send('Next.', said('Quiet.'));
+            await host.send('Next.', said(`Quiet. ${host.everyone()}`));
             const world = people(host);
             assert.equal(world['ersveil:brom'].alive, false, `${label}: unmet people can die`);
             assert.equal(world['ersveil:fenna'].alive, label === 'the setting' ? false : true, label);
@@ -139,7 +139,7 @@ test('a failed or empty planner call moves no one, but the day is still counted;
         try {
             await host.send('Sleep.', said('Morning.', DAY2));
             await settle();
-            await host.send('Next.', said('Quiet.'));
+            await host.send('Next.', said(`Quiet. ${host.everyone()}`));
             assert.equal(people(host)['ersveil:fenna'].where, 'Bluewatch docks');
             assert.equal(slice(host).day[0].at, host.head().domains.director.time.minutes, 'the cast\'s day moved on');
             assert.equal(Object.values(slice(host).notes).filter(note => note.kind === 'moved').length, 0, 'no card when nothing changed');
@@ -161,7 +161,7 @@ test('a goal the story touches between two days is judged at once: the planner i
         assert.match(model.calls[0].prompt, /for the people whose drawn-to phrase the recent story touches/);
         assert.match(model.calls[0].prompt, /- sera \| Sera/);
         assert.doesNotMatch(model.calls[0].prompt, /- fenna/, 'only those whose goal was touched');
-        await host.send('Rest.', said('You rest by the man you fought at the weir.'));
+        await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
         assert.equal(model.calls.length, 1, 'not asked again the same day');
         const sera = people(host)['ersveil:sera'];
         assert.deepEqual([sera.met.why, sera.met.reason], ['goal', 'the fight at the weir reached her.']);
@@ -199,13 +199,13 @@ test('a plan not asked for after the last reply (a reload): a named connection i
             await settle();
             castPlans.clear();
             const asked = model.calls.length;
-            await host.send('Next.', said('Quiet.'));
+            await host.send('Next.', said(`Quiet. ${host.everyone()}`));
             await settle();
             assert.equal(model.calls.length, asked + 1, `${profile || 'chat'}: asked once`);
             assert.equal(model.calls.at(-1).profile, profile);
             if (profile) assert.equal(people(host)['ersveil:fenna'].where, 'Ashford', 'a named connection is waited for');
             else assert.equal(people(host)['ersveil:fenna'].where, 'Bluewatch docks', 'the chat\'s own is not waited for');
-            await host.send('And?', said('Quiet.'));
+            await host.send('And?', said(`Quiet. ${host.everyone()}`));
             assert.equal(people(host)['ersveil:fenna'].where, 'Ashford', 'used by the next reply');
             assert.equal(model.calls.length, asked + 1);
             assert.deepEqual(validatorErrors(host), []);
