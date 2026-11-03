@@ -47,13 +47,19 @@ import { part as checks } from './checks/index.js';
 import { part as screens } from './screens/index.js';
 import { calendarConfig, packCalendarOf } from './tracker/time.js';
 import { fightsAmong } from './fights.js';
+import { rareKindsUsed } from './rare.js';
+
+/** Story Block's RPG feature: while it is on, its planner asks for the checks. */
+const RPG_FEATURE = 'story-block.rpg';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.9.3';
+export const VERSION = '2.10.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-export const STORY_BLOCK_RANGE = '>=2.12.0';
+// 2.19.0 reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own).
+export const STORY_BLOCK_WITH_HEADS = '2.19.0';
+export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['arc', arc], ['checks', checks], ['screens', screens]]);
@@ -342,10 +348,15 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
     // one set of modules).
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
-    const env = { fights: fightRunner() ?? true, keyPeople: false };
+    // `chronicle`, `map`, `routes`: whether the story uses the rare kinds (world and faction lines; landmark and route lines; trip lines),
+    // so their grammar is taught only then (the lean diet, 3 Nov). All start false and are learnt from the state before each reply.
+    const env = { fights: fightRunner() ?? true, rpg: false, keyPeople: false, chronicle: false, map: false, routes: false };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
+        // Story Block's RPG feature (off by default): while it is on its planner asks for the checks.
+        if (typeof view?.feature === 'function') env.rpg = tryLive(() => view.feature(RPG_FEATURE), false) === true;
+        if (isObject(view?.state?.domains)) Object.assign(env, rareKindsUsed(view));
         // Whether anyone is pinned (Key people): the feature's paragraph and grammar lines are taught only then, so a chat with no key
         // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
         const pins = view?.state?.domains?.keypeople?.pins;
@@ -405,10 +416,12 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             kinds[kind] = {
                 // A line may be '' (the Key people's, while nobody is pinned): the host then leaves the kind out, so a function answers (the registry takes one for a kind with no line yet).
                 get grammar() {
-                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, keyPeople: env.keyPeople }) : grammar;
+                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, rpg: env.rpg, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) : grammar;
                     return line === '' ? () => '' : line;
                 },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
+                // The change-line heads a kind with no grammar line of its own still answers to when a story writes one outside the block (Story Block `heads`).
+                ...(Array.isArray(spec.heads) ? { heads: [...spec.heads] } : {}),
                 // A kind a feature owns (MODULES §F100): Story Block leaves its grammar out, and its lines unused, while that feature is off.
                 ...(typeof spec.feature === 'string' ? { feature: spec.feature } : {}),
                 // Kinds whose lines of a reply this kind's lines run behind (Story Block 2.11.1; an older host reads the lines as written).
@@ -468,7 +481,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
         else grouped.push({ feature: chunk.feature, items: [chunk.static] });
     }
-    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) ?? '').trim()).filter(Boolean).join('\n');
     const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
         .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {

@@ -430,7 +430,7 @@ export const sceneQueries = {
  * on), one more line says {{user}}'s rank, what they wear and their condition, whichever are set, and while wearing or condition is
  * empty a second line asks the narrator to write the empty ones (`youNote`).
  */
-export function sceneTail(state, { weather = false, you = false, rankLabel = '' } = {}) {
+export function sceneTail(state, { weather = false, you = false, rankLabel = '', askLook = true } = {}) {
     const scene = state?.domains?.scene;
     const lines = [];
     const place = scene?.place;
@@ -445,7 +445,8 @@ export function sceneTail(state, { weather = false, you = false, rankLabel = '' 
             .map(([part, word]) => [word, typeof scene?.you?.[part] === 'string' ? scene.you[part] : '']).filter(([, text]) => text);
         // "{{user}}: Guild rank …; wears …; condition …" (the pack's word for the Rank, only with a pack that gives one), only the parts that are set.
         if (said.length) lines.push(`{{user}}: ${said.map(([word, text]) => `${word} ${text}`).join('; ')}`);
-        const note = youNote(scene?.you, rankLabel);
+        // (Prompt diet: the ask for the look is made once per chat, on the reader's first message (`askLook` false after it), not on every reply until it is set.)
+        const note = askLook ? youNote(scene?.you, rankLabel) : '';
         if (note) lines.push(note);
     }
     return lines;

@@ -40,7 +40,7 @@ const NEARBY_ASKED = 24;
 const KINDS = new Set(['agenda', 'event', 'hook', 'quest', 'clock', 'beat']);
 
 /** The Director's static line while the feature is on: the same bytes every reply. */
-export const INITIATIVE_STATIC = 'Initiative: when the Director note names someone under Initiative, they take the first step in this reply (approach, interrupt or ask) where the scene allows it; what {{user}} does stays theirs.';
+export const INITIATIVE_STATIC = "Initiative: whoever the note names under Initiative takes the first step (approach, interrupt or ask) where the scene allows; {{user}}'s part stays theirs.";
 
 const isInt = value => Number.isSafeInteger(value);
 

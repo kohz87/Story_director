@@ -57,7 +57,7 @@ import { STRINGS, fill } from './strings.js';
 import { readRecord } from './persist.js';
 import { laterStore, replyEdits, replyRules, scanReplyCards } from './reply-cards.js';
 import { drawReplyCard } from './view/reply-cards-ui.js';
-import { CORE_FEATURE, withHiddenFeatures } from './features.js';
+import { CORE_FEATURE, GEAR_FEATURE, withHiddenFeatures } from './features.js';
 import { createBlockTemplates } from './data-modules/block-templates.js';
 import { createBlockWidgets } from './screens/blocks.js';
 import { ROLES_WITHOUT_TAB } from './lean-rpg/names.js';
@@ -719,7 +719,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
         overlay = openSettingsWindow({
             // The status strip's switch is there only while some screen asks for the strip (a pack's, a module's `hud` mount); its stored
             // choice stays, and the strip works as before.
-            registry, settings, doc, sdk, features: withHiddenFeatures(runtime.features ?? null, feature => feature.id === CORE_FEATURE.hud && !hudAsked()), fold, diagnostics,
+            registry, settings, doc, sdk, features: withHiddenFeatures(runtime.features ?? null, feature => (feature.id === CORE_FEATURE.hud && !hudAsked()) || feature.id === GEAR_FEATURE), fold, diagnostics,
             promptParts, tabs: tabsControl, theme, blockTemplates, blocks: blockWidgets,
             chatOpen: () => Boolean(liveCtx()?.getCurrentChatId?.() ?? liveCtx()?.chatId),
             ...(rpg ? { extraSections: rpg.settingsSections() } : {}),
@@ -885,6 +885,8 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
             rpgLoading = false;
             if (rpgGone || rpg || !rpgOn()) return;
             rpg = view.mountLeanRpg({ doc, ctx, store, events, screens, widgets: hostWidgets, headState: headStateNow, featureOn: rpgOn,
+                // Settings → RPG holds the gear switch (the feature stays out of the Features list).
+                gear: { on: () => registry.featureOn?.(GEAR_FEATURE) === true, set: value => runtime.features?.set?.(GEAR_FEATURE, Boolean(value)) },
                 readerName: () => String(liveCtx()?.name1 ?? ctx.name1 ?? ''),
                 // The active persona's description: the one property of SillyTavern's settings this reads (never another persona or setting).
                 readerAbout: () => { try { return String((liveCtx()?.powerUserSettings ?? ctx.powerUserSettings)?.persona_description ?? ''); } catch { return ''; } },

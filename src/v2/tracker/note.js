@@ -11,7 +11,7 @@
 // scene, then one Initiative line (initiative.js, feature `story-director.initiative`), then, while
 // the budget has room, at most `tracker.elsewhere` (2) other threads {{user}} knows of, by name only.
 
-import { CHANGE_INSTRUCTION, PACING, noteHeader, noteParts, tailNote } from '../../note.js';
+import { noteHeader, noteParts, tailNote } from '../../note.js';
 import { classify, estimateTokens } from '../../relevance.js';
 import { givenUpIn, offersChosenIn, untrackedCorrections } from '../../tracker.js';
 import { orderedThreads, toTracker } from './convert.js';
@@ -39,52 +39,50 @@ export const IDLE_REPLIES = 60;
 const ENDED_REPLIES = 5;
 const DATED = ['due', 'on', 'arrive'];
 
-const V1_LINES = CHANGE_INSTRUCTION.split('\n');
-// v1's Fields line without its offers (one deliberate change, 2.0.0-alpha.1): the story's `+ quest` is the
-// acceptance, so a job only offered is no hook with a giver and reward; it stays in the story.
-const FIELDS_LINE = V1_LINES.find(line => line.startsWith('Fields:')).replace('; a job only offered: + hook with giver, reward', '');
-const WRITE_ONLY_LINE = V1_LINES.find(line => line.startsWith('Write only changes'));
-
-// Story Director alone (WAVE rule 11, B-rxui-7): with no module that runs fights, the fields name no
-// encounter. A written `encounter:` is still kept on its thread as plain data; it is just not told.
-const FIELDS_ALONE = FIELDS_LINE.replace(', encounter;', ';');
+// The Director's rules, merged into as few lines as keep every rule (the lean diet, 3 Nov): v1's change-line instruction
+// (note.js) stays v1's own; v2 words it here. The change ops are Story Block's header's, so only what is the Director's is said.
+// The date rule is here, not in a grammar line, so it is said while the threads feature is off too.
+const RULES = [
+    'Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.',
+];
+// Pacing, shortened: the "never decide what {{user}} does" rule is in the line above.
+const PACING_V2 = 'Pacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).';
 
 /**
  * The Director's part of the static prompt: no names, counts, times or dice. The same bytes for one
- * set of modules: `fights` (a module runs fights) adds the encounter field. `threads: false` leaves
- * out the Pacing paragraph, which belongs to the feature `story-director.threads` (the module hands it
- * to the host as a context part under that feature, so it is sent only while the feature is on).
+ * set of modules. `threads: false` leaves out the Pacing paragraph, which belongs to the feature
+ * `story-director.threads` (the module hands it to the host as a context part under that feature, so
+ * it is sent only while the feature is on). `fights` no longer changes it: the encounter field is in the beat grammar.
  */
-export function staticText({ fights = true, threads = true } = {}) {
-    return [
-        'Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).',
-        fights ? FIELDS_LINE : FIELDS_ALONE,
-        WRITE_ONLY_LINE,
-        threads ? PACING : '',
-    ].filter(Boolean).join('\n');
+export function staticText({ threads = true } = {}) {
+    return [...RULES, threads ? PACING_V2 : ''].filter(Boolean).join('\n');
 }
 
 /** The Pacing paragraph (a due item comes in only where it fits), the feature `story-director.threads`' own. */
-export const PACING_TEXT = PACING;
+export const PACING_TEXT = PACING_V2;
 
 /** The static part when an optional fight runner is present. */
 export const STATIC_TEXT = staticText();
 
-/** Each Director kind's one line for the change-line instruction (SPEC §4.4). */
+/**
+ * The Director kinds' grammar, one line per family where the kinds share a shape (the lean diet, 3 Nov): the kinds of a family
+ * other than its carrier have no line of their own (the host leaves a kind with '' out), and the parser reads them as before.
+ * `agenda` carries the five world-building threads, `hook` the hook and the quest, `time` itself.
+ */
 export const GRAMMAR = Object.freeze({
-    agenda: '+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>',
-    event: '+ event Name — what is happening in the world | then: what next | on: <date, clock time>',
-    hook: '+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)',
-    quest: '+ quest Name — a task the story follows | goal: what to do | giver: who asked',
-    clock: '+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning',
-    beat: '+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}',
-    secret: '+ secret Name — what must not be revealed yet',
+    agenda: '+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); a secret is what must not be revealed yet',
+    event: '',
+    clock: '',
+    beat: '',
+    secret: '',
+    hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type',
+    quest: '',
     time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) · ! time +2h (time passes)',
 });
 
-// The grammar lines Story Director alone writes (no fight runner): a beat is a turn of the story only.
+// The grammar Story Director alone writes (no fight runner): a beat is a turn of the story only.
 export const GRAMMAR_ALONE = Object.freeze({
-    beat: GRAMMAR.beat.replace(' | encounter: the foes, for a fight', ''),
+    agenda: GRAMMAR.agenda.replace(', encounter (the foes, for a fight)', ''),
 });
 
 /** A kind's grammar line for the module set: `fights: false` takes GRAMMAR_ALONE's where it has one. */

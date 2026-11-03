@@ -15,7 +15,8 @@ test('Story Director alone: the fixed prompt does not ask for encounters or figh
     try {
         await host.send('I meet Fenna.', 'Fenna smiles.\n<Changes>\n~ place Bluewatch Village | kind: settlement\n</Changes>');
         const text = staticOf(host);
-        assert.ok(text.includes('+ beat'), 'the beat line is there');
+        assert.ok(text.includes('+ agenda|event|clock|beat|secret'), 'the beat is in the thread line (the lean diet carries five kinds on one line)');
+        assert.match(text, /beat on, reach/);
         assert.doesNotMatch(text, /encounter|\bfight\b|\bfoes?\b/i, 'the fixed prompt still asks for fights');
     } finally {
         host.close();

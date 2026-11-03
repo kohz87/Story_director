@@ -1,15 +1,16 @@
 {
   "grammar": {
-    "agenda": "+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>",
-    "event": "+ event Name — what is happening in the world | then: what next | on: <date, clock time>",
-    "hook": "+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)",
-    "clock": "+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning",
-    "beat": "+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}",
-    "secret": "+ secret Name — what must not be revealed yet",
+    "agenda": "+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); a secret is what must not be revealed yet",
+    "event": "",
+    "clock": "",
+    "beat": "",
+    "secret": "",
+    "hook": "+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type",
+    "quest": "",
     "time": "~ time <date, clock time such as 9:30 am> (the scene's time) · ! time +2h (time passes)"
   },
   "text": [
-    "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nPacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath. Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later).",
-    "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nPacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath. Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later)."
+    "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.\nPacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).",
+    "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.\nPacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later)."
   ]
 }

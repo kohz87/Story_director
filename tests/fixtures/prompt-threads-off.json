@@ -1,17 +1,23 @@
 {
-  "static": "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nChecks: write ? check skill — attempt | dc: hard (optionally who: Name or vs: Name), without a result. Story Director rolls once; narrate the outcome told by the tail. A pre-rolled check already told under [Happened] is not rolled again.\nInitiative: when the Director note names someone under Initiative, they take the first step in this reply (approach, interrupt or ask) where the scene allows it; what {{user}} does stays theirs.",
+  "static": "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.\nInitiative: whoever the note names under Initiative takes the first step (approach, interrupt or ask) where the scene allows; {{user}}'s part stays theirs.",
   "kinds": [
     {
       "kind": "check",
-      "grammar": "? check <a stat or skill> — what is attempted | dc: easy|normal|hard|very hard | who: Name | vs: Name"
+      "grammar": "? check <skill or stat> — what is tried | dc: easy|normal|hard|very hard | who: Name | vs: Name (no result: code rolls once, tell its outcome from the tail; one under [Happened] is not rolled again)",
+      "heads": [
+        "? check"
+      ]
     },
     {
       "kind": "hook",
-      "grammar": "+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)"
+      "grammar": "+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type"
     },
     {
       "kind": "quest",
-      "grammar": "+ quest Name — a task the story follows | goal: what to do | giver: who asked"
+      "grammar": "",
+      "heads": [
+        "+ quest"
+      ]
     },
     {
       "kind": "time",
@@ -19,7 +25,10 @@
     },
     {
       "kind": "trip",
-      "grammar": "~ trip Place | by: riding|foot|wagon|boat|ship | via: Stop, Stop (the party sets out by the known routes; ~ trip stop; ~ trip delay: 1 day | because: lame horse)"
+      "grammar": "",
+      "heads": [
+        "~ trip"
+      ]
     }
   ]
 }

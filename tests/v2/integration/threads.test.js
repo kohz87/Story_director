@@ -65,10 +65,11 @@ test('the feature: declared, on by default, out of the Lean preset; initiative a
     const stripped = withoutOwnedThreads({ time: 1, threads: { a: { kind: 'quest' }, b: { kind: 'clock' }, c: { kind: 'hook' } } });
     assert.deepEqual(Object.keys(stripped.threads), ['a', 'c']);
     // The paragraphs it owns are context parts under it, in the place they always had.
-    assert.deepEqual(def.context.parts.filter(part => part.feature === THREADS_FEATURE).map(part => part.static()), [PACING_TEXT, WORLD_PARAGRAPHS]);
+    assert.deepEqual(def.context.parts.filter(part => part.feature === THREADS_FEATURE).map(part => part.static()), [PACING_TEXT, '']);
+    // The World paragraphs are taught only while the story keeps a world event or a faction (the lean diet): none in a story that has none.
 });
 
-test('on: the static part and the kinds are what they always were, byte for byte; off: the three paragraphs and the nine grammar lines are gone', async () => {
+test('on: the static part and the kinds are what the fixtures hold, byte for byte; off: the paragraphs and the thread grammar line are gone', async () => {
     // The Key people feature (story-director.key-people) adds its own paragraph and two kinds to the prompt: left off here, so these bytes
     // are the ones the fixtures hold (tests/v2/keypeople says what it adds, and that off adds nothing).
     const on = await newHost({ features: { [KEY_PEOPLE_FEATURE]: false } });
@@ -80,19 +81,19 @@ test('on: the static part and the kinds are what they always were, byte for byte
         assert.deepEqual(got, was, 'with the feature on the prompt is unchanged');
         const gone = { static: contextOf(off).static(), kinds: contextOf(off).kinds };
         assert.deepEqual(gone, now);
-        for (const paragraph of [PACING_TEXT, ...WORLD_PARAGRAPHS.split('\n')]) {
-            assert.ok(got.static.includes(paragraph));
-            assert.ok(!gone.static.includes(paragraph));
-        }
-        assert.deepEqual(gone.kinds.map(entry => entry.kind), ['check', 'hook', 'quest', 'time', 'trip']);
-        assert.deepEqual(got.kinds.map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind)).sort(), [...OWNED_KINDS].sort());
-        // What stays: the Director lines, the fields, the write-only line and the checks line.
+        // A fresh story keeps no world event or faction, so the World paragraphs are not taught on either side (the lean diet).
+        assert.ok(got.static.includes(PACING_TEXT));
+        // The date rule is in the Director lines, so it is said with the threads feature off too.
+        assert.match(gone.static, /Only on, due and arrive take a date, as <date, clock time>/);
+        assert.ok(!gone.static.includes(PACING_TEXT));
+        for (const paragraph of WORLD_PARAGRAPHS.split('\n')) assert.ok(!got.static.includes(paragraph) && !gone.static.includes(paragraph));
+        // The thread kinds ride on the `agenda` line; a fresh story has no route, landmark or world entry, and the check line is the RPG-off one.
+        // (Story Block 2.19.0 lists a kind that has only `heads` too: quest and trip carry heads, no grammar line.)
+        assert.deepEqual(gone.kinds.filter(entry => entry.grammar).map(entry => entry.kind), ['check', 'hook', 'time']);
+        assert.deepEqual(got.kinds.filter(entry => entry.grammar).map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind && entry.grammar)).sort(), ['agenda', 'world']);
+        // What stays: the Director lines and the hook, quest and time line (the fields are in the grammar lines).
         assert.ok(gone.static.startsWith(staticText({ threads: false }).split('\n')[0]));
-        assert.match(gone.static, /Fields: now, then/);
-        assert.match(gone.static, /Checks: write \? check/);
-        // The figure for the report: the Story Director part with the feature off is 684 characters, 171 tokens, shorter (the whole
-        // fixed prompt with every other feature on its default: Story Block's 1310 tokens fall to 886).
-        assert.equal(Math.ceil(got.static.length / 4) - Math.ceil(gone.static.length / 4), 171);
+        assert.match(gone.kinds.find(entry => entry.kind === 'hook').grammar, /goal \| giver \| reward \| step \| due \| difficulty \| type/);
     } finally {
         on.close();
         off.close();

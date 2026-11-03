@@ -20,7 +20,14 @@ const line = (raw, state, options = {}) => {
 };
 
 test('the grammar is the old one and, after the flip, this part keeps the `check` kind (example fight runner\'s part is gone)', () => {
-    assert.match(checkKind.grammar, /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name$/);
+    // The lean diet: the check rule is said once, in this line. Story Block's RPG (its planner asks for the checks) leaves it out unless a
+    // fight module (rpg_battle) runs, where it is taught as it always was. The head is fixed, whatever the module set says.
+    assert.match(checkKind.grammar({ fights: false }), /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name \(.*\[Happened\].*\)$/);
+    assert.match(checkKind.grammar({ fights: false, rpg: false }), /^\? check /);
+    assert.equal(checkKind.grammar({ fights: false, rpg: true }), '');
+    assert.match(checkKind.grammar({ fights: true, rpg: true }), /^\? check /);
+    assert.match(checkKind.grammar({ fights: true }), /^\? check /);
+    assert.deepEqual(checkKind.heads, ['? check']);
     assert.equal(part.kinds.check, checkKind);
 });
 

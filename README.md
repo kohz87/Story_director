@@ -1,4 +1,4 @@
-# Story Director 2.9.3
+# Story Director 2.10.0
 
 Story Director is an extension for SillyTavern that gives your story a clock and a memory. It keeps the date and time, the weather, your quests, the open leads, the map and the wider world. It also keeps people you follow while they are away, and, if a pack has a cast, it lets that cast live off-screen. The narrator writes what changed at the end of each reply. Story Director keeps it and shows you the result in plain words.
 
@@ -15,7 +15,7 @@ For AI assistants that read this repository, see [AI-README.md](AI-README.md).
 3. Optional: install [NPC State Delta](https://github.com/kohz87/npc_state_delta) for a dossier on each person you meet. Story Director works without it.
 4. Reload SillyTavern. When you update, update Story Block before the others.
 
-Story Director needs Story Block 2.12.0 or later. Use the newest Story Block (2.16.1) to get the clock edit (2.16.0) and the cast (2.15.0). Without Story Block, Story Director only shows a one-line notice in the extensions drawer.
+Story Director needs Story Block 2.19.0 or later. Use the newest Story Block (2.19.0) to get the clock edit (2.16.0) and the cast (2.15.0). Without Story Block, Story Director only shows a one-line notice in the extensions drawer.
 
 [Story Studio](https://github.com/kohz87/Story_studio) is not an extension. It is one page you open in a browser to write packs. To try a world, import the Ersveil example pack that comes with Story Block (see its README). It has a calendar, places, roads and a cast.
 
@@ -91,7 +91,7 @@ Open the settings with the **Suite** button above the message box. Story Directo
 The Story Suite has four parts.
 
 - **Story Block** (2.16.6) is the hub. It keeps the story's state, runs the packs and draws the reader's screens.
-- **Story Director** (2.9.3) adds the story clock, the map, quests, the world's events and the pack's living cast. It needs Story Block.
+- **Story Director** (2.10.0) adds the story clock, the map, quests, the world's events and the pack's living cast. It needs Story Block.
 - **NPC State Delta** (1.7.1) adds a dossier for each person you meet, with meters, stages and secrets. It needs Story Block; with Story Director it also follows the cast and Key people.
 - **Story Studio** (0.6.0) is a separate page where you write packs. It is not an extension.
 

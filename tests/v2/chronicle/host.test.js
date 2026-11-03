@@ -116,10 +116,14 @@ test('on the host: more than three under way — one pick per reply, kept on a s
     const click = await host.sdk.command('chronicle.surface', { at: 1 }, { cause: 'ui' });
     assert.deepEqual([click.ok, click.code], [false, 'REFUSED']);
 
-    // The static part never changed.
-    assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
-    assert.match(sent(host, STATIC_KEY)[0], /\+ world Name — what is changing in the wider world/);
-    assert.match(sent(host, STATIC_KEY)[0], /Under \[World\] are events still under way/);
+    // The static part: the world grammar and paragraphs are taught once the story keeps a world event (the lean diet), so the first reply's prompt
+    // (sent before any) lacks the paragraphs and every later one is the same bytes.
+    const statics = sent(host, STATIC_KEY);
+    assert.match(statics[0], /\+ world Name/, 'the world line is always taught');
+    assert.doesNotMatch(statics[0], /Events under \[World\]/);
+    assert.equal(new Set(statics.slice(1)).size, 1);
+    assert.match(statics.at(-1), /\+ world Name — what is changing in the wider world/);
+    assert.match(statics.at(-1), /Events under \[World\] are under way/);
     const head = JSON.stringify(host.head());
     host.store.rebuild();
     assert.equal(JSON.stringify(host.head()), head, 'replay equals rebuild with the picks');

@@ -1,8 +1,9 @@
 // The [Rolls] cue (SPEC_RPG_v1 §4.5.3 step 5): what the narrator is told under [Happened], and what a refused action
 // says. Short lines, one per roll; the numbers are always "the party member's total vs the foe's (or the difficulty)".
 // Model-facing text, kept to the cue budget (names.js LIMITS.cueTokens).
-import { BATTLE_MARKER, LIMITS, STAGES, stageWord } from './names.js';
+import { BATTLE_MARKER, LIMITS, RESOLVE, STAGES, stageWord } from './names.js';
 
+export const wearLine = ({ item, to }) => `${item} ${to === 'broken' ? 'breaks' : 'is worn'} (${to[0].toUpperCase() + to.slice(1)})`;
 export const OUTCOME_WORD = Object.freeze({ success: 'SUCCESS', cost: 'SUCCESS AT A COST', fail: 'FAIL' });
 
 /** Tokens as the prompt budget counts them (§5): about four characters each. */
@@ -92,6 +93,15 @@ const barsLine = (start, lines) => hurtsOf(start, lines).map(item => {
 
 const STOP_POINTS = 'Stop earlier at the first stop point (a foe falls, flees or yields; anyone on your side is Down or Badly wounded; new foes arrive).';
 
+// How the cue ends from the flow of stage 49 (resolve.js FLOW_VERSION): a reply's rolls run until something happens, so the last line says what.
+// A won fight also tells the narrator that code gives the XP for it (fight.js), so it writes none, and that the beaten groups stay on the Foes block.
+const FLOW_ENDS = Object.freeze({
+    won: 'every foe is Down: the fight is won. Stop there and tell it as the end of the fight. Code gives the party its XP for it: write no XP line for this fight, and leave the beaten groups on the Foes block (Down).',
+    lost: 'everyone on your side is Down. Stop there and tell it.',
+    heavy: 'a party member is badly hurt or Down. Stop there at the latest.',
+});
+const flowEnd = (n, end) => (end ? `Round ${n} ends the rolls: ${FLOW_ENDS[end]}` : `Round ${n} is the last rolled: stop there at the latest. ${STOP_POINTS}`);
+
 // A refusal in fewer words: without its bracketed reason, and cut.
 const shortRefusal = text => cut(String(text).replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim(), 70);
 
@@ -135,9 +145,14 @@ export function cueText(parts, shape = 0, { plain = false } = {}) {
         const standing = barsLine(std.start, [...std.opening, ...rounds.flatMap(round => round.lines)]);
         if (standing) lines.push(`Bars now: ${standing}.`);
     }
-    if (fight) lines.push(`Round ${rounds.at(-1).n} is ${decisive ? (rounds.at(-1).decisive || !std ? 'decisive' : 'the end of the fight') : 'the last rolled'}: stop there at the latest. ${STOP_POINTS}`);
+    if (fight && parts.flow === 2) lines.push(flowEnd(rounds.at(-1).n, parts.end ?? null));
+    else if (fight) lines.push(`Round ${rounds.at(-1).n} is ${decisive ? (rounds.at(-1).decisive || !std ? 'decisive' : 'the end of the fight') : 'the last rolled'}: stop there at the latest. ${STOP_POINTS}`);
+    for (const event of parts.wear ?? []) lines.push(`Round ${event.n}: ${wearLine(event)}.`);
     return lines.join('\n');
 }
+
+// No foe is on the Foes block and nothing was rolled for this reply: if a fight starts now, the narrator sets the Foes line and stops at the first clash.
+export const OPEN_FIGHT_LINE = 'No foes are set and no rolls this reply: if a fight starts now, set the Foes line and stop at the first clash; the dice decide from the next reply.';
 
 export const NO_ROLLS_LINE = 'No rolls this reply: keep the fight undecided, one exchange, nobody goes Down.';
 
@@ -153,7 +168,9 @@ export function fitCue(parts, budget = LIMITS.cueTokens, { earlier = false } = {
     let last = null;
     for (let shape = 0; shape <= (earlier ? 0 : 3); shape += 1) {
         for (let count = total; count >= Math.min(1, total); count -= 1) {
-            const told = { ...parts, rounds: parts.rounds.slice(0, count), decisive: parts.decisive && count === total };
+            const told = { ...parts, rounds: parts.rounds.slice(0, count), decisive: parts.decisive && count === total, end: count === total ? parts.end ?? null : null };
+            // Gear's wear lines come after the dice (gear.js): `wearOf(rounds, opening)` says what the rounds told would wear, so those lines count in the budget.
+            if (typeof parts.wearOf === 'function') told.wear = parts.wearOf(told.rounds, parts.standard?.opening ?? []);
             last = { count, shape, text: cueText(told, shape) };
             // Measured as if no stat were hidden, so whether a stat is hidden never changes how many rounds are told (review
             // 164); the text that is sent is never longer than the one measured.
@@ -161,4 +178,39 @@ export function fitCue(parts, budget = LIMITS.cueTokens, { earlier = false } = {
         }
     }
     return last;
+}
+
+/**
+ * The cue text of a recorded roll (`data.v2.result` of an `rpg.resolve` receipt), built again from what the record holds: the lines, the refusals,
+ * the standard parts, the shape it was fitted to (`shape`, kept beside the record in `data.v2.shape`, absent = 0) and how it stopped. `rpg.resolve` stores no copy of it (stage 51), and keeps the text
+ * only if this would not give the same bytes. → text, or '' for a record that is not a roll.
+ */
+export function cueOfResult(result, shape = 0) {
+    if (!result || typeof result !== 'object' || !Array.isArray(result.rounds) || !Array.isArray(result.checks)) return '';
+    try {
+        const rounds = result.rounds, flow2 = result.flow === 2;
+        const std = Array.isArray(result.order) ? {
+            order: result.order, opening: result.opening ?? [], quick: result.quickStart ?? [],
+            // the bars the told lines moved: only the field of a bar is read (Stamina and Mana are named, Health is not), and a bar's id says which it is
+            start: { get: id => hurts.get(id) ?? { field: /:(stamina|mana)$/.exec(id)?.[1] ?? 'health' } },
+        } : null;
+        const hurts = new Map((result.hurts ?? []).map(item => [item.id, item]));
+        const decisive = !flow2 && (result.stop === 'decisive' || result.stop === 'over');
+        const end = flow2 && ['won', 'lost', 'heavy'].includes(result.stop) ? result.stop : null;
+        return cueText({
+            checks: result.checks, rounds, refused: (result.refused ?? []).map(entry => entry.text), decisive,
+            ...(std ? { standard: std } : {}), ...(flow2 ? { flow: 2, end } : {}), ...(result.wear ? { wear: result.wear } : {}),
+        }, Number.isInteger(shape) ? shape : 0);
+    } catch { return ''; }
+}
+
+/** A receipt with its cue as `summary` (an `rpg.resolve` receipt stores none from stage 51 on): readers get the same text the prompt does. */
+export const receiptWithCue = receipt => (receipt?.type === RESOLVE && !receipt.summary ? { ...receipt, summary: receiptCue(receipt) } : receipt);
+/** The same over the store's `{ index, receipt }` entries. */
+export const entriesWithCue = list => (Array.isArray(list) ? list.map(entry => (entry?.receipt ? { ...entry, receipt: receiptWithCue(entry.receipt) } : entry)) : list);
+
+/** The cue a receipt tells: its own `summary`, else (an `rpg.resolve` receipt of stage 51 on) the one its record gives back. */
+export function receiptCue(receipt) {
+    if (typeof receipt?.summary === 'string' && receipt.summary) return receipt.summary;
+    return receipt?.type === RESOLVE ? cueOfResult(receipt.data?.v2?.result, receipt.data?.v2?.shape) : (receipt?.summary ?? '');
 }

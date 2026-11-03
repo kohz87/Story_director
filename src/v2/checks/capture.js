@@ -11,7 +11,8 @@
 import { policyOf } from './domain.js';
 import { dcOf } from './words.js';
 
-export const GRAMMAR = '? check <a stat or skill> — what is attempted | dc: easy|normal|hard|very hard | who: Name | vs: Name';
+// The one place the check rule is said, and not while Story Block's RPG is on without a fight module (then its planner asks for the checks).
+export const GRAMMAR = '? check <skill or stat> — what is tried | dc: easy|normal|hard|very hard | who: Name | vs: Name (no result: code rolls once, tell its outcome from the tail; one under [Happened] is not rolled again)';
 
 const keyOf = text => String(text ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -50,4 +51,6 @@ export function applyCheck(ctx, line) {
     return { ...rolled, narrate: true };
 }
 
-export const kind = { grammar: GRAMMAR, apply: applyCheck };
+// The line is left out while Story Block's RPG is on and no fight module (rpg_battle) runs: the RPG's planner asks for the checks then.
+// With rpg_battle present it is taught as it always was. The head is fixed, so a stray check line is taken either way.
+export const kind = { grammar: env => (env?.rpg === true && env?.fights !== true ? '' : GRAMMAR), heads: ['? check'], apply: applyCheck };

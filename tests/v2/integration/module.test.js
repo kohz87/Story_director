@@ -14,6 +14,7 @@ import { daysScreen, worldScreen } from '../../../src/v2/world/index.js';
 import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
 import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { part as checksPart } from '../../../src/v2/checks/index.js';
+import { part as chroniclePart } from '../../../src/v2/chronicle/index.js';
 import { part as keyPeoplePart } from '../../../src/v2/keypeople/index.js';
 import { DEFAULT_TOKENS as KEY_PEOPLE_TOKENS } from '../../../src/v2/keypeople/domain.js';
 import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note.js';
@@ -32,15 +33,22 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     // The Pacing and the two World paragraphs are the world-building threads feature's: context parts, in the place they always had.
     // The Key people paragraph is that feature's: a context part too, between the World paragraphs and the checks line.
     const plain = id => id !== 'story-director.initiative' && id !== 'story-director.key-people';
-    assert.equal(hostStatic(def, plain), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}`);
-    assert.equal(hostStatic(def, id => plain(id) && id !== 'story-director.threads'), `${staticText({ threads: false })}\n${checksPart.context.static()}`);
+    // The lean diet: the World paragraphs are taught only while the story keeps a world event or a faction (env.chronicle); the check rule is
+    // the `? check` grammar line's, not a paragraph.
+    // (The module reads that from the state itself, so a module that has seen none sends the paragraph-free static; the chronicle part's own
+    // static, given the flag, is CHRONICLE_STATIC, in tests/v2/chronicle/context.test.js.)
+    assert.equal(hostStatic(def, plain), STATIC_TEXT);
+    assert.equal(chroniclePart.context.static({ chronicle: true }), CHRONICLE_STATIC);
+    assert.equal(checksPart.context.static(), '');
+    assert.equal(hostStatic(def, id => plain(id) && id !== 'story-director.threads'), staticText({ threads: false }));
     // Nobody pinned: the Key people paragraph is not taught (the prompt is what it was); with someone pinned it comes between them.
-    assert.equal(hostStatic(def, () => true, {}), `${STATIC_TEXT}\n${CHRONICLE_STATIC}\n${checksPart.context.static()}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
+    assert.equal(hostStatic(def, () => true, {}), `${STATIC_TEXT}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
     assert.equal(keyPeoplePart.context.static({ keyPeople: true }), KEY_PEOPLE_STATIC);
     assert.equal(keyPeoplePart.context.static({ keyPeople: false }), '');
     assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
     assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'arc', 'checks', 'screens']);
-    assert.match(def.capture.kinds.quest.grammar, /story follows/);
+    assert.match(def.capture.kinds.hook.grammar, /a quest is a job/);
+    assert.equal(def.capture.kinds.quest.grammar(), '', 'the quest rides on the hook line');
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
     let failed = null;
     const ctx = { fail: (code, message) => { failed = { code, message }; throw new Error(message); } };

@@ -14,16 +14,23 @@ import { blockTabScreen } from './block-screen.js';
 import { roleTail } from '../lean-rpg/tail.js';
 import { LEAN_RPG_FEATURE } from '../lean-rpg/names.js';
 import { barOf, sizeOf as barSizeOf, spreadWord, wordsOf } from '../lean-rpg/blocks.js';
-import { checkJoin, joinDefinitions, joinGrammar, joinMode, partyOf, readJoin, soulNaming } from '../lean-rpg/join.js';
-import { RPG_EXTRAS, extraDefinitions, extraName, extrasPlan } from '../lean-rpg/view/wizard-data.js';
-import { fold } from '../lean-rpg/read.js';
-import { isStandard, packRulesOf, rulesFromSettings } from '../lean-rpg/rules.js';
+import { fold, readSheet } from '../lean-rpg/read.js';
+// (foes.js and levels.js are small and need nothing of the RPG's library: they stay static, like read.js)
+import { averageLevel, bandOfRank, foeRandom, foeLevelCap, levelOf, partyLevels, pickLevel } from '../lean-rpg/foes.js';
+import { XP_RATE, packLevelsOf, scaleXp, xpRateFrom } from '../lean-rpg/levels.js';
 import { CLASS_NAMES } from '../lean-rpg/names.js';
-import { RPG_STRINGS } from '../lean-rpg/strings.js';
+// The companions who join, the rules they are made with and their words are the RPG's library, loaded only when it is needed (rpg-lazy.js).
+import { rpgLib } from '../rpg-lazy.js';
+import { castGearOf, gearLine } from '../packs/cast-gear.js';
+import { gearOn } from '../domains/inventory.js';
+import { actorIdOf } from '../lean-rpg/roster.js';
+import { placeOf } from '../domains/gear.js';
 
 const E = STRINGS.editMessages;
 const B = STRINGS.blocks;
-const J = RPG_STRINGS.join;
+// The RPG library's pieces, at the time they are used: a step that needs them while the library is not there is refused (the loader brings it in first).
+const rpg = () => rpgLib() ?? refuse('FAILED', '', 'The RPG is still loading. Try again in a moment.');
+const J = new Proxy({}, { get: (_target, key) => rpg().RPG_STRINGS.join[key] });
 // The most fields one multi-field `dm.set` takes (a sheet's seven stats and its points fit with room to spare).
 const SET_FIELDS = 16;
 
@@ -122,12 +129,22 @@ export function pinnedPresentation(state, kind = 'screens', noTab = []) {
     });
 }
 
-/** The static lines for the pinned modules (empty without a pin); they change only when a pin does. */
-export function grammarFor(state) {
+/**
+ * The static lines for the pinned modules (empty without a pin); they change only when a pin does, and (the RPG on) with a quiet reply
+ * (`quiet`, the RPG's QUIET_GRAMMAR table, lean-rpg/quiet.js: no combat text and only the opening Foes line). A long list of values (the health words) is told once.
+ */
+export function grammarFor(state, quiet = null) {
     const active = Object.keys(state?.domains?.dataModules?.active ?? {});
+    const seen = new Map();
     const lines = active.map(id => {
         const definition = activeDefinition(state, id);
-        return definition ? moduleGrammar(definition, referenceOf(active, id)) : '';
+        const only = quiet && definition?.role ? quiet[definition.role] : null;
+        if (definition && only?.skip) {
+            // (A skipped block may keep one line of its text: the XP guide stays on a quiet reply, whatever words the pinned block holds it in.)
+            const kept = only.keep ? new RegExp(only.keep.source, 'u').exec(String(definition.prompt ?? ''))?.[0] : '';
+            return kept ? oneLine(kept) : '';
+        }
+        return definition ? moduleGrammar(definition, referenceOf(active, id), { seen, ...(only ?? {}) }) : '';
     }).filter(Boolean);
     return lines.length ? `Data modules in this story (write these lines exactly; a refused line changes nothing):\n${lines.join('\n')}` : '';
 }
@@ -175,7 +192,7 @@ export function dataModuleGuard(view, info) {
             // A joining companion is two blocks made as one action (the Character, then the Skills block kept in `decision.more`, then the
             // Combat rules and Foes blocks a story's first character brings when it has none).
             const join = predicate.kind === 'dm.join', more = join ? recorded.decision?.more : [];
-            if (join && (!Array.isArray(more) || more.length < 1 || more.length > 1 + RPG_EXTRAS.length || !more.every(dmObject))) return { ok: false, reason: 'Malformed data module guard.' };
+            if (join && (!Array.isArray(more) || more.length < 1 || more.length > 1 + (rpgLib()?.RPG_EXTRAS.length ?? Infinity) || !more.every(dmObject))) return { ok: false, reason: 'Malformed data module guard.' };
             if (domain?.active?.[predicate.module] || recorded.pin.interpreter !== 1 || recorded.pin.definition.id !== predicate.module
                 || hashOf(recorded.pin.definition) !== predicate.hash) return { ok: false, reason: 'Pin selection or checked definition changed.' };
             if (activeCount(domain) + more.length >= L.pins) return { ok: false, reason: 'Data module limit changed.' };
@@ -373,12 +390,19 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
             predicate, inputHash: hashJson({ source, witness, predicate, decision }), ...(bound ? { replyBound: true } : {}) }, recorded);
         return recorded;
     }
-    function finish(ctx, prefix, draft, data, { pin = false, visits = 0, summary, notes = [], replan = false, result = null } = {}) {
+    function finish(ctx, prefix, draft, data, { pin = false, visits = 0, summary, notes = [], replan = false, result = null, xpFrom = null, practiceFrom = null } = {}) {
         const key = pairKey(ctx.source), standing = ctx.standing?.domains?.dataModules?.perReply?.[key];
         const actions = { ...(draft.perReply[key]?.actions ?? {}) };
+        // `xpFrom` (the RPG's fight XP, lean-rpg/fight.js): what a character's xp, soul and points were before the first story line of this reply that wrote
+        // XP, by block. The first line's is kept; later actions of the reply carry it on.
+        const rises = { ...(xpFrom ?? {}), ...(draft.perReply[key]?.xpFrom ?? {}) };
+        // `practiceFrom`: the practice and rank of a skill slot before the first story line of this reply that practised it, by block and slot (the RPG's practice by
+        // code puts them back, lean-rpg/practice.js). The first line's is kept.
+        const slots = {};
+        for (const module of new Set([...Object.keys(practiceFrom ?? {}), ...Object.keys(draft.perReply[key]?.practiceFrom ?? {})])) slots[module] = { ...(practiceFrom?.[module] ?? {}), ...(draft.perReply[key]?.practiceFrom?.[module] ?? {}) };
         for (const [id, action] of Object.entries(standing?.actions ?? {})) if (action.click) actions[id] ??= action;
         actions[ctx.cursor().block] = { visits, click: ctx.cause === 'ui' && !pin };
-        const next = { roots: Object.keys(actions).length, visits: Object.values(actions).reduce((n, action) => n + action.visits, 0), actions };
+        const next = { roots: Object.keys(actions).length, visits: Object.values(actions).reduce((n, action) => n + action.visits, 0), actions, ...(Object.keys(rises).length ? { xpFrom: rises } : {}), ...(Object.keys(slots).length ? { practiceFrom: slots } : {}) };
         if (next.roots > L.replyRoots || next.visits > L.replyVisits) refuse('DM_BUDGET', '', 'Data module reply budget exhausted.');
         // The story's lines leave room for the steps that settle the reply (what each block with reply-end functions can really cost): without it a full
         // reply would take its last action and the settling that decides a death would be refused.
@@ -447,6 +471,17 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
             delete draft.instances[module];
             const answer = finish(ctx, prefix, draft, recorded, { pin: true, result: { module }, summary: fill(B.removed, { name: previous.name }) });
             answer.data.edit = true;
+            // A Character who is gone leaves nothing filed under their actor (a block made later under the same name would inherit it): their pieces go to the
+            // party's bag, plain, and what was set aside for them with them (inventory.release). Nothing runs when they held nothing.
+            if (previous.role === 'character') {
+                const owner = actorIdOf(module);
+                let inventory = null;
+                try { inventory = ctx.read('inventory'); } catch { inventory = null; }
+                if (Object.values(inventory?.stacks ?? {}).some(stack => stack.owner === owner) || (inventory?.kept && Array.isArray(inventory.kept[owner]))) {
+                    const out = ctx.call('inventory.release', { owner });
+                    if (out?.data?.items?.length) { answer.summary = `${answer.summary} ${out.summary}`; answer.data.gear = { owner, released: out.data.items }; }
+                }
+            }
             return answer;
         }
         const catalog = Object.keys(domain?.active ?? {}).map(id => activeDefinition(prefix, id)).filter(Boolean);
@@ -496,12 +531,14 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
         const prefix = stateOf(ctx), domain = prefix.domains.dataModules;
         // (the formula and numbers in force: the reader's settings, else what the story's pack asks for, as the roll planner reads them)
         let pack = null;
-        try { pack = packRulesOf((packs?.packs?.() ?? []).flatMap(entry => entry?.content?.rpg ?? [])); } catch { pack = null; }
-        const rules = rulesFromSettings(settings(), pack);
-        const made = joinDefinitions(request, { used: Object.keys(domain?.active ?? {}), soul, rules });
+        const rpgRecords = (packs?.packs?.() ?? []).flatMap(entry => entry?.content?.rpg ?? []);
+        try { pack = rpg().packRulesOf(rpgRecords); } catch { pack = null; }
+        const rules = rpg().rulesFromSettings(settings(), pack);
+        // (a companion starts under the story's level cap: the pack's ranks record names one, else the reader's setting, else 99)
+        const made = rpg().joinDefinitions(request, { used: Object.keys(domain?.active ?? {}), soul, rules, cap: rpg().levelCapFor(settings(), packLevelsOf(rpgRecords)?.levelCap) });
         // The story's first character also brings the Combat rules and Foes blocks it lacks, as far as they fit (nothing is refused for them).
-        const first = partyOf(prefix).length === 0, plan = first ? extrasPlan(prefix) : { add: [], skipped: [] };
-        const extras = extraDefinitions(plan.add, { used: [...Object.keys(domain?.active ?? {}), made.character.slug, made.skills.slug], formula: isStandard(rules) ? 'standard' : 'classic' });
+        const first = rpg().partyOf(prefix).length === 0, plan = first ? rpg().extrasPlan(prefix) : { add: [], skipped: [] };
+        const extras = rpg().extraDefinitions(plan.add, { used: [...Object.keys(domain?.active ?? {}), made.character.slug, made.skills.slug], formula: rpg().isStandard(rules) ? 'standard' : 'classic' });
         const catalog = Object.keys(domain?.active ?? {}).map(id => activeDefinition(prefix, id)).filter(Boolean);
         const checked = validateDataModules([made.character, made.skills, ...extras], { packId: 'chat', capabilities: ['data-modules-v1', 'story-director'], definitions: catalog });
         if (!checked.ok) refuse(checked.errors[0].code, checked.errors[0].path, checked.errors[0].message);
@@ -518,29 +555,108 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
         const recorded = guard(ctx, prefix, { kind: 'dm.join', module: head.definition.id, hash: head.hash, generation, imports: [],
             decision: { subjects: ['chat'], inputs: {}, previous: null, base: Boolean(domain && Object.keys(domain.active ?? {}).length),
                 more: rest.map(entry => ({ module: entry.definition.id, hash: entry.hash, generation, pin: entry.pin })) }, pin: head.pin, bound: true });
-        const left = plan.skipped.length ? ` ${fill(J.noExtras, { list: plan.skipped.map(item => extraName(item.role)).join(', ') })}` : '';
+        const left = plan.skipped.length ? ` ${fill(J.noExtras, { list: plan.skipped.map(item => rpg().extraName(item.role)).join(', ') })}` : '';
         const answer = finish(ctx, prefix, draft, recorded, { pin: true, result: { module: head.definition.id, skills: rest[0].definition.id },
             summary: `${fill(J.joined, { name: request.name })}${left}` });
         answer.data.join = { op: 'added', name: request.name };
+        return giveGear(ctx, answer, request.name, head.definition.id);
+    }
+    // The party actor of the Character block `module` (`party.actors`: the one whose ID is the block's, which a rename never changes), else, when a module of
+    // another make answers the roster, the one of that name; 'party' when nothing answers or no one is so. The joiner's own block is in the roster at once
+    // (the draft is what the query reads), so a join finds their actor in the same receipt.
+    function gearOwnerOf(ctx, name, module = null) {
+        try {
+            const actors = (v => (Array.isArray(v) ? v : []))(ctx.query('party.actors'));
+            const own = module ? actors.find(entry => typeof entry?.id === 'string' && entry.id === actorIdOf(module)) : null;
+            const actor = own ?? actors.find(entry => typeof entry?.id === 'string' && fold(entry.name) === fold(name));
+            if (actor) return actor.id;
+        } catch { /* no roster */ }
+        return 'party';
+    }
+    // A cast member's signature gear (cast.js `gear`, GEAR.md): with `story-block.gear` on, the joining person's pack items are added to the
+    // inventory owned by them (the party's actor of that name; with none, nothing is given) and put on, through the inventory's own commands, so
+    // the items are part of the join's one receipt. A command that fails inside another fails the whole receipt (the join with it), so everything that
+    // could be refused is checked first here, never tried: each piece is looked up by its definition ID (a story item of the same name never gets in
+    // the way), what they already own is not added again, a slot that is taken is left as it is (the piece is carried, not worn), and a piece that
+    // cannot be found goes to the Problems list. The pieces are BOUND to the member (`bound: true`: GEAR.md "Signature gear"). Coming back, what left with them
+    // (inventory.stow, in `leave`) was restored before this (restoreKept), once, and counts as owned. Gear off, or no gear: nothing here runs and the answer is untouched.
+    // What a member left with (inventory.kept) comes back whenever they return, whatever the gear switch or the pack say now: found by their actor,
+    // else by the block it was set aside for (a member renamed while away). → { owner, pieces } or null.
+    function restoreKept(ctx, person) {
+        let kept = null;
+        try { kept = ctx.read('inventory')?.kept; } catch { kept = null; }
+        if (!kept || typeof kept !== 'object') return null;
+        const named = gearOwnerOf(ctx, person.name, person.module);
+        const owner = Array.isArray(kept[named]) ? named : Object.keys(kept).find(id => Array.isArray(kept[id]) && kept[id].some(entry => entry?.by === person.module));
+        if (!owner) return null;
+        const back = ctx.call('inventory.restore', { owner });
+        const pieces = Array.isArray(back?.data?.pieces) ? back.data.pieces : [];
+        return pieces.length ? { owner, pieces } : null;
+    }
+    function giveGear(ctx, answer, name, module = null, back = null) {
+        if (!gearOn(ctx)) return answer;
+        let found = null;
+        try { found = castGearOf(packs?.packs?.() ?? [], name); } catch { found = null; }
+        if (!found?.items.length) return answer;
+        const owner = back?.owner ?? gearOwnerOf(ctx, name, module);
+        // No actor of their own (nothing answers `party.actors`): the shared bag's worn gear is the reader's Character's, so nothing is given at all; it stays with them.
+        if (owner === 'party') {
+            answer.problem = [answer.problem, `${found.name}'s gear stays with ${found.name} (no party roster).`].filter(Boolean).join(' ');
+            return answer;
+        }
+        const inventory = ctx.read('inventory');
+        const stacks = Object.values(inventory?.stacks ?? {}).filter(stack => stack.owner === owner);
+        const taken = new Set(stacks.map(stack => stack.equipped).filter(Boolean));
+        const held = new Set(stacks.map(stack => stack.def));
+        // Their bound pieces that left with them come back first (once, in the condition they left in, worn where they were when the slot is free),
+        // so they are what they "still own" below; the read above is the state before this action, so what came back is added by hand.
+        const added = [], notes = [];
+        for (const piece of back?.pieces ?? []) {
+            held.add(piece.def);
+            if (piece.equipped) taken.add(piece.equipped);
+            added.push(piece.name);
+        }
+        let packed = [];
+        try { packed = ctx.query('packs.itemDefs', { ids: found.items.map(item => item.id) }); } catch { packed = []; }
+        for (const item of found.items) {
+            if (held.has(item.id)) continue;
+            // (the def by its ID: the chat's own when it already has it, else the pack's, which the grant defines)
+            const def = inventory?.defs?.[item.id] ? item.id : (Array.isArray(packed) ? packed : []).find(entry => entry?.id === item.id);
+            if (!def) { notes.push(`${found.name}'s ${item.name} could not be found in the pack, so it was not given.`); continue; }
+            const places = item.slot === 'accessory' ? ['accessory-1', 'accessory-2'] : [placeOf(item.slot)];
+            const place = places.find(key => !taken.has(key));
+            const given = ctx.call('inventory.grant', { def, qty: 1, owner, bound: true });
+            const stack = given?.data?.stacks?.[0];
+            if (!stack) { added.push(item.name); continue; }
+            if (place) {
+                const worn = ctx.call('item.equip', { stack, owner, slot: place });
+                taken.add(worn?.data?.place ?? place);
+            } else notes.push(`${found.name}'s ${item.name} is carried, not worn: the ${item.slot} slot is taken.`);
+            added.push(item.name);
+        }
+        if (notes.length) answer.problem = [answer.problem, ...notes].filter(Boolean).join(' ');
+        if (!added.length) return answer;
+        answer.summary = `${answer.summary} ${gearLine(found.items.filter(item => added.includes(item.name)))}.`;
+        answer.data.gear = { owner, items: added };
         return answer;
     }
     function party(ctx, line, call = {}) {
         if (ctx.cause !== 'story' || ctx.caller !== null) refuse('REFUSED', '', J.storyOnly);
         const prefix = stateOf(ctx);
-        const read = readJoin(line, soulNaming(prefix));
+        const read = rpg().readJoin(line, rpg().soulNaming(prefix));
         call.label = 'Party';
         if (read.error) refuse('DM_LABEL', '', read.error);
         if (read.op === '-') {
-            const person = partyOf(prefix).find(entry => fold(entry.name) === fold(read.name));
+            const person = rpg().partyOf(prefix).find(entry => fold(entry.name) === fold(read.name));
             if (!person || person.left) refuse('DM_SCHEMA', '', fill(J.nothing, { name: read.name }));
             // The player's own character (the one named like the persona) never leaves: companions only.
             if (isReader(person.name)) refuse('REFUSED', '', fill(J.isYou, { name: person.name }));
             return leave(ctx, person, true, call);
         }
-        const check = checkJoin(prefix, read);
+        const check = rpg().checkJoin(prefix, read);
         if (!check.ok) refuse('REFUSED', '', check.why);
         if (check.returning) return leave(ctx, check.returning, false, call);
-        if (joinMode(settings()) === 'ask') {
+        if (rpg().joinMode(settings()) === 'ask') {
             // Ask: nothing is made. The line is kept in this reply's own receipt, and the card under the reply (rpg.joins) is read from it.
             const offer = { op: 'offer', name: read.name, about: read.about, soul: read.soul, best: read.best };
             return { summary: fill(J.offerNote, { name: read.name }), narrate: false, data: { join: offer } };
@@ -551,19 +667,39 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
     function leave(ctx, person, left, call) {
         const definition = activeDefinition(stateOf(ctx), person.module);
         if (!person.canLeave || !definition) refuse('DM_SCHEMA', '', fill(J.noLeave, { name: person.name }));
+        // (their actor is found before the field changes: a member who left is no longer on the roster)
+        const owner = left && gearOn(ctx) ? gearOwnerOf(ctx, person.name, person.module) : 'party';
         const answer = setField(ctx, { module: person.module, field: 'left', value: left }, call, { story: true });
         answer.summary = fill(left ? J.left : J.returned, { name: person.name });
         answer.data.join = { op: left ? 'left' : 'back', name: person.name };
-        return answer;
+        // With gear on, the pieces bound to them leave with them, in this receipt (they come back once when they return: giveGear).
+        if (owner !== 'party') {
+            const away = ctx.call('inventory.stow', { owner, module: person.module });
+            const items = Array.isArray(away?.data?.items) ? away.data.items : [];
+            if (items.length) {
+                answer.summary = `${answer.summary} ${fill(J.gearLeaves, { items: items.join(', ') })}`;
+                answer.data.gear = { owner, away: items };
+            }
+        }
+        if (left) return answer;
+        const back = restoreKept(ctx, person);
+        const out = giveGear(ctx, answer, person.name, person.module, back);
+        // (giveGear stops early when gear is off or the cast no longer knows them: what came back is still said)
+        if (back && !out.data.gear) {
+            const names = back.pieces.map(piece => piece.name);
+            out.summary = `${out.summary} ${gearLine(names.map(name => ({ name })))}.`;
+            out.data.gear = { owner: back.owner, items: names };
+        }
+        return out;
     }
     // "Add to party" on the Ask card: the reader's own go-ahead, so it is made like the automatic one, for the head reply.
     function addParty(ctx, payload, call = {}) {
         if (ctx.cause !== 'ui' || ctx.caller !== null) refuse('REFUSED', '', J.cardOnly);
         const soul = payload?.soul === undefined ? 1 : payload.soul;
-        const request = readJoin({ op: '+', name: payload?.name, labels: { about: payload?.about, class: Number.isSafeInteger(soul) ? CLASS_NAMES[soul - 1] ?? 'X' : 'X', best: payload?.best ?? '' } }, soulNaming(stateOf(ctx)));
+        const request = rpg().readJoin({ op: '+', name: payload?.name, labels: { about: payload?.about, class: Number.isSafeInteger(soul) ? CLASS_NAMES[soul - 1] ?? 'X' : 'X', best: payload?.best ?? '' } }, rpg().soulNaming(stateOf(ctx)));
         call.label = 'Party';
         if (request.error) refuse('DM_LABEL', '', request.error);
-        const check = checkJoin(stateOf(ctx), request);
+        const check = rpg().checkJoin(stateOf(ctx), request);
         if (!check.ok) refuse('REFUSED', '', check.why);
         if (check.returning) refuse('REFUSED', '', fill(J.taken, { name: request.name }));
         return makeParty(ctx, request, check.soul, call);
@@ -611,18 +747,76 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
         });
         return fits.length === 1 ? { ...labels, kind: fits[0] } : labels;
     }
+    // A skill name or a reason as the matcher compares it: NFKC, lower case, runs of spaces and dashes as one space.
+    const words = value => ` ${String(value ?? '').normalize('NFKC').toLowerCase().replace(/[\s\-‐‑–—_]+/gu, ' ').replace(/[^\p{L}\p{N} ]/gu, '').replace(/ +/gu, ' ').trim()} `;
+    // The one skill a reason names (whole words; of two names inside it, the longer one if the shorter is part of it), else null.
+    function skillNamed(slots, reason) {
+        const text = words(reason);
+        const found = slots.filter(slot => slot.name && words(slot.name).trim() && text.includes(words(slot.name)));
+        const top = found.filter(slot => !found.some(other => other !== slot && words(other.name).includes(words(slot.name)) && words(other.name) !== words(slot.name)));
+        const keys = new Set(top.map(slot => words(slot.name)));
+        return keys.size === 1 && top.length === 1 ? top[0] : null;
+    }
+    // The Skills block's story lines never overwrite a slot (USER, 3 Nov). `learn-N` of a name some slot already holds updates that slot;
+    // a new name goes to slot N if it is empty, else the first empty one, else the line is refused. `practice-N` whose reason names one of the
+    // skills credits that skill's slot. → { kind, slot, name, update? } | { refuse } | null (not one of these lines: as written).
+    function skillRoute(fields, kindName, args, reason) {
+        const learn = /^learn-([1-5])$/u.exec(kindName), practice = /^practice-([1-5])$/u.exec(kindName);
+        if (!learn && !practice) return null;
+        const slots = [1, 2, 3, 4, 5].map(n => ({ n, name: typeof fields[`skill${n}`] === 'string' ? fields[`skill${n}`] : '' }));
+        if (learn) {
+            const wanted = fold(args.name);
+            const same = wanted ? slots.find(slot => slot.name && fold(slot.name) === wanted) : undefined;
+            if (same) return { kind: `learn-${same.n}`, slot: same.n, name: same.name, update: true };
+            const at = Number(learn[1]);
+            const free = slots[at - 1].name ? slots.find(slot => !slot.name)?.n : at;
+            return free ? { kind: `learn-${free}`, slot: free, name: args.name } : { refuse: `No free skill slot for ${args.name}.` };
+        }
+        const named = skillNamed(slots, reason);
+        const slot = named ? named.n : Number(practice[1]);
+        return { kind: `practice-${slot}`, slot, name: slots[slot - 1].name };
+    }
+    // A Foes block of the Levels rules (its set-slot kind has a `level` label): a line that gives a level keeps it; one that gives a rank gets a level drawn inside that
+    // rank's band (the `rpg.rank` query names the ranks); one that gives neither gets a level within ±2 of the party's average. The draw is from the reply's seed, so a
+    // swipe draws anew and a Re-read keeps it. `rank` is not a label of the kind: it is taken out of the line here.
+    function foeLevelLabels(labels, kind, prefix, ctx, module) {
+        if (!kind.labels?.level || !/^set-slot-\d$/u.test(labels.kind)) return labels;
+        const { rank, ...rest } = labels;
+        // A group already on the block, named again with no level and no rank, keeps the level it has: it is not drawn anew (a swipe would otherwise move a fight's foes).
+        const have = prefix.domains?.dataModules?.instances?.[module]?.chat?.fields;
+        const known = !dmOwn(rest, 'level') && !(typeof rank === 'string' && rank.trim()) && typeof rest.name === 'string' && have
+            ? [1, 2, 3, 4].find(n => typeof have[`foe${n}`] === 'string' && have[`count${n}`] > 0 && fold(have[`foe${n}`]) === fold(rest.name) && Number.isSafeInteger(have[`level${n}`])) : undefined;
+        if (known !== undefined) return { ...rest, level: String(have[`level${known}`]) };
+        // A level or rank above one band (10 levels) over the party's highest level is held down to it.
+        const levels = partyLevels(readSheet({ domains: { dataModules: prefix.domains?.dataModules } })), cap = foeLevelCap(levels);
+        if (dmOwn(rest, 'level')) { const given = levelOf(rest.level); return given === null ? rest : { ...rest, level: String(Math.min(given, cap)) }; }
+        const band = typeof rank === 'string' && rank.trim() ? bandOfRank(rank, level => ctx.query('rpg.rank', { level })) : null;
+        const ask = band ? { from: Math.min(band.from, cap), to: Math.min(band.to, cap) } : {};
+        return { ...rest, level: String(Math.min(cap, pickLevel(ask, averageLevel(levels), foeRandom(Math.floor(ctx.rng() * 4294967296) >>> 0, 0)))) };
+    }
     function act(ctx, payload, line = null, call = {}) {
         if (ctx.caller !== null) refuse('REFUSED', '', 'A data action cannot be called by another module.');
         const prefix = stateOf(ctx), module = resolveModule(prefix, line?.name ?? payload.module), definition = activeDefinition(prefix, module);
         call.label = definition?.name ?? module;
         if (!definition) refuse('DM_SCHEMA', '', 'Unsupported or damaged pin.');
         dependency(definition, prefix);
-        const labels = line ? withKind(definition, line) : { ...payload.labels, kind: payload.kind, ...(payload.who !== undefined ? { who: payload.who } : {}) };
-        const kind = dmOwn(definition.kinds, labels.kind) && definition.kinds[labels.kind];
+        const given = line ? withKind(definition, line) : { ...payload.labels, kind: payload.kind, ...(payload.who !== undefined ? { who: payload.who } : {}) };
+        const kind = dmOwn(definition.kinds, given.kind) && definition.kinds[given.kind];
+        // A foe group the narrator sets may give `level: N` or `rank: <name>`, or neither: then its level is drawn from the reply's seed (see foeLevelLabels).
+        const labels = kind && line && definition.role === 'foes' ? foeLevelLabels(given, kind, prefix, ctx, module) : given;
         if (!kind) refuse('DM_LABEL', 'kind', `kind must be ${orList(Object.keys(definition.kinds))}`);
         if (line ? line.op !== kind.op : ctx.cause !== 'ui' || !kind.ui) refuse('REFUSED', '', line ? `${labels.kind} is written with ${kind.op}, not ${line.op}` : `${labels.kind} is a story line; a screen may only use kinds that allow it`);
         if (line && dmKindWritesHidden(definition, kind)) refuse('REFUSED', '', B.hiddenLine);
         const args = parseLabels(definition, kind, labels, { text: Boolean(line) });
+        // The XP rate (lean-rpg/levels.js): the narrator's XP line for a character is multiplied by the rate in force (the RPG on), which the line's record keeps
+        // (`xpRate`, only when it is not 100) so a later change of the setting never moves it; a line recorded without it is 100.
+        let xpRate = XP_RATE.default;
+        if (ctx.cause === 'story' && definition.role === 'character' && ctx.feature?.(LEAN_RPG_FEATURE) === true) {
+            try { xpRate = xpRateFrom(settings()); } catch { xpRate = XP_RATE.default; }
+            if (xpRate !== XP_RATE.default) for (const effect of kind.effects ?? []) {
+                if (effect?.op === 'add' && Array.isArray(effect.path) && effect.path[0] === 'xp' && Array.isArray(effect.value) && effect.value[0] === 'arg' && Number.isSafeInteger(args[effect.value[1]])) args[effect.value[1]] = scaleXp(args[effect.value[1]], xpRate);
+            }
+        }
         const subject = definition.scope === 'chat' ? 'chat' : resolveActor(prefix, labels.who, subjectsOf(prefix, module));
         const active = prefix.domains.dataModules.active[module], draft = draftOf(ctx);
         const instance = atPath(draft, instancePath(module, subject)), inputs = inputsOf(prefix, definition);
@@ -631,16 +825,36 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
         const evaluation = createEvaluation(definition, instance, { inputs, source: ctx.source, cursor: ctx.cursor(), subject });
         const fieldsBefore = copy(instance.fields);
         evaluation.timers();
-        if (!evaluation.condition(['kind', labels.kind], kind.when, { arg: args })) refuse('DM_CONDITION', '', kind.refusal ?? 'Kind condition is not met.');
-        evaluation.effects(kind.effects, { arg: args }); evaluation.rules();
+        // A foe group the narrator sets by a name already on a slot of the same Foes block (the pre-call may have opened this very fight, lean-rpg/open.js)
+        // is that group: the slot is updated (count and class), never a second slot with the same name; its health stays as it is.
+        const route = definition.role === 'skills' && line ? skillRoute(instance.fields, labels.kind, args, line.text) : null;
+        if (route?.refuse) refuse('DM_CONDITION', '', route.refuse);
+        const same = definition.role === 'foes' && /^set-slot-\d$/u.test(labels.kind) && typeof args.name === 'string'
+            ? [1, 2, 3, 4].find(n => typeof instance.fields[`foe${n}`] === 'string' && instance.fields[`count${n}`] > 0 && fold(instance.fields[`foe${n}`]) === fold(args.name)) : undefined;
+        if (same !== undefined) evaluation.effects([{ op: 'set', path: [`foe${same}`], value: ['arg', 'name'] }, { op: 'set', path: [`count${same}`], value: ['arg', 'count'] }, { op: 'set', path: [kind.labels.level ? `level${same}` : `class${same}`], value: ['arg', kind.labels.level ? 'level' : 'class'] }], { arg: args });
+        else if (route?.update) evaluation.effects(['about', 'stat', 'uses'].map(key => ({ op: 'set', path: [`${key}${route.slot}`], value: ['arg', key] })), { arg: args });
+        else {
+            const run = route ? definition.kinds[route.kind] : kind;
+            if (!evaluation.condition(['kind', route?.kind ?? labels.kind], run.when, { arg: args })) refuse('DM_CONDITION', '', run.refusal ?? 'Kind condition is not met.');
+            evaluation.effects(run.effects, { arg: args });
+        }
+        evaluation.rules();
         const result = evaluation.finish();
         const changes = namedChanges(definition, fieldsBefore, instance.fields);
         const recorded = guard(ctx, prefix, { kind: 'dm.act', module, hash: active.hash, generation: active.generation, subject,
             reads: result.reads.map(read => read.path), imports: prefixImports(definition),
-            actor: subject !== 'chat', decision: { args, inputs, decisions: result.decisions.map(({ source: _source, cursor: _cursor, ...rest }) => rest), conds: result.conds } });
+            actor: subject !== 'chat', decision: { args, inputs, decisions: result.decisions.map(({ source: _source, cursor: _cursor, ...rest }) => rest), conds: result.conds, ...(xpRate !== XP_RATE.default ? { xpRate } : {}) } });
         // The concrete outcome kept beside the inputs (and past the receipts' display data): which line, for whom, what was frozen, what was limited.
-        const outcome = { kind: labels.kind, subject, decisions: result.decisions.map(({ source: _source, cursor: _cursor, ...rest }) => rest), notes: result.notes, ...(result.fired.length ? { rules: result.fired } : {}) };
-        const answer = finish(ctx, prefix, draft, recorded, { visits: result.visits, notes: result.notes, result: outcome, summary: `${definition.name}: ${kind.title ?? labels.kind}${changes.length ? ` (${changes.join(', ')})` : ''}.` });
+        const outcome = { kind: labels.kind, ...(route ? { skill: { slot: route.slot, name: route.update ? route.name : instance.fields[`skill${route.slot}`] } } : {}), subject, decisions: result.decisions.map(({ source: _source, cursor: _cursor, ...rest }) => rest), notes: result.notes, ...(result.fired.length ? { rules: result.fired } : {}) };
+        // A story line that writes a character's XP: what the character had before it is kept for the reply (see finish), so that a won fight, whose XP is
+        // given by code, can put back what the narrator added in that reply.
+        const xpFrom = ctx.cause === 'story' && definition.role === 'character' && kind.effects.some(effect => Array.isArray(effect?.path) && effect.path[0] === 'xp')
+            ? { [module]: Object.fromEntries(['xp', 'level', 'soul', 'points'].filter(key => Number.isSafeInteger(fieldsBefore[key])).map(key => [key, fieldsBefore[key]])) } : null;
+        // A story line that practises a skill (`practice-N`, after skillRoute): what the slot held before it is kept for the reply, so that the practice the
+        // reply's rolls give by code can put back what the narrator added for the same skill.
+        const practiceFrom = ctx.cause === 'story' && route && route.kind.startsWith('practice-')
+            ? { [module]: { [route.slot]: Object.fromEntries(['practice', 'rank'].filter(key => Number.isSafeInteger(fieldsBefore[`${key}${route.slot}`])).map(key => [key, fieldsBefore[`${key}${route.slot}`]])) } } : null;
+        const answer = finish(ctx, prefix, draft, recorded, { visits: result.visits, notes: result.notes, result: outcome, xpFrom, practiceFrom, summary: `${definition.name}: ${route ? `${route.kind} (${route.update ? route.name : instance.fields[`skill${route.slot}`]})` : kind.title ?? labels.kind}${changes.length ? ` (${changes.join(', ')})` : ''}.` });
         if (ctx.cause === 'ui') answer.data.edit = true;
         return answer;
     }
@@ -814,7 +1028,7 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
             'dm.join': Object.assign(wrap(addParty), { feature: LEAN_RPG_FEATURE }) },
         // `+ party Name | about: … | class: I | best: int` and `- party Name`: under the RPG feature, out of the grammar while Companions who join is Off, and
         // until the story has a Character block (a party line means something only once there is a party).
-        kinds: { dm: kind, party: { grammar: joinGrammar(), feature: LEAN_RPG_FEATURE, get enabled() { return joinMode(settings()) !== 'off' && partyOf(state()).length > 0; }, apply: wrap(party) } },
+        kinds: { dm: kind, party: { grammar: () => rpgLib()?.joinGrammar() ?? '', feature: LEAN_RPG_FEATURE, get enabled() { const lib = rpgLib(); return lib !== null && lib.joinMode(settings()) !== 'off' && lib.partyOf(state()).length > 0; }, apply: wrap(party) } },
         queries: { 'dataModules.offers': offers, 'dataModules.view': moduleView, 'dataModules.public': publicView,
             'dataModules.replayInputs': replayInputs, 'dataModules.actors': actorsOf,
             'dataModules.setup': prefix => {
@@ -844,7 +1058,7 @@ export function createDataModulesPart({ packs, state: head = () => null, lifecyc
         hooks: { afterCapture: afterCapture, beforeGenerate: (view, info) => info?.commit === false ? undefined : due(view) },
         cards: blockCardSlots,
         context: {
-            static: () => grammarFor(state()),
+            static: hint => grammarFor(state(), rpgLib()?.isQuiet(hint, state(), settings()) ? rpgLib().QUIET_GRAMMAR : null),
             tail: view => ({ lines: tailLines(view.state, typeof view.feature === 'function' ? view.feature(LEAN_RPG_FEATURE) === true : true), optional: [] }),
             // Tail room for the lines above: 100 tokens for each pinned module (300 for one with a role), on top of the core's own; none without a pin.
             extra: () => Object.keys(state()?.domains?.dataModules?.active ?? {}).slice(0, L.pins).reduce((sum, id) => sum + tailRoom(activeDefinition(state(), id)), 0),

@@ -15,7 +15,8 @@ export const part = {
         checks: { initial: initialChecks, validate: slice => validateChecks(slice, TOPIC_NAMES) },
     },
     context: {
-        static: () => 'Checks: write ? check skill — attempt | dc: hard (optionally who: Name or vs: Name), without a result. Story Director rolls once; narrate the outcome told by the tail. A pre-rolled check already told under [Happened] is not rolled again.',
+        // The check rule is the `? check` grammar line's (capture.js), said once, and not while Story Block's RPG is on without a fight module.
+        static: () => '',
         tail: () => ({ lines: [], optional: [] }),
         budget: 1,
     },

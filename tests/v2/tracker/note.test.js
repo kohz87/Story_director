@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { CHANGE_INSTRUCTION, PACING } from '../../../src/note.js';
 import { estimateTokens } from '../../../src/relevance.js';
 import { part } from '../../../src/v2/tracker/index.js';
-import { PACING_TEXT, STATIC_TEXT, TAIL_BUDGET, staticText } from '../../../src/v2/tracker/note.js';
+import { GRAMMAR, PACING_TEXT, STATIC_TEXT, TAIL_BUDGET, staticText } from '../../../src/v2/tracker/note.js';
 import { makeState, story } from './helpers/fake-ctx.js';
 
 const tail = (state, lastUser = '', settings = {}) => part.context.tail({ state, settings, chat: { length: 9, lastUser } });
@@ -26,42 +26,48 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     assert.ok(busy.domains.director.threads, 'a full tracker exists');
     // static() takes no state, only the module set ({ fights }): the same bytes before and after the story moved.
     assert.equal(part.context.static.length, 1);
+    // The lean diet: the rules no longer differ with a fight runner (the encounter field is in the thread grammar line, below).
     assert.equal(part.context.static({ fights: true }), empty);
-    const alone = part.context.static({ fights: false });
-    assert.equal(part.context.static({ fights: false }), alone);
-    assert.doesNotMatch(alone, /encounter/);
-    assert.equal(alone, empty.replace(', encounter;', ';'));
+    assert.equal(part.context.static({ fights: false }), empty);
+    assert.doesNotMatch(empty, /encounter/);
     // The Pacing paragraph is the world-building threads feature's (the module sends it as a context part under it, right after).
     assert.equal(empty, staticText({ threads: false }));
     assert.equal(`${empty}\n${PACING_TEXT}`, STATIC_TEXT);
     assert.deepEqual(part.context.inline.map(item => [item.feature, item.static()]), [['story-director.threads', PACING_TEXT]]);
     for (const word of ['Geva', 'Wolf', 'March', 'Bluewatch', '2026']) assert.ok(!empty.includes(word), word);
-    // v1's own rules, word for word, but for the Fields line's offers (one deliberate change: a job is a
-    // quest once {{user}} accepts it, and a job only offered stays in the story).
-    const v1Fields = CHANGE_INSTRUCTION.split('\n').find(line => line.startsWith('Fields:'));
-
-    assert.ok(empty.includes(v1Fields.replace('; a job only offered: + hook with giver, reward', '')));
+    // v1's rules, merged (the lean diet, 3 Nov), every one still there: the ops, write only changes, never act for {{user}}, the Pacing rules.
+    for (const rule of [/~ only what changed, never the whole list/, /- closes it \(— reason\)/, /! fires a due item \(— what happened\)/, /Never write or decide what \{\{user\}\} does/]) assert.match(empty, rule);
+    for (const rule of [/only where it fits/, /on-screen if \{\{user\}\} is there/, /later as news, signs or aftermath/, /never cut into or bend the scene for a beat/, /off-screen \(!\) or slips \(~ on: later\)/]) assert.match(PACING_TEXT, rule);
+    assert.ok(STATIC_TEXT.length < CHANGE_INSTRUCTION.length + PACING.length, 'shorter than v1\'s instruction and Pacing');
     assert.doesNotMatch(empty, /offer/);
-    assert.ok(STATIC_TEXT.includes(PACING) && !empty.includes(PACING));
+    // v1's Fields: every field is still named, now in the grammar lines (agenda carries the five thread kinds, hook the hook and quest).
+    const lines = [GRAMMAR.agenda, GRAMMAR.hook].join('\n');
+    for (const field of ['now', 'then', 'on', 'due', 'leg', 'arrive', 'shown', 'encounter', 'reach', 'type', 'giver', 'goal', 'reward', 'step', 'difficulty']) assert.match(lines, new RegExp(`\\b${field}\\b`), field);
+    // The date rule is in the rules, so it is said with the threads feature off too (not in the agenda line).
+    assert.match(empty, /Only on, due and arrive take a date, as <date, clock time>/);
+    assert.doesNotMatch(GRAMMAR.agenda, /take a date/);
+    assert.match(GRAMMAR.hook, /done or failed: - it/);
 });
 
-test('each kind has one grammar line for the change instruction', () => {
+test('each kind has one grammar line for the change instruction, a family on its carrier', () => {
     assert.deepEqual(Object.keys(part.kinds), ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'time']);
+    // The lean diet: agenda carries agenda|event|clock|beat|secret, hook carries hook|quest; the others have no line of their own (the host leaves them out).
+    const carriers = { agenda: 'agenda|event|clock|beat|secret', hook: 'hook|quest', time: 'time' };
     for (const [kind, entry] of Object.entries(part.kinds)) {
-        // The beat's grammar depends on the module set (a fight runner or none, WAVE rule 11).
+        // The thread line depends on the module set (a fight runner or none, WAVE rule 11).
         for (const fights of [true, false]) {
             const grammar = typeof entry.grammar === 'function' ? entry.grammar({ fights }) : entry.grammar;
             assert.equal(typeof grammar, 'string', kind);
             assert.ok(!grammar.includes('\n'), kind);
-            assert.ok(grammar.includes(` ${kind} `), kind);
+            if (carriers[kind]) assert.ok(grammar.includes(` ${carriers[kind]} `) || grammar.startsWith(`~ ${kind} `), kind);
+            else assert.equal(grammar, '', kind);
         }
         assert.equal(typeof entry.apply, 'function', kind);
     }
-    assert.match(part.kinds.beat.grammar({ fights: true }), /encounter: the foes, for a fight/);
-    // A hook is an open thread, no job offer with a giver and a reward; + hook is written once {{user}} accepts.
-    assert.doesNotMatch(part.kinds.hook.grammar, /giver|reward/);
-    assert.match(part.kinds.hook.grammar, /\+ quest once \{\{user\}\} accepts/);
-    assert.doesNotMatch(part.kinds.beat.grammar({ fights: false }), /encounter|fight|foe/);
+    assert.match(part.kinds.agenda.grammar({ fights: true }), /encounter \(the foes, for a fight\)/);
+    // A hook is an open thread, no job offer with a giver and a reward; + quest is written once {{user}} accepts.
+    assert.match(part.kinds.hook.grammar, /a hook is an open thread or lead \(a job only offered stays in the story; \+ quest once \{\{user\}\} accepts it\); a quest is a job \{\{user\}\} accepted/);
+    assert.doesNotMatch(part.kinds.agenda.grammar({ fights: false }), /encounter|fight|foe/);
 });
 
 test('nothing tracked: no tail', () => {

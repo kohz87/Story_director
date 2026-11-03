@@ -12,6 +12,7 @@
 import { KINDS, RARITIES } from '../domains/inventory.js';
 import { formatAmount } from '../domains/money.js';
 import { CREATION, RANK_NAMES, SKILL_SLOTS, STATS, USES } from './names.js';
+import { classOfLevel, levelOfClass } from './formula.js';
 import { RPG_STRINGS, fill } from './strings.js';
 
 const F = RPG_STRINGS.file;
@@ -22,7 +23,7 @@ export const CHAR_VERSION = 1;
 
 /** What the file may hold: the RPG's own limits where it has them (names.js CREATION, the Character block's fields), the inventory's elsewhere. */
 export const FILE_LIMITS = Object.freeze({
-    bytes: 65536, soul: Object.freeze([1, 9]), points: 60, stat: Object.freeze([1, 20]), rank: 3,
+    bytes: 65536, level: Object.freeze([1, 99]), soul: Object.freeze([1, 9]), points: 60, stat: Object.freeze([1, 20]), rank: 3,
     items: 60, itemName: 60, itemNote: 300, qty: 999, money: 1_000_000_000,
 });
 
@@ -36,9 +37,11 @@ const bad = message => ({ ok: false, message });
  * A saved character file, as the plain object that is written. `character`: { soul, points, stats, skills: [{ name, about, stat?, uses, rank }] };
  * `items` (omit to leave the inventory out): [{ name, qty, note?, kind?, rarity? }]; `money` (omit to leave the purse out): whole base units.
  */
-export function buildCharacterFile({ soul, points, stats, skills = [], items = null, money = null }) {
+export function buildCharacterFile({ level, soul, points, stats, skills = [], items = null, money = null }) {
+    // (`level` 1..99 is the character's level; `soul` stays in the file, the Soul Class the level stands for, for a build that still reads the class.)
+    const shown = Number.isSafeInteger(level) ? level : levelOfClass(soul);
     const file = {
-        [CHAR_FILE]: CHAR_VERSION, soul, points,
+        [CHAR_FILE]: CHAR_VERSION, level: shown, soul: Number.isSafeInteger(soul) ? soul : classOfLevel(shown), points,
         stats: Object.fromEntries(STATS.map(stat => [stat, stats[stat]])),
         skills: skills.slice(0, SKILL_SLOTS).map(skill => ({ name: skill.name, about: skill.about, ...(STATS.includes(skill.stat) ? { stat: skill.stat } : {}), uses: skill.uses, rank: skill.rank })),
     };
@@ -78,7 +81,7 @@ function readItem(entry) {
 }
 
 /**
- * Reads a file's text. → `{ ok: true, file }` with `file` = { soul, points, stats, skills, items?, money? } (clean copies, `items` and `money`
+ * Reads a file's text. → `{ ok: true, file }` with `file` = { level, soul, points, stats, skills, items?, money? } (clean copies, `items` and `money`
  * only when the file had them), or `{ ok: false, message }`.
  */
 export function parseCharacterFile(text) {
@@ -89,7 +92,10 @@ export function parseCharacterFile(text) {
         try { data = JSON.parse(text); } catch { return bad(F.notJson); }
         if (!isRecord(data) || !Object.hasOwn(data, CHAR_FILE)) return bad(F.notCharacter);
         if (data[CHAR_FILE] !== CHAR_VERSION) return bad(F.version);
-        if (!whole(data.soul, ...FILE_LIMITS.soul)) return bad(F.soul);
+        // A file of this build says `level` (1..99); one made before levels has only the Soul Class, which stands for the level 10n - 5.
+        const hasLevel = data.level !== undefined;
+        if (hasLevel ? !whole(data.level, ...FILE_LIMITS.level) : !whole(data.soul, ...FILE_LIMITS.soul)) return bad(F.soul);
+        if (hasLevel && data.soul !== undefined && !whole(data.soul, ...FILE_LIMITS.soul)) return bad(F.soul);
         if (!whole(data.points, 0, FILE_LIMITS.points)) return bad(fill(F.points, { max: FILE_LIMITS.points }));
         if (!isRecord(data.stats)) return bad(F.stats);
         const stats = {};
@@ -105,7 +111,8 @@ export function parseCharacterFile(text) {
             if (!skill) return bad(fill(F.skill, { n: at + 1 }));
             skills.push(skill);
         }
-        const file = { soul: data.soul, points: data.points, stats, skills };
+        const level = hasLevel ? data.level : levelOfClass(data.soul);
+        const file = { level, soul: data.soul ?? classOfLevel(level), points: data.points, stats, skills };
         if (data.items !== undefined) {
             if (!Array.isArray(data.items) || data.items.length > FILE_LIMITS.items) return bad(fill(F.items, { max: FILE_LIMITS.items }));
             file.items = [];
