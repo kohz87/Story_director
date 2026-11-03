@@ -47,6 +47,7 @@ import { part as checks } from './checks/index.js';
 import { part as screens } from './screens/index.js';
 import { calendarConfig, packCalendarOf } from './tracker/time.js';
 import { fightsAmong } from './fights.js';
+import { rareKindsUsed } from './rare.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
@@ -342,10 +343,13 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
     // one set of modules).
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
-    const env = { fights: fightRunner() ?? true, keyPeople: false };
+    // `chronicle`, `map`, `routes`: whether the story uses the rare kinds (world and faction lines; landmark and route lines; trip lines),
+    // so their grammar is taught only then (the lean diet, 3 Nov). All start false and are learnt from the state before each reply.
+    const env = { fights: fightRunner() ?? true, keyPeople: false, chronicle: false, map: false, routes: false };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
+        if (isObject(view?.state?.domains)) Object.assign(env, rareKindsUsed(view));
         // Whether anyone is pinned (Key people): the feature's paragraph and grammar lines are taught only then, so a chat with no key
         // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
         const pins = view?.state?.domains?.keypeople?.pins;
@@ -405,7 +409,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             kinds[kind] = {
                 // A line may be '' (the Key people's, while nobody is pinned): the host then leaves the kind out, so a function answers (the registry takes one for a kind with no line yet).
                 get grammar() {
-                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, keyPeople: env.keyPeople }) : grammar;
+                    const line = typeof grammar === 'function' ? grammar({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) : grammar;
                     return line === '' ? () => '' : line;
                 },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
@@ -468,7 +472,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
         else grouped.push({ feature: chunk.feature, items: [chunk.static] });
     }
-    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) ?? '').trim()).filter(Boolean).join('\n');
     const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
         .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {

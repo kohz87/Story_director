@@ -16,10 +16,13 @@ export const TRIP_TAIL_BUDGET = 90;
 // Characters the line may take: Story Block estimates tokens as characters / 4.
 const MAX_CHARS = TAIL_BUDGET * 4;
 
-/** Each atlas kind's one line for the change-line instruction (SPEC §4.4). */
+/**
+ * The atlas kinds' grammar: the route line carries the landmark's (one line for the family; the landmark has none of its own),
+ * and both are taught only while the story has a route or a landmark (the lean diet, 3 Nov). The trip line only while a route is known.
+ */
 export const GRAMMAR = Object.freeze({
-    route: '+ route Place — Other Place | hours: 2 (or days: 1.5) | kind: road|river|trail|sea (a way between two places; - route Place — Other Place when it is gone)',
-    landmark: '+ landmark Name | region: where | kind: town|ruin|cave|… | plane: underground (only off the surface)',
+    route: '+ route Place — Other Place | hours: 2 (or days: 1.5) | kind: road|river|trail|sea (- route Place — Other Place when it is gone); + landmark Name | region: where | kind: town|ruin|cave|… | plane: underground (only off the surface)',
+    landmark: '',
     trip: '~ trip Place | by: riding|foot|wagon|boat|ship | via: Stop, Stop (the party sets out by the known routes; ~ trip stop; ~ trip delay: 1 day | because: lame horse)',
 });
 

@@ -29,12 +29,17 @@ test('the static part is the three kinds\' grammar only (the trip kind under its
     part.context.tail(view(changed));
     assert.equal(staticOf(), before);
     assert.equal(Buffer.from(staticOf()).equals(Buffer.from(before)), true);
-    for (const grammar of Object.values(part.kinds).map(kind => kind.grammar)) {
+    // The lean diet: the route line carries the landmark's, both only while the story has a route or a landmark (env.map); the trip line only
+    // while a route is known (env.routes); the landmark has no line of its own.
+    const used = { map: true, routes: true };
+    for (const grammar of [part.kinds.route.grammar(used), part.kinds.trip.grammar(used), part.kinds.landmark.grammar]) {
         assert.doesNotMatch(grammar, /\n/);
         assert.doesNotMatch(grammar, /Bluewatch|Weir|Ruins/);
     }
-    assert.match(part.kinds.route.grammar, /^\+ route Place — Other Place \| hours: 2/);
-    assert.match(part.kinds.landmark.grammar, /^\+ landmark Name \| region: .* \| kind: /);
+    assert.match(part.kinds.route.grammar(used), /^\+ route Place — Other Place \| hours: 2/);
+    assert.match(part.kinds.route.grammar(used), /; \+ landmark Name \| region: .* \| kind: /);
+    assert.equal(part.kinds.landmark.grammar, '');
+    assert.deepEqual([part.kinds.route.grammar({}), part.kinds.trip.grammar({}), part.kinds.route.grammar({ routes: true }), part.kinds.trip.grammar({ map: true })], ['', '', '', ''], 'nothing of them is taught while the story has none');
 });
 
 test('the tail is one optional line: the known routes from the scene\'s place with their times', () => {

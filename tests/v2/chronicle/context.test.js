@@ -27,14 +27,19 @@ function sixEvents() {
 }
 
 test('the static part is the same bytes whatever the state; it names no event, count or time', () => {
-    const empty = part.context.static();
-    const busy = (() => { const state = sixEvents(); chronicleTail(viewOf(state)); return part.context.static(); })();
+    // The lean diet: the paragraphs and the grammar are taught only while the story keeps a world event or a faction (env.chronicle).
+    const empty = part.context.static({ chronicle: true });
+    const busy = (() => { const state = sixEvents(); chronicleTail(viewOf(state)); return part.context.static({ chronicle: true }); })();
     assert.equal(empty, busy);
     assert.equal(empty, STATIC_TEXT);
+    assert.equal(part.context.static({ chronicle: false }), '');
+    assert.equal(part.kinds.world.grammar({ chronicle: false }), '');
+    assert.equal(part.kinds.world.grammar({ chronicle: true }), GRAMMAR.world);
     assert.equal(STATIC_TEXT.split('\n').length, 2);
     assert.doesNotMatch(STATIC_TEXT, /\d/);
     assert.match(GRAMMAR.world, /^\+ world Name — /);
-    assert.match(GRAMMAR.faction, /^\+ faction Name — /);
+    assert.match(GRAMMAR.world, /; \+ faction Name — /);
+    assert.equal(GRAMMAR.faction, '', 'the faction has no line of its own: the world line carries it');
     assert.deepEqual(Object.keys(part.kinds).sort(), ['faction', 'world']);
     assert.equal(part.context.budget, TAIL_BUDGET + DIGEST_TAIL_BUDGET);
 });

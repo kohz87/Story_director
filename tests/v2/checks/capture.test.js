@@ -20,7 +20,9 @@ const line = (raw, state, options = {}) => {
 };
 
 test('the grammar is the old one and, after the flip, this part keeps the `check` kind (example fight runner\'s part is gone)', () => {
-    assert.match(checkKind.grammar, /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name$/);
+    // The lean diet: the check rule is said once, in this line, and only while no module runs fights (the RPG's planner asks for them then).
+    assert.match(checkKind.grammar({ fights: false }), /^\? check .* \| dc: easy\|normal\|hard\|very hard \| who: Name \| vs: Name \(.*\[Happened\].*\)$/);
+    assert.equal(checkKind.grammar({ fights: true }), '');
     assert.equal(part.kinds.check, checkKind);
 });
 

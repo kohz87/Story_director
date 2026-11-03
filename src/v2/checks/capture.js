@@ -11,7 +11,8 @@
 import { policyOf } from './domain.js';
 import { dcOf } from './words.js';
 
-export const GRAMMAR = '? check <a stat or skill> — what is attempted | dc: easy|normal|hard|very hard | who: Name | vs: Name';
+// The one place the check rule is said, and only while no module runs fights (with the RPG on, its planner asks for the checks).
+export const GRAMMAR = '? check <skill or stat> — what is tried | dc: easy|normal|hard|very hard | who: Name | vs: Name (no result: code rolls once, tell its outcome from the tail; one under [Happened] is not rolled again)';
 
 const keyOf = text => String(text ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -50,4 +51,4 @@ export function applyCheck(ctx, line) {
     return { ...rolled, narrate: true };
 }
 
-export const kind = { grammar: GRAMMAR, apply: applyCheck };
+export const kind = { grammar: env => (env?.fights === true ? '' : GRAMMAR), apply: applyCheck };

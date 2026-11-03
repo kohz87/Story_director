@@ -17,16 +17,19 @@ const MAX_CHARS = TAIL_BUDGET * 4;
 const MAX_ITEM = 130;
 export const TAIL_HEADER = '[World] Under way off-screen:';
 
-/** Each chronicle kind's one line for the change-line instruction (SPEC §4.4). */
+/**
+ * The chronicle kinds' grammar: the world line carries the faction's (one line for the family), taught only while the story keeps
+ * a world event or a faction (the lean diet, 3 Nov).
+ */
 export const GRAMMAR = Object.freeze({
-    world: '+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place: where | factions: who (~ world Name — what changed; - world Name — how it ended)',
-    faction: '+ faction Name — who they are, what they want | area: where they hold sway | stance: toward {{user}} (~ faction Name to change it; - faction Name when it is gone)',
+    world: '+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place: where | factions: who (~ world Name — what changed; - world Name — how it ended); + faction Name — who they are, what they want | area: where they hold sway | stance: toward {{user}} (~ faction Name to change it; - faction Name when it is gone)',
+    faction: '',
 });
 
-/** The chronicle's part of the static prompt: no names, counts, times or dice. */
+/** The chronicle's part of the static prompt (only while the story keeps world events or factions): no names, counts, times or dice. */
 export const STATIC_TEXT = [
     'World lines are for what changes the wider world (a war, a plague, a calamity, a power rising or falling), never the scene\'s own business; a faction line for a power that shapes it. Code keeps their dates.',
-    'Under [World] are events still under way: when time and place allow, let one move on in the story and write its ~ world line.',
+    'Events under [World] are under way: when time and place allow, let one move on and write its ~ world line.',
 ].join('\n');
 
 const queryOf = view => (typeof view?.query === 'function' ? (name, args) => view.query(name, args) : null);

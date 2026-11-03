@@ -1,61 +1,17 @@
 {
-  "static": "Director lines: ~ changes only what changed; - closes it (— reason); ! fires a due item (— what happened).\nFields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.\nWrite only changes, never the whole list. Never write actions for {{user}}.\nPacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath. Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later).\nWorld lines are for what changes the wider world (a war, a plague, a calamity, a power rising or falling), never the scene's own business; a faction line for a power that shapes it. Code keeps their dates.\nUnder [World] are events still under way: when time and place allow, let one move on in the story and write its ~ world line.\nChecks: write ? check skill — attempt | dc: hard (optionally who: Name or vs: Name), without a result. Story Director rolls once; narrate the outcome told by the tail. A pre-rolled check already told under [Happened] is not rolled again.\nInitiative: when the Director note names someone under Initiative, they take the first step in this reply (approach, interrupt or ask) where the scene allows it; what {{user}} does stays theirs.",
+  "static": "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Never write or decide what {{user}} does.\nPacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).\nInitiative: whoever the note names under Initiative takes the first step (approach, interrupt or ask) where the scene allows; {{user}}'s part stays theirs.",
   "kinds": [
     {
       "kind": "agenda",
-      "grammar": "+ agenda Name — what they are up to off-screen | now: where | then: what next | on: <date, clock time>"
-    },
-    {
-      "kind": "beat",
-      "grammar": "+ beat Name — a planned turn of the story | on: <date, clock time> | encounter: the foes, for a fight | reach: what it changes for {{user}}"
-    },
-    {
-      "kind": "check",
-      "grammar": "? check <a stat or skill> — what is attempted | dc: easy|normal|hard|very hard | who: Name | vs: Name"
-    },
-    {
-      "kind": "clock",
-      "grammar": "+ clock Name — what happens when it runs out | due: <date, clock time> | shown: none|sign|warning"
-    },
-    {
-      "kind": "event",
-      "grammar": "+ event Name — what is happening in the world | then: what next | on: <date, clock time>"
-    },
-    {
-      "kind": "faction",
-      "grammar": "+ faction Name — who they are, what they want | area: where they hold sway | stance: toward {{user}} (~ faction Name to change it; - faction Name when it is gone)"
+      "grammar": "+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); only on, due and arrive take a date, as <date, clock time>; a secret is what must not be revealed yet"
     },
     {
       "kind": "hook",
-      "grammar": "+ hook Name — an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it)"
-    },
-    {
-      "kind": "landmark",
-      "grammar": "+ landmark Name | region: where | kind: town|ruin|cave|… | plane: underground (only off the surface)"
-    },
-    {
-      "kind": "quest",
-      "grammar": "+ quest Name — a task the story follows | goal: what to do | giver: who asked"
-    },
-    {
-      "kind": "route",
-      "grammar": "+ route Place — Other Place | hours: 2 (or days: 1.5) | kind: road|river|trail|sea (a way between two places; - route Place — Other Place when it is gone)"
-    },
-    {
-      "kind": "secret",
-      "grammar": "+ secret Name — what must not be revealed yet"
+      "grammar": "+ hook|quest Name — a hook is an open thread or lead (also a job only offered); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type"
     },
     {
       "kind": "time",
       "grammar": "~ time <date, clock time such as 9:30 am> (the scene's time) · ! time +2h (time passes)"
-    },
-    {
-      "kind": "trip",
-      "grammar": "~ trip Place | by: riding|foot|wagon|boat|ship | via: Stop, Stop (the party sets out by the known routes; ~ trip stop; ~ trip delay: 1 day | because: lame horse)"
-    },
-    {
-      "kind": "world",
-      "grammar": "+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place: where | factions: who (~ world Name — what changed; - world Name — how it ended)"
     }
   ]
 }

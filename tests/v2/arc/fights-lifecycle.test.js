@@ -94,7 +94,8 @@ test('the module\'s first prompt starts from the fight runner\'s status, not fro
         try {
             await host.sdk.registerModule(rpg(waitsFor));
             const module = createModule({ host: { settings: id => host.sdk.settings(id), substitute: text => host.sdk.substitute(text) } });
-            return module.context.static();
+            // The encounter field is in the thread grammar line (carried by `agenda`) since the lean diet; the fixed rules no longer differ.
+            return `${module.context.static()}\n${module.capture.kinds.agenda.grammar}`;
         } finally {
             restoreLive();
             host.close();

@@ -116,7 +116,12 @@ test('on the host: an event\'s step writes the entry, a second event counts a da
     assert.ok(tail.includes(TAIL_HEADER));
     assert.match(tail, /- Seventh seal failed \(Auvoth\)/);
     assert.match(tail, new RegExp(`- ${CRACKS} \\(Auvoth\\)`));
-    assert.equal(new Set(sent(host, STATIC_KEY)).size, 1, 'the static prompt did not change');
+    // The lean diet: the world grammar is taught from the reply after the pack's event wrote the first entry; the story's own lines changed no byte.
+    const statics = sent(host, STATIC_KEY);
+    assert.equal(new Set(statics).size, 2, 'the static prompt gained the world grammar once, when the first entry was kept');
+    assert.doesNotMatch(statics[0], /\+ world Name/);
+    assert.match(statics.at(-1), /\+ world Name/);
+    assert.equal(new Set(statics.slice(statics.findIndex(text => /\+ world Name/.test(text)))).size, 1);
 
     // The reader can still change anything.
     const edited = await host.sdk.command('chronicle.edit', { id: failed.id, state: 'resolved', summary: 'Mended by the Guild.' }, { cause: 'ui' });
