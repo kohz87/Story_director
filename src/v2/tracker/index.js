@@ -20,7 +20,10 @@ import { THREADS_FEATURE, ownedKind } from '../threads.js';
 // A kind Story Director alone words otherwise (GRAMMAR_ALONE) gets its grammar from the module set. The agenda,
 // event, clock, beat and secret kinds belong to the feature `story-director.threads` (src/v2/threads.js): while it
 // is off the host leaves their grammar out and a line of one is a quiet FEATURE_OFF. Quests and hooks stay.
+// The heads of the kinds whose grammar rides on a family line (note.js GRAMMAR): the ops 2.9.3's own lines wrote.
+const HEADS = { event: ['+ event'], clock: ['+ clock'], beat: ['+ beat'], secret: ['+ secret'], quest: ['+ quest'] };
 const kinds = Object.fromEntries(THREAD_KINDS.map(kind => [kind, {
+    ...(HEADS[kind] ? { heads: HEADS[kind] } : {}),
     grammar: Object.hasOwn(GRAMMAR_ALONE, kind) ? env => grammarOf(kind, env) : GRAMMAR[kind],
     apply: applyThreadLine,
     ...(ownedKind(kind) ? { feature: THREADS_FEATURE } : {}),

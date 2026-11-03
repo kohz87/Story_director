@@ -54,7 +54,10 @@ export const MODULE_NAME = 'Story Director';
 export const VERSION = '2.9.3';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-export const STORY_BLOCK_RANGE = '>=2.12.0';
+// PLACEHOLDER: the Story Block release that reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own).
+// The lead gives the number; set it here and nothing else changes. Until then it is the old minimum, so the module still loads.
+export const STORY_BLOCK_WITH_HEADS = '2.12.0';
+export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
 export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['arc', arc], ['checks', checks], ['screens', screens]]);
@@ -413,6 +416,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                     return line === '' ? () => '' : line;
                 },
                 ...(spec.aliases ? { aliases: spec.aliases } : {}),
+                // The change-line heads a kind with no grammar line of its own still answers to when a story writes one outside the block (Story Block `heads`).
+                ...(Array.isArray(spec.heads) ? { heads: [...spec.heads] } : {}),
                 // A kind a feature owns (MODULES §F100): Story Block leaves its grammar out, and its lines unused, while that feature is off.
                 ...(typeof spec.feature === 'string' ? { feature: spec.feature } : {}),
                 // Kinds whose lines of a reply this kind's lines run behind (Story Block 2.11.1; an older host reads the lines as written).
