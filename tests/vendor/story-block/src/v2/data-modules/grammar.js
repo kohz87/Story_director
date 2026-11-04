@@ -21,6 +21,8 @@ function namedRange(schema, names) {
 const valuesOf = (schema, names = null) => schema.type === 'enum' ? schema.values.map(value => oneLine(value)).join('|')
     : schema.type === 'int' ? (names ? namedRange(schema, names) : `${schema.min}..${schema.max}`) : schema.type === 'text' ? 'text' : 'true|false';
 
+const onEntries = kind => (kind.effects ?? []).some(effect => effect?.op === 'entrySet' || effect?.op === 'entryDrop');
+
 /**
  * One line of grammar for a kind: "+ dm reputation — reason | kind: gain | faction: guild|watch|compact".
  * `seen` (a Map, optional): a long list of values (the health words) already written on an earlier line is not written again: "to: same words as
@@ -28,13 +30,19 @@ const valuesOf = (schema, names = null) => schema.type === 'enum' ? schema.value
  */
 export function kindGrammar(definition, name, reference, seen = null) {
     const kind = definition.kinds[name];
+    // A line that changes an entry may give any part the line that adds one gives: it says so instead of writing them all again.
+    const add = kind.effects?.length === 1 && kind.effects[0].op === 'entrySet' ? `add-${kind.effects[0].path?.[0]}` : null;
+    const same = add && definition.kinds[add] && Object.keys(kind.labels).every(label => label === 'at' || definition.kinds[add].labels[label]);
     return `${kind.op} dm ${reference} — reason | kind: ${name}${definition.scope === 'character' ? ' | who: attached actor' : ''}`
-        + Object.entries(kind.labels).map(([label, schema]) => {
+        + (same ? ` | at: number or title | [any part of ${add}]` : Object.entries(kind.labels).map(([label, schema]) => {
+            // (a line that works a List of entries names the entry it changes by number or title; a part the line may leave out is in brackets)
+            if (label === 'at' && onEntries(kind)) return ' | at: number or title';
             const values = valuesOf(schema, schema.type === 'int' ? dmLabelNames(definition, kind, label) : null);
+            if (schema.optional === true) return ` | [${label}: ${values}]`;
             const before = seen && values.length >= SAME_WORDS_AT ? seen.get(values) : undefined;
             if (seen && values.length >= SAME_WORDS_AT && before === undefined) seen.set(values, `${reference.split('/').at(-1)} ${name}`);
             return ` | ${label}: ${before === undefined ? values : `same words as ${before}`}`;
-        }).join('');
+        }).join(''));
 }
 // A list of values at least this long is written once per prompt (the stage words of a health bar are 55 characters, a stat list 29).
 const SAME_WORDS_AT = 40;
@@ -44,7 +52,7 @@ export function kindExample(definition, name, reference) {
     const kind = definition.kinds[name];
     const first = schema => schema.type === 'enum' ? schema.values[0] : schema.type === 'int' ? schema.min : schema.type === 'text' ? 'text' : true;
     return `${kind.op} dm ${reference} — why it happens | kind: ${name}${definition.scope === 'character' ? ' | who: Name' : ''}`
-        + Object.entries(kind.labels).map(([label, schema]) => ` | ${label}: ${first(schema)}`).join('');
+        + Object.entries(kind.labels).map(([label, schema]) => ` | ${label}: ${label === 'at' && onEntries(kind) ? 1 : first(schema)}`).join('');
 }
 
 // Kinds that come in a numbered family (learn-1 … learn-5, set-slot-1 … set-slot-4) share one template line: the same line, "kind: learn-N", and one
@@ -93,12 +101,12 @@ const offeredKinds = definition => Object.keys(definition.kinds).filter(name => 
 
 /**
  * The complete text used to measure the static budget before accepting a definition.
- * `options`: { prompt: false } leaves the module's description out; { only: /re/ } offers only the kinds whose name matches (the RPG's quiet prompt, lean-rpg/names.js
+ * `options`: { prompt: false } leaves the module's description out; { only: /re/ } offers only the kinds whose name matches, { without: /re/ } leaves out the kinds whose name matches (the RPG's quiet prompt, lean-rpg/names.js
  * QUIET_GRAMMAR); { seen } is a Map shared by the modules of one prompt (see kindGrammar).
  */
-export function fullModuleGrammar(definition, reference, { prompt: withPrompt = true, only = null, seen = null } = {}) {
+export function fullModuleGrammar(definition, reference, { prompt: withPrompt = true, only = null, without = null, seen = null } = {}) {
     const prompt = withPrompt && definition.prompt ? [...oneLine(definition.prompt)].slice(0, L.prompt).join('') : '';
-    const names = offeredKinds(definition).filter(name => !only || only.test(name));
+    const names = offeredKinds(definition).filter(name => (!only || only.test(name)) && !(without && without.test(name)));
     return [prompt, ...familyLines(definition, names, reference, seen)].filter(Boolean).join('\n');
 }
 

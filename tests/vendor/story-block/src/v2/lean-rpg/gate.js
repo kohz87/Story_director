@@ -16,6 +16,8 @@ const BASE = [
     'persuade', 'convince', 'bluff', 'lie', 'deceive', 'threaten', 'intimidate', 'charm', 'seduce', 'haggle', 'bribe',
     // Weapons, flight, force, the senses and care: the review's phrases (draw and lunge, fire and loose, flee, break down, force, search, track, listen, heal).
     'lunge', 'thrust', 'fire', 'loose', 'aim', 'draw', 'flee', 'run', 'escape', 'chase', 'break', 'force', 'search', 'track', 'listen', 'spot', 'heal', 'resist', 'endure', 'try', 'attempt',
+    // Cutting words (a reader who cuts the gnashers down with a sword is fighting).
+    'cut', 'slice', 'cleave', 'hack', 'slaughter', 'butcher',
 ];
 // (Planning too often costs one cheap "none"; dropping a roll costs the story its dice, so "listen" and "try" plan even in a calm sentence.
 // "fire" the noun is the exception, see FIRE_NOUN.)
@@ -46,7 +48,7 @@ const hasRiskWord = words => words.some((word, at) => WORDS.has(word) && !((word
 /** Whether a narrator reply reads as combat: a fight word or a hostile named. */
 export const readsAsCombat = text => wordsOf(text).some(word => COMBAT.has(word));
 
-/** Whether the reader's message reads as a risky action: a listed word, "pick a lock", or one of the party's skills (by its name) or a listed foe. */
+/** Whether the reader's message reads as a risky action: a listed word (the fight verbs, cut and slice among them; a weapon or a wound as a noun, a bow, a foe named do not count: a narrator reply keeps those, `readsAsCombat`), "pick a lock", or one of the party's skills (by its name) or a listed foe. */
 export function riskyMessage(text, sheet = null) {
     const message = String(text ?? '');
     if (hasRiskWord(wordsOf(message)) || PICK_LOCK.test(message.normalize('NFKC').toLowerCase())) return true;

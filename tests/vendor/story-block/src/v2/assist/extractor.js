@@ -4,7 +4,8 @@
 // the story clearly told but its block did not write (time passing, a new place, who came or went, the
 // weather, quest progress or a turn-in, wounds, an item handed over). Code then keeps only what the value
 // wall lets through (safety.js: never coin, new items, XP, loot or heals), drops a line the block already
-// has (C-1's matching, capture.js sameChangeLine, and the same op, kind and name), and hands the rest to
+// has (C-1's matching, capture.js sameChangeLine, and the same op, kind and name) or a place, time or weather
+// line when the block set that kind, and hands the rest to
 // the host's capture, which checks each like a story line and marks it as the extractor's. The output is
 // stored with the reply (capture.js withAssist), so replay, swipes and Re-read never call the model again.
 // Never for quiet or impersonate generations, never for a continue (its reply was read when it first
@@ -61,15 +62,33 @@ export function extractorPrompt(reply, grammar, written = [], around = null) {
 // Two lines are one change when C-1 calls them the same line, or when they share op, kind and name
 // (a `- item Pelt` the block wrote is not handed over twice because the extractor added a label).
 const nameKey = line => `${line.op} ${String(line.kind ?? '').toLowerCase()} ${String(line.name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()}`;
-/** The raw lines of `lines` (raw[]) the reply's `written` lines (raw[]) do not already hold (nor repeat among themselves). */
-export function notWritten(lines, written) {
+// Kinds that describe the whole scene, one value at a time: where it is, when, and its weather. Once the
+// reply's own block sets one of them, the safety net's line of that kind for the same reply is not used,
+// whatever name it gives: another wording of the same place would read as a move and leave everyone present
+// behind, and a second `! time` would move the clock on twice. A late line (the reply before's, applied after
+// the next reply's own lines) that sets a value the next reply set again is older and not used either; but a
+// late `! time` (time that passed in the reply before) still adds.
+export const SCENE_KINDS = Object.freeze(['place', 'time', 'weather']);
+const sceneKind = line => {
+    const kind = String(line?.kind ?? '').toLowerCase();
+    return SCENE_KINDS.includes(kind) ? kind : null;
+};
+/**
+ * The raw lines of `lines` (raw[]) the reply's `written` lines (raw[]) do not already hold (nor repeat among
+ * themselves), and none of a scene kind (SCENE_KINDS) that `scene` (raw[], default `written`: the lines that set the
+ * scene, never an older reply's late lines) already sets. `late`: `lines` are late lines; a `! time` among them is kept.
+ */
+export function notWritten(lines, written, { scene = written, late = false } = {}) {
     const parsed = parseChanges(written.join('\n')).lines;
     const same = new Set(written.map(sameChangeLine));
     const names = new Set(parsed.map(nameKey));
+    const set = new Set(parseChanges(scene.join('\n')).lines.map(sceneKind).filter(Boolean));
     const out = [];
     for (const raw of lines) {
         const line = parseChanges(raw).lines[0];
-        if (!line || same.has(sameChangeLine(raw)) || names.has(nameKey(line))) continue;
+        const kind = sceneKind(line);
+        const sceneSet = kind !== null && set.has(kind) && !(late && line.op === '!' && kind === 'time');
+        if (!line || same.has(sameChangeLine(raw)) || names.has(nameKey(line)) || sceneSet) continue;
         same.add(sameChangeLine(raw));
         names.add(nameKey(line));
         out.push(raw);
@@ -190,7 +209,9 @@ export function createExtractor({ callModel, settings, grammar, capture, chatId,
                 return null;
             }
             const parsed = parseExtractorAnswer(answer, [...new Set(lines.map(grammarKind))], allow, check);
-            const missing = notWritten(parsed.lines, written);
+            // `written` mixes the block's lines with the reply before's late ones, so the scene kinds are left to the host's
+            // capture (turn.js captureAssist), which knows which lines are the block's; here only repeats are dropped.
+            const missing = notWritten(parsed.lines, written, { scene: [] });
             // What it wrote that the reader is told was refused (Problems on the reply): never applied.
             const refused = parsed.refused.filter(item => item.problem).map(({ line, why }) => ({ line, why }));
             if (!missing.length && !refused.length) {

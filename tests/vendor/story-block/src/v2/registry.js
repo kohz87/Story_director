@@ -582,6 +582,8 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         asIf = switches instanceof Map ? switches : new Map(Object.entries(isObject(switches) ? switches : {}));
         try { return read(); } finally { asIf = before; }
     }
+    // True while a `withFeatures` read runs: what it asks is not the story as it is.
+    const hypothetical = () => asIf !== null;
     // Is this item (a kind spec, a command, a hook, a tab…) under a feature that is off?
     const off = item => {
         const id = featureOf(item);
@@ -973,6 +975,7 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         /** Whether feature `id` is on (the reader's choice, else its default); false for an id no module declares. */
         featureOn,
         withFeatures,
+        hypothetical,
         /** The feature command `type` belongs to, or null; the bus refuses it with FEATURE_OFF while that is off. */
         commandFeature,
         /**

@@ -55,8 +55,7 @@ export const FORMULA = Object.freeze({ die: 20, statDivisor: 2, classWeight: 2, 
 /** Pacing: exchanges per reply. (From the second flow, FLOW_VERSION in resolve.js, only `careful` limits a reply: 1 exchange; the others run to the cap.) */
 export const PACE = Object.freeze({ careful: 1, normal: 5, all: 8 });
 
-/** How many skill slots a Skills block has (`skill1`…`skill5`, `rank1`…, `practice1`…) and foe slots a Foes block (`foe1`…`foe4`). */
-export const SKILL_SLOTS = 5;
+/** Foe slots of a Foes block: `foe1`…`foe4` (skill slots: ../skill-slots.js). */
 export const FOE_SLOTS = 4;
 
 /**
@@ -83,6 +82,8 @@ export const LIMITS = Object.freeze({
  */
 export const ROLLS_SETTING = 'rpgRolls';
 export const ROLLS = Object.freeze(['automatic', 'off']);
+/** Skill practice comes only from rolled uses while the RPG is on and Rolls is automatic (the narrator's `practice-N` line is not offered and is refused). */
+export const practiceFromRollsOnly = (rpgOn, values) => rpgOn === true && values?.[ROLLS_SETTING] !== 'off';
 
 /**
  * XP for a won fight (fight.js), worked out for each party member who has not Left, group by group from the member's level against the group's:
@@ -122,7 +123,7 @@ export const USES = Object.freeze(['stamina', 'mana']);
  * `skills` skills, at most `adept` of them at Adept and the rest Novice. Text limits are the Character and Skills fields'.
  */
 export const CREATION = Object.freeze({
-    start: 10, budget: 6, min: 8, max: 15, skills: SKILL_SLOTS, adept: 1,
+    start: 10, budget: 6, min: 8, max: 15, skills: 5, adept: 1,
     name: 40, about: 240, skillName: 40, skillAbout: 120,
 });
 
@@ -134,3 +135,6 @@ export const CREATION = Object.freeze({
 export const JOIN_SETTING = 'rpgJoin';
 export const JOINS = Object.freeze(['ask', 'auto', 'off']);
 export const PARTY_MAX = 8;
+
+/** A roll's rules mark (`fix` in `rpg.resolve`; 2: stage 65, 3: `then:`); none replays as before. */
+export const FIX_VERSION = 3;

@@ -1,17 +1,19 @@
 // A saved character (Export / Import a character): the file the Party tab's Export writes and the New character wizard's Import reads.
-// Pure: no DOM. It holds only what the user chose to carry between chats: Soul Class, unspent points, the seven stats, up to five skills
+// Pure: no DOM. It holds only what the user chose to carry between chats: Soul Class, unspent points, the seven stats, up to eight skills
 // (name, what it does, stat (left out for a skill whose block has none: a stat is never guessed), Stamina or Mana, rank), and, if left on, the things the character carries and the purse.
 //
 //   { "storySuiteCharacter": 1, "soul": 2, "points": 3, "stats": { "str": 14, … "cha": 10 },
-//     "skills": [{ "name", "about", "stat"?, "uses", "rank" }], "items"?: [{ "name", "qty", "note"?, "kind"?, "rarity"? }], "money"?: <base units> }
+//     "skills": [{ "name", "about", "stat"?, "uses", "rank" }], "items"?: [{ "name", "qty", "note"?, "kind"?, "rarity"?, "slot"?, "stats"? }], "money"?: <base units> }
 //
 // `parseCharacterFile` checks a file with the RPG's own limits (the Character and Skills fields, the inventory's name and note lengths)
 // and hands back a clean copy: unknown keys are dropped, text is one line, nothing is kept that was not asked for. A bad file is
 // `{ ok: false, message }` in plain words; nothing is read from it beyond that. Never throws.
 
 import { KINDS, RARITIES } from '../domains/inventory.js';
+import { GEAR, slotWordOf } from '../domains/gear.js';
 import { formatAmount } from '../domains/money.js';
-import { CREATION, RANK_NAMES, SKILL_SLOTS, STATS, USES } from './names.js';
+import { CREATION, RANK_NAMES, STATS, USES } from './names.js';
+import { SKILL_SLOTS_MAX } from '../skill-slots.js';
 import { classOfLevel, levelOfClass } from './formula.js';
 import { RPG_STRINGS, fill } from './strings.js';
 
@@ -43,11 +45,12 @@ export function buildCharacterFile({ level, soul, points, stats, skills = [], it
     const file = {
         [CHAR_FILE]: CHAR_VERSION, level: shown, soul: Number.isSafeInteger(soul) ? soul : classOfLevel(shown), points,
         stats: Object.fromEntries(STATS.map(stat => [stat, stats[stat]])),
-        skills: skills.slice(0, SKILL_SLOTS).map(skill => ({ name: skill.name, about: skill.about, ...(STATS.includes(skill.stat) ? { stat: skill.stat } : {}), uses: skill.uses, rank: skill.rank })),
+        skills: skills.slice(0, SKILL_SLOTS_MAX).map(skill => ({ name: skill.name, about: skill.about, ...(STATS.includes(skill.stat) ? { stat: skill.stat } : {}), uses: skill.uses, rank: skill.rank })),
     };
     if (Array.isArray(items)) {
         file.items = items.map(item => ({ name: item.name, qty: item.qty, ...(item.note ? { note: item.note } : {}),
-            ...(item.kind ? { kind: item.kind } : {}), ...(item.rarity ? { rarity: item.rarity } : {}) }));
+            ...(item.kind ? { kind: item.kind } : {}), ...(item.rarity ? { rarity: item.rarity } : {}),
+            ...(item.slot ? { slot: item.slot } : {}), ...(item.stats ? { stats: item.stats } : {}) }));
     }
     if (Number.isSafeInteger(money)) file.money = money;
     return file;
@@ -77,7 +80,13 @@ function readItem(entry) {
     if (!name || !whole(entry.qty, 1, FILE_LIMITS.qty)) return null;
     const note = line(entry.note, FILE_LIMITS.itemNote);
     // A kind or rarity this build does not know is left out, so the thing is added as the inventory would add it.
-    return { name, qty: entry.qty, ...(note ? { note } : {}), ...(KINDS.includes(entry.kind) ? { kind: entry.kind } : {}), ...(RARITIES.includes(entry.rarity) ? { rarity: entry.rarity } : {}) };
+    // A piece set up by hand (Equipment) also keeps its slot and its bonus (at most the stats a piece may give, each a whole number), so it comes back as it was.
+    const kind = KINDS.includes(entry.kind) ? entry.kind : null;
+    const slot = kind === 'equipment' && typeof entry.slot === 'string' ? slotWordOf(entry.slot) : null;
+    const given = kind === 'equipment' && isRecord(entry.stats) ? Object.entries(entry.stats) : [];
+    const stats = given.length && given.length <= GEAR.maxStats && given.every(([key, value]) => GEAR.stats.includes(key) && whole(value, 1, 6)) ? Object.fromEntries(given) : null;
+    return { name, qty: entry.qty, ...(note ? { note } : {}), ...(kind ? { kind } : {}), ...(RARITIES.includes(entry.rarity) ? { rarity: entry.rarity } : {}),
+        ...(slot ? { slot } : {}), ...(stats ? { stats } : {}) };
 }
 
 /**
@@ -104,7 +113,7 @@ export function parseCharacterFile(text) {
             stats[stat] = data.stats[stat];
         }
         const rawSkills = data.skills ?? [];
-        if (!Array.isArray(rawSkills) || rawSkills.length > SKILL_SLOTS) return bad(fill(F.skills, { max: SKILL_SLOTS }));
+        if (!Array.isArray(rawSkills) || rawSkills.length > SKILL_SLOTS_MAX) return bad(fill(F.skills, { max: SKILL_SLOTS_MAX }));
         const skills = [];
         for (const [at, entry] of rawSkills.entries()) {
             const skill = readSkill(entry);
@@ -139,9 +148,9 @@ export function parseCharacterFile(text) {
 export function itemsForFile(rows) {
     const out = [], at = new Map();
     for (const row of Array.isArray(rows) ? rows : []) {
-        const item = readItem({ name: row?.name, qty: row?.qty, note: row?.note, kind: row?.kind, rarity: row?.rarity });
+        const item = readItem({ name: row?.name, qty: row?.qty, note: row?.note, kind: row?.kind, rarity: row?.rarity, ...(row?.hand === true ? { slot: row?.slot, stats: row?.stats } : {}) });
         if (!item) continue;
-        const key = JSON.stringify([item.name.toLowerCase(), item.note ?? '', item.kind ?? '', item.rarity ?? '']);
+        const key = JSON.stringify([item.name.toLowerCase(), item.note ?? '', item.kind ?? '', item.rarity ?? '', item.slot ?? '', item.stats ?? null]);
         if (at.has(key)) {
             const had = out[at.get(key)];
             had.qty = Math.min(FILE_LIMITS.qty, had.qty + item.qty);

@@ -46,7 +46,7 @@ export async function hostAvailable() {
  * timeline calls it at every phase; a test makes it throw to stop there), lazyRpg?: true (the RPG's code is NOT handed to the host: it is
  * imported by `rpgLoad?()` (default: lean-rpg/index.js) only when the feature is on or the chat holds the RPG's records, as in the real page; by
  * default the host has it at once, so a test may switch the feature on and use the RPG without waiting) }.
- * Returns { st, ctx, registry, settings, features, store, bus, events, sdk, turn, packs, timeline (the host's side of the
+ * Returns { st, ctx, registry, settings, features, store, bus, events, sdk, api (the public API), turn, packs, timeline (the host's side of the
  * timeline: { host, capability, … }, docs/v2/TIMELINE.md), send(text, reply, { stopped }),
  * swipe(reply), regenerate(reply), cont(reply), quiet(), head(), close() }; `st` is the fake
  * SillyTavern (fake-st.js), with `st.notices` = [{ reason, moduleId }] for held-back generations; `features` is the
@@ -79,14 +79,14 @@ export async function createHost(options = {}) {
         onBlocked: stOptions.onBlocked ?? null,
         notify: (reason, moduleId) => st.notices.push({ reason, moduleId }),
     });
-    const { registry, settings, store, bus, events, sdk, turn, markReady, timeline } = runtime;
+    const { registry, settings, store, bus, events, sdk, api, turn, markReady, timeline } = runtime;
     turn.install({ globalName: null });
     st.interceptor = turn.interceptor;
     await turn.onChatChanged();
     markReady();
 
     return {
-        st, ctx, registry, settings, features: runtime.features, store, bus, events, sdk, turn, packs: runtime.packs, timeline, rpgLoader: runtime.rpgLoader,
+        st, ctx, registry, settings, features: runtime.features, store, bus, events, sdk, api, turn, packs: runtime.packs, timeline, rpgLoader: runtime.rpgLoader, cardSettings: runtime.cardSettings,
         send: (text, reply = '', { stopped = false } = {}) => st.send(text, { reply, stopped }),
         swipe: (reply = '') => st.generate('swipe', { reply }),
         regenerate: (reply = '') => st.generate('regenerate', { reply }),

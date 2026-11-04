@@ -19,6 +19,7 @@ import { HOLD_WIDGET, createStart } from './start.js';
 import { WIZARD_WIDGET, createWizard } from './wizard.js';
 import { EXPORT_WIDGET, createExporter } from './export.js';
 import { packLevelsOf } from '../levels.js';
+import { practiceFromRollsOnly } from '../names.js';
 import { planGear } from '../gear.js';
 import { readSheet } from '../read.js';
 import { readRecord } from '../../persist.js';
@@ -86,7 +87,7 @@ export function mountLeanRpg({ doc, ctx, store, events = null, screens, widgets,
     const wizard = createWizard({ headState, readerName, readerAbout, roleOf, openDialog, replyKey, rules, packNote, levels, levelCap });
     const exporter = createExporter({ headState, readerName, roleOf, openDialog });
     const start = createStart({ doc, headState, readerName, featureOn, roleOf, openDialog, wizard, meta, save, redraw: () => refresh() });
-    widgets[PARTY_WIDGET] = createPartyWidget({ headState, readerName, roleOf, openWizard: openDialog ? wizard.open : null, exportCharacter: openDialog ? exporter.open : null, rules, levels,
+    widgets[PARTY_WIDGET] = createPartyWidget({ headState, readerName, roleOf, openWizard: openDialog ? wizard.open : null, exportCharacter: openDialog ? exporter.open : null, rules, rolled: () => practiceFromRollsOnly(true, values()), levels,
         // The slot card behind a card's Inventory button: the switch and the `gear.view` answer (null while off).
         gear: gear ? { on: () => gear.on(), view: args => { try { return query?.('gear.view', args) ?? null; } catch { return null; } } } : null });
     widgets[WIZARD_WIDGET] = wizard.widget;

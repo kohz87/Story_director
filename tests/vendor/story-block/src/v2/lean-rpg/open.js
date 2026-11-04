@@ -8,7 +8,7 @@
 // (A plan made before the Levels rules has `class` (1–9) instead and is read as it was.)
 // Pure except openFoes, which writes the domain it is given (the transaction's draft, or a copy to look ahead).
 import { createEvaluation } from '../data-modules/interpreter.js';
-import { CLASS_NAMES, FOE_SLOTS } from './names.js';
+import { CLASS_NAMES, FIX_VERSION, FOE_SLOTS } from './names.js';
 import { FOE_LEVEL, bandOfRank, classOfLevel, foeLevelCap, levelOf, levelOfClass, partyLevels } from './foes.js';
 import { fold, readSheet } from './read.js';
 
@@ -57,7 +57,8 @@ export function vetOpen(requested, sheet, texts, { rankAt = null } = {}) {
     const open = [], refused = [];
     // A new foe is at most one band (10 levels) above the party's highest level: a level or rank above that is held down to it.
     const cap = foeLevelCap(partyLevels(sheet));
-    const known = new Set((sheet?.foes ?? []).filter(foe => foe.filled).map(foe => fold(foe.name)));
+    // (a standing group is already there; a Down one is beaten and a new group of its name is new: openFoes replaces it)
+    const known = new Set((sheet?.foes ?? []).filter(foe => foe.filled && foe.hurt > 0).map(foe => fold(foe.name)));
     for (const entry of requested ?? []) {
         const name = oneLine(entry?.name).slice(0, OPEN_MAX_NAME).trim();
         if (!name) continue;
@@ -104,19 +105,25 @@ const argsOf = entry => (entry.level !== undefined
     ? { level: entry.level, class: classOfLevel(entry.level) }
     : { class: entry.class ?? 1, level: levelOfClass(entry.class) ?? 1 });
 
+export { FIX_VERSION };
+
 /**
- * Fills a free slot (count 0) of the Foes blocks in `domain` (the data-module domain) for each entry of `open`, in order, through the block's
+ * Fills a free slot (empty or Down) of the Foes blocks in `domain` (the data-module domain) for each entry of `open`, in order, through the block's
  * own `set-slot-N` kind (its effects, run by the block interpreter); a block with no such kind (a bare sheet) has the same four fields set, the
- * health full. An entry whose name is on a filled slot already, or that finds no free slot, is passed over. The domain is changed in place.
+ * health full. An entry whose name is on a standing slot already, or that finds no free (empty or Down) slot, is passed over; a Down group of the same name is replaced in its own slot. The domain is changed in place.
  * An entry carries its `level` (the Levels rules, once resolve.js has settled it) or its `class` (a plan from before). → [{ slot, module, name, count, level | class }] the
  * slots filled (the sheet's slot numbers).
  */
-export function openFoes(domain, open) {
+export function openFoes(domain, open, { fix = FIX_VERSION } = {}) {
     const placed = [];
     for (const entry of open ?? []) {
         const sheet = readSheet({ domains: { dataModules: domain } });
-        if (sheet.foes.some(foe => foe.filled && fold(foe.name) === fold(entry.name))) continue;
-        const free = sheet.foes.find(foe => foe.count === 0);
+        // A group of that name that is standing is the one already there. A Down group (filled, hurt 0) is a beaten one and no longer holds its slot: a new
+        // group of the same name replaces it, else the first empty or Down slot takes the new group, so five fights in a row never stall the block.
+        const same = sheet.foes.find(foe => foe.filled && fold(foe.name) === fold(entry.name));
+        // (A roll made before `fix: 2` keeps the earlier rule exactly: a filled group of the name stops the entry, only an empty slot is free, nothing is cleared.)
+        if (fix < 2 ? same : same && same.hurt > 0) continue;
+        const free = fix < 2 ? sheet.foes.find(foe => foe.count === 0) : same ?? sheet.foes.find(foe => foe.count === 0 || (foe.filled && foe.hurt === 0));
         if (!free) continue;
         const n = ((free.slot - 1) % FOE_SLOTS) + 1;
         const pin = domain.pins?.[domain.active?.[free.module]?.hash];
@@ -131,6 +138,25 @@ export function openFoes(domain, open) {
             evaluation.finish();
         } else Object.assign(instance.fields, { [`foe${n}`]: entry.name, [`count${n}`]: entry.count, ...(entry.level !== undefined ? { [`level${n}`]: entry.level } : { [`class${n}`]: entry.class ?? 1 }), [`hurt${n}`]: 5 });
         placed.push({ slot: free.slot, module: free.module, name: entry.name, count: entry.count, ...(entry.level !== undefined ? { level: entry.level } : { class: entry.class ?? 1 }) });
+    }
+    // A new fight has opened: the Down groups left from earlier replies are cleared in the same step (the block's own clear kind, else its four fields), so the Foes
+    // block, the log's Status and the prompts show only this fight's foes. Opening happens before this reply's rolls, so a group that goes Down in this reply stays
+    // until the next fight opens and its XP is still paid.
+    if (placed.length && fix >= 2) {
+        const taken = new Set(placed.map(entry => entry.slot));
+        for (const stale of readSheet({ domains: { dataModules: domain } }).foes.filter(foe => foe.filled && foe.hurt === 0 && !taken.has(foe.slot))) {
+            const n = ((stale.slot - 1) % FOE_SLOTS) + 1;
+            const definition = domain.pins?.[domain.active?.[stale.module]?.hash]?.definition;
+            const instance = domain.instances?.[stale.module]?.chat;
+            if (!instance?.fields) continue;
+            const kind = definition?.kinds?.[`clear-${n}`];
+            if (kind?.effects && definition.state) {
+                const evaluation = createEvaluation(definition, instance, { inputs: {}, source: {}, cursor: null, subject: 'chat' });
+                evaluation.effects(kind.effects, { arg: { why: 'gone' } });
+                evaluation.rules();
+                evaluation.finish();
+            } else Object.assign(instance.fields, { [`foe${n}`]: '', [`count${n}`]: 0, [`hurt${n}`]: 5 });
+        }
     }
     return placed;
 }

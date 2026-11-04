@@ -144,11 +144,16 @@ export const LEAN_RPG_LIMITS = Object.freeze({ sets: 12, skills: 5, name: 40, ab
 // `{ id, name, aliases?, about, look, voice?, personality?, history?, portrait?, start: { place, goal, routine? }, drawnTo?,
 // meters?: { preset?, <meter>: n }, stages?, fields?, secrets?, canDieUnmet? }`. All text is plain: no < > { } (and no | in
 // the short lines a change line may carry), line breaks become spaces. `stages` take the shape of a meter preset's stages.
-export const CAST_FIELDS = Object.freeze(['id', 'name', 'aliases', 'about', 'look', 'voice', 'personality', 'history', 'portrait', 'start', 'drawnTo', 'meters', 'stages', 'fields', 'secrets', 'canDieUnmet', 'gear']);
+export const CAST_FIELDS = Object.freeze(['id', 'name', 'aliases', 'about', 'look', 'voice', 'personality', 'history', 'portrait', 'start', 'drawnTo', 'meters', 'stages', 'fields', 'secrets', 'canDieUnmet', 'gear', 'skills']);
+// A cast member's signature skills (`cast[].skills`): the same seven stats as the RPG's (lean-rpg/names.js STATS, pinned by a test), the ranks, the resources and the most a person brings (lean-rpg/names.js SKILL_SLOTS_MAX, pinned too).
+export const CAST_SKILL_FIELDS = Object.freeze(['name', 'about', 'stat', 'uses', 'rank']);
+export const CAST_SKILL_STATS = Object.freeze(['str', 'vit', 'agi', 'dex', 'int', 'luk', 'cha']);
+export const CAST_SKILL_USES = Object.freeze(['stamina', 'mana']);
+export const CAST_SKILL_RANK_WORDS = Object.freeze(['novice', 'adept', 'expert', 'master']);
 export const CAST_START_FIELDS = Object.freeze(['place', 'goal', 'routine']);
 export const CAST_SECRET_FIELDS = Object.freeze(['title', 'text', 'meter', 'at', 'when']);
 export const CAST_LIMITS = Object.freeze({ entries: 64, name: 80, aliases: 8, about: 300, look: 600, voice: 300, personality: 600, history: 1200,
-    place: 80, goal: 200, routine: 200, drawnTo: 6, phrase: 80, fields: 6, fieldName: 40, fieldValue: 60, secrets: 8, secretTitle: 60, secretText: 300, secretWhen: 120, meters: 10, gear: 6 });
+    place: 80, goal: 200, routine: 200, drawnTo: 6, phrase: 80, fields: 6, fieldName: 40, fieldValue: 60, secrets: 8, secretTitle: 60, secretText: 300, secretWhen: 120, meters: 10, gear: 6, skills: 8, skillName: 40, skillAbout: 120 });
 // The meters NPC State Delta has before any preset (a secret or a stage may name them without the entry listing them): its four
 // own and the ones its built-in presets (companion, rival, mentor) add.
 export const CAST_BUILT_IN_METERS = Object.freeze(['trust', 'affection', 'desire', 'tension', 'loyalty', 'respect', 'rivalry', 'approval']);
@@ -190,7 +195,11 @@ export const WEATHER_TABLE_FIELDS = Object.freeze(['season', 'region', 'weather'
 export const WEATHER_LIMITS = Object.freeze({ seasons: 12, months: 60, season: 24, region: 80, tables: 120, kinds: 24, text: 60 });
 export const START_FIELDS = Object.freeze(['scene', 'inventory']);
 // Screens (SPEC §13.1) a pack adds or overrides by id.
-export const SCREEN_FIELDS = Object.freeze(['id', 'title', 'icon', 'mounts', 'template', 'layout', 'css', 'theme', 'data', 'steps']);
+// `tab` puts a screen in a shared tab (the same `tab` on several screens draws them as sections of one tab, in `order`; `tabTitle` names it, the first one
+// given wins); a block's `show.into` names the same tab. `order` is the screen's place among the tabs (lower first).
+export const SCREEN_FIELDS = Object.freeze(['id', 'title', 'icon', 'mounts', 'template', 'layout', 'css', 'theme', 'data', 'steps', 'tab', 'tabTitle', 'order']);
+export const TAB_ID = /^[a-z][a-z0-9-]{0,39}$/;
+export const TAB_TITLE_MAX = 24;
 export const MOUNTS = Object.freeze(['tab', 'screen', 'card', 'hud', 'dialog']);
 
 // Slugs are lowercase words joined by single dashes, as Story Block's definition IDs need.
