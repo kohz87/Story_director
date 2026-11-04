@@ -283,7 +283,18 @@ function closeWords(left, right) {
  * contained in the key's (two words or more) or overlap by 3/4. One entry is a match; more
  * are ambiguous and none is to be guessed.
  */
-export function nearMatches(records, key) {
+export function nearMatches(records, key, kind = null) {
+    const found = nearMatchesAll(records, key);
+    // (stage72) A line that says its kind ("- quest …") and more than one near match, of which exactly one is
+    // of that kind: the kind settles it (the hook a quest grew out of stays active beside the quest).
+    if (found.length > 1 && kind) {
+        const same = found.filter(entry => entry.record.kind === kind);
+        if (same.length === 1) return same;
+    }
+    return found;
+}
+
+function nearMatchesAll(records, key) {
     const words = keyWords(key);
     if (!words.length) return [];
     const active = (records ?? [])
@@ -611,7 +622,7 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
         if (target === undefined) {
             // A key that is not tracked: the one record it plainly means, else (for a `~` with
             // something to say) a new record, else the line is ignored and the next note says so.
-            const near = nearMatches(records, op.key);
+            const near = nearMatches(records, op.key, op.op === '+' ? null : op.lineKind ?? null);
             if (near.length === 1) {
                 target = near[0].index;
                 problems.push(finding('near-key', 'info', op, `"${op.key}" read as "${near[0].record.key}".`));

@@ -33,6 +33,7 @@ import { createModule } from '../../../src/v2/module.js';
 import { castPlans } from '../../../src/v2/cast/index.js';
 import { PRESETS, makeCalendar } from '../../../src/calendar.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
+import { problemList } from '../../../src/v2/tracker/domain.js';
 import { fakeDelta } from '../keypeople/helpers.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
@@ -156,6 +157,20 @@ function replyLines(r, n) {
         if (r.chance(0.2)) lines.push(`- hook ${key} — it passed`);
     }
     return lines;
+}
+
+// Near-name quest lines (own stream, so the story's lines stay as they were): a hook, the quest taken on from it under a
+// name that only reads near it, and a closing or progress line under a third near spelling ("Cellar-Rat Cull"), all of the
+// reply's own. The hook stays live beside the quest, so the line finds two near matches and the quest line's kind settles it.
+const NEAR = { hook: 'Rats', quest: 'Cellar-Rats', line: 'Cellar-Rat Cull' };
+function nearLines(rn, n) {
+    if (!rn.chance(0.4)) return { lines: [] };
+    const base = `${word(rn)}${String(n).padStart(2, '0')}77`;
+    const close = rn.chance(0.6);
+    const lines = [`+ hook ${base} ${NEAR.hook} — rats under the store | giver: Fenna | reward: 5 gold`,
+        `+ quest ${base} ${NEAR.quest} — a job | giver: Fenna | reward: 6 copper | step: Find the key`,
+        close ? `- quest ${base} ${NEAR.line} — turned in` : `~ quest ${base} ${NEAR.line} | step: Seal the burrow`];
+    return { lines, base, close };
 }
 
 // A reply's trip lines (own stream): routes from both of the first reply's places to a waypoint of the reply's own (so there is a way to go from
@@ -286,6 +301,10 @@ function validatorErrors(host) {
     return out;
 }
 
+// Near-name quest lines that settled on the quest (counted over all seeds, asserted after them).
+let nearPicks = 0;
+let nearLinesMade = 0;
+
 for (const seed of SEEDS) {
     test(`delete fuzz, seed ${seed}: ${REPLIES} replies with middle deletes replay cleanly`, async t => {
         t.mock.method(console, 'warn', () => {});
@@ -297,6 +316,7 @@ for (const seed of SEEDS) {
         const rk = prng(seed ^ 0x4B50);
         const rc = prng(seed ^ 0xCA57);
         const re = prng(seed ^ 0xC10C);
+        const rn = prng(seed ^ 0x4EA2);
         const source = { version: '1.0.0', enabled: true, entries: [] };
         source.entries = CAST_IDS.map(id => castEntry(id, rc, source.version));
         castPlans.clear();
@@ -322,8 +342,24 @@ for (const seed of SEEDS) {
             let editsMade = 0;
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
-                const lines = [...replyLines(r, n), ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
+                const near = nearLines(rn, n);
+                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
+                if (near.base) {
+                    // The line read as the quest (a near-key note), not the hook beside it: the quest took it, the hook is as it was.
+                    nearLinesMade += 1;
+                    const director = host.head().domains.director;
+                    const named = `${near.base} ${NEAR.line}`;
+                    const quest = Object.values(director.threads).find(thread => thread.key === `${near.base} ${NEAR.quest}`);
+                    const hook = Object.values(director.threads).find(thread => thread.key === `${near.base} ${NEAR.hook}`);
+                    assert.ok(quest && hook, `seed ${seed}, reply ${n}: the hook and the quest exist`);
+                    assert.equal(hook.status, 'active', `seed ${seed}, reply ${n}: the hook is left alone`);
+                    assert.ok(problemList(director).some(problem => problem.kind === 'near-key' && problem.key === named), `seed ${seed}, reply ${n}: "${named}" read as a near key`);
+                    assert.equal(director.keys[named.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()], quest.id, `seed ${seed}, reply ${n}: the name is the quest's alias`);
+                    if (near.close) assert.equal(quest.status, 'resolved', `seed ${seed}, reply ${n}: the quest was closed`);
+                    else assert.equal(quest.fields.step, 'Seal the burrow', `seed ${seed}, reply ${n}: the quest took the step`);
+                    nearPicks += 1;
+                }
                 await castPlans.idle();
                 castEdits(rc, source, n);
                 await installCast();
@@ -415,3 +451,9 @@ for (const seed of SEEDS) {
         }
     });
 }
+
+test('delete fuzz: near-name quest lines were reached, and settled on the quest', t => {
+    t.diagnostic(`near-name quest lines ${nearLinesMade}, settled on the quest ${nearPicks}`);
+    assert.ok(nearPicks > 0, 'the narrowing picked a quest at least once');
+    assert.equal(nearPicks, nearLinesMade);
+});
