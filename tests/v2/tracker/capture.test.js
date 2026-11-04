@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 
 import { part } from '../../../src/v2/tracker/index.js';
 import { toV1Op } from '../../../src/v2/tracker/capture.js';
+import { parseChanges } from '../../../src/changes.js';
+import { applyOps, emptyTracker, nearMatches } from '../../../src/tracker.js';
 import { lastProblems, makeState, readLine, reply, runCommand, story, thread } from './helpers/fake-ctx.js';
 import { problemList, replyTurn } from '../../../src/v2/tracker/domain.js';
 
@@ -305,4 +307,53 @@ test('quest close: a hook line is not narrowed by kind (only a quest line is)', 
     const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: '- hook Storehouse No. 2 Cellar-Rat Cull — done' }]);
     assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'active');
     assert.equal(kinds(state)[0], 'unknown-key');
+});
+
+// stage72 review follow-ups: what the kind narrowing must not reach.
+const quest = key => `+ quest ${key} — a job | giver: Nelje | reward: 1 silver | step: Look | difficulty: F | type: cull`;
+const CULL = 'Storehouse No. 2 Cellar-Rat Cull';
+
+test('quest close: a finished quest of a near name does not compete with the active one', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: quest('Storehouse No. 2 Cellar-Rats') }, { lines: '- quest Storehouse No. 2 Cellar-Rats — done' },
+        { lines: quest('Storehouse No. 2 Cellar Cull Rats') }, { lines: `- quest ${CULL} — done` }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar Cull Rats').status, 'resolved');
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'active');
+    assert.deepEqual(kinds(state), ['near-key']);
+});
+
+test('quest close: an offered quest (a hook with its goal, offer: true) is not counted as the quest', () => {
+    const state = story([{ lines: '+ hook Storehouse No. 2 Cellar Rats — a job | goal: Clear them | giver: Nelje | reward: 1 silver' },
+        { lines: quest('Storehouse No. 2 Cellar Cull Rats') }, { lines: `- quest ${CULL} — done` }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar Rats').offer, true);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar Rats').status, 'active', 'the offer stays open');
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar Cull Rats').status, 'resolved');
+    assert.deepEqual(kinds(state), ['near-key']);
+});
+
+test('quest close: a ! quest line settles on the quest as - and ~ do', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: `! quest ${CULL} — done` }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'resolved');
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'active');
+    assert.equal(kinds(state)[0], 'near-key');
+});
+
+test('quest close: the reader\'s own-choice gate still applies to a quest reached by a near name', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: `- quest ${CULL} — gave up` }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'active');
+    assert.deepEqual(kinds(state), ['near-key', 'not-chosen']);
+});
+
+test('quest close: a v1 op with no lineKind behaves as before (two near matches are not guessed)', () => {
+    const made = applyOps(emptyTracker(), parseChanges([
+        '+ hook Storehouse No. 2 Rats — a job | giver: Nelje | reward: 6 copper',
+        '+ quest Storehouse No. 2 Cellar-Rats — a job | giver: Nelje | reward: 1 silver | step: Look',
+    ].join('\n')).ops, { message: 1, time: 0 }).tracker;
+    assert.equal(nearMatches(made.records, CULL).length, 2);
+    assert.equal(nearMatches(made.records, CULL, 'quest').length, 1);
+    const [close] = parseChanges(`- ${CULL} — done`).ops;
+    assert.equal(close.lineKind, undefined);
+    const { tracker, problems } = applyOps(made, [close], { message: 2, time: 0 });
+    assert.deepEqual(problems.map(problem => problem.kind), ['unknown-key']);
+    assert.deepEqual(problems[0].candidates.slice().sort(), ['Storehouse No. 2 Cellar-Rats', 'Storehouse No. 2 Rats']);
+    assert.deepEqual(tracker.records.map(record => record.status), ['active', 'active']);
 });
