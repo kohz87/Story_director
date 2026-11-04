@@ -18,13 +18,14 @@ Story Director works without NPC State Delta. Read other modules through guarded
 - `src/v2/tracker/`: the `director` domain, its change-line kinds and grammar, the clock (`time.js`), calendar
   settings, the note (static + tail, `note.js`), seed.
 - `src/v2/time/`: settle (lapses, overdue, due now), advance, recap, records.
-- `src/v2/atlas/`: places, routes, map widget, travel, trips (`trip*.js`, docs/dev/trips.md). `src/v2/chronicle/`: world events, factions, day digest.
+- `src/v2/atlas/`: places, routes, map widget, travel, trips (`trip*.js`, docs/dev/trips.md). The map widget is `widget.js` (`render`), with its stylesheet in `widget-css.js` and its prop readers and DOM helpers in `widget-view.js`. `src/v2/chronicle/`: world events, factions, day digest.
 - `src/v2/world/`: the World screen (Now / Journal), PC-known views, people widget; nothing stored.
 - `src/v2/keypeople/`: key people the reader pins (domain `keypeople`, kinds `away` and `key`, the tail, `director.keyPeople`, the World section's widget; docs/dev/key-people.md).
 - `src/v2/cast/`: the living cast (domain `cast`, steps `cast.sync` / `cast.advance` / `cast.meet`, the planner, `director.cast`; docs/dev/cast.md).
 - `src/v2/arc/`: arc planning through `sdk.callModel`, review, Reveal/Hide (feature `story-director.arc`).
 - `src/v2/screens/`: Director, Quests, Reveal, Behind, HUD, status card.
 - `src/*.js`: v1's pure rules reused by v2 (`tracker.js`, `lapses.js`, `calendar.js`, `places.js`, `routes.js`, ...).
+- `src/routes.js`: facade re-exporting the route rules, which live in `src/routes/`: `pack.js` (world-pack loading, place lookup, `normalizeMode`), `plan.js` (paces, day maths, planner), `leg.js` (`parseLeg`, `validateLeg`), `text.js` (route and leg text), `util.js` (shared tiny helpers).
 - `tests/*.test.js`: v1 rule tests. `tests/v2/<part>/`: per-part tests; `tests/v2/integration/` (incl.
   `alone.test.js`), `tests/v2/break/` (one file per break finding, `fuzz-delete*.test.js`).
 - `tests/vendor/story-block/`: Story Block's testkit + runtime, vendored (VERSION names the commit).
