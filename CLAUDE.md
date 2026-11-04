@@ -25,6 +25,7 @@ Story Director works without NPC State Delta. Read other modules through guarded
 - `src/v2/arc/`: arc planning through `sdk.callModel`, review, Reveal/Hide (feature `story-director.arc`).
 - `src/v2/screens/`: Director, Quests, Reveal, Behind, HUD, status card.
 - `src/*.js`: v1's pure rules reused by v2 (`tracker.js`, `lapses.js`, `calendar.js`, `places.js`, `routes.js`, ...).
+- `src/routes.js`: facade re-exporting the route rules, which live in `src/routes/`: `pack.js` (world-pack loading, place lookup, `normalizeMode`), `plan.js` (paces, day maths, planner), `leg.js` (`parseLeg`, `validateLeg`), `text.js` (route and leg text), `util.js` (shared tiny helpers).
 - `tests/*.test.js`: v1 rule tests. `tests/v2/<part>/`: per-part tests; `tests/v2/integration/` (incl.
   `alone.test.js`), `tests/v2/break/` (one file per break finding, `fuzz-delete*.test.js`).
 - `tests/vendor/story-block/`: Story Block's testkit + runtime, vendored (VERSION names the commit).
