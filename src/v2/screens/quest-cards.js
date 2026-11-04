@@ -37,7 +37,7 @@ export function chipOf(thread) {
 export function rowsOf(thread) {
     const fields = thread.fields ?? {};
     const rows = [];
-    for (const [name, label] of [['giver', 'Giver'], ['reward', 'Reward'], ['difficulty', 'Difficulty'], ['due', 'Due']]) {
+    for (const [name, label] of [['progress', 'Progress'], ['giver', 'Giver'], ['reward', 'Reward'], ['difficulty', 'Difficulty'], ['due', 'Due']]) {
         const value = text(fields[name]);
         if (!value) continue;
         if (name === 'difficulty' && value.toLowerCase() === 'normal') continue;
@@ -68,6 +68,8 @@ function render(el, props, memory) {
     const view = doc.defaultView;
     const root = make('div', 'sd-q-root');
     el.replaceChildren(root);
+    // The template's plain list is hidden by this class once the cards are drawn (not by :has()).
+    el.classList?.add('sd-qw-drawn');
     const observers = [];
     let value = props?.value ?? null;
 
@@ -94,7 +96,7 @@ function render(el, props, memory) {
             foot.append(make('span', 'sd-q-step', step));
         }
         if (body) {
-            more = make('button', 'sd-q-more', undefined, { type: 'button' });
+            more = make('button', 'ss-pill ss-pill-outline ss-tap-pill sd-q-more', undefined, { type: 'button' });
             const sync = () => {
                 const expanded = body.getAttribute('data-open') === 'true';
                 more.textContent = expanded ? 'Less' : 'More';
@@ -178,6 +180,7 @@ function render(el, props, memory) {
         destroy() {
             for (const observer of observers.splice(0)) observer.disconnect();
             root.remove();
+            el.classList?.remove('sd-qw-drawn');
         },
     };
 }

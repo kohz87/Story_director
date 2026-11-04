@@ -7,7 +7,7 @@ export const QUESTS_ID = 'story-director/quests';
 
 // SD's neutral/read-only view uses only its own retained projection, including old quests. The cards are the widget
 // `story-director.quests` (quest-cards.js, display only). The plain list under it is what a Story Block with no widgets
-// shows (the widget's place then reads "There is no widget called ..."); once the widget has drawn, the CSS hides the list.
+// shows (the renderer's "no widget" note is hidden); once the widget has drawn it marks its host `sd-qw-drawn` and the CSS hides the list.
 const TEMPLATE = `
 <div class="sd-quests">
   <ss-widget class="sd-qw" name="${QUESTS_WIDGET}" data-props='{"bind":"q.threads"}'></ss-widget>
@@ -32,8 +32,9 @@ const CSS = `${BASE_CSS}
 .sd-quests { display: grid; gap: 14px; padding: 4px 0; min-width: 0; container-type: inline-size; }
 .sd-active, .sd-finished { min-width: 0; }
 .sd-qw { display: block; min-width: 0; }
-.sd-qw:has(.sd-q-root) + .sd-plain { display: none; }
-.sd-qw.ss-widget-missing { font-size: 0.85em; color: var(--sd-muted); }
+.sd-qw-drawn + .sd-plain { display: none; }
+/* A host with no such widget writes its own "no widget" note into this element: hidden, the plain list is all there is. */
+.sd-qw.ss-widget-missing { display: none; }
 /* The quest cards (quest-cards.js): Story Block's quest-card look as Story Director's copy, on its tokens with fallbacks. */
 .sd-q-root { display: flex; flex-direction: column; gap: 10px; min-width: 0; color: var(--ss-text, inherit); }
 .sd-q-root * { box-sizing: border-box; }
@@ -55,7 +56,7 @@ const CSS = `${BASE_CSS}
 .sd-q-icon { flex: none; width: 14px; height: 14px; color: var(--ss-accent, currentColor); }
 .sd-q-icon.sd-q-done { color: var(--ss-good, seagreen); }
 .sd-q-step { min-width: 0; overflow-wrap: anywhere; }
-.sd-q-more { position: relative; flex: none; margin-left: auto; margin-block: 0; font: inherit; font-size: 12px; padding: 1px 10px; min-height: 22px; border-radius: 999px; border: 1px solid var(--ss-border, color-mix(in srgb, currentColor 25%, transparent)); background: transparent; color: var(--ss-text, inherit); cursor: pointer; }
+.sd-q-more { flex: none; margin-left: auto; margin-block: 0; font-size: 12px; }
 .sd-q-more[hidden] { display: none; }
 .sd-q-more:focus-visible, .sd-q-fold > summary:focus-visible { outline: 2px solid var(--ss-accent, currentColor); outline-offset: 2px; }
 .sd-q-rows { display: grid; grid-template-columns: 5.6em minmax(0, 1fr); gap: 2px 8px; margin: 2px 0 0; font-size: 12.5px; }

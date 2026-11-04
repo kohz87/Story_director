@@ -103,14 +103,29 @@ test('where nothing can be measured a long text counts as cut and a short one do
 test('rows show only what is set; difficulty "normal" is left out, any other shows', () => {
     const { el, restore } = mount([
         quest('th_a0000001', 'Bare', { goal: 'g' }),
-        quest('th_b0000001', 'Full', { goal: 'g', giver: 'Nelje', reward: '5 silver', difficulty: 'Rank E', due: 'June 20' }),
+        quest('th_b0000001', 'Full', { goal: 'g', progress: '3 of 9 jaws', giver: 'Nelje', reward: '5 silver', difficulty: 'Rank E', due: 'June 20' }),
         quest('th_c0000001', 'Normal', { goal: 'g', difficulty: 'Normal' }),
     ]);
     assert.equal(card(el, 'th_a0000001').querySelector('dl'), null, 'no rows, no list');
     assert.equal(card(el, 'th_c0000001').querySelector('dl'), null, '"normal" (any case) is hidden');
     const full = card(el, 'th_b0000001').querySelector('dl');
-    assert.deepEqual(full.querySelectorAll('dt').map(n => n.textContent), ['Giver', 'Reward', 'Difficulty', 'Due']);
-    assert.deepEqual(full.querySelectorAll('dd').map(n => n.textContent), ['Nelje', '5 silver', 'Rank E', 'June 20']);
+    assert.deepEqual(full.querySelectorAll('dt').map(n => n.textContent), ['Progress', 'Giver', 'Reward', 'Difficulty', 'Due']);
+    assert.deepEqual(full.querySelectorAll('dd').map(n => n.textContent), ['3 of 9 jaws', 'Nelje', '5 silver', 'Rank E', 'June 20']);
+    restore();
+});
+
+test('the More control is Story Block\'s tap pill, not a bare button', () => {
+    const { el, restore } = mount([quest('th_long0001', 'Long', { goal: 'g' }, { summary: LONG })]);
+    const classes = String(more(el)[0].className).split(' ');
+    for (const name of ['ss-pill', 'ss-pill-outline', 'ss-tap-pill', 'sd-q-more']) assert.ok(classes.includes(name), name);
+    restore();
+});
+
+test('the widget marks its host once drawn and unmarks it on destroy (the CSS hides the plain list by that class)', () => {
+    const { el, instance, restore } = mount([quest('th_a0000001', 'A', { goal: 'g' })]);
+    assert.equal(el.classList.contains('sd-qw-drawn'), true);
+    instance.destroy();
+    assert.equal(el.classList.contains('sd-qw-drawn'), false);
     restore();
 });
 
@@ -184,7 +199,7 @@ test('text goes in as text: markup in a title, summary or field stays text, and 
     const { el, restore } = mount([quest('th_x0000001', '<img src=x onerror=boom()>', { goal: '<b>g</b>', giver: '<i>G</i>' }, { summary: '<script>boom()</script>' })]);
     assert.equal(el.querySelectorAll('img, script, b b, i').length, 0);
     assert.equal(squash(el.querySelector('.sd-qt').textContent), '<img src=x onerror=boom()>');
-    assert.deepEqual(el.querySelectorAll('button').map(n => String(n.className)), ['sd-q-more']);
+    assert.deepEqual(el.querySelectorAll('button').map(n => String(n.className)), ['ss-pill ss-pill-outline ss-tap-pill sd-q-more']);
     restore();
 });
 
@@ -204,7 +219,9 @@ test('registered as story-director.quests and placed by the Quests screen, with 
     assert.match(screen.template, /sd-plain/);
     assert.match(screen.template, /From an earlier version/);
     assert.doesNotMatch(screen.template, /data-command/);
-    assert.match(screen.css, /\.sd-qw:has\(\.sd-q-root\) \+ \.sd-plain \{ display: none; \}/);
+    assert.match(screen.css, /\.sd-qw-drawn \+ \.sd-plain \{ display: none; \}/);
+    assert.doesNotMatch(screen.css, /:has\(\.sd-q-root\)/);
+    assert.match(screen.css, /\.sd-qw\.ss-widget-missing \{ display: none; \}/, 'the renderer\'s "no widget" note is hidden');
     assert.match(screen.css, /var\(--ss-muted, [^)#]/, 'tokens come with fallbacks (no hex: the screens carry no palette of their own)');
 });
 
@@ -233,6 +250,10 @@ test('in Story Block\'s renderer the widget draws the cards from director.thread
     const without = drawScreen(state, { ...runtime.widgets });
     assert.match(without.warnings.join(' '), /no widget called "story-director\.quests"/i);
     assert.equal(without.el.querySelector('.sd-q-root'), null);
+    const host = without.el.querySelector('ss-widget.sd-qw, .sd-qw');
+    assert.equal(host.classList.contains('ss-widget-missing'), true, 'the renderer marks the missing widget (the CSS hides it)');
+    assert.equal(host.classList.contains('sd-qw-drawn'), false, 'so the plain list is not hidden');
+    assert.equal(withWidget.el.querySelector('.sd-qw').classList.contains('sd-qw-drawn'), true);
     const plain = squash(without.el.querySelector('.sd-plain').textContent);
     for (const name of ['East Bluff Wolves', 'Granary Rats', 'Gnashers']) assert.match(plain, new RegExp(name));
 });
