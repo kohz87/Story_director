@@ -40,7 +40,7 @@ const CSS = `${BASE_CSS}
 .sd-q-sec { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .sd-q-label { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); }
 .sd-q-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 460px)); gap: 8px; }
-.sd-q { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid var(--ss-border, color-mix(in srgb, currentColor 25%, transparent)); border-radius: var(--ss-radius, var(--ss-radius-m, 10px)); background: var(--ss-surface, transparent); min-width: 0; }
+.sd-q { display: grid; align-content: start; gap: 5px; padding: 10px 12px; border: 1px solid var(--ss-border, color-mix(in srgb, currentColor 25%, transparent)); border-radius: var(--ss-radius, var(--ss-radius-m, 10px)); background: var(--ss-surface, transparent); min-width: 0; }
 .sd-q1 { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .sd-qt { font-size: 15px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .sd-chip { display: inline-flex; align-items: center; padding: 0 .55em; border-radius: 999px; font-size: 12px; line-height: 1.35; border: 1px solid currentColor; white-space: nowrap; }
@@ -69,10 +69,6 @@ const CSS = `${BASE_CSS}
 .sd-q-fold > summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
 .sd-q-fold[open] > summary::before { transform: rotate(45deg); }
 @media (prefers-reduced-motion: reduce) { .sd-q-fold > summary::before { transition: none; } }
-/* A phone or touch screen: More keeps a 44px tap area without making the card taller. */
-@media (max-width: 759.98px), (pointer: coarse) {
-  .sd-q-more::after { content: ""; position: absolute; inset: -11px -6px; }
-}
 .sd-finished { padding: 8px 12px; }
 .sd-finished > summary { cursor: pointer; list-style-position: inside; min-height: 28px; padding: 4px 0; }
 .sd-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
