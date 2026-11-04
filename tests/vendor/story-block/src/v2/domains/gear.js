@@ -125,7 +125,21 @@ const NAME_SLOT = Object.freeze({
     cloak: 'cloak', cape: 'cloak', mantle: 'cloak',
     boot: 'feet', shoe: 'feet', sandal: 'feet',
     ring: 'accessory', amulet: 'accessory', pendant: 'accessory', belt: 'accessory',
+    gauntlet: 'accessory', glove: 'accessory', bracer: 'accessory', bracelet: 'accessory',
 });
+// Real compound gear words ("Longsword", "Warhammer", "Breastplate", "Longbow"), each matched as a whole word (a plural s is allowed, as for the nouns above).
+// No word is read by its ending: "horseshoe", "reboot", "windshield", "crossword", "flagstaff" and "rainbow" are not gear.
+const COMPOUND_SLOT = Object.freeze({
+    longsword: 'weapon', shortsword: 'weapon', broadsword: 'weapon', greatsword: 'weapon', bastardsword: 'weapon', twohandedsword: 'weapon',
+    warhammer: 'weapon', battleaxe: 'weapon', greataxe: 'weapon', handaxe: 'weapon', warstaff: 'weapon', quarterstaff: 'weapon',
+    longbow: 'weapon', shortbow: 'weapon', crossbow: 'weapon', greatbow: 'weapon', warbow: 'weapon',
+    breastplate: 'body', chainmail: 'body', platemail: 'body', ringmail: 'body',
+});
+const slotOfWord = word => {
+    if (Object.hasOwn(NAME_SLOT, word)) return { slot: NAME_SLOT[word] };
+    if (Object.hasOwn(COMPOUND_SLOT, word)) return { slot: COMPOUND_SLOT[word] };
+    return null;
+};
 const foldHand = text => String(text ?? '').normalize('NFKC').toLowerCase().replace(/off[\s-]*hand/g, 'offhand');
 
 // The stat a kind of thing raises when nothing else says (the name's last matching noun), else the slot's own (GEAR.slotStat).
@@ -157,8 +171,8 @@ export const placeOf = slot => (slot === 'accessory' ? 'accessory-1' : slot);
 export function gearSlotOf(kindWord, name) {
     const said = slotWordOf(kindWord);
     if (said) return said;
-    const nouns = words(name).map(singular).filter(word => Object.hasOwn(NAME_SLOT, word));
-    return nouns.length ? NAME_SLOT[nouns[nouns.length - 1]] : null;
+    const found = words(name).map(singular).map(slotOfWord).filter(Boolean);
+    return found.length ? found.at(-1).slot : null;
 }
 
 // The five rarity words and their usual synonyms (a `rarity:` or `quality:` label).
@@ -235,6 +249,10 @@ export function gearDefine(def, said = {}, { allowLegendary = false, ceiling = n
     }
     return def;
 }
+
+/** Is this def one the reader made by hand (`hand: true`), with no story-given stack of it? Only then may the reader's Edit change its kind, slot, rarity or bonus. */
+export const handDef = (inventory, def) => def?.hand === true
+    && !Object.values(isPlainObject(inventory?.stacks) ? inventory.stacks : {}).some(stack => stack?.def === def.id && stack.story === true);
 
 /** A pack item's explicit bonus (0…6), only for a `pack.` def; else null. */
 export const packBonus = (id, value) => (typeof id === 'string' && id.startsWith('pack.') && Number.isSafeInteger(value) && value >= 0 && value <= GEAR.bonusMax ? value : null);
@@ -409,7 +427,7 @@ export function loadLevel(load, capacity) {
  *   where it is worn and by whom), owners: [{ value, label }] (who can wear: the main character first), slots: { [place]: { stack, name, rarity, bonus, cond, word, broken } | null } (what `owner` has on) }.
  * `names(id)` is how an owner is called ("Astra"); `owners` the wearers it offers. `who` (a name) picks the owner by name, `own` the main character's.
  */
-export function gearView(state, args, { condOf, carryOf, penalty, mounts, names, owners }) {
+export function gearView(state, args, { condOf, carryOf, penalty, mounts, names, owners, kit = () => false, empty = () => false }) {
     const inventory = state?.domains?.inventory;
     const defs = isPlainObject(inventory?.defs) ? inventory.defs : {};
     const stacks = Object.values(isPlainObject(inventory?.stacks) ? inventory.stacks : {}).filter(stack => isPlainObject(stack) && isPlainObject(defs[stack.def]))
@@ -432,6 +450,8 @@ export function gearView(state, args, { condOf, carryOf, penalty, mounts, names,
             // The slot the Edit form offers: where it is worn, else the place its own slot names ('' for none: a bag).
             slotKey: worn ? stack.equipped : (def.kind === 'equipment' && slotWordOf(def.slot) ? placeOf(slotWordOf(def.slot)) : ''),
             fill: FILL[condWord(cond)],
+            // A piece the reader added by hand (its Edit offers Kind, Slot, Rarity and Bonus): its own slot and stat points.
+            ...(handDef(inventory, def) ? { hand: true, defSlot: def.kind === 'equipment' ? placeOf(slotWordOf(def.slot) ?? '') : '', stats: statsFor(def) } : {}),
             // A cast member's signature piece: whose it is, for the chip ("Bound to Mara").
             ...(typeof stack.bound === 'string' && stack.bound ? { bound: { who: names(stack.bound) || stack.bound } } : {}),
         };
@@ -455,6 +475,8 @@ export function gearView(state, args, { condOf, carryOf, penalty, mounts, names,
     });
     return {
         on: true, owner, owners: list, rows, slots,
+        // The starting kit (the chat has no message from the reader yet): Rarity and Bonus may be set by hand.
+        kit: { open: kit() === true, ...(empty() === true ? { empty: true } : {}) },
         carry: {
             load: shared.load, capacity: shared.capacity, pct: shared.capacity > 0 ? Math.round(shared.load * 100 / shared.capacity) : 0,
             level: loadLevel(shared.load, shared.capacity), lose: Math.abs(penalty), breakdown, away,
@@ -466,7 +488,7 @@ export function gearView(state, args, { condOf, carryOf, penalty, mounts, names,
  * The two gear queries: `inventory.gear` and `gear.carry` (`items.carry`'s answer from Story Block's own rules, asked only when no
  * carry module answers `items.carry`; a query of that name would clash with a carry module's). Both answer null while `on()` is false.
  */
-export function createGearQueries({ on, condOf, carryOf, penalty, feature, names = () => '', owners = () => [] }) {
+export function createGearQueries({ on, kit = () => false, empty = () => false, condOf, carryOf, penalty, feature, names = () => '', owners = () => [] }) {
     // (`recorded: true`, asked by a roll that carries a gear record, answers whatever the switch says now: the record decides, gear.js `wearGear`)
     // (`inventory.gear` has no `feature`: the registry would answer null for it while the switch is off, and a roll that carries a gear record asks it then)
     const gate = (fn, recorded = false) => Object.assign((state, args, tools) => (on() || args?.recorded === true ? fn(state, args, tools) : null), recorded ? {} : { feature });
@@ -475,7 +497,7 @@ export function createGearQueries({ on, condOf, carryOf, penalty, feature, names
     return {
         'inventory.statBonus': gate((state, args) => statBonus(state, typeof args?.owner === 'string' && args.owner ? args.owner : 'party', condOf)),
         'inventory.gear': gate((state, args, tools) => gearAnswer(state, args, { condOf, carryOf, penalty, mounts: mountsOf(tools) }), true),
-        'gear.view': gate((state, args, tools) => gearView(state, args, { condOf, carryOf, penalty, mounts: mountsOf(tools), names: id => names(state, tools, id), owners: () => owners(state, tools) })),
+        'gear.view': gate((state, args, tools) => gearView(state, args, { kit, empty, condOf, carryOf, penalty, mounts: mountsOf(tools), names: id => names(state, tools, id), owners: () => owners(state, tools) })),
         'gear.carry': gate((state, args, tools) => carryAnswer(state, args, { carryOf, mounts: mountsOf(tools) })),
     };
 }

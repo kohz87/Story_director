@@ -23,7 +23,7 @@
 // The record (the step's receipt `data.v2.result.fight`): { lv: 1, groups: [{ slot, name, count, level }], awards: [{ who, module, xp, held? }] } (xp is the member's own). A record without `lv` is an
 // older one (groups carry `class`); it is read as it is and replays as recorded.
 import { createEvaluation } from '../data-modules/interpreter.js';
-import { FIGHT, FIGHT_XP, FOE_SLOTS, LEAN_RPG_FEATURE } from './names.js';
+import { FIGHT, FIGHT_XP, FOE_SLOTS, LEAN_RPG_FEATURE, RESOLVE } from './names.js';
 import { XP_RATE, clampLevel, scaleXp, xpRateFrom, xpRateOf } from './levels.js';
 import { levelOfClass } from './formula.js';
 import { fold, readSheet } from './read.js';
@@ -92,6 +92,13 @@ export function fightWitness(sheet, domain, source, decision) {
         members: paidOf(sheet).map(character => ({ module: character.module, who: character.who, xp: character.xp, soul: character.soul, ...(character.levelled ? { level: character.level } : {}), points: character.points })) };
 }
 
+/** The foe slots this reply's roll put a group in (its `rpg.resolve` receipt's `result.opened`, open.js): a group that took a Down group's slot is a new one. */
+export function openedSlots(receipts) {
+    const roll = (Array.isArray(receipts) ? receipts : []).findLast(receipt => receipt?.type === RESOLVE && isObject(receipt.data?.v2?.result));
+    const opened = roll?.data?.v2?.result?.opened;
+    return Array.isArray(opened) ? opened.map(entry => entry?.slot).filter(slot => Number.isSafeInteger(slot) && slot >= 1) : [];
+}
+
 /**
  * The part's afterCapture: the step for a fight this reply won, else nothing. `view.before()` is the state before the reply (sdk.js makeView); without it
  * (a view that cannot say) nothing is asked for.
@@ -109,7 +116,9 @@ export function fightHook(view, info) {
     // reply's roll, or the narrator's own set-slot line): a slot that was empty before, or held another group, and is filled now.
     const filledBefore = new Map(before.foes.filter(foe => foe.filled).map(foe => [foe.slot, fold(foe.name)]));
     const arrived = filled.filter(foe => filledBefore.get(foe.slot) !== fold(foe.name)).map(foe => foe.slot);
-    const was = [...new Set([...standingSlots(before), ...arrived])].sort((a, b) => a - b);
+    // (a group the reply's roll opened in a Down group's slot, even one of the same name, is new: it is paid; a stale Down group never is)
+    const opened = openedSlots(info?.receipts).filter(slot => filled.some(foe => foe.slot === slot));
+    const was = [...new Set([...standingSlots(before), ...arrived, ...opened])].sort((a, b) => a - b);
     if (!was.length || !fightOf(sheet, was).won) return undefined;
     // The XP rate in force, recorded with the step (a payload without `rate` is 100): a later change of the setting never moves a reply that has it.
     let rate = XP_RATE.default;

@@ -51,7 +51,7 @@ const LOCK = `<ss-widget class="bound-lock" name="ss.badge" data-props='{"icon":
 function group(kind, gear = false) {
     const row = 'q.gx.rows[it.stack]';
     const edit = `{"value":"{{ it.name }}","itemCount":{{ q.counts[it.stack] }},"itemNote":"{{ it.note }}","displayValue":false,"kind":"item","label":"${jsonText(S.editItem)}","command":"inventory.edit","payload":{"stack":"{{ it.stack }}","group":true}${gear
-        ? `,"gear":{"kind":"{{ it.kind }}","stack":"{{ it.stack }}","owner":"{{ it.owner }}","by":"{{ ${row}.byId }}","place":"{{ ${row}.place }}","slot":"{{ ${row}.slotKey }}","bound":"{{ ${row}.bound.who }}","owners":{{ q.gx.owners }}}` : ''}}`;
+        ? `,"gear":{"kind":"{{ it.kind }}","stack":"{{ it.stack }}","owner":"{{ it.owner }}","by":"{{ ${row}.byId }}","place":"{{ ${row}.place }}","slot":"{{ ${row}.slotKey }}","bound":"{{ ${row}.bound.who }}","def":"{{ it.def }}","rarity":"{{ it.rarity }}","row":{{ ${row} }},"kit":{{ q.gx.kit.open }},"owners":{{ q.gx.owners }}}` : ''}}`;
     // The chips and the condition of a row: today's, or (gear on) the slot, who wears it and the condition bar with its word.
     const chips = gear ? `
           <span class="rarity">{{ it.rarity }}</span>
@@ -193,6 +193,19 @@ const CSS = `${BASE_CSS}
 .inv-add-form { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .inv-add-form input { width: 10em; max-width: 100%; }
 .inv-add-error { flex-basis: 100%; color: var(--ss-bad-text); }
+/* Gear in fights: "+ Add item" opens the grouped form full width under the button; while a row is being edited on a phone it takes the whole row. */
+.wallet-and-add:has(.inv-add-gear) { display: flex; width: 100%; }
+.wallet-and-add:has(.inv-add-gear) > :has(.inv-add-gear) { flex: 1 1 100%; min-width: 0; }
+/* the slim 32px boxes only where there is room and a fine pointer; a phone keeps size.css's 44px controls */
+@media (min-width: 760px) and (pointer: fine) {
+  .ss-w-editable-group input, .ss-w-editable-group select { box-sizing: border-box !important; min-height: 32px !important; height: 32px !important; }
+}
+.ss-w-inventory-add:has(.inv-add-gear), .inv-add-gear, .inv-add-gear > .ss-w-editable { display: block; width: 100%; min-width: 0; }
+.inv.gear .item:has(.ss-w-editable-gear) > .body > .actions { display: none; }
+@media (max-width: 600px) {
+  .inv.gear .item:has(.ss-w-editable-gear) > .ss-tile-box { display: none; }
+  .inv.gear .item.grow:has(.ss-w-editable-gear) { grid-template-columns: minmax(0, 1fr); }
+}
 .filter { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-left: auto; font-size: 0.85em; }
 .filter label { display: inline-flex; gap: 4px; align-items: center; }
 .filter select, .filter .find { font: inherit; color: var(--sb-fg); background: var(--sb-surface); border: 1px solid var(--sb-border);

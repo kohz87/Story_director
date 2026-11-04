@@ -4,7 +4,7 @@
 // fields' `names`). They come in the shape `replyCardLines` gives (ui-host.js adds them to the card's `moduleLines`).
 // Pure: no DOM.
 
-import { FIGHT, FORMULA, RESOLVE } from '../index.js';
+import { FIGHT, FORMULA, PRACTICE_STEP, RESOLVE, RANK_NAMES, STATS, USES } from '../index.js';
 import { STANDARD, normalizeRules } from '../rules.js';
 import { RPG_STRINGS, fill } from '../strings.js';
 import { rpgBlocks, readParty, skillsOf } from './party-data.js';
@@ -69,8 +69,14 @@ export function partyLines(record, problems = []) {
         if (!isRecord(join) || skipped.has(receipt.id)) continue;
         const who = words(join.name);
         if (!who) continue;
-        if (join.op === 'added') out.push(line({ icon: 'fa-user-plus', tone: 'good', text: fill(C.joined, { who }), summary: fill(C.joinedSummary, { who }), note: C.joinedNote }));
-        else if (join.op === 'back') out.push(line({ icon: 'fa-user-plus', tone: 'good', text: fill(C.returned, { who }), summary: fill(C.joinedSummary, { who }) }));
+        // (the signature skills the join seeded, as its receipt recorded them: one tile each, shown from the receipt and never worked out from the pack)
+        const seeded = list(receipt.data?.sigSkills).filter(skill => isRecord(skill) && words(skill.name));
+        const skillTiles = () => seeded.map(skill => line({ icon: 'fa-book-open', tone: 'good', text: words(skill.name),
+            flag: fill(C.skillSignature, { rank: RANK_NAMES[skill.rank] ?? RANK_NAMES[0] }),
+            note: fill(C.skillStatUses, { stat: STATS.includes(skill.stat) ? skill.stat.toUpperCase() : '', uses: USES.includes(skill.uses) ? skill.uses.charAt(0).toUpperCase() + skill.uses.slice(1) : '' }) }));
+        const summary = (plain, many) => (seeded.length ? fill(seeded.length === 1 ? C.joinedSkillOne : many, { who, n: seeded.length }) : plain);
+        if (join.op === 'added') out.push(line({ icon: 'fa-user-plus', tone: 'good', text: fill(C.joined, { who }), summary: summary(fill(C.joinedSummary, { who }), C.joinedSkillsSummary), note: C.joinedNote }), ...skillTiles());
+        else if (join.op === 'back') out.push(line({ icon: 'fa-user-plus', tone: 'good', text: fill(C.returned, { who }), summary: summary(fill(C.joinedSummary, { who }), C.returnedSkillsSummary) }), ...skillTiles());
         else if (join.op === 'left') out.push(line({ icon: 'fa-user-minus', tone: 'info', text: fill(C.left, { who }), summary: fill(C.leftSummary, { who }), note: C.leftNote }));
     }
     return out;
@@ -95,6 +101,24 @@ export function fightLines(record, problems = []) {
 }
 
 /**
+ * The practice code gave for the skills this reply's rolls used (practice.js), one line each: "Astra's Shadow Cut +6 practice (rolled)", from the
+ * step's own receipt (`data.v2.result.practice.skills`): a swipe or a delete takes the receipt and so the line away, and a step the replay skipped is not told.
+ */
+export function practiceLines(record, problems = []) {
+    const skipped = new Set(list(problems).flatMap(problem => list(problem?.receipts)));
+    const out = [];
+    for (const receipt of list(record?.receipts)) {
+        if (receipt?.type !== PRACTICE_STEP || skipped.has(receipt.id)) continue;
+        for (const entry of list(receipt.data?.v2?.result?.practice?.skills)) {
+            const who = words(entry?.who), skill = words(entry?.skill);
+            if (!who || !skill || !Number.isSafeInteger(entry.amount) || entry.amount <= 0) continue;
+            out.push(line({ icon: 'fa-dumbbell', tone: 'good', text: fill(C.practice, { who, skill, amount: entry.amount }), summary: fill(C.practiceSummary, { who, skill, amount: entry.amount }), note: C.practiceNote }));
+        }
+    }
+    return out;
+}
+
+/**
  * The RPG's lines for one reply. `state` is the reply's state, `before` the one before it (null for the first reply: no
  * rises are told then), `record` the reply's record, `problems` the replay problems of that reply. `rules`: the numbers in force
  * now, used only for a reply that has no roll of its own (its roll's recorded numbers win).
@@ -110,6 +134,7 @@ export function rpgReplyLines({ state, before = null, record = null, problems = 
     }
     out.push(...partyLines(record, problems));
     out.push(...fightLines(record, problems));
+    out.push(...practiceLines(record, problems));
     if (!before) return out;
     const then = new Map(readParty(before, { roleOf }).map(character => [`${character.module}|${character.subject}`, character]));
     for (const character of readParty(state, { roleOf })) {

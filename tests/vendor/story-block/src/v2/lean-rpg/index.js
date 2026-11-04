@@ -37,6 +37,7 @@ export { JOIN_ADD, JOIN_NO, checkJoin, joinCard, joinDefinitions, joinDraft, joi
 // What the data modules' companion steps (data-modules/part.js) reach through the loaded library (rpg-lazy.js).
 export { RPG_EXTRAS, extraDefinitions, extraName, extrasPlan } from './view/wizard-data.js';
 export { RPG_STRINGS } from './strings.js';
+export { grownSkills } from './templates.js';
 export { setStartNotes, skipOf, startNotes } from './start.js';
 export { PRECALL_HEAD, claimed, createPrecall, precallPrompt, sheetText } from './precall.js';
 export { DICE_VERSION, FLOW_VERSION, RESULT_VERSION, claimKey, leanRpgGuard, outcomeOf, positionalDice, prepare, resolve, rollPrepared, rollsOf } from './resolve.js';

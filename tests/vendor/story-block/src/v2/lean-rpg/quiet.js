@@ -19,8 +19,8 @@ export const QUIET_GRAMMAR = Object.freeze({
     foes: Object.freeze({ prompt: false, only: /^set-slot-\d+$/u }),
 });
 
-/** Whether a foe group is on the Foes block (standing or Down: a Down group stays until the narrator clears it). */
-export const fightIsOpen = state => readSheet(state).foes.some(foe => foe.filled);
+/** Whether a fight is open on the Foes block: a standing group. Down groups alone are a won fight: a new fight takes their slots (open.js), so they keep no combat text on a quiet reply. */
+export const fightIsOpen = state => readSheet(state).foes.some(foe => foe.filled && foe.hurt > 0);
 
 /**
  * Whether the prompt being built is a quiet reply. `hint` is what prompt.js assemble gives the static parts ({ view, rolled }); `values` the story module's

@@ -112,6 +112,9 @@ function breakdownStandard(raw, skill, soul, foeSide, against, lv) {
     return [`${pcStandard(raw, skill, soul, lv)}${theirs ? ` · vs ${theirs}` : ''}`, damageText(raw.damage), raw.decisive === true ? B.decisive : ''].filter(Boolean).join(' · ');
 }
 
+// The bar a skill's cost moved on a recorded line ('mana' | 'stamina'), from the cost's bar id; '' when the line has none (a record from before kept none).
+const costOf = cost => (isRecord(cost) ? /:(mana|stamina)$/.exec(String(cost.id ?? ''))?.[1] ?? '' : '');
+
 // One Line as the panel draws it: who acts, on whom, the acting side's total against the other's, and the roll behind it. A party
 // act or check reads the party's total first; a foe's attack reads from the attacker's side, so the foe's total and roll come first.
 function lineOf(raw, soulOf = () => null, lv = false, divisor = null) {
@@ -132,7 +135,7 @@ function lineOf(raw, soulOf = () => null, lv = false, divisor = null) {
     const standard = typeof raw.type === 'string' && Number.isFinite(raw.pc.mainValue) && Number.isFinite(raw.pc.secondValue);
     const breakdown = told || (standard ? breakdownStandard(raw, skill, soul, foeSide, against, lv) : why ? `${detail} · ${why}` : detail);
     const gear = gearText(raw.pc.gear);
-    const base = { outcome, total: raw.pc.total, vs: against, skill, breakdown: gear && breakdown ? `${breakdown} · ${gear}` : breakdown, arrows: [], ...(raw.decisive === true ? { decisive: true } : {}), ...(raw.area === true ? { area: true } : {}), ...(gear ? { gear } : {}) };
+    const base = { outcome, total: raw.pc.total, vs: against, skill, breakdown: gear && breakdown ? `${breakdown} · ${gear}` : breakdown, arrows: [], ...(costOf(raw.cost) ? { cost: costOf(raw.cost) } : {}), ...(raw.decisive === true ? { decisive: true } : {}), ...(raw.area === true ? { area: true } : {}), ...(gear ? { gear } : {}) };
     // A support action (a heal or a buff, a `check` line that names the one helped) reads like an act on that character.
     if (raw.kind === 'check' && raw.support === true && words(raw.target, 40)) return { ...base, who: words(raw.pc.who, 40), target: words(raw.target, 40), stat: words(raw.pc.stat, 12).toUpperCase(), foe: false, support: true, heals: isRecord(raw.damage) && raw.damage.blocks < 0 };
     if (raw.kind === 'foe') return { ...base, total: foeSide?.total ?? null, vs: raw.pc.total, who: words(foeSide?.name, 40), target: words(raw.pc.who, 40), skill: '', defence: skill, stat: words(raw.pc.stat, 12).toUpperCase(), foe: true };
@@ -173,7 +176,10 @@ export function readResolve(result, { soulOf = () => null } = {}) {
         ...(rolledAt.has(fold(words(item.name, 40))) && Number.isFinite(rolledAt.get(fold(words(item.name, 40)))) ? { level: rolledAt.get(fold(words(item.name, 40))) } : {}) })).filter(item => item.name);
     const order = entries.length ? entries.map(item => item.name) : [...new Set(rounds[0]?.lines.map(line => line.who) ?? [])];
     const quickStart = list(result.quickStart).filter(isRecord).map(item => ({ who: words(item.who, 40), against: words(item.against, 40) })).filter(item => item.who && item.against);
-    return { rounds, checks, refused, order, ...(entries.length ? { orderEntries: entries } : {}), ...(quickStart.length ? { quickStart } : {}), ...(opening.length ? { opening } : {}), ended: '' };
+    // An ambush check's result (ambush.js): told in one line before Round 1.
+    const ambush = isRecord(result.ambush) && words(result.ambush.who, 40) && typeof result.ambush.success === 'boolean'
+        ? { who: words(result.ambush.who, 40), what: words(result.ambush.skill, 40) ? `${words(result.ambush.skill, 40)} check` : 'check', success: result.ambush.success, half: result.ambush.outcome === 'cost', drop: result.ambush.drop === true, total: Number.isFinite(result.ambush.total) ? result.ambush.total : '?', dc: Number.isFinite(result.ambush.dc) ? result.ambush.dc : '?' } : null;
+    return { rounds, checks, refused, order, ...(ambush ? { ambush } : {}), ...(entries.length ? { orderEntries: entries } : {}), ...(quickStart.length ? { quickStart } : {}), ...(opening.length ? { opening } : {}), ended: '' };
 }
 
 /** The recorded rolls of a reply's record: the result of its `rpg.resolve` receipt that the replay kept, or null. */
@@ -199,7 +205,7 @@ function consequences(state, before, roleOf) {
     for (const character of readParty(state, { roleOf })) {
         const old = was.get(`${character.module}|${character.subject}`);
         if (!old) continue;
-        for (const key of BARS) if (old.bars[key].value !== character.bars[key].value) out.push({ name: character.name, kind: key, text: `${character.name} ${character.bars[key].word}` });
+        for (const key of BARS) if (old.bars[key].value !== character.bars[key].value) out.push({ name: character.name, kind: key, text: key === 'health' ? `${character.name} ${character.bars[key].word}` : fill(B.arrowBar, { name: character.name, bar: character.definition.state?.[key]?.label ?? RPG_STRINGS.bars[key], word: character.bars[key].word }) });
     }
     return out;
 }
@@ -211,7 +217,9 @@ function attach(model, changes) {
     const lines = [...(model.opening ?? []), ...model.rounds.flatMap(round => round.lines)];
     for (const change of changes) {
         const aimed = line => (change.kind === 'health' ? (line.target && same(line.target, change.name)) || (line.foe && same(line.who, change.name)) : same(line.who, change.name));
-        lines.findLast(aimed)?.arrows.push(change.text);
+        // A Mana or Stamina change sits on the first line whose recorded cost moved that bar; a record with no cost keeps the last line the actor took.
+        const paid = change.kind === 'health' ? null : lines.find(line => line.cost === change.kind && same(line.foe ? line.target : line.who, change.name));
+        (paid ?? lines.findLast(aimed))?.arrows.push(change.text);
     }
 }
 
@@ -232,7 +240,9 @@ export function panelModel({ resolve, state, before = null, roleOf, ranks = [] }
     const involved = party.filter(character => names.has(character.name));
     model.status = (involved.length ? involved : party).map(character => ({ name: character.name,
         rows: BARS.map(key => ({ key, ...character.bars[key], label: character.definition.state?.[key]?.label ?? RPG_STRINGS.bars[key] })) }));
-    model.foes = model.rounds.length ? foes.map(foe => ({ text: `${foe.count > 1 ? `${foe.name} ${fill(B.count, { n: foe.count })}` : foe.name} · ${foe.levelText}: ${foe.hurt === 0 ? B.down : foe.word}` })) : [];
+    // The Foes line lists the groups that took part in this reply's rolls (a group left on the block from an earlier fight is not this reply's).
+    const rolledFoes = new Set([...(model.opening ?? []), ...model.rounds.flatMap(round => round.lines)].filter(line => line.foe).map(line => fold(line.who)).concat([...(model.opening ?? []), ...model.rounds.flatMap(round => round.lines)].filter(line => !line.foe && line.target).map(line => fold(line.target))));
+    model.foes = model.rounds.length ? foes.filter(foe => !rolledFoes.size || rolledFoes.has(fold(foe.name))).map(foe => ({ text: `${foe.count > 1 ? `${foe.name} ${fill(B.count, { n: foe.count })}` : foe.name} · ${foe.levelText}: ${foe.hurt === 0 ? B.down : foe.word}` })) : [];
     return model;
 }
 
@@ -343,6 +353,10 @@ export function buildPanel(doc, model, { folded = false, onFold = () => {}, vari
     if (model.order.length) body.appendChild(el(doc, 'p', 'rpg-bl-order', `${B.turnOrder} ${(model.orderEntries ?? model.order.map(name => ({ name, total: null }))).map(item => { const name = item.level ? fill(RPG_STRINGS.blocks.orderNameLevel, item) : item.name; return item.total === null ? name : `${name} ${item.total}`; }).join(' > ')}`));
     for (const item of model.quickStart ?? []) body.appendChild(el(doc, 'p', 'rpg-bl-note rpg-bl-quick', fill(RPG_STRINGS.blocks.quickStartLine, item)));
     for (const check of model.checks) body.appendChild(lineNode(doc, check, { check: true }));
+    if (model.ambush && (model.rounds.length || model.ambush.drop)) {
+        const a = model.ambush, which = a.success ? (a.drop ? 'ambushDrop' : 'ambushWon') : a.half ? 'ambushHalf' : 'ambushLost';
+        body.appendChild(el(doc, 'p', `rpg-bl-note rpg-bl-ambush rpg-bl-ambush-${a.success ? 'won' : 'lost'}`, fill(RPG_STRINGS.blocks[which], a)));
+    }
     if (model.opening?.length) {
         const box = el(doc, 'div', 'rpg-bl-round rpg-bl-opening');
         box.appendChild(el(doc, 'p', 'rpg-bl-round-title', B.opening));
