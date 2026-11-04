@@ -68,8 +68,6 @@ function render(el, props, memory) {
     const view = doc.defaultView;
     const root = make('div', 'sd-q-root');
     el.replaceChildren(root);
-    // The template's plain list is hidden by this class once the cards are drawn (not by :has()).
-    el.classList?.add('sd-qw-drawn');
     const observers = [];
     let value = props?.value ?? null;
 
@@ -172,6 +170,9 @@ function render(el, props, memory) {
     }
 
     draw();
+    // The template's plain list is hidden by this class once the cards are drawn (not by :has()); set after the first draw, so a
+    // draw that throws leaves the plain list showing.
+    el.classList?.add('sd-qw-drawn');
     return {
         update(next) {
             value = next?.value ?? null;

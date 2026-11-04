@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.10.1
+
+- **Quest cards on the Quests tab.** The tab draws its quests with the cards Story Block 2.22's blocks use: the title and
+  a status chip (Active, Offered, Done, Failed, Abandoned, Declined), the description clamped to 2 lines with More, the
+  current step (else the goal) with a pin, and short rows only where a value is set: Progress, Giver, Reward, Difficulty
+  (left out when normal) and Due. Finished quests fold under "Finished (n)", closed by default; More and the fold stay as
+  the reader left them across redraws. Display only: the same quests as before, the same query, no change to quest data,
+  story lines, the tracker or the prompt. A quest from an earlier version still says so. Drawn by the new widget
+  `story-director.quests`; with an older Story Block (no such widget) the tab shows the plain list as before.
+
 ## 2.10.0
 
 - **Shorter Director text** (about 3.1k → 1.5–1.7k characters a reply): one grammar line per family, merged rules, the Checks rule only without an RPG, route/landmark/trip taught on first use. Needs Story Block 2.19.0 (kind heads keep stray lines working).
