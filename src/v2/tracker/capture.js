@@ -188,6 +188,8 @@ export function toV1Op(line) {
         op: {
             ...parsed,
             kind: op === '+' ? line.kind : null,
+            // The kind a `- quest` / `~ quest` line wrote: it settles a near match between a quest and, say, its old hook.
+            ...(op !== '+' && line.kind === 'quest' ? { lineKind: 'quest' } : {}),
             key,
             id,
             raw: clip(String(line?.raw ?? '').trim()) || lineText(line),

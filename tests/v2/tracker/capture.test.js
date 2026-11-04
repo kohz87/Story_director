@@ -258,3 +258,51 @@ test('the same lines on the same state give the same state (ids from the receipt
     const ids = threads(story(lines)).map(entry => entry.id);
     assert.equal(new Set(ids).size, ids.length);
 });
+
+// stage72: a quest closed under a slightly different name, while the hook it grew out of is still active.
+const RAT_HOOK = '+ hook Storehouse No. 2 Rats — Clear cellar-rats and their burrow under Storehouse No. 2 | giver: Nelje | reward: 6 copper per tail';
+const RAT_QUEST = '+ quest Storehouse No. 2 Cellar-Rats — Clear the cellar-rats under Storehouse No. 2 | giver: Nelje | reward: 6 copper per tail | step: Get the key | difficulty: F | type: cull';
+
+test('quest close: the USER\'s pair ("Cellar-Rats" closed as "Cellar-Rat Cull") closes the quest, not the old hook', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: '- quest Storehouse No. 2 Cellar-Rat Cull — turned in 12 rat tails to Nelje' }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'resolved');
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'active', 'the hook is left as it was');
+    assert.deepEqual(lastProblems(state).map(({ kind, text }) => ({ kind, text })), [
+        { kind: 'near-key', text: '"Storehouse No. 2 Cellar-Rat Cull" read as "Storehouse No. 2 Cellar-Rats".' },
+    ]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rat Cull').id, thread(state, 'Storehouse No. 2 Cellar-Rats').id, 'the name is remembered');
+    // Replay gives the same state.
+    assert.deepEqual(story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: '- quest Storehouse No. 2 Cellar-Rat Cull — turned in 12 rat tails to Nelje' }]), state);
+    valid(state);
+});
+
+test('quest close: ~ quest progress under a close name reaches the one quest too', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: '~ quest Storehouse No. 2 Cellar-Rat Cull | step: Seal the burrow' }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').fields.step, 'Seal the burrow');
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').fields.step, undefined);
+});
+
+test('quest close: two quests that qualify are never guessed between; the Problem names both', () => {
+    const second = '+ quest Storehouse No. 2 Cellar Cull Rats — More rats | giver: Nelje | reward: 1 silver | step: Look | difficulty: F | type: cull';
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: second }, { lines: '- quest Storehouse No. 2 Cellar-Rat Cull — done' }]);
+    for (const key of ['Storehouse No. 2 Cellar-Rats', 'Storehouse No. 2 Cellar Cull Rats', 'Storehouse No. 2 Rats']) assert.equal(thread(state, key).status, 'active', key);
+    const [problem] = lastProblems(state);
+    assert.equal(problem.kind, 'unknown-key');
+    assert.deepEqual(problem.candidates.slice().sort(), ['Storehouse No. 2 Cellar Cull Rats', 'Storehouse No. 2 Cellar-Rats', 'Storehouse No. 2 Rats']);
+});
+
+test('quest close: an unrelated name matches nothing; an exact name is unchanged', () => {
+    let state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: '- quest Greypost Farm Bristle-Boar Cull — done' }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'active');
+    assert.deepEqual(kinds(state), ['unknown-key']);
+    state = reply(state, '- quest Storehouse No. 2 Cellar-Rats — paid').state;
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'resolved');
+    assert.deepEqual(kinds(state), []);
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'active');
+});
+
+test('quest close: a hook line is not narrowed by kind (only a quest line is)', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: '- hook Storehouse No. 2 Cellar-Rat Cull — done' }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'active');
+    assert.equal(kinds(state)[0], 'unknown-key');
+});
