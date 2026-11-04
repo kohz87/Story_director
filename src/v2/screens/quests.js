@@ -1,13 +1,17 @@
 // Neutral goals and old quest history, read through SD threads without an RPG dependency.
 
 import { BASE_CSS } from './style.js';
+import { QUESTS_WIDGET } from './quest-cards.js';
 
 export const QUESTS_ID = 'story-director/quests';
 
-// SD's neutral/read-only view uses only its own retained projection, including old quests.
+// SD's neutral/read-only view uses only its own retained projection, including old quests. The cards are the widget
+// `story-director.quests` (quest-cards.js, display only). The plain list under it is what a Story Block with no widgets
+// shows (the renderer's "no widget" note is hidden); once the widget has drawn it marks its host `sd-qw-drawn` and the CSS hides the list.
 const TEMPLATE = `
 <div class="sd-quests">
-  <section class="ss-listcard ss-glass" aria-label="Goals and quest history">
+  <ss-widget class="sd-qw" name="${QUESTS_WIDGET}" data-props='{"bind":"q.threads"}'></ss-widget>
+  <section class="ss-listcard ss-glass sd-plain" aria-label="Goals and quest history">
     <h4>Goals and quest history</h4>
     <ul class="sd-cards">
       <li class="sd-card" data-each="q.threads as t" data-if="t.kind == 'quest' || t.rpg != null || t.fields.goal != null">
@@ -27,6 +31,45 @@ const TEMPLATE = `
 const CSS = `${BASE_CSS}
 .sd-quests { display: grid; gap: 14px; padding: 4px 0; min-width: 0; container-type: inline-size; }
 .sd-active, .sd-finished { min-width: 0; }
+.sd-qw { display: block; min-width: 0; }
+.sd-qw-drawn + .sd-plain { display: none; }
+/* A host with no such widget writes its own "no widget" note into this element: hidden, the plain list is all there is. */
+.sd-qw.ss-widget-missing { display: none; }
+/* The quest cards (quest-cards.js): Story Block's quest-card look as Story Director's copy, on its tokens with fallbacks. */
+.sd-q-root { display: flex; flex-direction: column; gap: 10px; min-width: 0; color: var(--ss-text, inherit); }
+.sd-q-root * { box-sizing: border-box; }
+.sd-q-sec { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sd-q-label { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); }
+.sd-q-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 460px)); gap: 8px; }
+.sd-q { display: grid; align-content: start; gap: 5px; padding: 10px 12px; border: 1px solid var(--ss-border, color-mix(in srgb, currentColor 25%, transparent)); border-radius: var(--ss-radius, var(--ss-radius-m, 10px)); background: var(--ss-surface, transparent); min-width: 0; }
+.sd-q1 { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.sd-qt { font-size: 15px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.sd-chip { display: inline-flex; align-items: center; padding: 0 .55em; border-radius: 999px; font-size: 12px; line-height: 1.35; border: 1px solid currentColor; white-space: nowrap; }
+.sd-chip-accent { color: var(--ss-accent, currentColor); }
+.sd-chip-good { color: var(--ss-good, seagreen); }
+.sd-chip-bad { color: var(--ss-bad, indianred); }
+.sd-chip-neutral { color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); }
+.sd-q2 { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.sd-q2[data-open="true"] { -webkit-line-clamp: unset; display: block; }
+.sd-q3 { display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; }
+.sd-q3[hidden] { display: none; }
+.sd-q-icon { flex: none; width: 14px; height: 14px; color: var(--ss-accent, currentColor); }
+.sd-q-icon.sd-q-done { color: var(--ss-good, seagreen); }
+.sd-q-step { min-width: 0; overflow-wrap: anywhere; }
+.sd-q-more { flex: none; margin-left: auto; margin-block: 0; font-size: 12px; }
+.sd-q-more[hidden] { display: none; }
+.sd-q-more:focus-visible, .sd-q-fold > summary:focus-visible { outline: 2px solid var(--ss-accent, currentColor); outline-offset: 2px; }
+.sd-q-rows { display: grid; grid-template-columns: 5.6em minmax(0, 1fr); gap: 2px 8px; margin: 2px 0 0; font-size: 12.5px; }
+.sd-q-rows dt { color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); }
+.sd-q-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.sd-q-old { margin: 0; font-size: 12px; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); overflow-wrap: anywhere; }
+.sd-q-none { margin: 0; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); font-size: 13px; }
+.sd-q-fold { border-top: 1px solid color-mix(in srgb, var(--ss-muted, currentColor) 22%, transparent); min-width: 0; }
+.sd-q-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); font-size: 13px; font-weight: 600; list-style: none; }
+.sd-q-fold > summary::-webkit-details-marker { display: none; }
+.sd-q-fold > summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+.sd-q-fold[open] > summary::before { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .sd-q-fold > summary::before { transition: none; } }
 .sd-finished { padding: 8px 12px; }
 .sd-finished > summary { cursor: pointer; list-style-position: inside; min-height: 28px; padding: 4px 0; }
 .sd-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
