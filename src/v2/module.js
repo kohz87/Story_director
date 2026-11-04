@@ -54,7 +54,7 @@ const RPG_FEATURE = 'story-block.rpg';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.10.1';
+export const VERSION = '2.10.2';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 // 2.19.0 reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own).

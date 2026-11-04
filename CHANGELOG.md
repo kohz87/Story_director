@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.2
+
+- **A quest closed under a slightly different name next to a similar hook.** A `- quest` or `~ quest` line whose name is close
+  to, but not exactly, the quest's ("Storehouse No. 2 Cellar-Rat Cull" for "Storehouse No. 2 Cellar-Rats") was ignored when an
+  older hook of a similar name was still open ("Storehouse No. 2 Rats"): two near matches counted as unclear. Now, when exactly one
+  of the near matches is a quest, the quest line settles on it; the hook is left alone. Two or more qualifying quests still count as
+  unclear (a Problems line names them). Re-read the reply to repair a quest that stayed open. No prompt change.
+
 ## 2.10.1
 
 - **Quest cards on the Quests tab.** The tab draws its quests with the cards Story Block 2.22's blocks use: the title and
