@@ -8,14 +8,15 @@
 //   notes that tell a reply's card what happened. The pack entries themselves are read from the packs (Story Block's query
 //   `packs.content({ kind: 'cast' })`), never copied; an unmet person is hidden from every screen and from the narrator.
 // * Steps (capture.js, all cause `system`, before a reply, hooks.js): `cast.sync` (the packs' cast joined, changed or left), `cast.advance`
-//   (the planner's batch after a day change or a time skip) and `cast.meet` (paths cross for the first time). One step after the reply:
+//   (the planner's batch after a day change or a time skip), `cast.meet` (paths cross for the first time, also when the reader sought a kind of
+//   person) and `cast.rumor` (the reader sought a kind of person who is elsewhere: the narrator hears of them with no name). One step after the reply:
 //   `cast.withdraw` (the reply did not show the person the meeting brought in, so the meeting is taken back).
 // * Narrator: the one cue for a meeting, in the reply it happens in (note.js). No static text.
 // * Interface for other modules: the query `director.cast` (queries.js): the met people with their pack entries, for NPC State Delta.
 // * Reader: the reply's card (the status card's notes), World -> Now -> Around here, Settings -> Modules -> Story Director -> The cast.
 // Works without NPC State Delta, and without a model (nobody moves, meetings by place still happen).
 
-import { advance, meet, sync, withdraw } from './capture.js';
+import { advance, meet, rumor, sync, withdraw } from './capture.js';
 import { FEATURE, initialCast, validateCast } from './domain.js';
 import { createCastHooks } from './hooks.js';
 import { tail } from './note.js';
@@ -45,6 +46,7 @@ export const part = {
         'cast.sync': tagged((ctx, payload) => sync(ctx, payload)),
         'cast.advance': tagged((ctx, payload) => advance(ctx, payload)),
         'cast.meet': tagged((ctx, payload) => meet(ctx, payload)),
+        'cast.rumor': tagged((ctx, payload) => rumor(ctx, payload)),
         'cast.withdraw': tagged((ctx, payload) => withdraw(ctx, payload)),
     },
     queries,

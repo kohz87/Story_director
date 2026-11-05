@@ -7,14 +7,16 @@
 //   day:     null | [{ at, rev }],      // a slot: the story minute the cast was last moved to (the planner's last batch)
 //   meeting: null | [{ at, keys, rev }],// a slot: who comes into the scene in the reply being written (`at`: the chat's length)
 // }
-// person = { pack, eid (the entry's id; a field called `id` must be an ID like it_k3f9a2qz), name, aliases?, ver, joined, where, doing, since, alive, met, heard, rev }
+// person = { pack, eid (the entry's id; a field called `id` must be an ID like it_k3f9a2qz), name, aliases?, ver, joined, where, doing, since, alive, met, heard, rumored?, rev }
 //   ver:    the pack version of the entry as last seen (a string; '' when the pack gives none)
 //   sig:    a short fingerprint of the entry's content (not its version), so an update is told apart from a version bump ('' when unknown)
 //   joined: the story minute they joined the world (null while the clock is not set)
 //   where / doing: where they are and what they do now (off-screen, kept by the planner's batches)
-//   met:    null while unmet, else { on, where, why: 'place' | 'goal' | 'story', reason, rev, was? } (a meeting is recorded on the reply; `was`: where
+//   met:    null while unmet, else { on, where, why: 'place' | 'goal' | 'sought' | 'story', reason, rev, was? } (a meeting is recorded on the reply; `was`: where
 //           a goal arrival was before it came to the party, so a meeting the reply did not show (`cast.withdraw`) puts them back there)
 //   heard:  the last news of a met person: null | [{ on, text }] (a slot: written whole each time)
+//   rumored: an unmet person the reader sought who is elsewhere: null | [{ on, where, at, rev }] (a slot: written whole; the rumor, which never
+//           names them, was told in the reply at `at` and is not told again until met or until `where` is no longer where they are)
 // The pack entry itself (look, voice, history, secrets...) is never copied here: it is read from the pack when needed,
 // and only for a person who has been met. Nothing stored here is read by a reader before the person is met.
 //
@@ -38,8 +40,8 @@ export const MAX_ALIASES = 6;
 export const MAX_KEY = 160;
 /** Replies whose notes are kept for their cards (the newest). */
 export const MAX_NOTE_REPLIES = 6;
-export const NOTE_KINDS = Object.freeze(['met', 'moved', 'updated']);
-export const WHYS = Object.freeze(['place', 'goal', 'story']);
+export const NOTE_KINDS = Object.freeze(['met', 'moved', 'updated', 'heard']);
+export const WHYS = Object.freeze(['place', 'goal', 'sought', 'story']);
 
 /** The settings' defaults. `faces`: how many new faces may cross the party's path (day1, day2, week1). */
 export const FACES = Object.freeze({ day1: { label: '1 a day', count: 1, days: 1 }, day2: { label: '2 a day', count: 2, days: 1 }, week1: { label: '1 a week', count: 1, days: 7 } });
@@ -146,10 +148,12 @@ function personProblems(key, person) {
         || !textOk(person.ver, MAX_NAME) || !(person.sig === undefined || textOk(person.sig, 24)) || !timeOk(person.joined) || !textOk(person.where, MAX_PLACE) || !textOk(person.doing, MAX_DOING) || !timeOk(person.since)
         || typeof person.alive !== 'boolean' || !isInt(person.rev)) return [`${at} is not { pack, eid, name, ver, joined, where, doing, since, alive, met, heard, rev }.`];
     if (person.aliases !== undefined && (!Array.isArray(person.aliases) || person.aliases.length > MAX_ALIASES || person.aliases.some(alias => !textOk(alias, MAX_NAME)))) return [`${at}.aliases is a list of at most ${MAX_ALIASES} names.`];
-    const { met, heard } = person;
+    const { met, heard, rumored } = person;
     if (met !== null && !(isRecord(met) && timeOk(met.on) && textOk(met.where, MAX_PLACE) && WHYS.includes(met.why) && textOk(met.reason, MAX_REASON) && isInt(met.rev) && (met.was === undefined || textOk(met.was, MAX_PLACE)))) return [`${at}.met is null or { on, where, why, reason, rev, was? }.`];
     const news = slotOf(heard);
     if (heard !== null && !(news && Array.isArray(heard) && timeOk(news.on) && textOk(news.text, MAX_DOING))) return [`${at}.heard is null or [{ on, text }].`];
+    const rumor = slotOf(rumored);
+    if (rumored !== undefined && rumored !== null && !(rumor && Array.isArray(rumored) && timeOk(rumor.on) && textOk(rumor.where, MAX_PLACE) && isInt(rumor.at) && rumor.at >= 0 && isInt(rumor.rev))) return [`${at}.rumored is null or [{ on, where, at, rev }].`];
     return [];
 }
 

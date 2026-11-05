@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **The cast answers when you seek a kind of person** (feature `story-director.cast`, no new setting). When your message (or the story's
+  last reply) asks for a healer, a priest, a smith, a guide... the cast planner (its own model call, only when a word of an unmet
+  person's calling appears) may name an unmet person who fits and quote the words that ask for them; code accepts the quote only as whole
+  words from the message or reply, so an invented request is refused. At your place the person comes in (meeting `why: sought`, card
+  "Paths crossed: Name — you sought ..."); elsewhere the narrator hears one nameless rumor (calling, who they are, where; any sentence
+  with the name or an alias left out) and the card says "Heard of: ...", told once until they move (`person.rumored`, new step
+  `cast.rumor`). One new face a reply, the pace setting, never in a fight, never someone present or pinned; a reply that does not show
+  the person takes the meeting back. Unmet people stay hidden everywhere else. No static prompt change; the rumor is a tail line within
+  the cast's budget. Planner prompt: a new 'sought' mode with its own wording (docs/dev/cast.md).
 - **v1 code removed from main** (the unloaded `index.v1.js`, its glue, UI, `style.css` and their tests); it is kept on the `v1` branch. Nothing v2 loads changed.
 - **A quest line no longer closes or advances a hook through a near name.** A `- quest`, `~ quest` or `! quest` line whose name only
   reads near a hook or event (even the only near match) now stays unclear: the record is left as it was and a Problems line names it.

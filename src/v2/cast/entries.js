@@ -25,7 +25,7 @@ const SLUG = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
 /**
  * One listed entry as the world reads it, or null when it is not one: `{ key, pack, id, name, aliases, ver, place, goal, routine,
- * drawnTo, canDieUnmet, raw }` (text cut and flattened; `raw` the entry as listed, for the narrator's cue and other modules, never stored).
+ * drawnTo, canDieUnmet, calling, about, raw }` (text cut and flattened; `raw` the entry as listed, for the narrator's cue and other modules, never stored).
  */
 export function readEntry(raw) {
     if (!isRecord(raw)) return null;
@@ -48,6 +48,9 @@ export function readEntry(raw) {
         routine: cutPoints(start.routine, 160),
         drawnTo: (Array.isArray(raw.drawnTo) ? raw.drawnTo : []).map(phrase => cutPoints(phrase, 80)).filter(Boolean).slice(0, 6),
         canDieUnmet: raw.canDieUnmet === true,
+        // What the reader can seek a person by (sought.js): their calling and who they are, never read by anyone but the planner and the rumor.
+        calling: cutPoints(isRecord(raw.fields) ? raw.fields.Calling : '', 100),
+        about: cutPoints(raw.about, 400),
         // What the entry says, not which version of the pack it came in: a bump with nothing changed is no change.
         sig: (({ pack: _pack, packVersion: _version, ...own }) => hashJson(own).slice(0, 12))(raw),
         raw,

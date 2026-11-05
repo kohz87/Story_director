@@ -4,6 +4,7 @@
 // - `cast.sync { add?, update?, drop?, updated?, init? }`: the packs' cast joined, changed or left (apply.js).
 // - `cast.advance { from, to, moves?, died? }`: the planner's batch after a day change or a time skip.
 // - `cast.meet { at, who: [{ key, why, reason }] }`: the party meets someone for the first time (no dice).
+// - `cast.rumor { at, who: [{ key, where, text }] }`: the reader sought a kind of person who is elsewhere: the narrator is told of them without the name.
 // - `cast.withdraw { at, keys }`: the reply did not show a person it was told to bring in, so their meeting is taken back (after the reply).
 //
 // Replay: a person is added whole under its key; a change inside a person is marked `ctx.ifThere` (passed over when the reply that
@@ -11,7 +12,8 @@
 // and data never name or count an unmet person beyond what the reader's card says.
 
 import { idFrom } from '../writes.js';
-import { applyAdvance, applyMeet, applySync, applyWithdraw } from './apply.js';
+import { applyAdvance, applyMeet, applyRumor, applySync, applyWithdraw } from './apply.js';
+import { MAX_RUMOR } from './sought.js';
 import { MAX_DOING, MAX_KEY, MAX_NAME, MAX_NOTE_REPLIES, MAX_PEOPLE, MAX_PLACE, MAX_REASON, WHYS, cutPoints, isInt, isRecord } from './domain.js';
 
 const revOf = ctx => (isInt(ctx?.rev) ? ctx.rev : 0);
@@ -133,7 +135,7 @@ export function meet(ctx, payload = {}) {
         return ctx.fail('INVALID', 'cast.meet takes { at, who: [{ key, why, reason }] }.');
     }
     for (const item of payload.who) {
-        if (!isRecord(item) || !keyOk(item.key) || !WHYS.includes(item.why) || !textOk(item.reason ?? '', MAX_REASON) || !textOk(item.place ?? '', MAX_PLACE)) return ctx.fail('INVALID', 'cast.meet: each of who is { key, why: place | goal | story, reason, place? }.');
+        if (!isRecord(item) || !keyOk(item.key) || !WHYS.includes(item.why) || !textOk(item.reason ?? '', MAX_REASON) || !textOk(item.place ?? '', MAX_PLACE)) return ctx.fail('INVALID', 'cast.meet: each of who is { key, why: place | goal | sought | story, reason, place? }.');
     }
     if (payload.names !== undefined && !(isRecord(payload.names) && Object.keys(payload.names).length <= 8 && Object.values(payload.names).every(name => textOk(name, MAX_NAME)))) return ctx.fail('INVALID', 'cast.meet: names is { pack: name }.');
     const cast = ctx.draft('cast');
@@ -142,6 +144,25 @@ export function meet(ctx, payload = {}) {
     if (!met.length) return { summary: 'No one new crossed your path.', narrate: false, data: { met: 0 } };
     const who = met.map(key => cast.people[key].name);
     return { summary: `Paths crossed: ${who.join(', ')}.`, narrate: false, data: { met: met.length, keys: met } };
+}
+
+// ---- cast.rumor --------------------------------------------------------------------------------------------------------------
+
+/** `cast.rumor` (cause `system`): a sought person who is elsewhere is told of without a name, once. */
+export function rumor(ctx, payload = {}) {
+    only(ctx, 'Whom people here have heard of');
+    if (!isRecord(payload) || Object.keys(payload).some(field => !['at', 'who', 'names'].includes(field)) || !isInt(payload.at) || payload.at < 0 || !Array.isArray(payload.who) || !payload.who.length || payload.who.length > 2) {
+        return ctx.fail('INVALID', 'cast.rumor takes { at, who: [{ key, where, text }] }.');
+    }
+    for (const item of payload.who) {
+        if (!isRecord(item) || !keyOk(item.key) || !textOk(item.where ?? '', MAX_PLACE) || !textOk(item.text ?? '', MAX_RUMOR)) return ctx.fail('INVALID', 'cast.rumor: each of who is { key, where, text }.');
+    }
+    if (payload.names !== undefined && !(isRecord(payload.names) && Object.keys(payload.names).length <= 8 && Object.values(payload.names).every(name => textOk(name, MAX_NAME)))) return ctx.fail('INVALID', 'cast.rumor: names is { pack: name }.');
+    const cast = ctx.draft('cast');
+    const names = isRecord(payload.names) ? payload.names : {};
+    const told = applyRumor(cast, payload, envOf(ctx, cast, names, payload.at));
+    // The summary never says who: an unmet person stays hidden.
+    return { summary: told.length ? 'People here know of someone you sought.' : 'No one new was heard of.', narrate: false, data: { told: told.length } };
 }
 
 // ---- cast.withdraw -----------------------------------------------------------------------------------------------------------

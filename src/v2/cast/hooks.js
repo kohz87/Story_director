@@ -12,12 +12,14 @@
 // Without a model (an older Story Block, or the call failing) nobody moves, and meetings by place still happen. With no cast in the
 // enabled packs the hooks do nothing at all, so the prompt and the state are as they were.
 
-import { applyAdvance, applyMeet, applySync, planSync, syncEmpty, syncPayload } from './apply.js';
+import { applyAdvance, applyMeet, applyRumor, applySync, planSync, syncEmpty, syncPayload } from './apply.js';
+import { sha256 } from '../hash.js';
 import { cutPoints, isInt, keysOfPerson } from './domain.js';
 import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entries.js';
-import { MAX_PEOPLE_ASKED, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
+import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
+import { kindWords } from './sought.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
-import { askedAbout, batchKey, chooseMeetings, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf, unshown } from './world.js';
+import { askedAbout, batchKey, chooseMeetings, chooseRumor, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf, seekable, unshown } from './world.js';
 
 const REPLY_TYPES = new Set(['normal', 'regenerate', 'swipe']);
 const normalizeType = type => String(type ?? 'normal').toLowerCase();
@@ -35,6 +37,35 @@ export function recentStory(chat, { messages = 3, chars = 3500 } = {}) {
     const text = list.map(message => `${message.name || (message.is_user ? 'User' : 'Narrator')}: ${String(message.mes ?? '').replace(MARKUP, '').replace(/\n{3,}/g, '\n\n').trim()}`).join('\n\n');
     return text.length > chars ? text.slice(text.length - chars) : text;
 }
+
+// ---- what the reader asked for -------------------------------------------------------------------------------------------------------
+
+const byReader = message => Boolean(message) && message.is_user === true && !message.is_system;
+const byStory = message => Boolean(message) && !message.is_user && !message.is_system;
+
+/** The reader's latest message and the story's last reply as the reader sees them, or null when neither has words. */
+export function soughtTexts(chat) {
+    const list = Array.isArray(chat) ? chat : [];
+    const reader = list.findLast(byReader);
+    const reply = list.findLast(byStory);
+    const texts = { reader: shownText(reader?.mes).trim(), reply: shownText(reply?.mes).trim() };
+    return texts.reader || texts.reply ? texts : null;
+}
+
+/** The chat as it stands for the reply being written: a reply being swiped or redone is not part of it. */
+const baseOf = (chat, type) => {
+    const list = Array.isArray(chat) ? chat : [];
+    return list.length && byStory(list.at(-1)) && (type === 'swipe' || type === 'regenerate') ? list.slice(0, -1) : list;
+};
+
+/** The chat as the last reply left it (what `afterReceive` saw): the reader's message that came after the last reply is not part of it. */
+const afterReply = chat => {
+    const list = Array.isArray(chat) ? chat : [];
+    const last = list.findLastIndex(byStory);
+    return last < 0 ? [] : list.slice(0, last + 1);
+};
+
+const soughtKey = (print, texts) => `sought|${print}|${sha256(`${texts.reader}\u0000${texts.reply}`).slice(0, 12)}`;
 
 function chatId() {
     try {
@@ -117,6 +148,47 @@ export function createCastHooks({ plans }) {
         });
     }
 
+    // Asks the planner whether the reader's message (or the story's last reply) looks for the kind of person one of `list` is.
+    function askSought(view, frame, key, list, texts) {
+        const model = view?.model;
+        if (typeof model?.callModel !== 'function') return null;
+        const asked = list.slice(0, MAX_SOUGHT);
+        const refs = refsOf(asked);
+        const request = castRequest({
+            mode: 'sought', now: frame.calendar?.text ?? '', place: [frame.party.place, frame.party.region].filter(Boolean).join(', '), texts,
+            people: asked.map(item => ({ ref: item.ref, name: item.person.name, goal: item.entry.goal, routine: item.entry.routine, where: item.person.where, kind: kindWords(item.entry), met: false })),
+        });
+        const allow = { seek: new Set(asked.map(item => item.key)) };
+        return plans.start(key, async () => {
+            const result = await model.callModel({ profile: frame.settings.profile, system: request.system, prompt: request.prompt, maxTokens: MAX_TOKENS, feature: FEATURE, timeoutMs: CALL_MS });
+            if (!result?.ok) return { ok: false };
+            // The cited words must stand in the reader's message or the reply as they were when the planner read them (readCast refuses others).
+            return { ok: true, moves: [], comes: [], died: [], sought: readCast(result.text, { refs, allow, texts: [texts.reader, texts.reply] }).sought ?? [] };
+        });
+    }
+
+    // The sought people for the reply being written: asked of the reader's newest message now when the planner has a connection of its own
+    // (it can be waited for), else what was asked after the last reply (the chat's own connection is free only then). Null-safe: [] for none.
+    async function soughtFor(view, frame, world, print, type) {
+        if (typeof view?.model?.callModel !== 'function') return [];
+        const chat = view.model.chat?.();
+        const base = baseOf(chat, type);
+        const gate = texts => seekable(world, frame.cast, { present: frame.present, pinned: frame.pinned, texts: [texts.reader, texts.reply] });
+        const now = soughtTexts(base);
+        if (now && frame.settings.profile) {
+            const list = gate(now);
+            const key = soughtKey(print, now);
+            if (list.length) {
+                const entry = plans.peek(key) ?? askSought(view, frame, key, list, now);
+                const settled = entry ? await plans.settled(key, HOLD_MS) : null;
+                if (settled?.status === 'done' && settled.result?.ok && settled.result.sought.length) return settled.result.sought;
+            }
+        }
+        const before = soughtTexts(afterReply(base));
+        const entry = before ? plans.peek(soughtKey(print, before)) : null;
+        return entry?.status === 'done' && entry.result?.ok ? entry.result.sought : [];
+    }
+
     function batchPeople(slice, frame, due) {
         return movable(slice, frame.cast, { to: due.to, present: frame.present, pinned: frame.pinned, unmetDie: frame.settings.unmetDie });
     }
@@ -126,6 +198,12 @@ export function createCastHooks({ plans }) {
         if (!castOn(view)) return undefined;
         if (typeof view?.model?.callModel !== 'function') return undefined;
         const frame = frameOf(view);
+        if (frame.cast.listed && frame.cast.entries.length) {
+            // The reader may be looking for a kind of person: asked of the planner now, used by the next reply.
+            const texts = soughtTexts(view?.model?.chat?.());
+            const list = texts ? seekable(frame.slice, frame.cast, { present: frame.present, pinned: frame.pinned, texts: [texts.reader, texts.reply] }) : [];
+            if (list.length) askSought(view, frame, soughtKey(fingerprint(frame.slice, chatId()), texts), list, texts);
+        }
         if (!frame.cast.listed || !frame.cast.entries.length || !isInt(frame.now)) return undefined;
         const slice = frame.slice;
         const print = fingerprint(slice, chatId());
@@ -201,15 +279,24 @@ export function createCastHooks({ plans }) {
 
         // 3. Paths cross.
         if (at !== null) {
+            const fight = fightOn(frame.query, view?.state, { leanOn: typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false });
+            const sought = await soughtFor(view, frame, world, print, normalizeType(info?.type));
             const picks = chooseMeetings(world, frame.cast, {
-                now: frame.now, party: frame.party, comes, fight: fightOn(frame.query, view?.state, { leanOn: typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false }), pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
+                now: frame.now, party: frame.party, comes, sought, fight, pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
             });
+            // Someone sought who is elsewhere is heard of, with no name (no meeting in this reply to share the cue with).
+            const rumor = chooseRumor(world, frame.cast, { party: frame.party, sought, fight, met: picks, present: frame.present, pinned: frame.pinned });
             // Someone the story already has in the scene is met at once, as they are (no cue, no pace).
             picks.push(...metInTheStory(world, frame.cast, { present: frame.present, party: frame.party }));
             if (picks.length) {
                 const payload = { at, who: picks, names };
                 commands.push({ type: 'cast.meet', payload });
                 applyMeet(world, payload, { now: frame.now, rev });
+            }
+            if (rumor) {
+                const payload = { at, who: [rumor], names };
+                commands.push({ type: 'cast.rumor', payload });
+                applyRumor(world, payload, { now: frame.now, rev });
             }
         }
         return commands.length ? { commands } : undefined;

@@ -6,9 +6,10 @@
 // no static text, so a story with no cast in its packs sends the same prompt as before.
 
 import { TAIL_BUDGET, castOn } from './settings.js';
-import { cutWords, isInt, isRecord, slotOf, tables } from './domain.js';
+import { cutWords, isAlive, isInt, isRecord, slotOf, tables } from './domain.js';
 import { whyNarrator } from './apply.js';
-import { castOf } from './entries.js';
+import { castOf, samePlace } from './entries.js';
+import { rumorText } from './sought.js';
 
 const FRESH_REPLIES = 2;
 
@@ -57,10 +58,18 @@ export function tail(view) {
     const slice = view?.state?.domains?.cast;
     const meeting = slotOf(slice?.meeting);
     const at = isInt(view?.chat?.length) ? view.chat.length : null;
-    if (!meeting || !meetingFresh(slice.meeting, at)) return { lines: [], optional: [] };
     const { people } = tables(slice);
     const cast = castOf(typeof view?.query === 'function' ? (name, args) => view.query(name, args) : null);
     const lines = [];
+    // A sought person who is elsewhere: people here know of them, said with no name (only in the reply it was decided for).
+    for (const key of Object.keys(people).sort()) {
+        const person = people[key];
+        const rumor = isRecord(person) ? slotOf(person.rumored) : null;
+        if (!rumor || isRecord(person.met) || !isAlive(person) || !meetingFresh(rumor, at) || lines.length >= 1) continue;
+        const text = rumorText(cast.byKey.get(key), { where: rumor.where, home: samePlace(rumor.where, cast.byKey.get(key)?.place) });
+        if (text) lines.push(`[Cast] ${text}`);
+    }
+    if (!meeting || !meetingFresh(slice.meeting, at)) return { lines, optional: [] };
     for (const key of meeting.keys.slice(0, 2)) {
         const person = isRecord(people[key]) ? people[key] : null;
         if (!person || !isRecord(person.met)) continue;
