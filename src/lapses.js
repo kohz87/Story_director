@@ -67,12 +67,13 @@ export function slippedBeats(tracker, { calendar, now, graceDays = SLIP_GRACE_DA
 // An offer with no deadline written at all (a deadline that cannot be read stays as it was).
 const isUndated = record => !String(record?.fields?.due ?? '').trim();
 
-// An undated offer lapses `days` story days after the later of when it was offered
-// (`created.time`) and when the story last mentioned it (`seen.time`: every line that touches
-// the record sets it). No known time for either: it never lapses (nothing to count from).
+// An undated offer lapses `days` story days after the latest of when it was offered
+// (`created.time`), when the story last mentioned it (`seen.time`: every line that touches
+// the record sets it) and when the reader first spoke of it (`engaged.time`). No known time for
+// any: it never lapses (nothing to count from).
 function undatedLapse(record, { calendar, now, days }) {
     const span = Number(days) >= 0 ? Number(days) : UNDATED_OFFER_DAYS;
-    const times = [record.created?.time, record.seen?.time].filter(isNumber);
+    const times = [record.created?.time, record.seen?.time, record.engaged?.time].filter(isNumber);
     if (!times.length) return false;
     return calendar.addDays(Math.max(...times), span) <= now;
 }

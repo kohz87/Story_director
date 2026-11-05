@@ -116,6 +116,10 @@ test('an offer with no deadline lapses three story days after it was offered or 
     const named = markSeen(tracker, 'Rat Culling again, says Danique.', { message: 2, time: at('Goldwane 14, 09:00 pm') });
     assert.deepEqual(lapsedOffers(named, { calendar, now: at('Goldwane 17, 08:59 pm') }), []);
     assert.equal(lapsedOffers(named, { calendar, now: at('Goldwane 17, 09:00 pm') }).length, 1);
+    // The reader speaking of it (engaged) counts too: three days from then.
+    const spoken = { ...tracker, records: tracker.records.map(record => ({ ...record, engaged: { message: 2, time: at('Goldwane 14, 10:00 pm') } })) };
+    assert.deepEqual(lapsedOffers(spoken, { calendar, now: at('Goldwane 17, 09:59 pm') }), []);
+    assert.equal(lapsedOffers(spoken, { calendar, now: at('Goldwane 17, 10:00 pm') }).length, 1);
     // Seen earlier than it was offered never moves the start back.
     const odd = { ...tracker, records: tracker.records.map(record => ({ ...record, seen: { message: 1, time: offered - 5000 } })) };
     assert.deepEqual(lapsedOffers(odd, { calendar, now: at('Goldwane 15, 07:59 pm') }), []);

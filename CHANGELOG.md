@@ -25,6 +25,7 @@
   match (more of the line's core words, plurals folded and job words dropped, shared with the quest's name than with each other
   candidate's); a tie stays unclear and a Problems line names the candidates ("Wolf Hunt" for quest "Wolf Hunt North" and hook "Wolf Hunt South").
   No prompt change.
+- **Existing chats, also:** offers the story had touched (a `~` line) were never closed by time before this fix; a touched offer already past its deadline now closes as "offer lapsed" at your next reply, and one within its deadline now shows as overdue like any other. An undated offer's 3 days count from the latest of when it was offered, when the story last touched it and when you first spoke of it.
 
 ## 2.10.2
 
