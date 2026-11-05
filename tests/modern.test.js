@@ -6,8 +6,6 @@ import assert from 'node:assert/strict';
 import { makeCalendar } from '../src/calendar.js';
 import { estimateTrip, formatTrip } from '../src/places.js';
 import { durationText, formatRoute, loadWorldPack, packSummary, paceFor, parseLeg, planRoute, validateLeg } from '../src/routes.js';
-import { travelFindings } from '../src/travel.js';
-import { emptyTracker } from '../src/tracker.js';
 
 const CITY = {
     source: 'A small modern region, for tests',
@@ -88,13 +86,14 @@ test('legs in hours: read, checked, corrected', () => {
 test('a modern arrival is checked to the quarter hour or a tenth of the trip', () => {
     const cal = makeCalendar('gregorian');
     const depart = cal.parse('June 3, 2031, 09:00 am').abs;
-    const tracker = emptyTracker();
-    tracker.records.push({ id: 'r1', key: 'Courier van', kind: 'agenda', status: 'active', fields: { leg: 'Downtown → North City 1100 MW, car 100/h → 11 h', arrive: 'June 3, 2031, 08:00 pm' }, legSince: { time: depart } });
-    const [late] = travelFindings(tracker, { pack, calendar: cal });
+    const check = (arrive) => {
+        const leg = parseLeg(pack, 'Downtown → North City 1100 MW, car 100/h → 11 h');
+        return validateLeg(pack, leg, { depart, arrive: cal.parse(arrive, { reference: depart }).abs, calendar: cal });
+    };
+    const [late] = check('June 3, 2031, 08:00 pm');
     assert.equal(late.kind, 'leg-arrive');
-    assert.match(late.message, /^Courier van: Arrival June 3, 08:00 pm is 14 h off: 1 day 1 h from June 3, 09:00 am is June 4, 10:00 am\.$/);
-    tracker.records[0].fields.arrive = 'June 4, 2031, 11:30 am';
-    assert.deepEqual(travelFindings(tracker, { pack, calendar: cal }), [], 'within a tenth of a 25-hour trip');
+    assert.match(late.message, /^Arrival June 3, 08:00 pm is 14 h off: 1 day 1 h from June 3, 09:00 am is June 4, 10:00 am\.$/);
+    assert.deepEqual(check('June 4, 2031, 11:30 am'), [], 'within a tenth of a 25-hour trip');
 });
 
 test('without a pack, a modern map estimates in hours', () => {

@@ -301,11 +301,7 @@ src/tracker.js      records, applying changes, replay, dormant shelf (pure)
 src/relevance.js    picking what to inject (pure)
 src/note.js         the injected note (pure)
 src/routes.js       world packs, shortest paths, legs, travel maths (pure)
-src/checks.js       the checks in 4.5 (pure)
 src/planner.js      the arc planning prompt, output parser, plan validation (pure)
-src/seed.js         seeding from a World_State block or a World State Alpha export (pure)
-src/ui/tab.js       the sidebar tab
-src/ui/settings.js  the settings panel
 ```
 
 Everything under `src/` except `ui/` is pure and tested without SillyTavern.

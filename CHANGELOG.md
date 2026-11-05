@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **v1 code removed from main** (the unloaded `index.v1.js`, its glue, UI, `style.css` and their tests); it is kept on the `v1` branch. Nothing v2 loads changed.
 - **A quest line no longer closes or advances a hook through a near name.** A `- quest`, `~ quest` or `! quest` line whose name only
   reads near a hook or event (even the only near match) now stays unclear: the record is left as it was and a Problems line names it.
   An exact key or alias still reaches it, so a quest line that names a hook exactly closes that hook as before.

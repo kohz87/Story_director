@@ -12,7 +12,7 @@ Story Director works without NPC State Delta. Read other modules through guarded
 
 ## Directory map
 
-- `index.js`: SillyTavern entry; registers `src/v2/module.js` once `StoryBlock.ready` resolves. `index.v1.js` is v1.
+- `index.js`: SillyTavern entry; registers `src/v2/module.js` once `StoryBlock.ready` resolves. v1's glue is no longer on main (it lives on the `v1` branch).
 - `src/v2/module.js`: merges the parts (tracker, quests, time, atlas, chronicle, world, arc, screens); settings
   namespaced per part; `fights` (whether a module runs fights) told to every part.
 - `src/v2/tracker/`: the `director` domain, its change-line kinds and grammar, the clock (`time.js`), calendar
@@ -27,7 +27,7 @@ Story Director works without NPC State Delta. Read other modules through guarded
 - `src/*.js`: v1's pure rules reused by v2 (`tracker.js`, `lapses.js`, `calendar.js`, `places.js`, `routes.js`, ...).
 - `src/routes.js`: facade re-exporting the route rules, which live in `src/routes/`: `pack.js` (world-pack loading, place lookup, `normalizeMode`), `plan.js` (paces, day maths, planner), `leg.js` (`parseLeg`, `validateLeg`), `text.js` (route and leg text), `util.js` (shared tiny helpers).
 - `src/tracker.js`: records, `applyOps`, `replay` and the queries; the word helpers (`keyWords`, `nearMatches`, name comparisons) live in `src/tracker-words.js` and the "said" helpers (quest over / given up / offers chosen, `waitsForPay`, `looksFinished`, `isOffer`, `overByChange`, `takesOnQuest`) in `src/tracker-said.js`; `tracker.js` re-exports every name it exported before. The helper files never import `tracker.js` (`tracker-said.js` imports `tracker-words.js`).
-- `tests/*.test.js`: v1 rule tests. `tests/v2/<part>/`: per-part tests; `tests/v2/integration/` (incl.
+- `tests/*.test.js`: tests of the pure rules. `tests/v2/<part>/`: per-part tests; `tests/v2/integration/` (incl.
   `alone.test.js`), `tests/v2/break/` (one file per break finding, `fuzz-delete*.test.js`).
 - `tests/vendor/story-block/`: Story Block's testkit + runtime, vendored (VERSION names the commit).
   `tests/v2/screens/vendor/` is an older pinned copy of Story Block's screens registry (or `STORY_BLOCK_DIR`).
