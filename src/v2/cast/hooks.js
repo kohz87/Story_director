@@ -158,7 +158,7 @@ export function createCastHooks({ plans }) {
             mode: 'sought', now: frame.calendar?.text ?? '', place: [frame.party.place, frame.party.region].filter(Boolean).join(', '), texts,
             people: asked.map(item => ({ ref: item.ref, name: item.person.name, goal: item.entry.goal, routine: item.entry.routine, where: item.person.where, kind: kindWords(item.entry), met: false })),
         });
-        const allow = { seek: new Set(asked.map(item => item.key)) };
+        const allow = { seek: new Set(asked.map(item => item.key)), kind: new Map(asked.map(item => [item.key, item.entry])) };
         return plans.start(key, async () => {
             const result = await model.callModel({ profile: frame.settings.profile, system: request.system, prompt: request.prompt, maxTokens: MAX_TOKENS, feature: FEATURE, timeoutMs: CALL_MS });
             if (!result?.ok) return { ok: false };

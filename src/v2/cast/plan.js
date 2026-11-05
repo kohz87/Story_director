@@ -14,7 +14,7 @@
 // The same call, asked only for the `>` lines, judges a goal touched by the story between two days (index.js `touched`).
 
 import { MAX_DOING, MAX_PLACE, MAX_REASON, cutPoints, cutWords, flat } from './domain.js';
-import { citedClean, citedIn, words } from './sought.js';
+import { citedClean, citedIn, citesKind, words } from './sought.js';
 
 export const MAX_ANSWER_CHARS = 8000;
 export const MAX_LINES = 60;
@@ -170,7 +170,7 @@ export function readCast(text, { refs = new Map(), allow = {}, texts = [] } = {}
         } else if (label === '?') {
             // A request the planner says it read: its words must stand in the message or the reply (whole words), else it is refused.
             const cited = citedClean(bits.slice(1).join(' / '));
-            if (!allow.seek?.has(key) || seen.seek.has(key) || (out.sought?.length ?? 0) >= CAPS.seek || !citedIn(cited, texts)) continue;
+            if (!allow.seek?.has(key) || seen.seek.has(key) || (out.sought?.length ?? 0) >= CAPS.seek || !citedIn(cited, texts) || (allow.kind?.has(key) && !citesKind(allow.kind.get(key), cited))) continue;
             seen.seek.add(key);
             (out.sought ??= []).push({ key, words: cited });
         } else {

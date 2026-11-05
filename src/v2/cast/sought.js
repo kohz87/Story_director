@@ -32,50 +32,87 @@ export function citedIn(phrase, texts) {
 
 // ---- who a person is, in words that hide the name ----------------------------------------------------------------------------------------
 
-// Titles are not names: "a Flame sister" says who someone is, "Temiwa" says which one.
-const TITLES = new Set(['sister', 'brother', 'mother', 'father', 'captain', 'lady', 'lord', 'sir', 'dame', 'master', 'mistress', 'old', 'young', 'saint', 'doctor', 'madam', 'king', 'queen', 'prince', 'princess', 'elder', 'lieutenant', 'sergeant', 'knight', 'the', 'and', 'of']);
+// Titles and particles are not names: "a Flame sister" says who someone is, "Temiwa" says which one.
+const TITLES = new Set(['sister', 'brother', 'mother', 'father', 'captain', 'lady', 'lord', 'sir', 'dame', 'master', 'mistress', 'old', 'young', 'saint', 'doctor', 'madam', 'king', 'queen', 'prince', 'princess', 'elder', 'lieutenant', 'sergeant', 'knight', 'the', 'and', 'of', 'de', 'la', 'le', 'von', 'van', 'du', 'el', 'al', 'in', 'on', 'at']);
 
-/** `mentions(text)`: whether a text holds the person's name, an alias or a name-like token (a word of their name that is not a title). */
-export function nameTester(entryOrPerson) {
-    const names = [entryOrPerson?.name, ...(Array.isArray(entryOrPerson?.aliases) ? entryOrPerson.aliases : []), entryOrPerson?.id ?? entryOrPerson?.eid].map(flat).filter(Boolean);
-    const phrases = new Set(names.filter(name => keyOf(name)));
-    for (const name of [entryOrPerson?.name, ...(Array.isArray(entryOrPerson?.aliases) ? entryOrPerson.aliases : [])].map(flat)) {
-        for (const part of name.split(/\s+/)) {
-            const bare = part.replace(/[^\p{L}\p{N}]/gu, '');
-            if (Array.from(bare).length >= 3 && !TITLES.has(bare.toLowerCase())) phrases.add(bare);
-        }
+/** A text as lower case with diacritics folded away ("Zoë" is "zoe"). */
+export const fold = text => String(text ?? '').normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+/** The words of a text, folded; any non-letter splits (hyphens, apostrophes, possessives: "Temiwa's" is "temiwa", "s"). */
+const wordsOf = text => fold(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+const prefixLen = (a, b) => { let n = 0; while (n < a.length && n < b.length && a[n] === b[n]) n += 1; return n; };
+
+// Whether a word of a text is a name token: the same word; in Latin script the token with up to two letters added or taken off its end
+// ("Temiwa", "Temiwan", "Temiwas"); in another script (where a name is inflected: "Зоя", "Зои", "Зою") a word of three or more letters that
+// shares all but the last letter of the shorter one.
+function sameToken(word, token) {
+    if (word === token) return true;
+    if (!/[^\u0000-\u024f]/.test(token)) {
+        const [short, long] = word.length <= token.length ? [word, token] : [token, word];
+        return short.length >= 4 && long.length - short.length <= 2 && long.startsWith(short);
     }
-    const tests = [...phrases].filter(phrase => Array.from(phrase).length >= 3).map(wholeWords);
-    return text => { const said = flat(text); return tests.some(test => test.test(said)); };
+    const common = prefixLen(word, token);
+    return Math.min(word.length, token.length) >= 3 && common >= Math.min(word.length, token.length) - 1;
+}
+
+/**
+ * `mentions(text)`: whether a text holds the person's name, an alias or a name-like token: every word of the name, of each alias and of the
+ * entry's id (split on any non-letter, diacritics folded, two letters are enough for a whole word) that is not a title, whole or inflected.
+ */
+export function nameTester(entryOrPerson) {
+    const aliases = Array.isArray(entryOrPerson?.aliases) ? entryOrPerson.aliases : [];
+    const tokens = new Set();
+    for (const name of [entryOrPerson?.name, ...aliases, entryOrPerson?.id ?? entryOrPerson?.eid]) {
+        const parts = wordsOf(name);
+        for (const part of parts) if (Array.from(part).length >= 2 && !TITLES.has(part)) tokens.add(part);
+    }
+    return text => wordsOf(text).some(word => [...tokens].some(token => sameToken(word, token)));
 }
 
 const sentencesOf = text => String(text ?? '').split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(Boolean);
 
 /** What the entry's `about` says of who they are: the opening noun phrase of its first sentence with no name (up to the first `:`, `,` or `;`, no article). */
 export function leadOf(entry, mentions = nameTester(entry)) {
-    const sentence = sentencesOf(entry?.about).find(one => !mentions(one));
-    if (!sentence) return '';
-    const phrase = sentence.split(/[:,;]/)[0].trim().replace(/^(?:the|a|an)\s+/i, '').replace(/[.!?]+$/, '');
-    // A lone adjective or a pair of them ("Proud", "Stoic and tired") says nothing about who someone is.
-    return mentions(phrase) || phrase.split(/\s+/).length < 3 || /^\S+ and \S+$/i.test(phrase) ? '' : cutWords(phrase, 70);
+    for (const sentence of sentencesOf(entry?.about)) {
+        // Only this opening phrase is ever used, so it is the phrase that must not carry a name (a common word of the sentence elsewhere may).
+        const phrase = sentence.split(/[:,;]/)[0].trim().replace(/^(?:the|a|an)\s+/i, '').replace(/[.!?]+$/, '');
+        // A lone adjective or a pair of them ("Proud", "Stoic and tired") says nothing about who someone is.
+        if (mentions(sentence.split(/[:,;]/)[0]) || phrase.split(/\s+/).length < 3 || /^\S+ and \S+$/i.test(phrase)) {
+            if (mentions(sentence)) continue;
+            return '';
+        }
+        return cutWords(phrase, 70);
+    }
+    return '';
 }
 
 /** The words a person is sought by: their calling and the lead of their `about` (name-free). */
 export function kindWords(entry) {
     const mentions = nameTester(entry);
-    const calling = mentions(entry?.calling) ? '' : flat(entry?.calling);
+    // Each part of a calling that carries a name-like word is left out on its own ("Saintess candidate, healer" for an alias "Last Candle" keeps "healer").
+    const calling = flat(entry?.calling).split(/\s*[,;]\s*/).filter(part => part && !mentions(part)).join(', ');
     return { calling, lead: leadOf(entry, mentions) };
 }
 
-/**
- * Whether the reader's `text` may be asking for this person's kind: a telling word of their calling (else, with no calling, of the lead of their
- * `about`) as a whole word, a plural counting. A cheap check so the planner is asked only then; a word of ordinary prose that the entry's
- * other sentences happen to use does not count.
- */
-export function kindTouches(entry, text) {
+// Words of ordinary prose that a calling or a lead happens to use: they never open the gate on their own.
+const COMMON = new Set(['long', 'watch', 'iron', 'card', 'candidate', 'chain', 'cell', 'runner', 'sharp', 'guard', 'captain', 'knife', 'night', 'dark', 'grey', 'gray', 'pale', 'calm', 'warm', 'cold', 'tired', 'proud', 'gentle', 'stranger', 'keeper', 'people', 'village', 'frontier', 'city', 'great', 'noble', 'self', 'taught', 'spell', 'grammar', 'free', 'freed', 'broken', 'holds', 'roaming', 'little', 'small', 'tall', 'old', 'young', 'aging', 'dead', 'hair', 'quiet', 'loud', 'sworn', 'twenty', 'lost', 'thousand', 'sails', 'church', 'eternal', 'flame', 'eared', 'barge', 'barges', 'vargate', 'flower']);
+/** The words a person is sought by: a telling word of their calling and of the lead of their `about`, common prose words out. */
+export function gateWords(entry) {
     const { calling, lead } = kindWords(entry);
+    return [...new Set(words(`${calling} ${lead}`).filter(word => !COMMON.has(word)))];
+}
+const hasWord = (have, word) => have.has(word) || have.has(`${word}s`) || have.has(`${word}es`) || (word.endsWith('s') && have.has(word.slice(0, -1)));
+
+/** Whether the reader's `text` may be asking for this person's kind: a word of `gateWords` is in it as a whole word (a plural counts). */
+export function kindTouches(entry, text) {
     const have = new Set(words(Array.isArray(text) ? text.join('\n') : text));
-    return words(calling || lead).some(word => have.has(word) || have.has(`${word}s`) || have.has(`${word}es`));
+    return gateWords(entry).some(word => hasWord(have, word));
+}
+
+/** Whether cited words hold a telling word of the person's kind (their calling or the lead of their `about`, 4+ letters, no stop word). */
+export function citesKind(entry, cited) {
+    const { calling, lead } = kindWords(entry);
+    const have = new Set(words(cited));
+    return words(`${calling} ${lead}`).some(word => hasWord(have, word));
 }
 
 // ---- the rumor ---------------------------------------------------------------------------------------------------------------------------

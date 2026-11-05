@@ -2,12 +2,13 @@
 // unmet person is sought, citing the reader's words; code checks the words stand in the message or the reply. At the party's place the person
 // comes in ("sought"); elsewhere the narrator hears a rumor that describes them and never names them, told once until they move.
 import test from 'node:test';
+import { existsSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 import { applyRumor, applySync, planSync, syncPayload } from '../../../src/v2/cast/apply.js';
 import { DAY, initialCast, validateCast } from '../../../src/v2/cast/domain.js';
 import { castOf, readEntry } from '../../../src/v2/cast/entries.js';
-import { citedIn, rumorText } from '../../../src/v2/cast/sought.js';
+import { citedIn, citesKind, gateWords, kindTouches, nameTester, rumorText } from '../../../src/v2/cast/sought.js';
 import { chooseMeetings, chooseRumor, paceOf } from '../../../src/v2/cast/world.js';
 import { readCast } from '../../../src/v2/cast/plan.js';
 import { OPENING, castCue, castHost, castSource, createFakeModel, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
@@ -357,4 +358,62 @@ test('the sought step is part of the cast feature: off, nothing is asked or told
     } finally {
         host.close();
     }
+});
+
+// ---- round 2: the review's findings ---------------------------------------------------------------------------------------------------
+
+test('the name tester: hyphen and apostrophe parts, diacritics, short whole names, inflected other-script aliases, possessives and titles', () => {
+    const mentions = (entry, text) => nameTester(entry)(text);
+    const moon = { name: 'Sister Marla', aliases: ['Moonrain-on-the-Roofs'] };
+    assert.equal(mentions(moon, 'Moonrain tends the sick'), true, 'one half of a hyphenated alias');
+    assert.equal(mentions(moon, 'friend of the Roofs'), true);
+    assert.equal(mentions(moon, 'a healer of the frontier'), false);
+    assert.equal(mentions({ name: 'Li' }, 'friend of Li'), true, 'two letters are a whole name');
+    assert.equal(mentions({ name: 'Li' }, 'a little light'), false, 'but only as a whole word');
+    assert.equal(mentions({ name: 'Zoë' }, 'friend of Zoe'), true, 'diacritics fold, one way');
+    assert.equal(mentions({ name: 'Zoe' }, 'friend of ZOË'), true, 'and the other, in any case');
+    assert.equal(mentions({ name: 'Marla', aliases: ['Зоя'] }, 'Healer of Зои'), true, 'an inflected form of an other-script alias');
+    assert.equal(mentions({ name: 'Marla', aliases: ['Зоя'] }, 'Healer of Зою'), true);
+    assert.equal(mentions({ name: 'Marla', aliases: ['Зоя'] }, 'Healer of Иван'), false);
+    assert.equal(mentions({ name: 'Sister Temiwa' }, "Temiwa's hands"), true, 'a possessive');
+    assert.equal(mentions({ name: 'Sister Temiwa' }, 'the sister of the Flame'), false, 'a title alone is no name');
+    assert.equal(mentions({ name: 'Sister Temiwa' }, 'Temiwan pilgrims'), true, 'an inflected form (same first letters, four or more)');
+    assert.equal(mentions({ name: "O'Brien-Smith" }, 'Smith the baker'), true);
+    // The leak the review found, end to end: none of these words reaches a rumor.
+    const read = more => readEntry({ pack: 'ersveil', packVersion: '1', ...temiwa('Harrow', more) });
+    const said = text => rumorText(read({ name: 'Marla', aliases: ['Moonrain-on-the-Roofs'], fields: { Calling: 'Healer, Moonrain the mender' }, about: 'Moonrain tends the sick of the frontier villages: a gentle presence.' }), { where: 'Kesh' });
+    assert.equal(said(), 'People here know of a healer, found in Kesh.');
+    assert.equal(rumorText(read({ name: 'Li', aliases: [], fields: { Calling: 'Healer, friend of Li' }, about: 'Li heals the sick of the frontier villages.' }), { where: 'Kesh' }), 'People here know of a healer, found in Kesh.');
+    assert.equal(rumorText(read({ name: 'Zoë', aliases: ['Зоя'], fields: { Calling: 'Healer, friend of Зои, friend of Zoe' }, about: 'Zoe heals.' }), { where: 'Kesh' }), 'People here know of a healer, found in Kesh.');
+    assert.doesNotMatch(rumorText(read({ name: 'Sister Temiwa', aliases: ['Temiwa'], fields: { Calling: "Temiwa's mender, healer" } }), { where: 'Kesh' }), /Temiwa/i);
+});
+
+test('cited words must contain a telling word of the person\'s kind: "the", "her", "you" are refused; "a healer" is not', () => {
+    const entryOf = readEntry({ pack: 'ersveil', packVersion: '1', ...temiwa('Harrow') });
+    assert.equal(citesKind(entryOf, 'a healer or a sister'), true);
+    assert.equal(citesKind(entryOf, 'healers'), true, 'a plural');
+    for (const filler of ['the', 'her', 'you', 'around here', 'a sister']) assert.equal(citesKind(entryOf, filler), false, filler);
+    const refs = new Map([['temiwa', 'ersveil:temiwa']]);
+    const read = text => readCast(text, { refs, allow: { seek: new Set(['ersveil:temiwa']), kind: new Map([['ersveil:temiwa', entryOf]]) }, texts: ['Is the healer around? I need her, you see.'] });
+    assert.equal(read('? cast temiwa | "the"').sought, undefined);
+    assert.equal(read('? cast temiwa | "her"').sought, undefined);
+    assert.equal(read('? cast temiwa | "you"').sought, undefined);
+    assert.deepEqual(read('? cast temiwa | "the healer"').sought, [{ key: 'ersveil:temiwa', words: 'the healer' }]);
+});
+
+// Story Block's example pack, when it sits beside this checkout (CI has no sibling checkout).
+const PACK_FILE = new URL('../../../../Story_block/examples/packs/ersveil/pack.json', import.meta.url);
+const PACK_FILE2 = new URL('../../../../../Story_block/examples/packs/ersveil/pack.json', import.meta.url);
+const packFile = [PACK_FILE, PACK_FILE2].find(file => existsSync(file));
+
+test('the gate: calling and the lead of about, common prose words dropped; the 12 Ersveil entries', { skip: !packFile && 'Story Block\'s example pack is not beside this checkout' }, () => {
+    const pack = JSON.parse(readFileSync(packFile, 'utf8'));
+    const entries = pack.content.cast.map(raw => readEntry({ pack: 'ersveil', packVersion: '1', ...raw }));
+    const gate = id => gateWords(entries.find(item => item.id === id));
+    assert.ok(gate('hush').includes('guide'), 'Hush: "guide of the lost" fires on "a guide"');
+    assert.equal(kindTouches(entries.find(item => item.id === 'hush'), 'Is there a guide here?'), true);
+    assert.ok(gate('temiwa').includes('healer'));
+    assert.ok(gate('nerissa').includes('pilot'));
+    const prose = 'A long watch of iron guard and card sharp, a chain cell runner with a captain and a knife, the candidate said.';
+    for (const item of entries) assert.equal(kindTouches(item, prose), false, `${item.id}: ordinary prose does not open the gate (${gate(item.id).join(' ')})`);
 });
