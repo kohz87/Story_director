@@ -48,9 +48,23 @@ export function nearMatches(records, key, kind = null) {
     // of that kind: the kind settles it (the hook a quest grew out of stays active beside the quest).
     if (found.length > 1 && kind) {
         const same = found.filter(entry => entry.record.kind === kind);
-        if (same.length === 1) return same;
+        // (stage73) ...but only when that quest is the strictly stronger match: its core-word overlap with the line's
+        // name beats every other candidate's. A tie stays unclear.
+        if (same.length === 1) {
+            const core = coreWords(keyWords(key));
+            const score = entry => coreOverlap(core, coreWords(keyWords(entry.record.key)));
+            const best = score(same[0]);
+            if (found.every(entry => entry === same[0] || score(entry) < best)) return same;
+        }
     }
     return found;
+}
+
+// Jaccard overlap of two core-word lists (plurals folded, job words dropped).
+function coreOverlap(left, right) {
+    const shared = left.filter(word => right.includes(word)).length;
+    const union = left.length + right.length - shared;
+    return union > 0 ? shared / union : 0;
 }
 
 function nearMatchesAll(records, key) {

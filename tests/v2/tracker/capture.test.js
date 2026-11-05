@@ -325,6 +325,26 @@ test('quest rule: a lone hook near-matched by a - quest line stays open, and the
     assert.equal(lastProblems(progress)[0].kind, 'unknown-key');
 });
 
+test('quest rule: "Wolf Hunt" with quest "Wolf Hunt North" and hook "Wolf Hunt South" is a tie and stays unclear', () => {
+    const state = story([{ lines: '+ hook Wolf Hunt South — wolves | giver: Nelje' }, { lines: quest('Wolf Hunt North') }, { lines: '- quest Wolf Hunt — done' }]);
+    assert.equal(thread(state, 'Wolf Hunt North').status, 'active');
+    assert.equal(thread(state, 'Wolf Hunt South').status, 'active');
+    const [problem] = lastProblems(state);
+    assert.equal(problem.kind, 'unknown-key');
+    assert.deepEqual(problem.candidates.slice().sort(), ['Wolf Hunt North', 'Wolf Hunt South']);
+});
+
+test('quest rule: the USER\'s pair settles on the quest by score (0.75 against 0.50)', () => {
+    const core = words => new Set(words);
+    const line = ['storehouse', 'cellar', 'rat', 'cull'];
+    const overlap = other => [...core(other)].filter(w => line.includes(w)).length / new Set([...line, ...other]).size;
+    assert.equal(overlap(['storehouse', 'cellar', 'rat']), 0.75);
+    assert.equal(overlap(['storehouse', 'rat']), 0.5);
+    const state = story([{ lines: RAT_HOOK }, { lines: RAT_QUEST }, { lines: `- quest ${CULL} — done` }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Cellar-Rats').status, 'resolved');
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'active');
+});
+
 test('quest rule: a quest line that names the hook exactly still reaches it', () => {
     const state = story([{ lines: RAT_HOOK }, { lines: '- quest Storehouse No. 2 Rats — done' }]);
     assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'resolved');
