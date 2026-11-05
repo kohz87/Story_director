@@ -423,6 +423,7 @@ test('a sought answer that leaves off "? cast" is read the same; the default pla
     const entryOf = readEntry({ pack: 'ersveil', packVersion: '1', ...temiwa('Harrow') });
     const read = text => readCast(text, { refs, allow: { seek: new Set(['ersveil:temiwa']), kind: new Map([['ersveil:temiwa', entryOf]]) }, texts: ['Is there a healer or a sister around here?'] });
     assert.deepEqual(read('temiwa | "Is there a healer or a sister around here?"').sought, [{ key: 'ersveil:temiwa', words: 'Is there a healer or a sister around here?' }]);
+    assert.deepEqual(read('? temiwa | "a healer"').sought, [{ key: 'ersveil:temiwa', words: 'a healer' }], 'the form the live model gave');
     assert.deepEqual(read('cast temiwa | "a healer"').sought, [{ key: 'ersveil:temiwa', words: 'a healer' }]);
     assert.equal(read('temiwa | "a priest"').sought, undefined, 'the words are still checked');
     // The timer, as a browser has it: setTimeout only works with `this` as the window (or nothing).

@@ -147,9 +147,12 @@ export function readCast(text, { refs = new Map(), allow = {}, texts = [] } = {}
     for (const raw of clean.split(/\r?\n/).slice(0, MAX_LINES)) {
         const trimmed = raw.trim();
         if (!trimmed || FENCE.test(trimmed)) continue;
-        let match = LINE.exec(trimmed.replace(DECORATION, ''));
+        const plain = trimmed.replace(DECORATION, '');
+        let match = LINE.exec(plain);
+        // The 'sought' call carries one kind of line, so `? ref | "words"` (no `cast`) is read the same.
+        if (!match && allow.seek && !allow.come && !allow.die) match = /^(\?)\s*(.+\|.+)$/.exec(plain);
         // A 'sought' answer that leaves off the `? cast` (just `ref | "words"`) is read the same: it is the only line that call can carry.
-        if (!match && allow.seek && !allow.come && !allow.die) match = /^()(.+\|.+)$/.exec(trimmed.replace(DECORATION, '').replace(/^cast\s+/i, ''));
+        if (!match && allow.seek && !allow.come && !allow.die) match = /^()(.+\|.+)$/.exec(plain.replace(/^cast\s+/i, ''));
         if (!match) continue;
         const bits = match[2].split('|').map(bit => bit.trim());
         const key = refs.get(refOf(bits[0]));
