@@ -44,7 +44,7 @@ Delta (`tests/v2/integration/alone.test.js` guards that). NPC State Delta reads 
   `beat`, `secret`), a key (its name), a summary, `fields`, a status (`active`, `resolved`) and `track` (when created, changed,
   seen). Written by change lines or reader commands; never by hand.
 - **Quest / hook / offer**: a job only offered is a `hook`. `+ quest` is the acceptance. An older chat's offer or RPG quest data is
-  read-only history.
+  read-only history. An offer with no `due` lapses 3 story days (`UNDATED_OFFER_DAYS`, `src/lapses.js`) after it was offered or last touched by a line, like a passed deadline (`- Key — offer lapsed`); an offer with a `due` lapses at it; quests taken on are unchanged.
 - **Behind the scenes**: agendas, beats, clocks, secrets. The narrator is told them; the reader's screens hide them until
   **Reveal** (per chat, in the browser). Secrets are told by name only ("Do not reveal").
 - **Clock**: `director.time.minutes`, story minutes from the calendar's epoch. Moves only by `~ time <date>`, `! time +2h`,

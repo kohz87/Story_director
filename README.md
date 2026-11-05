@@ -31,7 +31,7 @@ Story Director adds screens to Story Block's **Game view** (the **Game view** bu
 
 *The card says who arrived and why, and where things stand.*
 
-**Quests and leads.** Quests are told by the story. A job that is only offered stays a lead, called a hook. When you accept it, the narrator writes a quest with its goal, who asked and when it is due. **Quests** lists them. **Director** shows quests, hooks, world events and the arc panel. If a quest's deadline passes, it goes overdue, and two story days later it fails. An offer with a deadline lapses when the deadline passes. Turn this off with **Deadlines slip or lapse** in the settings.
+**Quests and leads.** Quests are told by the story. A job that is only offered stays a lead, called a hook. When you accept it, the narrator writes a quest with its goal, who asked and when it is due. **Quests** lists them. **Director** shows quests, hooks, world events and the arc panel. If a quest's deadline passes, it goes overdue, and two story days later it fails. An offer with a deadline lapses when the deadline passes; one without a deadline lapses three story days after the story last spoke of it. Turn this off with **Deadlines slip or lapse** in the settings.
 
 <img src="docs/images/director.png" alt="The Director screen: the Arc panel with a Plan arc button, then the Quests card with Granary Vermin and the Hooks card with The orc clan envoys." width="100%">
 

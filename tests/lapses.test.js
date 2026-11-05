@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 
 import { makeCalendar } from '../src/calendar.js';
 import { parseChanges } from '../src/changes.js';
-import { LAPSED_REASON, SLIPPED_REASON, SLIP_GRACE_DAYS, lapseLines, lapsedOffers, lapsesIn, slippedBeats } from '../src/lapses.js';
-import { applyOps, emptyTracker, findRecord, isOffer, questsDoneIn, replay } from '../src/tracker.js';
+import { LAPSED_REASON, SLIPPED_REASON, SLIP_GRACE_DAYS, UNDATED_OFFER_DAYS, lapseLines, lapsedOffers, lapsesIn, slippedBeats } from '../src/lapses.js';
+import { applyOps, emptyTracker, findRecord, isOffer, markSeen, questsDoneIn, replay } from '../src/tracker.js';
 
 const calendar = makeCalendar({ preset: 'custom', months: ['Haywane', 'Goldwane', 'Reapwane'].map(name => ({ name, days: 30 })) });
 const at = text => calendar.parse(text).abs;
@@ -99,6 +99,38 @@ test('what does not lapse: no deadline, a quest taken on, a plain hook, closed, 
     ].join('\n'));
     assert.deepEqual(lapsedOffers(tracker, { calendar, now }), []);
     assert.deepEqual(lapsedOffers(trackerOf('+ hook Ferry — reward: 2 silver | due: Goldwane 13'), { calendar, now: null }), []);
+});
+
+test('an offer with no deadline lapses three story days after it was offered or last seen (stage73)', () => {
+    assert.equal(UNDATED_OFFER_DAYS, 3);
+    const offered = at('Goldwane 12, 08:00 pm');
+    const timed = (text, message, time, tracker = emptyTracker()) => applyOps(tracker, ops(text), { message, time }).tracker;
+    const tracker = timed('+ hook Rat Culling — giver: Danique | reward: 4 copper', 1, offered);
+    assert.deepEqual(lapsedOffers(tracker, { calendar, now: at('Goldwane 15, 07:59 pm') }), []);
+    assert.deepEqual(keys(lapsedOffers(tracker, { calendar, now: at('Goldwane 15, 08:00 pm') })), ['Rat Culling']);
+    // A line that touches it is the story mentioning it: three days from then.
+    const touched = timed('~ Rat Culling — now: still wanted', 2, at('Goldwane 14, 08:00 pm'), tracker);
+    assert.deepEqual(lapsedOffers(touched, { calendar, now: at('Goldwane 17, 07:59 pm') }), []);
+    assert.equal(lapsedOffers(touched, { calendar, now: at('Goldwane 17, 08:00 pm') }).length, 1);
+    // markSeen (the text of a reply naming it) does the same.
+    const named = markSeen(tracker, 'Rat Culling again, says Danique.', { message: 2, time: at('Goldwane 14, 09:00 pm') });
+    assert.deepEqual(lapsedOffers(named, { calendar, now: at('Goldwane 17, 08:59 pm') }), []);
+    assert.equal(lapsedOffers(named, { calendar, now: at('Goldwane 17, 09:00 pm') }).length, 1);
+    // The reader speaking of it (engaged) counts too: three days from then.
+    const spoken = { ...tracker, records: tracker.records.map(record => ({ ...record, engaged: { message: 2, time: at('Goldwane 14, 10:00 pm') } })) };
+    assert.deepEqual(lapsedOffers(spoken, { calendar, now: at('Goldwane 17, 09:59 pm') }), []);
+    assert.equal(lapsedOffers(spoken, { calendar, now: at('Goldwane 17, 10:00 pm') }).length, 1);
+    // Seen earlier than it was offered never moves the start back.
+    const odd = { ...tracker, records: tracker.records.map(record => ({ ...record, seen: { message: 1, time: offered - 5000 } })) };
+    assert.deepEqual(lapsedOffers(odd, { calendar, now: at('Goldwane 15, 07:59 pm') }), []);
+    // Dated offers keep their deadline; the span can be given; no known time never lapses.
+    const dated = timed('+ hook Ferry — reward: 2 silver | due: Goldwane 20', 1, offered);
+    assert.deepEqual(lapsedOffers(dated, { calendar, now: at('Goldwane 18, 09:00 am') }), []);
+    assert.equal(lapsedOffers(tracker, { calendar, now: at('Goldwane 13, 08:00 pm'), undatedDays: 1 }).length, 1);
+    assert.deepEqual(lapsedOffers(trackerOf('+ hook Rat Culling — giver: Danique | reward: 4 copper'), { calendar, now: at('Reapwane 10, 09:00 am') }), []);
+    // A quest taken on, a plain hook and a closed offer are not touched by it.
+    const others = timed(['+ quest Wolves — giver: Hobb | reward: 4 silver', '+ hook River stranger — who pulled Ren out', '+ hook Old — giver: A | reward: 1 gold', '- Old — someone else took it'].join('\n'), 1, offered);
+    assert.deepEqual(lapsedOffers(others, { calendar, now: at('Reapwane 10, 09:00 am') }), []);
 });
 
 test('the lines close them as resolved, not as failures, choices or quest outcomes', () => {

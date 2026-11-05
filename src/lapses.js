@@ -10,6 +10,10 @@ import { isOffer } from './tracker.js';
 // Story days a beat may run late before it slips: the story gets the rest of its day and two
 // more to bring it in (on-screen, or as news), then it is closed for it.
 export const SLIP_GRACE_DAYS = 2;
+// Story days an offer with no deadline stays open after the later of its being offered and the
+// story last mentioning it (its `seen` time); then it lapses like one whose deadline passed.
+// A constant, not a setting (USER, 5 Nov: "without deadline, it should expire in 2-3 game days").
+export const UNDATED_OFFER_DAYS = 3;
 // The reasons written on the `-` lines, and read back for the next note.
 export const SLIPPED_REASON = 'slipped';
 export const LAPSED_REASON = 'offer lapsed';
@@ -60,18 +64,34 @@ export function slippedBeats(tracker, { calendar, now, graceDays = SLIP_GRACE_DA
     });
 }
 
+// An offer with no deadline written at all (a deadline that cannot be read stays as it was).
+const isUndated = record => !String(record?.fields?.due ?? '').trim();
+
+// An undated offer lapses `days` story days after the latest of when it was offered
+// (`created.time`), when the story last mentioned it (`seen.time`: every line that touches
+// the record sets it) and when the reader first spoke of it (`engaged.time`). No known time for
+// any: it never lapses (nothing to count from).
+function undatedLapse(record, { calendar, now, days }) {
+    const span = Number(days) >= 0 ? Number(days) : UNDATED_OFFER_DAYS;
+    const times = [record.created?.time, record.seen?.time, record.engaged?.time].filter(isNumber);
+    if (!times.length) return false;
+    return calendar.addDays(Math.max(...times), span) <= now;
+}
+
 /**
  * The offers (jobs not taken on, tracker.isOffer) whose deadline (`due`) has passed, in tracker
  * order: the records to close as lapsed. A deadline without a time runs to the end of its day,
  * and is passed at that minute, as the Quests tab marks it overdue. (0.9.27) An offer the reader
  * has spoken of (`engaged`) is often the job's own day ("the hunt sets out on Goldwane 15"), so
- * it gets a beat's grace, `graceDays` more, for the story to play it.
+ * it gets a beat's grace, `graceDays` more, for the story to play it. An offer with no deadline
+ * lapses `undatedDays` (UNDATED_OFFER_DAYS) story days after it was offered or last mentioned.
  */
-export function lapsedOffers(tracker, { calendar, now, graceDays = SLIP_GRACE_DAYS } = {}) {
+export function lapsedOffers(tracker, { calendar, now, graceDays = SLIP_GRACE_DAYS, undatedDays = UNDATED_OFFER_DAYS } = {}) {
     if (!calendar || !isNumber(now)) return [];
     const grace = Number(graceDays) >= 0 ? Number(graceDays) : SLIP_GRACE_DAYS;
     return (tracker?.records ?? []).filter(record => {
         if (!isOffer(record)) return false;
+        if (isUndated(record)) return undatedLapse(record, { calendar, now, days: undatedDays });
         const end = dateEnd(record, 'due', { calendar, now });
         if (end === null) return false;
         return (record.engaged ? calendar.addDays(end, grace) : end) <= now;

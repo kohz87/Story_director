@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **An offer with no deadline lapses 3 story days after the story last spoke of it.** (The reader asked: "without deadline, it should expire in 2-3 game days".) An offer (a job not yet taken on) with no `due` now closes like a deadline lapse ("- Key — offer lapsed", claimed once, shown in Quests and the next note) at the first reply at or after 3 story days from the later of when it was offered and when a line last touched it; each such line starts the 3 days over. The span is a constant (`UNDATED_OFFER_DAYS`), not a setting; it counts story time only. Offers with a deadline and quests taken on are unchanged. **Existing chats: undated offers not mentioned for 3+ days close at the next reply.** Also fixed: an offer that a line had touched (`~ Key | now: …`) was read as a quest and skipped by time, so it never lapsed even past its deadline; it now lapses as the rule says. No prompt change.
 - **The cast's cue and rumor can no longer be cut by the tail budget.** They are returned from `beforeGenerate` as pinned cues (`{ text, keep: true }`) instead of tail lines, so a busy tail never drops them (it did: Story Director's tail section ranks after the scene and inventory lines). Needs a Story Block that passes such cues through (testkit re-synced to 44a0e73). Static prompt unchanged.
 - **A won Lean RPG fight no longer keeps the living cast from meeting anyone.** The cast read any Foes slot with a name and a count above 0 as a fight
   that is still on, but the narrator never empties a slot, it only sets the group's health (Down = 0). Now a slot counts only while its health is
@@ -24,6 +25,7 @@
   match (more of the line's core words, plurals folded and job words dropped, shared with the quest's name than with each other
   candidate's); a tie stays unclear and a Problems line names the candidates ("Wolf Hunt" for quest "Wolf Hunt North" and hook "Wolf Hunt South").
   No prompt change.
+- **Existing chats, also:** offers the story had touched (a `~` line) were never closed by time before this fix; a touched offer already past its deadline now closes as "offer lapsed" at your next reply, and one within its deadline now shows as overdue like any other. An undated offer's 3 days count from the latest of when it was offered, when the story last touched it and when you first spoke of it.
 
 ## 2.10.2
 
