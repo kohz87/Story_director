@@ -340,16 +340,29 @@ test('the pack label drops a trailing parenthetical, as NPC State Delta writes i
     assert.equal(cast.packs.ersveil.name, 'Ersveil');
 });
 
-test('a Lean RPG fight: a Foes block with a named foe whose count is above 0; nothing else is one', () => {
+test('a Lean RPG fight: a Foes block with a named foe whose count is above 0 and whose health is above 0; nothing else is one', () => {
     const state = (fields, role = 'foes') => ({ domains: { dataModules: { active: { 'pack.chat/foes': { hash: 'h' } }, pins: { h: { definition: { role } } }, instances: { 'pack.chat/foes': { chat: { fields } } } } } });
-    assert.equal(leanFight(state({ foe1: 'Drake', count1: 1 })), true);
-    assert.equal(leanFight(state({ foe1: '', count1: 2, foe3: 'Rat', count3: 0 })), false);
-    assert.equal(leanFight(state({ foe4: 'Rat', count4: 2 })), true);
-    assert.equal(leanFight(state({ foe1: 'Drake', count1: 1 }, 'character')), false, 'only a Foes block');
+    assert.equal(leanFight(state({ foe1: 'Drake', count1: 1, hurt1: 5 })), true);
+    assert.equal(leanFight(state({ foe1: '', count1: 2, hurt1: 5, foe3: 'Rat', count3: 0, hurt3: 5 })), false);
+    assert.equal(leanFight(state({ foe4: 'Rat', count4: 2, hurt4: 1 })), true);
+    assert.equal(leanFight(state({ foe1: 'Drake', count1: 1, hurt1: 5 }, 'character')), false, 'only a Foes block');
     assert.equal(leanFight({ domains: {} }), false);
     assert.equal(leanFight(null), false);
-    assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1 })), true);
-    assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1 }), { leanOn: false }), false);
+    assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1, hurt1: 5 })), true);
+    assert.equal(fightOn(() => null, state({ foe1: 'Drake', count1: 1, hurt1: 5 }), { leanOn: false }), false);
+});
+
+test('a won Lean RPG fight is no fight: a filled slot at health 0 (Down) is beaten, as Story Block reads it; any health above 0 is live', () => {
+    const state = fields => ({ domains: { dataModules: { active: { 'pack.chat/foes': { hash: 'h' } }, pins: { h: { definition: { role: 'foes' } } }, instances: { 'pack.chat/foes': { chat: { fields } } } } } });
+    // Classic: hurt is a stage index (0 = Down … 5 = Unhurt); Standard: the blocks left (0 = Down).
+    assert.equal(leanFight(state({ foe1: 'Gnashers', count1: 12, hurt1: 0 })), false, 'Down: a won fight');
+    assert.equal(leanFight(state({ foe1: 'Gnashers', count1: 12 })), false, 'no health field reads 0, as Story Block does');
+    assert.equal(leanFight(state({ foe1: 'Gnashers', count1: 12, hurt1: '0' })), false, 'not a whole number: 0');
+    for (const hurt of [1, 3, 5, 6, 8]) assert.equal(leanFight(state({ foe1: 'Boar', count1: 1, hurt1: hurt })), true, `health ${hurt}`);
+    assert.equal(leanFight(state({ foe1: 'Gnashers', count1: 12, hurt1: 0, foe2: 'Rat', count2: 3, hurt2: 0, foe3: 'Mantid', count3: 1, hurt3: 0 })), false, 'every filled slot Down');
+    assert.equal(leanFight(state({ foe1: 'Gnashers', count1: 12, hurt1: 0, foe2: 'Rat', count2: 3, hurt2: 2 })), true, 'one live slot among Down ones');
+    assert.equal(leanFight(state({ foe1: 'Rat', count1: 0, hurt1: 4 })), false, 'no count: an empty slot');
+    assert.equal(leanFight(state({ foe1: '  ', count1: 2, hurt1: 4 })), false, 'no name: an empty slot');
 });
 
 test('a pack update: a version bump alone is no change; an edited entry is, and counts once; a person kept before fingerprints existed has it noted silently', () => {

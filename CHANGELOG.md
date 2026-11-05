@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A won Lean RPG fight no longer keeps the living cast from meeting anyone.** The cast read any Foes slot with a name and a count above 0 as a fight
+  that is still on, but the narrator never empties a slot, it only sets the group's health (Down = 0). Now a slot counts only while its health is
+  above 0, as Story Block reads it (a block of Down groups only is a won fight). Both formulas' health shapes (Classic stage, Standard blocks) read the same.
+  No prompt change.
 - **v1 code removed from main** (the unloaded `index.v1.js`, its glue, UI, `style.css` and their tests); it is kept on the `v1` branch. Nothing v2 loads changed.
 - **A quest line no longer closes or advances a hook through a near name.** A `- quest`, `~ quest` or `! quest` line whose name only
   reads near a hook or event (even the only near match) now stays unclear: the record is left as it was and a Problems line names it.
