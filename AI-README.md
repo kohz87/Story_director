@@ -271,7 +271,7 @@ Queries:
 | Path | Purpose |
 |---|---|
 | `index.js` | SillyTavern entry: waits for Story Block, registers the module, hands `turn` to the arc planner |
-| `index.v1.js`, `src/*.js` | v1 glue (not loaded) and v1's pure rules that v2 reuses (`tracker.js`, `calendar.js`, `note.js`, `relevance.js`, ...) |
+| `src/*.js` | v1's pure rules that v2 reuses (`tracker.js`, `calendar.js`, `note.js`, `relevance.js`, ...); the v1 glue is on the `v1` branch |
 | `src/v2/module.js` | Merges the parts into one module definition; settings namespaced `<part>.<key>` |
 | `src/v2/tracker/` | `director` domain, change-line kinds, the clock, calendar settings, the note, initiative, scene filter |
 | `src/v2/time/` | Settle (lapses, overdue), advance, While away recap, weather by rule |
@@ -283,8 +283,7 @@ Queries:
 | `src/v2/checks/` | Check line, `checks.roll`, actors, dice |
 | `src/v2/screens/` | Director, Quests, Reveal, Behind, Status card, view queries |
 | `src/v2/threads.js` | The `story-director.threads` feature's owned kinds |
-| `src/suite.js`, `src/ui/` | v1 UI code, kept for its pure rules |
-| `tests/` | `*.test.js` v1 rules; `tests/v2/<part>/`, `tests/v2/integration/`, `tests/v2/break/` (fuzz and one file per finding); `tests/vendor/story-block/` the vendored Story Block testkit |
+| `tests/` | `*.test.js` tests of the pure rules; `tests/v2/<part>/`, `tests/v2/integration/`, `tests/v2/break/` (fuzz and one file per finding); `tests/vendor/story-block/` the vendored Story Block testkit |
 | `docs/` | `ARCHITECTURE.md` (v1 pure-module contract, older), `DESIGN.md`, `dev/` area notes (`trips.md`, `key-people.md`, `cast.md`, `world.md`, `chronicle.md`, `tracker-and-time.md`, `checks-and-danger.md`), `images/` (the README's pictures) |
 | `CHANGELOG.md`, `CLAUDE.md`, `NOTICE.md`, `LICENSE` | History; rules for coding agents; notices; MIT licence |
 
@@ -302,8 +301,7 @@ Delta checked out beside this repo.
 - No screen edits check actors; actors saved by an older chat keep their bonuses. Without one a check rolls for the player at +0.
 - RPG Battle is not supported: its packs are refused and its chats stay on older versions.
 - Arc planning needs `sdk.callModel`; without it the panel says what is missing.
-- Follow-ups: `docs/ARCHITECTURE.md` still describes the v1 pure modules and predates v2; `index.v1.js` and `src/suite.js`, `src/ui/`
-  stay only for their pure rules.
+- Follow-ups: `docs/ARCHITECTURE.md` still describes the v1 pure modules and predates v2. The v1 glue and UI (`index.v1.js`, `src/ui/`) were removed from main; they live on the `v1` branch.
 
 ## Version
 

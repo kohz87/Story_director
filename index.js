@@ -6,8 +6,7 @@
 // once `globalThis.StoryBlock.ready` resolves. Without a v2 host it shows one line in the
 // extensions drawer saying Story Block v2 is needed, and does nothing else.
 //
-// The v1 glue (index.v1.js and the v1 parts of src/) stays in the repository for its pure rules,
-// which v2 reuses, but is not loaded.
+// The v1 glue is no longer on main; v1 lives on the `v1` branch. The pure rules in src/*.js that v2 reuses stay.
 
 import { MODULE_ID, MODULE_NAME, VERSION, storyDirectorModule } from './src/v2/module.js';
 import { arcController } from './src/v2/arc/index.js';
