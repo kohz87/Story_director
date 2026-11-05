@@ -169,7 +169,7 @@ export function createCastHooks({ plans }) {
 
     // The sought people for the reply being written: asked of the reader's newest message now when the planner has a connection of its own
     // (it can be waited for), else what was asked after the last reply (the chat's own connection is free only then). Null-safe: [] for none.
-    async function soughtFor(view, frame, world, print, type) {
+    async function soughtFor(view, frame, world, print, type, waitMs = HOLD_MS) {
         if (typeof view?.model?.callModel !== 'function') return [];
         const chat = view.model.chat?.();
         const base = baseOf(chat, type);
@@ -180,7 +180,7 @@ export function createCastHooks({ plans }) {
             const key = soughtKey(print, now);
             if (list.length) {
                 const entry = plans.peek(key) ?? askSought(view, frame, key, list, now);
-                const settled = entry ? await plans.settled(key, HOLD_MS) : null;
+                const settled = entry ? await plans.settled(key, waitMs) : null;
                 if (settled?.status === 'done' && settled.result?.ok && settled.result.sought.length) return settled.result.sought;
             }
         }
@@ -225,6 +225,7 @@ export function createCastHooks({ plans }) {
     /** `beforeGenerate(view, info)`: `{ commands }` or nothing. */
     async function beforeGenerate(view, info = {}) {
         if (!castOn(view) || info?.commit === false || !REPLY_TYPES.has(normalizeType(info?.type))) return undefined;
+        const startedAt = Date.now();
         const frame = frameOf(view);
         if (!frame.cast.listed) return undefined;
         const commands = [];
@@ -281,7 +282,8 @@ export function createCastHooks({ plans }) {
         // 3. Paths cross.
         if (at !== null) {
             const fight = fightOn(frame.query, view?.state, { leanOn: typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false });
-            const sought = await soughtFor(view, frame, world, print, normalizeType(info?.type));
+            const sought = await soughtFor(view, frame, world, print, normalizeType(info?.type), Math.max(0, HOLD_MS - (Date.now() - startedAt)));
+            // (The hook as a whole has HOOK_MS: the planner's batch and the sought answer share the one wait, so a slow connection cannot time the step out.)
             const picks = chooseMeetings(world, frame.cast, {
                 now: frame.now, party: frame.party, comes, sought, fight, pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
             });

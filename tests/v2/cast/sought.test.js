@@ -10,7 +10,7 @@ import { DAY, initialCast, validateCast } from '../../../src/v2/cast/domain.js';
 import { castOf, readEntry } from '../../../src/v2/cast/entries.js';
 import { citedIn, citesKind, gateWords, kindTouches, nameTester, rumorText } from '../../../src/v2/cast/sought.js';
 import { chooseMeetings, chooseRumor, paceOf } from '../../../src/v2/cast/world.js';
-import { readCast } from '../../../src/v2/cast/plan.js';
+import { createPlans, readCast } from '../../../src/v2/cast/plan.js';
 import { OPENING, castCue, castHost, castSource, createFakeModel, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
 
 const castFor = (...entries) => castOf((name, args) => (name === 'packs.content' && args?.kind === 'cast' ? entries : name === 'packs.list' ? [{ id: 'ersveil', name: 'Ersveil', version: '1.1.0', enabled: true }] : null));
@@ -416,4 +416,22 @@ test('the gate: calling and the lead of about, common prose words dropped; the 1
     assert.ok(gate('nerissa').includes('pilot'));
     const prose = 'A long watch of iron guard and card sharp, a chain cell runner with a captain and a knife, the candidate said.';
     for (const item of entries) assert.equal(kindTouches(item, prose), false, `${item.id}: ordinary prose does not open the gate (${gate(item.id).join(' ')})`);
+});
+
+test('a sought answer that leaves off "? cast" is read the same; the default plan timer is not called as a method of another object (a browser says "Illegal invocation")', async t => {
+    const refs = new Map([['temiwa', 'ersveil:temiwa']]);
+    const entryOf = readEntry({ pack: 'ersveil', packVersion: '1', ...temiwa('Harrow') });
+    const read = text => readCast(text, { refs, allow: { seek: new Set(['ersveil:temiwa']), kind: new Map([['ersveil:temiwa', entryOf]]) }, texts: ['Is there a healer or a sister around here?'] });
+    assert.deepEqual(read('temiwa | "Is there a healer or a sister around here?"').sought, [{ key: 'ersveil:temiwa', words: 'Is there a healer or a sister around here?' }]);
+    assert.deepEqual(read('cast temiwa | "a healer"').sought, [{ key: 'ersveil:temiwa', words: 'a healer' }]);
+    assert.equal(read('temiwa | "a priest"').sought, undefined, 'the words are still checked');
+    // The timer, as a browser has it: setTimeout only works with `this` as the window (or nothing).
+    const realSetTimeout = globalThis.setTimeout;
+    t.mock.method(globalThis, 'setTimeout', function (...args) {
+        if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+        return realSetTimeout(...args);
+    });
+    const plans = createPlans();
+    plans.start('k', () => new Promise(() => {}));
+    await assert.doesNotReject(async () => { await plans.settled('k', 1); });
 });

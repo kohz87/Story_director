@@ -147,12 +147,14 @@ export function readCast(text, { refs = new Map(), allow = {}, texts = [] } = {}
     for (const raw of clean.split(/\r?\n/).slice(0, MAX_LINES)) {
         const trimmed = raw.trim();
         if (!trimmed || FENCE.test(trimmed)) continue;
-        const match = LINE.exec(trimmed.replace(DECORATION, ''));
+        let match = LINE.exec(trimmed.replace(DECORATION, ''));
+        // A 'sought' answer that leaves off the `? cast` (just `ref | "words"`) is read the same: it is the only line that call can carry.
+        if (!match && allow.seek && !allow.come && !allow.die) match = /^()(.+\|.+)$/.exec(trimmed.replace(DECORATION, '').replace(/^cast\s+/i, ''));
         if (!match) continue;
         const bits = match[2].split('|').map(bit => bit.trim());
         const key = refs.get(refOf(bits[0]));
         if (!key) continue;
-        const label = match[1];
+        const label = match[1] || '?';
         if (label === '~') {
             if (seen.move.has(key) || out.moves.length >= CAPS.move) continue;
             // One part is what they do; two are where and what.
@@ -208,7 +210,7 @@ export function touches(drawnTo, recent) {
  * used before the next one; a swipe, a Re-read or a second look at the same key finds the same answer, so who the cast brings does not
  * change with a rewrite of the scene. In memory only (a reload asks again). `size`: how many are kept.
  */
-export function createPlans({ size = 24, timer = { setTimeout, clearTimeout } } = {}) {
+export function createPlans({ size = 24, timer = { setTimeout: (...args) => setTimeout(...args), clearTimeout: id => clearTimeout(id) } } = {}) {
     const held = new Map();
     const trim = () => { while (held.size > size) held.delete(held.keys().next().value); };
     return {
