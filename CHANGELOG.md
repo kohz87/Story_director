@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A won Lean RPG fight no longer keeps the living cast from meeting anyone.** The cast read any Foes slot with a name and a count above 0 as a fight
+  that is still on, but the narrator never empties a slot, it only sets the group's health (Down = 0). Now a slot counts only while its health is
+  above 0, as Story Block reads it (a block of Down groups only is a won fight). Both formulas' health shapes (Classic stage, Standard blocks) read the same.
+  No prompt change.
 - **The cast answers when you seek a kind of person** (feature `story-director.cast`, no new setting). When your message (or the story's
   last reply) asks for a healer, a priest, a smith, a guide... the cast planner (its own model call, only when a word of an unmet
   person's calling appears) may name an unmet person who fits and quote the words that ask for them; code accepts the quote only as whole

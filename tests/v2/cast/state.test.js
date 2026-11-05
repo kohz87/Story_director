@@ -221,6 +221,38 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
     }
 });
 
+for (const [formula, down] of [['classic', '0'], ['standard', 'Down']]) {
+    test(`a won Lean RPG fight (${formula}) no longer holds the meetings back: a Down group stays in its slot, a live one still blocks; the next fight Down too`, async t => {
+        quiet(t);
+        const { templatesFor } = await import('../../vendor/story-block/src/v2/lean-rpg/templates.js');
+        const host = await castHost({ source: castSource([entry('brom', { start: { place: 'Kesh', goal: 'forge', routine: '' } })]) });
+        try {
+            await host.send('Hello.', said('Dawn.', OPENING));
+            host.features.set('story-block.rpg', true);
+            const foes = templatesFor(formula).find(item => item.name === 'Foes').definition;
+            assert.equal((await host.sdk.command('dm.define', { definition: structuredClone(foes) })).ok, true);
+            await host.send('Gnashers!', said('Gnashers pour in.', ['+ dm foes — gnashers | kind: set-slot-1 | name: Gnashers | count: 12 | level: 4', '~ place Kesh | kind: town']));
+            assert.equal(leanFight(host.head()), true, 'a live group');
+            await host.send('Fight.', said('Steel rings.'));
+            assert.equal(people(host)['ersveil:brom'].met, null, 'never during a fight');
+            // Won: the narrator only sets the health; the slot keeps its name and count.
+            await host.send('Fight.', said('They fall.', [`~ dm foes — they fall | kind: hurt-1 | to: ${down}`]));
+            const fields = Object.values(host.head().domains.dataModules.instances)[0].chat.fields;
+            assert.deepEqual([fields.foe1, fields.count1, fields.hurt1], ['Gnashers', 12, 0], 'the slot is still filled, at 0');
+            assert.equal(leanFight(host.head()), false, 'every filled slot is Down: no fight');
+            // A later fight in another slot: live, then won (Down) as well.
+            await host.send('Rats!', said('Rats.', ['+ dm foes — rats | kind: set-slot-2 | name: Rats | count: 3 | level: 2']));
+            assert.equal(leanFight(host.head()), true, 'a live group beside a Down one');
+            await host.send('Fight.', said('Squeaks.', [`~ dm foes — beaten | kind: hurt-2 | to: ${down}`]));
+            assert.equal(leanFight(host.head()), false, 'both Down');
+            await host.send('Look.', said(`Smoke. ${host.everyone()}`));
+            assert.equal(people(host)['ersveil:brom'].met.why, 'place', 'the meetings resume');
+        } finally {
+            host.close();
+        }
+    });
+}
+
 test('a pack person the story already has in the scene (under their name or an alias) is met at that moment, "met in the story": no cue, no pace used, never skipped for good', async t => {
     quiet(t);
     const fenna = entry('fenna', { aliases: ['the ferrywoman'], start: { place: 'Kesh', goal: 'ferry', routine: '' } });

@@ -199,8 +199,11 @@ export function routineHolds(routine, now) {
 const ENDED = /^(?:ended|over|done|finished|won|lost|fled|resolved|closed|victory|defeat|escaped|surrendered)$/i;
 
 /**
- * Whether a Lean RPG fight is open in `state`: a Foes block (a data module with the role `foes`) with a slot that has a name and a
- * count above 0 (Story Block's own reading of "a foe is there", lean-rpg/read.js; it offers no query for it).
+ * Whether a Lean RPG fight is open in `state`: a Foes block (a data module with the role `foes`) with a live slot: a name, a count above
+ * 0 and health above 0. This is Story Block's own reading (lean-rpg/read.js `foesOf` + gate.js `fightLive`; it offers no query for it):
+ * a slot is filled with a name and a count above 0, and live when its `hurt` (Classic: the stage index, Standard: the blocks left; a
+ * whole number either way, a missing or other value reads 0) is above 0. A slot at 0 is Down; a block of Down groups only is a won fight.
+ * The narrator never empties a slot, it only sets health, so the filled slot of a won fight stays.
  */
 export function leanFight(state) {
     const domain = state?.domains?.dataModules;
@@ -210,7 +213,8 @@ export function leanFight(state) {
         const fields = domain.instances?.[id]?.chat?.fields;
         if (!isRecord(definition) || definition.role !== 'foes' || !isRecord(fields)) continue;
         for (let slot = 1; slot <= 4; slot += 1) {
-            if (typeof fields[`foe${slot}`] === 'string' && fields[`foe${slot}`].trim() && Number.isSafeInteger(fields[`count${slot}`]) && fields[`count${slot}`] > 0) return true;
+            if (typeof fields[`foe${slot}`] === 'string' && fields[`foe${slot}`].trim() && Number.isSafeInteger(fields[`count${slot}`]) && fields[`count${slot}`] > 0
+                && Number.isSafeInteger(fields[`hurt${slot}`]) && fields[`hurt${slot}`] > 0) return true;
         }
     }
     return false;
@@ -218,7 +222,7 @@ export function leanFight(state) {
 
 /**
  * Whether a fight is on now: a module that runs fights answers `combat.session` with a session that has not ended, or the Lean RPG has a
- * foe on its Foes block (`state`, and `leanOn`: its feature is on).
+ * live foe on its Foes block (`state`, and `leanOn`: its feature is on).
  */
 export function fightOn(query, state = null, { leanOn = true } = {}) {
     const session = ask(query, 'combat.session', {}, null);
