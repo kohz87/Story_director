@@ -1,5 +1,5 @@
 // Story Suite v2: the store's writes (append, before, replaceStory, reconcile, setNarrated, setPracticeRule, receipts, truncate, untold, work,
-// rebuild, archived, archiveList, batch, renamed, touch, lifecycleChanged, saveIdle, idleSaves), moved out of createStore unchanged: the methods of
+// rebuild, archived, archiveList, batch, renamed, touch, lifecycleChanged, saveIdle, saveLate, idleSaves), moved out of createStore unchanged: the methods of
 // `api` that change the chat's records or its saving. `createWrite(s, deps)` returns them as one object and createStore puts each in `api` at
 // the place it was. It is given the store's state holder `s`, the store's options it reads (rescue, place) and the store functions it calls
 // (the other parts' come from their factories). It never imports store.js.
@@ -591,6 +591,18 @@ export function createWrite(s, deps) {
             try { where = typeof rescue === 'function' ? place() : null; } catch { where = null; }
             if (!where) return false;
             saver.idle(wait, max);
+            return true;
+        },
+        /**
+         * A change after the reply (a module's command, a reader's action): as saveIdle, but within FOLLOW_MS of the
+         * turn's save it joins one late window (persist.js LATE_MS / LATE_MAX_MS) instead of a save of its own. Same
+         * condition as saveIdle: false where the caller must save at once.
+         */
+        saveLate() {
+            let where = null;
+            try { where = typeof rescue === 'function' ? place() : null; } catch { where = null; }
+            if (!where) return false;
+            saver.late();
             return true;
         },
         /** True when changes are saved by the turn's idle save here (see saveIdle). */

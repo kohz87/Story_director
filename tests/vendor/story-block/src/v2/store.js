@@ -417,7 +417,7 @@ export function createStore({
     });
     // The write part (store/write.js): the methods of `api` that change the chat's records. Wired last, after every part and function it
     // calls; nothing here is looked up before it runs.
-    const { touch, lifecycleChanged, append, before, replaceStory, reconcile, setNarrated, setPracticeRule, receipts, truncate, untold, work, rebuild, archived, archiveList, batch, renamed, saveIdle, idleSaves } = createWrite(s, {
+    const { touch, lifecycleChanged, append, before, replaceStory, reconcile, setNarrated, setPracticeRule, receipts, truncate, untold, work, rebuild, archived, archiveList, batch, renamed, saveIdle, saveLate, idleSaves } = createWrite(s, {
         advanced, archive, asOps, baseFor, blockParts, bury2, carrierAt, current, forgetMemos, frozenReceipts, guardHolds, headKey, idsOf,
         intactReason, isGuardedBlock, keeps, lineOf, list, marked, markNow, ORPHAN, ownedAlready, place, publish, quarantined, receiptsFor,
         receiptsOf, replay, replayGuarded, replayLegacy, replayRecord, rerunBlock, rescue, retain, sameKey, saver, settleAll, skipped,
@@ -450,8 +450,8 @@ export function createStore({
          * dirty; the caller saves it (or schedules it again) when the reply comes or the generation ends.
          */
         deferSave() { saver.defer(); },
-        // saveIdle, idleSaves: store/write.js
-        saveIdle, idleSaves,
+        // saveIdle, saveLate, idleSaves: store/write.js
+        saveIdle, saveLate, idleSaves,
         /** Saves now (a reader's action is saved at once); → Promise<true | false>, never throws: a failure is told and tried again. */
         saveSoon(options) { return saver.saveSoon(options); },
         /** The page is closing: the newest state goes out at once, even past a save still on its way. */

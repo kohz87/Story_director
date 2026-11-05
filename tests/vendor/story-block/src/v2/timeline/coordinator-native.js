@@ -12,7 +12,7 @@ import { crashing, fail, isObject, isStaleChat, makeId } from './util.js';
 
 export function createNative(s, deps) {
     const {
-        store, registry, activeHistory, archive, ask, availability, brokenProblem, callParticipant, durable, exclusive, guarded, head, headNow, here,
+        store, registry, activeHistory, archive, ask, block, availability, brokenProblem, callParticipant, durable, exclusive, guarded, head, headNow, here,
         makeNow, participants, pendingNow, point, pointsOf, raise, release, session, stillHere, unmaterializedMarkers,
     } = deps;
 
@@ -76,35 +76,39 @@ export function createNative(s, deps) {
         });
     }
 
+    const WAITING = 'The selected story is waiting for its records.';
+
     async function selectHead() {
         if (!selectionNeeded()) return { ok: true };
         const desired = selectionPlan();
-        if (availability(Object.values(desired))) { raise('The selected story needs records that are unavailable. Restore a save point from before the change, or put the changed reply back.'); return fail('SNAPSHOT_UNAVAILABLE', 'The participants needed by this head are unavailable.'); }
+        const lacking = availability(Object.values(desired));
+        if (lacking) return block.note(null, fail('SNAPSHOT_UNAVAILABLE', lacking));
         const entry = archive.add({ id: makeId('hs'), kind: 'selection', phase: 'prepared', desired, slots: {} });
-        raise('The selected story is waiting for its records. If this continues, restore a save point from before the change, or put the changed reply back.');
+        raise(WAITING);
         await durable();
         return finishSelection(entry);
     }
 
     async function finishSelection(entry) {
-        raise('The selected story is waiting for its records. If this continues, restore a save point from before the change, or put the changed reply back.');
+        // (a block that is being retried keeps its own reason up; a first try says only that it is waiting)
+        if (!block.current()) raise(WAITING);
         await durable();
         for (const [module, target] of Object.entries(entry.desired)) {
             const registered = participants.get(module);
-            if (!registered || registered.schema !== target.schema) return fail('SNAPSHOT_UNAVAILABLE', `The participant ${module} is unavailable for the selected head.`);
+            if (!registered || registered.schema !== target.schema) return block.note(module, fail('SNAPSHOT_UNAVAILABLE', `The participant ${module} is unavailable for the selected head.`));
             let slot = archive.get(entry.id).slots[module];
             if (!slot) {
                 const prepared = await callParticipant(module, 'prepare', { return: entry.id, checkpoint: target.checkpoint, hash: target.hash });
-                if (!prepared.ok) return prepared;
-                if (prepared.hash !== target.hash) return fail('CONFLICT', 'The participant prepared other selected bytes.');
+                if (!prepared.ok) return block.note(module, prepared);
+                if (prepared.hash !== target.hash) return block.note(module, fail('CONFLICT', 'The participant prepared other selected bytes.'));
                 slot = { prepared: prepared.prepared, ack: false };
                 archive.patch(entry.id, { slots: { ...archive.get(entry.id).slots, [module]: slot } });
                 await durable();
             }
             if (!slot.ack) {
                 const done = await callParticipant(module, 'activate', { return: entry.id, prepared: slot.prepared });
-                if (!done.ok) return done;
-                if (done.checkpoint !== target.checkpoint || done.hash !== target.hash) return fail('CONFLICT', 'The participant selected other bytes.');
+                if (!done.ok) return block.note(module, done);
+                if (done.checkpoint !== target.checkpoint || done.hash !== target.hash) return block.note(module, fail('CONFLICT', 'The participant selected other bytes.'));
                 archive.patch(entry.id, { slots: { ...archive.get(entry.id).slots, [module]: { ...slot, ack: true } } });
                 await durable();
             }
@@ -113,6 +117,7 @@ export function createNative(s, deps) {
         archive.select(entry.desired);
         archive.patch(entry.id, { phase: 'complete' });
         await durable();
+        block.clear();
         return { ok: true };
     }
 

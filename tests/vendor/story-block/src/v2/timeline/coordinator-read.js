@@ -15,7 +15,7 @@ const ordered = (a, b) => (a.target.rev - b.target.rev) || (a.target.op - b.targ
 
 export function createRead(s, deps) {
     const {
-        store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise,
+        block, store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise,
         nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes,
     } = deps;
 
@@ -57,6 +57,7 @@ export function createRead(s, deps) {
         if (pendingEntry(settling) !== null || selectionNeeded() || nativeSelectionProblem()) return false;
         s.barrierOwner = null;
         s.barrierEarly = false;
+        block.clear();
         barrier('idle', '');
         return true;
     }
@@ -124,8 +125,17 @@ export function createRead(s, deps) {
         return { state, boundary, cursor: boundary.cursor, prefixHash: boundary.prefixHash, epoch, headHash };
     }
 
+    // Why the story is held, for the readers of the status and of a refused head: { reason, code, blockedBy: { module, code } | null }. A participant that
+    // could not follow the selected head is named (coordinator-block.js); a restore that is only finishing says what the barrier says.
+    function whyPending() {
+        const blocked = block.current();
+        if (blocked) return blocked;
+        const reason = registry.restore?.().reason;
+        return { reason: typeof reason === 'string' ? reason : '', code: null, blockedBy: null };
+    }
+
     async function head() {
-        if (pendingNow()) return fail('RESTORE_PENDING', 'A restore is in progress; the head is not settled until every part agrees.');
+        if (pendingNow()) return { ...fail('RESTORE_PENDING', 'A restore is in progress; the head is not settled until every part agrees.'), ...(({ reason, blockedBy }) => ({ reason, blockedBy }))(whyPending()) };
         const now = headNow();
         if (!now) return fail('NOT_FOUND', 'This chat has no story state yet.');
         // `source`: the Source of the reply at the head ({ sid, swipeKey, evidence, ordinal }), what nativeMutation asks of a participant that reads the head
@@ -155,7 +165,7 @@ export function createRead(s, deps) {
             const selected = archive.selection()[module];
             if (selected) out.push({ module, checkpoint: selected.checkpoint, hash: selected.hash, schema: selected.schema });
         }
-        return { ok: true, state, return: pending?.kind === 'restore' ? pending.return : null, participants: out };
+        return { ok: true, state, return: pending?.kind === 'restore' ? pending.return : null, participants: out, ...(state === 'pending' ? whyPending() : {}) };
     }
 
     // The one rule for which messages of the chat are on the active line: the faded interval of each return on the line of history,

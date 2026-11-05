@@ -17,6 +17,7 @@
 
 import { createActiveHistory } from './active.js';
 import { createArchive } from './archive.js';
+import { createBlock } from './coordinator-block.js';
 import { createNative } from './coordinator-native.js';
 import { createPrepare } from './coordinator-prepare.js';
 import { createRead } from './coordinator-read.js';
@@ -61,6 +62,8 @@ export function createTimeline({ store, registry, metadata, chat = () => [], bar
         barrierEarly: false,  // raised by `settle` as the chat opened, before its recovery had its turn (not by a running operation)
         hideFailed: new WeakSet(),  // chats (by their holder) where a faded message could not be hidden or shown
         witnessHashes: new WeakMap(),
+        block: null,  // what keeps the open chat's participants off the selected head: { holder, module, code, message, permanent, gaveUp, tries, reported } (session only)
+        retryTimer: null,  // the timer of the next try of a transient block (session only)
     };
     const archive = createArchive({ metadata, touch: () => store.touch?.(), bound: () => s.scope?.holder ?? null });
     const participants = createParticipants({ chat: () => archive.holder() });
@@ -182,9 +185,11 @@ export function createTimeline({ store, registry, metadata, chat = () => [], bar
 
     // The native half (coordinator-native.js), wired first of the halves: it needs `headNow`, `head`, `release`, `availability`, `makeNow` and
     // `unmaterializedMarkers` from the halves wired after it, and gets each as a function that reads it when it is called (none runs before the last wiring).
-    const { selectionPlan, withWholePrefixes, nativeSelectionProblem, selectionNeeded, selectHead, finishSelection, prefixKey, publishRestore, finishNative, pin, nativeEvent, register, attach, guard, contract, makeCommand } = createNative(s, { store, registry, activeHistory, archive, ask, availability: modules => availability(modules), brokenProblem, callParticipant, durable, exclusive, guarded, head: () => head(), headNow: () => headNow(), here, makeNow: (input, options) => makeNow(input, options), participants, pendingNow, point, pointsOf, raise, release: id => release(id), session, stillHere, unmaterializedMarkers: () => unmaterializedMarkers() });
+    // The blocked selection (coordinator-block.js): classifies a participant's failure, retries a transient one on a timer, tells a permanent one.
+    const block = createBlock(s, { archive, registry, problem, raise, again: () => exclusive(() => guarded(() => recover())) });
+    const { selectionPlan, withWholePrefixes, nativeSelectionProblem, selectionNeeded, selectHead, finishSelection, prefixKey, publishRestore, finishNative, pin, nativeEvent, register, attach, guard, contract, makeCommand } = createNative(s, { store, registry, activeHistory, archive, ask, block, availability: modules => availability(modules), brokenProblem, callParticipant, durable, exclusive, guarded, head: () => head(), headNow: () => headNow(), here, makeNow: (input, options) => makeNow(input, options), participants, pendingNow, point, pointsOf, raise, release: id => release(id), session, stillHere, unmaterializedMarkers: () => unmaterializedMarkers() });
     // The reading half (coordinator-read.js), wired once everything it calls is defined (the native half, above, is the last it needs).
-    const { settle, release, reconcile, minuteOf, sceneOf, headNow, head, listNow, list, status, activeLine, syncHidden, history } = createRead(s, { store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise, nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes });
+    const { settle, release, reconcile, minuteOf, sceneOf, headNow, head, listNow, list, status, activeLine, syncHidden, history } = createRead(s, { block, store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise, nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes });
     // The making and preparing half (coordinator-prepare.js), wired once everything it calls is defined: `headNow`, `minuteOf` and `sceneOf` are the
     // reading half's (just above). `complete` is the restoring half's, wired next; `finish` calls it only when it runs, so it is given as a function.
     const { makeNow, forget, availability, abortEntry, prepare, finish } = createPrepare(s, { store, registry, settings, announce, archive, participants, ask, brokenProblem, callParticipant, complete: entry => complete(entry), durable, headNow, here, minuteOf, owe, pendingNow, point, pointsOf, quietly, sceneOf, selectionPlan, session, stillHere });

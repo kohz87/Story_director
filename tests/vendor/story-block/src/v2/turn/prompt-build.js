@@ -13,6 +13,10 @@ import { RESOLVE as RPG_RESOLVE } from '../lean-rpg/names.js';
 import { NO_ROLLS_LINE, receiptCue } from '../lean-rpg/cue.js';
 import { TIMED_OUT, defuseMacros, firstLine, mapContent, stripBattleMarker, substituteNames, within } from './text.js';
 
+// The most a module's hook may keep whole in the tail (`{ text, keep: true }` lines): two meeting cues and a rumor fit; more is droppable.
+export const KEPT_LINES_MAX = 4;
+export const KEPT_CHARS_MAX = 4000;
+
 export function createPromptBuild(s, deps) {
     const { ctx, store, bus, registry, settings, events, onBlocked, notify, initial, prepare, hostSettings, viewReader, view, contextNow, hasCarrier, lastCarrier, isPrelude, markBusy, markIdle, setPrompts, clearPrompts, problem, trySave, claimQuiet, FOREGROUND, HOOK_TIMEOUT_MS, ASSIST_WAIT_MS, RPG_LOAD_WAIT_MS, OWN_PROMPT_PARTS, OWN_PROMPT_CHARS, STRIP_CACHE, HAS_BLOCK, HAS_LEGACY, hookTimeout, normalizeType } = deps;
 
@@ -47,9 +51,17 @@ export function createPromptBuild(s, deps) {
             const lines = Array.isArray(out) ? out : Array.isArray(out?.lines) ? out.lines : [];
             // The RPG's rolls and its "no rolls" line outrank ordinary tail notes when the tail is trimmed (prompt.js).
             // A hook may give a line as `{ text, keep: true }`: kept whole whatever the budget says (prompt.js `pinned`), like the no-rolls line.
+            // A module keeps at most KEPT_LINES_MAX lines and KEPT_CHARS_MAX characters this way (code points); a kept line over that
+            // is passed as an ordinary line, which the budget may drop, so one module can never spend the whole tail.
+            let keptLines = 0, keptChars = 0;
             const given = lines.map(line => {
                 if (typeof line === 'string') return line === NO_ROLLS_LINE ? { text: line, keep: true } : line;
-                return line && typeof line === 'object' && typeof line.text === 'string' && line.text.trim() ? (line.keep === true ? { text: line.text, keep: true } : line.text) : null;
+                if (!(line && typeof line === 'object' && typeof line.text === 'string' && line.text.trim())) return null;
+                if (line.keep !== true) return line.text;
+                const size = [...line.text].length;
+                if (keptLines >= KEPT_LINES_MAX || keptChars + size > KEPT_CHARS_MAX) return line.text;
+                keptLines += 1; keptChars += size;
+                return { text: line.text, keep: true };
             }).filter(line => line !== null);
             if (given.length) cues[moduleId] = given;
             for (const command of commit && Array.isArray(out?.commands) ? out.commands : []) {
