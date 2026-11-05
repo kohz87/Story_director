@@ -139,27 +139,31 @@ function render(el, props, api) {
     el.appendChild(root);
 
     // ---- state ----------------------------------------------------------------------------------
-    let data = readView(props);
+    // The state the drawing reads and writes: one object, so the drawing functions can live in a file of their own.
+    const s = {
+        data: readView(props),
+        layer: '',
+        points: new Map(),           // id → map-space point (unplaced ones laid out)
+        shown: [],                   // places on the layer
+        fitK: 1,
+        view: { cx: 0, cy: 0, k: 1 },
+        size: { ...FALLBACK_SIZE },
+        picked: '',
+        hovered: '',
+        lines: [],                   // [{ line, route }] on the layer (the known routes, then the trip's legs)
+        trip: null,                  // the trip prop, cleaned (readTrip)
+        marks: [],                   // [{ node, ids: [from, to], t }]: "You" and the movers, placed by paint()
+    };
     let viewKey = text(props?.viewKey) || 'map';
     let onSelect = text(props?.onSelect);
-    let layer = data.layer;
-    let points = new Map();          // id → map-space point (unplaced ones laid out)
-    let shown = [];                  // places on the layer
+    s.layer = s.data.layer;
     let box = boundsOf([]);
-    let fitK = 1;
     let limits = { min: 0.5, max: 8 };
-    let view = { cx: 0, cy: 0, k: 1 };
-    let size = { ...FALLBACK_SIZE };
-    let picked = '';
-    let hovered = '';
     let anim = null;
-    let lines = [];                  // [{ line, route }] on the layer (the known routes, then the trip's legs)
-    let trip = null;                 // the trip prop, cleaned (readTrip)
-    let marks = [];                  // [{ node, ids: [from, to], t }]: "You" and the movers, placed by paint()
     const nodes = new Map();         // id → place button
     const placeAt = new Map();       // id → the dot's point in the stage, as drawn last
     const labels = new Map();        // id → label span
-    const byId = id => data.places.find(place => place.id === id) ?? null;
+    const byId = id => s.data.places.find(place => place.id === id) ?? null;
 
     // The zoom the stage is drawn at (Story Block's roots are zoomed): the browser's currentCSSZoom, else drawn over own width.
     function zoomOf() {
@@ -173,21 +177,21 @@ function render(el, props, api) {
     function measure() {
         const rect = stage.getBoundingClientRect?.();
         const z = zoomOf();
-        if (rect && rect.width > 0 && rect.height > 0) size = { width: rect.width / z, height: rect.height / z };
-        return size;
+        if (rect && rect.width > 0 && rect.height > 0) s.size = { width: rect.width / z, height: rect.height / z };
+        return s.size;
     }
 
     function computePoints() {
-        const list = data.places.map(place => ({ id: place.id, point: mapPoint(place, data.orient) }));
-        points = placeUnplaced(list, data.routes.map(route => [route.from, route.to]));
+        const list = s.data.places.map(place => ({ id: place.id, point: mapPoint(place, s.data.orient) }));
+        s.points = placeUnplaced(list, s.data.routes.map(route => [route.from, route.to]));
     }
 
     function remember() {
-        views.set(`${viewKey}|${layer}`, { cx: view.cx, cy: view.cy, zoom: zoomLevel(view, fitK) });
+        views.set(`${viewKey}|${s.layer}`, { cx: s.view.cx, cy: s.view.cy, zoom: zoomLevel(s.view, s.fitK) });
     }
 
     function setView(next, { keep = true } = {}) {
-        view = clampView(next, box, limits);
+        s.view = clampView(next, box, limits);
         if (keep) remember();
         paint();
     }
@@ -210,7 +214,7 @@ function render(el, props, api) {
         stopAnimation();
         const goal = clampView(target, box, limits);
         if (reducedMotion() || typeof win?.requestAnimationFrame !== 'function') return setView(goal);
-        const from = view;
+        const from = s.view;
         let start = null;
         const step = time => {
             start ??= time;
@@ -224,32 +228,32 @@ function render(el, props, api) {
 
     function fitNow() {
         measure();
-        return fitView(box, size.width, size.height);
+        return fitView(box, s.size.width, s.size.height);
     }
 
     // The zoom that sets a place apart from its nearest neighbour on the layer (for search and "Me").
     function closeEnough(id) {
-        const at = points.get(id);
+        const at = s.points.get(id);
         let nearest = Infinity;
-        for (const place of shown) {
+        for (const place of s.shown) {
             if (place.id === id) continue;
-            const other = points.get(place.id);
+            const other = s.points.get(place.id);
             const d = Math.hypot(other.x - at.x, other.y - at.y);
             if (d > 0 && d < nearest) nearest = d;
         }
-        const k = Number.isFinite(nearest) ? (NEAR_PX * 1.6) / nearest : fitK * 4;
-        return Math.min(limits.max, Math.max(fitK * 2, k));
+        const k = Number.isFinite(nearest) ? (NEAR_PX * 1.6) / nearest : s.fitK * 4;
+        return Math.min(limits.max, Math.max(s.fitK * 2, k));
     }
 
     function setLayer(id, { refit = false } = {}) {
-        layer = data.layers.some(item => item.id === id) ? id : ALL;
-        shown = data.places.filter(place => onLayer(place, layer));
-        box = boundsOf(shown.map(place => points.get(place.id)));
+        s.layer = s.data.layers.some(item => item.id === id) ? id : ALL;
+        s.shown = s.data.places.filter(place => onLayer(place, s.layer));
+        box = boundsOf(s.shown.map(place => s.points.get(place.id)));
         const fit = fitNow();
-        fitK = fit.k;
-        limits = zoomLimits(fitK, nearestGap(shown.map(place => points.get(place.id))));
-        const saved = refit ? null : views.get(`${viewKey}|${layer}`);
-        view = clampView(saved ? { cx: saved.cx, cy: saved.cy, k: saved.zoom * fitK } : fit, box, limits);
+        s.fitK = fit.k;
+        limits = zoomLimits(s.fitK, nearestGap(s.shown.map(place => s.points.get(place.id))));
+        const saved = refit ? null : views.get(`${viewKey}|${s.layer}`);
+        s.view = clampView(saved ? { cx: saved.cx, cy: saved.cy, k: saved.zoom * s.fitK } : fit, box, limits);
         drawLayers();
         drawShown();
         paint();
@@ -257,30 +261,30 @@ function render(el, props, api) {
 
     // The view fitted to the trip's stops that are on this layer (two or more), inside the zoom limits.
     function fitTrip() {
-        const stops = new Set(trip.legs.flatMap(leg => [leg.fromId, leg.toId]));
-        const at = shown.filter(place => stops.has(place.id)).map(place => points.get(place.id)).filter(Boolean);
+        const stops = new Set(s.trip.legs.flatMap(leg => [leg.fromId, leg.toId]));
+        const at = s.shown.filter(place => stops.has(place.id)).map(place => s.points.get(place.id)).filter(Boolean);
         if (at.length < 2) return;
         measure();
-        view = clampView(fitView(boundsOf(at), size.width, size.height), box, limits);
+        s.view = clampView(fitView(boundsOf(at), s.size.width, s.size.height), box, limits);
         paint();
     }
 
     function drawLayers() {
-        const options = [{ id: ALL, name: 'All' }, ...data.layers].map(item => {
+        const options = [{ id: ALL, name: 'All' }, ...s.data.layers].map(item => {
             const option = h(doc, 'option', '', item.name);
             option.setAttribute('value', item.id || 'all');
-            if (item.id === layer) option.setAttribute('selected', '');
-            option.selected = item.id === layer;
+            if (item.id === s.layer) option.setAttribute('selected', '');
+            option.selected = item.id === s.layer;
             return option;
         });
         regions.replaceChildren(...options);
-        regions.value = layer || 'all';
-        regionBox.hidden = data.layers.length === 0;
+        regions.value = s.layer || 'all';
+        regionBox.hidden = s.data.layers.length === 0;
     }
 
     function drawShown() {
-        const ids = new Set(shown.map(place => place.id));
-        lines = data.routes.filter(route => ids.has(route.from) && ids.has(route.to)).map(route => {
+        const ids = new Set(s.shown.map(place => place.id));
+        s.lines = s.data.routes.filter(route => ids.has(route.from) && ids.has(route.to)).map(route => {
             const line = doc.createElementNS(SVG_NS, 'line');
             line.setAttribute('class', 'sd-map-route');
             line.setAttribute('data-from', route.from);
@@ -290,31 +294,31 @@ function render(el, props, api) {
             return { line, route };
         });
         // The trip's legs over the known routes (both ends on this layer), thick and in the accent.
-        for (const leg of trip?.legs ?? []) {
+        for (const leg of s.trip?.legs ?? []) {
             if (!ids.has(leg.fromId) || !ids.has(leg.toId) || leg.fromId === leg.toId) continue;
             const line = doc.createElementNS(SVG_NS, 'line');
             line.setAttribute('class', 'sd-map-trip-leg');
             line.setAttribute('data-from', leg.fromId);
             line.setAttribute('data-to', leg.toId);
             line.setAttribute('data-state', leg.state);
-            lines.push({ line, route: { from: leg.fromId, to: leg.toId } });
+            s.lines.push({ line, route: { from: leg.fromId, to: leg.toId } });
         }
-        worldGroup.replaceChildren(...lines.map(entry => entry.line));
+        worldGroup.replaceChildren(...s.lines.map(entry => entry.line));
         drawMarks(ids);
 
         nodes.clear();
         labels.clear();
-        const items = shown.map(place => {
+        const items = s.shown.map(place => {
             const node = button(doc, 'sd-map-place');
             // the dot draws its own tap area: Story Block's phone rule (44px controls) leaves it its size
             node.setAttribute('data-ss-hit', '');
             node.setAttribute('data-id', place.id);
             node.setAttribute('data-visited', String(place.visited));
             if (place.kind) node.setAttribute('data-kind', place.kind.slice(0, 64));
-            const about = [place.kind && humanize(place.kind), place.region, place.visited ? '' : 'not visited', place.id === data.current ? 'you are here' : ''].filter(Boolean).join(', ');
+            const about = [place.kind && humanize(place.kind), place.region, place.visited ? '' : 'not visited', place.id === s.data.current ? 'you are here' : ''].filter(Boolean).join(', ');
             node.setAttribute('aria-label', about ? `${place.name} (${about})` : place.name);
             node.setAttribute('title', place.name);
-            if (place.id === data.current) node.setAttribute('aria-current', 'location');
+            if (place.id === s.data.current) node.setAttribute('aria-current', 'location');
             node.append(icon(doc, place.icon));
             nodes.set(place.id, node);
             const label = h(doc, 'span', 'sd-map-label', place.name);
@@ -326,54 +330,54 @@ function render(el, props, api) {
         });
         placesLayer.replaceChildren(...items);
         labelsLayer.replaceChildren(...labels.values());
-        empty.hidden = shown.length > 0;
-        stage.hidden = shown.length === 0;
+        empty.hidden = s.shown.length > 0;
+        stage.hidden = s.shown.length === 0;
         drawLegend();
     }
 
     // "You" and the movers: a mark and a pin each, where both ends of their leg are on this layer.
     function drawMarks(ids) {
-        marks = [];
+        s.marks = [];
         const nodesOut = [];
         const add = (kind, ids2, t, label, title) => {
-            if (!ids2.every(id => ids.has(id) && points.get(id))) return;
+            if (!ids2.every(id => ids.has(id) && s.points.get(id))) return;
             const mark = h(doc, 'span', `sd-map-${kind}`);
             mark.setAttribute('data-kind', kind);
             const pin = h(doc, 'span', `sd-map-pin sd-map-pin-${kind}`, label);
             if (title) pin.setAttribute('title', title);
             nodesOut.push(mark, pin);
-            marks.push({ mark, pin, ids: ids2, t });
+            s.marks.push({ mark, pin, ids: ids2, t });
         };
-        if (trip?.you && trip.phase === 'road') {
-            const along = trip.you.of ? `${trip.you.along ?? 0} of ${trip.you.of} km` : '';
-            add('you', [trip.you.fromId, trip.you.toId], trip.you.t, `You${along ? ` · ${along}` : ''}`, 'Where you are on the road');
+        if (s.trip?.you && s.trip.phase === 'road') {
+            const along = s.trip.you.of ? `${s.trip.you.along ?? 0} of ${s.trip.you.of} km` : '';
+            add('you', [s.trip.you.fromId, s.trip.you.toId], s.trip.you.t, `You${along ? ` · ${along}` : ''}`, 'Where you are on the road');
         }
-        for (const mover of trip?.movers ?? []) add('mover', [mover.fromId, mover.toId], mover.t, `${mover.name}${mover.arrive ? ` · ${mover.arrive}` : ''}`, `${mover.name}: ${mover.from} → ${mover.to}${mover.arrive ? `, arrives ${mover.arrive}` : ''}`);
+        for (const mover of s.trip?.movers ?? []) add('mover', [mover.fromId, mover.toId], mover.t, `${mover.name}${mover.arrive ? ` · ${mover.arrive}` : ''}`, `${mover.name}: ${mover.from} → ${mover.to}${mover.arrive ? `, arrives ${mover.arrive}` : ''}`);
         markLayer.replaceChildren(...nodesOut);
     }
 
     // The "On the road" panel: the trip's stages (a progress bar on the current one) and the movers {{user}} knows of.
     function drawRoad() {
-        road.hidden = !trip;
-        if (!trip) {
+        road.hidden = !s.trip;
+        if (!s.trip) {
             road.replaceChildren();
             return;
         }
         const parts = [h(doc, 'h4', '', 'On the road')];
-        if (trip.on) {
-            const first = trip.legs[0];
-            parts.push(h(doc, 'p', 'sd-map-road-to', `${first?.from ?? ''} → ${trip.to}`));
-            parts.push(h(doc, 'p', 'sd-map-road-by', trip.phase === 'arrived' ? `Arrived at ${trip.to}${trip.arrive ? `, ${trip.arrive}` : ''}` : [trip.pace, trip.setOut && `set out ${trip.setOut}`].filter(Boolean).join(' · ')));
+        if (s.trip.on) {
+            const first = s.trip.legs[0];
+            parts.push(h(doc, 'p', 'sd-map-road-to', `${first?.from ?? ''} → ${s.trip.to}`));
+            parts.push(h(doc, 'p', 'sd-map-road-by', s.trip.phase === 'arrived' ? `Arrived at ${s.trip.to}${s.trip.arrive ? `, ${s.trip.arrive}` : ''}` : [s.trip.pace, s.trip.setOut && `set out ${s.trip.setOut}`].filter(Boolean).join(' · ')));
             const list = h(doc, 'ol', 'sd-map-road-legs');
-            for (const leg of trip.legs) {
+            for (const leg of s.trip.legs) {
                 const item = h(doc, 'li');
                 item.setAttribute('data-state', leg.state);
                 item.append(h(doc, 'span', 'sd-map-road-name', `${leg.index} · ${leg.from} → ${leg.to}`), h(doc, 'span', 'sd-map-road-when', [leg.km !== null && `${leg.km} km`, leg.time, leg.arrive].filter(value => value !== null && value !== false && value !== '').join(' · ')));
-                if (leg.state === 'now' && trip.you?.of) {
-                    const pct = Math.round(Math.min(1, Math.max(0, (trip.you.along ?? 0) / trip.you.of)) * 100);
+                if (leg.state === 'now' && s.trip.you?.of) {
+                    const pct = Math.round(Math.min(1, Math.max(0, (s.trip.you.along ?? 0) / s.trip.you.of)) * 100);
                     const bar = h(doc, 'div', 'sd-map-road-bar');
                     bar.setAttribute('role', 'progressbar');
-                    bar.setAttribute('aria-label', `Stage ${leg.index}: ${trip.you.along ?? 0} of ${trip.you.of} km`);
+                    bar.setAttribute('aria-label', `Stage ${leg.index}: ${s.trip.you.along ?? 0} of ${s.trip.you.of} km`);
                     bar.setAttribute('aria-valuemin', '0');
                     bar.setAttribute('aria-valuemax', '100');
                     bar.setAttribute('aria-valuenow', String(pct));
@@ -385,12 +389,12 @@ function render(el, props, api) {
                 list.append(item);
             }
             parts.push(list);
-            for (const delay of trip.delays) parts.push(h(doc, 'p', 'sd-map-road-note', `Delayed ${delay}`));
+            for (const delay of s.trip.delays) parts.push(h(doc, 'p', 'sd-map-road-note', `Delayed ${delay}`));
         }
-        if (trip.movers.length) {
+        if (s.trip.movers.length) {
             parts.push(h(doc, 'h5', '', 'Moving that you know of'));
             const list = h(doc, 'ul', 'sd-map-road-movers');
-            for (const mover of trip.movers) {
+            for (const mover of s.trip.movers) {
                 const item = h(doc, 'li');
                 item.setAttribute('data-kind', 'mover');
                 item.append(h(doc, 'span', 'sd-map-road-name', `${mover.name}${mover.summary ? `: ${mover.summary}` : ''}`), h(doc, 'span', 'sd-map-road-when', [`${mover.from} → ${mover.to}`, mover.arrive && `arrive ${mover.arrive}`].filter(Boolean).join(' · ')));
@@ -414,54 +418,54 @@ function render(el, props, api) {
             entries.push(li);
         };
         const kinds = [];
-        for (const place of shown) if (place.kind && !kinds.includes(place.kind)) kinds.push(place.kind);
+        for (const place of s.shown) if (place.kind && !kinds.includes(place.kind)) kinds.push(place.kind);
         for (const kind of kinds.slice(0, 12)) {
             const sample = h(doc, 'span', 'sd-map-sample');
-            sample.append(icon(doc, text(data.kinds[kind]?.icon) || shown.find(place => place.kind === kind)?.icon));
-            entry(sample, text(data.kinds[kind]?.label) || humanize(kind));
+            sample.append(icon(doc, text(s.data.kinds[kind]?.icon) || s.shown.find(place => place.kind === kind)?.icon));
+            entry(sample, text(s.data.kinds[kind]?.label) || humanize(kind));
         }
-        if (shown.some(place => !place.visited)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-known'), 'Not visited yet');
-        if (shown.some(place => place.id === data.current)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-here'), 'You are here');
-        if (lines.some(({ line }) => line.getAttribute('class') === 'sd-map-trip-leg')) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-trip'), 'Your trip');
-        if (marks.some(item => item.mark.getAttribute('data-kind') === 'mover')) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-mover'), 'Moving that you know of');
+        if (s.shown.some(place => !place.visited)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-known'), 'Not visited yet');
+        if (s.shown.some(place => place.id === s.data.current)) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-here'), 'You are here');
+        if (s.lines.some(({ line }) => line.getAttribute('class') === 'sd-map-trip-leg')) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-trip'), 'Your trip');
+        if (s.marks.some(item => item.mark.getAttribute('data-kind') === 'mover')) entry(h(doc, 'span', 'sd-map-sample sd-map-sample-mover'), 'Moving that you know of');
         legend.replaceChildren(...entries);
         legendCard.hidden = entries.length === 0;
     }
 
     // Everything that follows the view: cheap enough for every pointer move.
     function paint() {
-        const { width, height } = size;
+        const { width, height } = s.size;
         const frame = { x: -8, y: -8, w: width + 16, h: height + 16 };
-        for (const { line, route } of lines) {
-            const cut = clipSegment(toScreen(view, width, height, points.get(route.from)), toScreen(view, width, height, points.get(route.to)), frame);
+        for (const { line, route } of s.lines) {
+            const cut = clipSegment(toScreen(s.view, width, height, s.points.get(route.from)), toScreen(s.view, width, height, s.points.get(route.to)), frame);
             line.style.display = cut ? '' : 'none';
             if (!cut) continue;
             for (const [name, value] of [['x1', cut.a.x], ['y1', cut.a.y], ['x2', cut.b.x], ['y2', cut.b.y]]) line.setAttribute(name, fmt(value));
         }
-        const zoom = zoomLevel(view, fitK);
+        const zoom = zoomLevel(s.view, s.fitK);
         stage.setAttribute('data-zoom', String(Math.round(zoom * 100) / 100));
         const far = zoom < KNOWN_ICON_ZOOM;
         const markers = [];
         const at = placeAt;
         at.clear();
-        for (const place of shown) {
+        for (const place of s.shown) {
             const node = nodes.get(place.id);
-            const p = toScreen(view, width, height, points.get(place.id));
+            const p = toScreen(s.view, width, height, s.points.get(place.id));
             at.set(place.id, p);
             node.style.left = px(p.x);
             node.style.top = px(p.y);
-            const isFar = !place.visited && far && place.id !== picked && place.id !== hovered;
+            const isFar = !place.visited && far && place.id !== s.picked && place.id !== s.hovered;
             node.classList.toggle('sd-map-far', isFar);
-            node.classList.toggle('sd-map-picked', place.id === picked);
+            node.classList.toggle('sd-map-picked', place.id === s.picked);
             const onScreen = p.x > -40 && p.y > -40 && p.x < width + 40 && p.y < height + 40;
             if (onScreen) markers.push({ id: place.id, x: p.x, y: p.y, r: place.visited ? R_VISITED : isFar ? R_KNOWN_FAR : R_KNOWN });
         }
         // Names by priority: the one under the pointer or focus, the picked one, where you are, the
         // visited places, then (closer in) the unvisited ones.
         const visible = new Set(markers.map(marker => marker.id));
-        const rank = place => (place.id === hovered ? 0 : place.id === picked ? 1 : place.id === data.current ? 2 : place.visited ? 3 : 4);
-        const items = shown
-            .filter(place => visible.has(place.id) && (place.visited || zoom >= KNOWN_LABEL_ZOOM || place.id === hovered || place.id === picked))
+        const rank = place => (place.id === s.hovered ? 0 : place.id === s.picked ? 1 : place.id === s.data.current ? 2 : place.visited ? 3 : 4);
+        const items = s.shown
+            .filter(place => visible.has(place.id) && (place.visited || zoom >= KNOWN_LABEL_ZOOM || place.id === s.hovered || place.id === s.picked))
             .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
             .map(place => ({ id: place.id, x: at.get(place.id).x, y: at.get(place.id).y, r: markers.find(marker => marker.id === place.id).r, text: place.name }));
         const placed = new Map(placeLabels(items, markers, width, height).map(entry => [entry.id, entry]));
@@ -473,10 +477,10 @@ function render(el, props, api) {
             label.style.left = px(spot.x);
             label.style.top = px(spot.y);
             label.setAttribute('data-slot', spot.slot);
-            label.classList.toggle('sd-map-picked', id === picked);
+            label.classList.toggle('sd-map-picked', id === s.picked);
         }
-        for (const item of marks) {
-            const [a, b] = item.ids.map(id => toScreen(view, width, height, points.get(id)));
+        for (const item of s.marks) {
+            const [a, b] = item.ids.map(id => toScreen(s.view, width, height, s.points.get(id)));
             const x = a.x + (b.x - a.x) * item.t;
             const y = a.y + (b.y - a.y) * item.t;
             for (const node of [item.mark, item.pin]) {
@@ -486,7 +490,7 @@ function render(el, props, api) {
             // A pin near the right edge goes to the left of its mark, so it is not cut off.
             item.pin.classList.toggle('sd-map-pin-left', x > width - 130);
         }
-        const here = data.current && at.get(data.current);
+        const here = s.data.current && at.get(s.data.current);
         hereRing.hidden = !here;
         if (here) {
             hereRing.style.left = px(here.x);
@@ -498,7 +502,7 @@ function render(el, props, api) {
     let asked = 0;
     function showDetails(id) {
         const place = byId(id);
-        picked = place ? id : '';
+        s.picked = place ? id : '';
         if (!place) {
             details.hidden = true;
             details.replaceChildren();
@@ -507,13 +511,13 @@ function render(el, props, api) {
         }
         const close = button(doc, 'sd-map-btn sd-map-close', '×', 'Close');
         const about = [place.kind && humanize(place.kind), place.region].filter(Boolean).join(' · ');
-        const status = place.id === data.current ? 'You are here.' : place.visited ? 'Visited.' : 'Not visited yet.';
+        const status = place.id === s.data.current ? 'You are here.' : place.visited ? 'Visited.' : 'Not visited yet.';
         const trip = h(doc, 'p', 'sd-map-trip');
         details.replaceChildren(h(doc, 'h3', 'sd-map-name', place.name), ...(about ? [h(doc, 'p', 'sd-map-about', about)] : []), h(doc, 'p', 'sd-map-status', status), trip, close);
         details.setAttribute('data-id', place.id);
         details.hidden = false;
         paint();
-        if (place.id === data.current) return;
+        if (place.id === s.data.current) return;
         // The trip from the current place, by known routes: code's figures (travel.js), not the story's.
         const ticket = ++asked;
         let detail = null;
@@ -529,7 +533,7 @@ function render(el, props, api) {
                 const by = route.by?.length ? ` by ${route.by.join(', ')}` : '';
                 trip.textContent = `From ${route.fromName}: ${route.km ? `${route.km} km, ` : ''}${route.text}${by}.`;
                 trip.className = 'sd-map-trip';
-            } else if (data.current) {
+            } else if (s.data.current) {
                 trip.textContent = 'No known route from where you are.';
                 trip.className = 'sd-map-trip sd-map-none';
             }
@@ -552,22 +556,22 @@ function render(el, props, api) {
     function goTo(id) {
         const place = byId(id);
         if (!place) return;
-        if (!onLayer(place, layer)) setLayer(layerFor(place, layer));
+        if (!onLayer(place, s.layer)) setLayer(layerFor(place, s.layer));
         measure();
-        moveTo(centreOn(view, points.get(id), box, limits, closeEnough(id)));
+        moveTo(centreOn(s.view, s.points.get(id), box, limits, closeEnough(id)));
         pick(id);
     }
 
     // ---- search ---------------------------------------------------------------------------------
     let hits = [];
     function runSearch() {
-        hits = searchPlaces(data.places, input.value);
+        hits = searchPlaces(s.data.places, input.value);
         const items = hits.map(hit => {
             const place = byId(hit.id);
             const li = h(doc, 'li');
             const choose = button(doc, 'sd-map-result');
             choose.setAttribute('data-id', place.id);
-            const about = [place.region, place.id === data.current ? 'you are here' : place.visited ? '' : 'not visited'].filter(Boolean).join(' · ');
+            const about = [place.region, place.id === s.data.current ? 'you are here' : place.visited ? '' : 'not visited'].filter(Boolean).join(' · ');
             choose.append(h(doc, 'span', 'sd-map-result-name', place.name), h(doc, 'span', 'sd-map-result-about', about));
             li.append(choose);
             return li;
@@ -587,7 +591,7 @@ function render(el, props, api) {
     };
     listen(regions, 'change', () => {
         const id = regions.value === 'all' ? ALL : regions.value;
-        if (id !== layer) setLayer(id);
+        if (id !== s.layer) setLayer(id);
     });
     listen(results, 'click', event => {
         const choose = closestWith(event.target, results, node => node.getAttribute?.('data-id'));
@@ -614,14 +618,14 @@ function render(el, props, api) {
     const zoomCentre = factor => {
         stopAnimation();
         measure();
-        setView(zoomAt(view, factor, size.width / 2, size.height / 2, size.width, size.height, box, limits));
+        setView(zoomAt(s.view, factor, s.size.width / 2, s.size.height / 2, s.size.width, s.size.height, box, limits));
     };
     const fit = () => {
         stopAnimation();
         setView(fitNow());
     };
     const toMe = () => {
-        if (data.current) goTo(data.current);
+        if (s.data.current) goTo(s.data.current);
     };
     listen(zoomIn, 'click', () => zoomCentre(BUTTON_ZOOM));
     listen(zoomOut, 'click', () => zoomCentre(1 / BUTTON_ZOOM));
@@ -633,11 +637,11 @@ function render(el, props, api) {
         if (step) {
             stopAnimation();
             measure();
-            setView(panBy(view, step[0] * size.width * KEY_PAN, step[1] * size.height * KEY_PAN, box, limits));
+            setView(panBy(s.view, step[0] * s.size.width * KEY_PAN, step[1] * s.size.height * KEY_PAN, box, limits));
         } else if (event.key === '+' || event.key === '=') zoomCentre(BUTTON_ZOOM);
         else if (event.key === '-' || event.key === '_') zoomCentre(1 / BUTTON_ZOOM);
         else if (event.key === '0' || event.key === 'Home') fit();
-        else if (event.key === 'Escape' && picked) showDetails('');
+        else if (event.key === 'Escape' && s.picked) showDetails('');
         else return;
         event.preventDefault?.();
     });
@@ -677,8 +681,8 @@ function render(el, props, api) {
         pick(id);
     });
     const hover = id => {
-        if (hovered === id) return;
-        hovered = id;
+        if (s.hovered === id) return;
+        s.hovered = id;
         paint();
     };
     listen(placesLayer, 'pointerover', event => hover(placeOf(event.target)));
@@ -717,7 +721,7 @@ function render(el, props, api) {
                 try { stage.setPointerCapture?.(event.pointerId); } catch { /* not capturable */ }
                 stage.classList.add('sd-map-dragging');
             }
-            if (moved > DRAG_THRESHOLD) setView(panBy(view, now.x - before.x, now.y - before.y, box, limits));
+            if (moved > DRAG_THRESHOLD) setView(panBy(s.view, now.x - before.x, now.y - before.y, box, limits));
             return;
         }
         const [a, b] = [...pointers.values()];
@@ -728,7 +732,7 @@ function render(el, props, api) {
         const newMid = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
         const newDistance = Math.hypot(c.x - d.x, c.y - d.y);
         moved = Infinity;
-        let next = oldDistance > 0 && newDistance > 0 ? zoomAt(view, newDistance / oldDistance, oldMid.x, oldMid.y, size.width, size.height, box, limits) : view;
+        let next = oldDistance > 0 && newDistance > 0 ? zoomAt(s.view, newDistance / oldDistance, oldMid.x, oldMid.y, s.size.width, s.size.height, box, limits) : s.view;
         next = panBy(next, newMid.x - oldMid.x, newMid.y - oldMid.y, box, limits);
         setView(next);
     });
@@ -751,9 +755,9 @@ function render(el, props, api) {
         event.preventDefault?.();
         stopAnimation();
         measure();
-        const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * size.height : event.deltaY;
+        const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * s.size.height : event.deltaY;
         const at = local(event);
-        setView(zoomAt(view, Math.exp(-(Number(delta) || 0) * WHEEL_RATE), at.x, at.y, size.width, size.height, box, limits));
+        setView(zoomAt(s.view, Math.exp(-(Number(delta) || 0) * WHEEL_RATE), at.x, at.y, s.size.width, s.size.height, box, limits));
     }, { passive: false });
 
     // A click elsewhere closes the results list.
@@ -767,50 +771,50 @@ function render(el, props, api) {
     let observer = null;
     if (typeof Observer === 'function') {
         observer = new Observer(() => {
-            const before = size;
+            const before = s.size;
             measure();
-            if (before.width === size.width && before.height === size.height) return;
-            const zoom = zoomLevel(view, fitK);
-            fitK = fitNow().k;
-            limits = zoomLimits(fitK, nearestGap(shown.map(place => points.get(place.id))));
-            view = clampView({ ...view, k: zoom * fitK }, box, limits);
+            if (before.width === s.size.width && before.height === s.size.height) return;
+            const zoom = zoomLevel(s.view, s.fitK);
+            s.fitK = fitNow().k;
+            limits = zoomLimits(s.fitK, nearestGap(s.shown.map(place => s.points.get(place.id))));
+            s.view = clampView({ ...s.view, k: zoom * s.fitK }, box, limits);
             paint();
         });
         observer.observe(stage);
     }
 
     function load(next, first) {
-        data = readView(next);
-        trip = readTrip(next?.trip ?? next?.value?.trip);
+        s.data = readView(next);
+        s.trip = readTrip(next?.trip ?? next?.value?.trip);
         // The map opens on the layer of the place {{user}} is at; with a trip on whose stages do not all lie there (the road runs on into
         // another region), it opens on All, where the whole route can be seen.
-        if (first && trip?.on && data.layer !== ALL) {
-            const here = new Set(data.places.filter(place => onLayer(place, data.layer)).map(place => place.id));
-            if (!trip.legs.every(leg => here.has(leg.fromId) && here.has(leg.toId))) data.layer = ALL;
+        if (first && s.trip?.on && s.data.layer !== ALL) {
+            const here = new Set(s.data.places.filter(place => onLayer(place, s.data.layer)).map(place => place.id));
+            if (!s.trip.legs.every(leg => here.has(leg.fromId) && here.has(leg.toId))) s.data.layer = ALL;
         }
         viewKey = text(next?.viewKey) || 'map';
         onSelect = text(next?.onSelect);
         root.setAttribute('aria-label', text(next?.label) || 'Map');
         // "Centre on where you are" works once a place is known (breaker a3-2): until then it is off and says why.
-        centreMe.disabled = !data.current;
-        centreMe.setAttribute('title', data.current ? 'Centre on where you are' : 'Centre on where you are (once the story names where you are)');
+        centreMe.disabled = !s.data.current;
+        centreMe.setAttribute('title', s.data.current ? 'Centre on where you are' : 'Centre on where you are (once the story names where you are)');
         computePoints();
-        const keep = !first && (layer === ALL || data.layers.some(item => item.id === layer));
+        const keep = !first && (s.layer === ALL || s.data.layers.some(item => item.id === s.layer));
         if (keep) {
             // A state update keeps the reader's layer, pan and zoom.
-            const zoom = zoomLevel(view, fitK);
-            const centre = { cx: view.cx, cy: view.cy };
-            setLayer(layer, { refit: true });
-            view = clampView({ ...centre, k: zoom * fitK }, box, limits);
+            const zoom = zoomLevel(s.view, s.fitK);
+            const centre = { cx: s.view.cx, cy: s.view.cy };
+            setLayer(s.layer, { refit: true });
+            s.view = clampView({ ...centre, k: zoom * s.fitK }, box, limits);
             paint();
         } else {
-            setLayer(data.layer);
+            setLayer(s.data.layer);
             // The first time the map is drawn with a trip on, it shows the trip: the view fitted to the stops the trip runs through.
-            if (trip?.on && !views.has(`${viewKey}|${layer}`)) fitTrip();
+            if (s.trip?.on && !views.has(`${viewKey}|${s.layer}`)) fitTrip();
         }
         drawRoad();
-        if (picked && !byId(picked)) showDetails('');
-        else if (picked) showDetails(picked);
+        if (s.picked && !byId(s.picked)) showDetails('');
+        else if (s.picked) showDetails(s.picked);
         if (input.value) runSearch();
     }
 
@@ -827,7 +831,7 @@ function render(el, props, api) {
         },
         // For tests and the preview: the view as the widget holds it.
         get state() {
-            return { layer, view: { ...view }, fitK, limits: { ...limits }, picked, size: { ...size } };
+            return { layer: s.layer, view: { ...s.view }, fitK: s.fitK, limits: { ...limits }, picked: s.picked, size: { ...s.size } };
         },
     };
 }
