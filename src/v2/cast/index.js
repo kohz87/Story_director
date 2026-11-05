@@ -19,7 +19,6 @@
 import { advance, meet, rumor, sync, withdraw } from './capture.js';
 import { FEATURE, initialCast, validateCast } from './domain.js';
 import { createCastHooks } from './hooks.js';
-import { tail } from './note.js';
 import { createPlans } from './plan.js';
 import { queries } from './queries.js';
 import { DEFAULTS, HOOK_MS, SCHEMA, TAIL_BUDGET } from './settings.js';
@@ -51,7 +50,8 @@ export const part = {
     },
     queries,
     kinds: {},
-    context: { static: () => '', tail: view => tail(view), budget: TAIL_BUDGET },
+    // The cue and the rumor are pinned cues from `beforeGenerate` (hooks.js), so Story Block's budgets never drop them; the tail is empty (never twice).
+    context: { static: () => '', tail: () => ({ lines: [], optional: [] }), budget: TAIL_BUDGET },
     hooks: {
         // The planner's answer is waited for a little (HOOK_MS), so the turn's own limit is given the same.
         beforeGenerate: Object.assign(tagged((view, info) => hooks.beforeGenerate(view, info)), { timeoutMs: HOOK_MS }),

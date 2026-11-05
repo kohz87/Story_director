@@ -14,6 +14,7 @@
 
 import { applyAdvance, applyMeet, applyRumor, applySync, planSync, syncEmpty, syncPayload } from './apply.js';
 import { sha256 } from '../hash.js';
+import { cueLines, pinned } from './note.js';
 import { cutPoints, isInt, keysOfPerson } from './domain.js';
 import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
@@ -224,7 +225,15 @@ export function createCastHooks({ plans }) {
 
     /** `beforeGenerate(view, info)`: `{ commands }` or nothing. */
     async function beforeGenerate(view, info = {}) {
-        if (!castOn(view) || info?.commit === false || !REPLY_TYPES.has(normalizeType(info?.type))) return undefined;
+        if (!castOn(view)) return undefined;
+        // A Continue (the same reply goes on) commits nothing but is told the same cue again (from the state it has).
+        if (info?.commit === false) {
+            if (normalizeType(info?.type) !== 'continue') return undefined;
+            const cast = castOf(queryOf(view));
+            const lines = cueLines(view?.state?.domains?.cast, cast, isInt(view?.chat?.length) ? view.chat.length : null);
+            return lines.length ? { lines: pinned(lines) } : undefined;
+        }
+        if (!REPLY_TYPES.has(normalizeType(info?.type))) return undefined;
         const startedAt = Date.now();
         const frame = frameOf(view);
         if (!frame.cast.listed) return undefined;
@@ -302,7 +311,9 @@ export function createCastHooks({ plans }) {
                 applyRumor(world, payload, { now: frame.now, rev });
             }
         }
-        return commands.length ? { commands } : undefined;
+        // The cue and the rumor go as pinned lines of this reply (Story Block keeps a `keep` cue whatever the tail budget says).
+        const lines = pinned(cueLines(world, frame.cast, isInt(view?.chat?.length) ? view.chat.length : null));
+        return commands.length || lines.length ? { ...(commands.length ? { commands } : {}), ...(lines.length ? { lines } : {}) } : undefined;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The cast's cue and rumor can no longer be cut by the tail budget.** They are returned from `beforeGenerate` as pinned cues (`{ text, keep: true }`) instead of tail lines, so a busy tail never drops them (it did: Story Director's tail section ranks after the scene and inventory lines). Needs a Story Block that passes such cues through (testkit re-synced to 44a0e73). Static prompt unchanged.
 - **A won Lean RPG fight no longer keeps the living cast from meeting anyone.** The cast read any Foes slot with a name and a count above 0 as a fight
   that is still on, but the narrator never empties a slot, it only sets the group's health (Down = 0). Now a slot counts only while its health is
   above 0, as Story Block reads it (a block of Down groups only is a won fight). Both formulas' health shapes (Classic stage, Standard blocks) read the same.

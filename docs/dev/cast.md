@@ -77,7 +77,7 @@ runs), so a note names the message its card goes under (`at`) rather than the re
    People here know of ...` line is rebuilt from the entry and `rumored.where` for the reply at `rumored.at` only. A rumor is told once per
    place: again only after `where` changes (the planner's move), until they are met.
 
-The cue: the reply of a meeting gets one tail line, `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
+The cue: the reply of a meeting gets one line (pinned, see below), `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
 how they speak, what they want and why now (`note.js`). A swipe rewrites the scene, not who you meet: the steps stay, the planner's
 answer is kept in memory per key.
 
@@ -127,3 +127,12 @@ NPC State Delta's dossier runs the existing reader command `keypeople.pin { name
   place as its tooltip), then the time of day (`dayText`, "· morning"), which goes first when the two do not fit; `heading` is the same in one string.
 - Settings -> Modules -> Story Director -> The cast: on/off, new faces at most, unmet can die, planner connection.
 - Key people: the Pin chooser lists the people met from the cast.
+
+## How the cue and the rumor reach the narrator
+
+They are not tail lines of the part (its `context.tail` is empty): `beforeGenerate` returns them as pinned cues, `lines: [{ text, keep: true }]`
+(`note.js` `cueLines`/`pinned`, hooks.js). Story Block keeps a `keep` cue whole whatever the budgets say (prompt.js `pinned`); a plain tail line of
+Story Director is one of the first things cut when the host's total tail budget is small (its section ranks after the scene and inventory lines).
+Needs a Story Block with hook-given keep cues (testkit commit 44a0e73, "A module's beforeGenerate may give a tail line as { text, keep: true }");
+an older host drops the object and tells nothing. A swipe or regenerate runs the hook again (same decision, same cue); a Continue returns the cue
+again from the state (no step); impersonate/quiet get nothing. Tests: tests/v2/cast/pinned.test.js.
