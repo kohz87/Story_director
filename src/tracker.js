@@ -312,7 +312,10 @@ export function applyOps(tracker, ops, { message, time = null, said, chosen = []
             // A key that is not tracked: the one record it plainly means, else (for a `~` with
             // something to say) a new record, else the line is ignored and the next note says so.
             const near = nearMatches(records, op.key, op.op === '+' ? null : op.lineKind ?? null);
-            if (near.length === 1) {
+            // (stage73) A `- quest` / `~ quest` / `! quest` line never reaches a hook or event through a near match
+            // (exact keys and aliases are matched above): it stays unclear and the Problem names that record.
+            const wrongKind = near.length === 1 && op.lineKind === 'quest' && near[0].record.kind !== 'quest';
+            if (near.length === 1 && !wrongKind) {
                 target = near[0].index;
                 problems.push(finding('near-key', 'info', op, `"${op.key}" read as "${near[0].record.key}".`));
                 remember(target, id);

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **A quest line no longer closes or advances a hook through a near name.** A `- quest`, `~ quest` or `! quest` line whose name only
+  reads near a hook or event (even the only near match) now stays unclear: the record is left as it was and a Problems line names it.
+  An exact key or alias still reaches it, so a quest line that names a hook exactly closes that hook as before. No prompt change.
+
 ## 2.10.2
 
 - **A quest closed under a slightly different name next to a similar hook.** A `- quest` or `~ quest` line whose name is close

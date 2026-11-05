@@ -313,6 +313,23 @@ test('quest close: a hook line is not narrowed by kind (only a quest line is)', 
 const quest = key => `+ quest ${key} — a job | giver: Nelje | reward: 1 silver | step: Look | difficulty: F | type: cull`;
 const CULL = 'Storehouse No. 2 Cellar-Rat Cull';
 
+// stage73: a quest line reaches a hook only by its exact key, never by a near match.
+test('quest rule: a lone hook near-matched by a - quest line stays open, and the Problem names it', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: '- quest Storehouse No. 2 Rats Cull — done' }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'active');
+    const [problem] = lastProblems(state);
+    assert.equal(problem.kind, 'unknown-key');
+    assert.deepEqual(problem.candidates, ['Storehouse No. 2 Rats']);
+    const progress = story([{ lines: RAT_HOOK }, { lines: '~ quest Storehouse No. 2 Rats Cull | step: Seal it' }]);
+    assert.equal(thread(progress, 'Storehouse No. 2 Rats').fields.step, undefined);
+    assert.equal(lastProblems(progress)[0].kind, 'unknown-key');
+});
+
+test('quest rule: a quest line that names the hook exactly still reaches it', () => {
+    const state = story([{ lines: RAT_HOOK }, { lines: '- quest Storehouse No. 2 Rats — done' }]);
+    assert.equal(thread(state, 'Storehouse No. 2 Rats').status, 'resolved');
+});
+
 test('quest close: a finished quest of a near name does not compete with the active one', () => {
     const state = story([{ lines: RAT_HOOK }, { lines: quest('Storehouse No. 2 Cellar-Rats') }, { lines: '- quest Storehouse No. 2 Cellar-Rats — done' },
         { lines: quest('Storehouse No. 2 Cellar Cull Rats') }, { lines: `- quest ${CULL} — done` }]);
