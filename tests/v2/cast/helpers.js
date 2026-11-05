@@ -49,7 +49,7 @@ export async function syncCast(host, source) {
  * A host with Story Director, a scripted planner (`model`) and the cast from `source`. `queries`: more queries a test module answers
  * (a fight, for example). `settings`: Story Director's (dotted keys).
  */
-export async function castHost({ source = castSource(), model = createFakeModel([]), settings = {}, features = {}, queries = {}, extra = [], parts = undefined } = {}) {
+export async function castHost({ source = castSource(), model = createFakeModel([]), settings = {}, features = {}, queries = {}, extra = [], parts = undefined, hostSettings = undefined } = {}) {
     castPlans.clear();
     let host = null;
     const module = createModule({
@@ -57,7 +57,7 @@ export async function castHost({ source = castSource(), model = createFakeModel(
         host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat },
     });
     const stub = Object.keys(queries).length ? [{ id: 'cast-test-stub', name: 'Test stand-in', version: '0.0.0-test', domains: {}, commands: {}, queries }] : [];
-    host = await createHost({ modules: [...stub, ...extra, module], callModel: model, settings: { modules: { 'story-director': settings }, features } });
+    host = await createHost({ modules: [...stub, ...extra, module], callModel: model, settings: { ...(hostSettings ? { host: hostSettings } : {}), modules: { 'story-director': settings }, features } });
     // The test cast is a real pack, installed before each reply (so a test changes `source` and the next reply sees it).
     for (const method of ['send', 'swipe', 'regenerate', 'cont']) {
         const original = host[method];

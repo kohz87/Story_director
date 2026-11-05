@@ -27,7 +27,8 @@ of the suite notes' V2_LOG.
 people:  { [pack:id]: { pack, eid, name, aliases?, ver, joined, where, doing, since, alive, met, heard, rev } }
          met:   null | { on, where, why: 'place' | 'goal', reason, rev }     (the entry's id is `eid`: a field called `id` must be a host id)
          heard: null | [{ on, text }]                                        (a slot, written whole: the last news of a met person)
-notes:   { [id]: { at, kind: 'met' | 'moved' | 'updated', head, tag, rest, line, rev } }   what a reply tells its card; the newest 6 messages'
+         rumored: undefined | [{ on, where, at, rev }]                       (a slot, written whole: an unmet person the reader sought who is elsewhere, heard of once)
+notes:   { [id]: { at, kind: 'met' | 'moved' | 'updated' | 'heard', head, tag, rest, line, rev } }   what a reply tells its card; the newest 6 messages'
 day:     null | [{ at, rev }]       the story minute the cast was last moved to (a slot)
 meeting: null | [{ at, keys, rev }] who comes into the scene in the reply being written (`at`: the chat's length; a slot)
 ```
@@ -60,7 +61,23 @@ runs), so a note names the message its card goes under (`at`) rather than the re
    made for a withdrawn meeting; a swipe or Re-read decides again. The hook opts in (`hook.always`, Story Block's afterCapture) to run for a
    reply with no change lines too; module.js then runs only the parts that opted in. Needs a Story Block with that option (the vendored testkit has it).
 
-The cue: the reply of a meeting gets one tail line, `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
+5. **Sought** (`sought.js`, hooks.js, part of the same feature): the reader's latest message (or the story's last reply) may look for a kind of
+   person ("a healer or sister around"). The cheap gate (`kindTouches`): a telling word of an unmet, living, placed person's calling
+   (pack `fields.Calling`) or the name-free lead of their `about` is in those texts. Then the planner is asked once per message pair (mode
+   `sought`, plan key `sought|<print>|<hash of both texts>`, after the reply in `afterReceive`; on a named planner connection also in `beforeGenerate`
+   and waited for): it may answer one `? cast ref | "the words"`; `readCast` accepts it only if the ref was offered and `citedIn` finds the words as
+   whole words in the message or reply (a made-up phrase is refused). On the chat's own connection the answer is used by the next reply (a
+   swipe of that reply finds the same answer in memory). `chooseMeetings` then takes the sought person after a goal arrival and before a place
+   meeting: at the party's place (routine holding) a meeting with `why: 'sought'` and `reason` the cited words (the pace and one a reply
+   apply; `applyWithdraw` takes it back like any planned meeting); they do not move. Elsewhere, `chooseRumor` (no meeting, no pace used, never
+   in a fight, never when a meeting is made in the same reply, never someone present, pinned, met or dead, never a person with no place) makes
+   `cast.rumor { at, who: [{ key, where, text }] }`: `person.rumored = [{ on, where, at, rev }]` (a slot, written whole, `ctx.ifThere`) and a
+   note of kind `heard` ("Heard of: <description>"). `rumorText` builds the description from calling, the `about` lead and the routine/place
+   and never carries the name, an alias or a name-like word (parts that do are dropped; with nothing left there is no rumor). The tail's `[Cast]
+   People here know of ...` line is rebuilt from the entry and `rumored.where` for the reply at `rumored.at` only. A rumor is told once per
+   place: again only after `where` changes (the planner's move), until they are met.
+
+The cue: the reply of a meeting gets one line (pinned, see below), `[Cast] <Name> comes into the scene in this reply...` with who they are, how they look,
 how they speak, what they want and why now (`note.js`). A swipe rewrites the scene, not who you meet: the steps stay, the planner's
 answer is kept in memory per key.
 
@@ -79,6 +96,7 @@ used by the next reply; a named connection is waited for. It answers one short l
 ~ cast ref | place | what they are doing now
 > cast ref | what in the story pulls them to {{user}}      (only people with `drawnTo`)
 ! cast ref | how they died                                 (only people marked "may die")
+? cast ref | "the words that ask for them"                 (mode `sought` only: see Steps, 5)
 ```
 
 Read strictly (`readCast`): only those labels, only refs it named, each part cut and cleaned, a person once per label, at most 16/3/2 lines.
@@ -109,3 +127,12 @@ NPC State Delta's dossier runs the existing reader command `keypeople.pin { name
   place as its tooltip), then the time of day (`dayText`, "· morning"), which goes first when the two do not fit; `heading` is the same in one string.
 - Settings -> Modules -> Story Director -> The cast: on/off, new faces at most, unmet can die, planner connection.
 - Key people: the Pin chooser lists the people met from the cast.
+
+## How the cue and the rumor reach the narrator
+
+They are not tail lines of the part (its `context.tail` is empty): `beforeGenerate` returns them as pinned cues, `lines: [{ text, keep: true }]`
+(`note.js` `cueLines`/`pinned`, hooks.js). Story Block keeps a `keep` cue whole whatever the budgets say (prompt.js `pinned`); a plain tail line of
+Story Director is one of the first things cut when the host's total tail budget is small (its section ranks after the scene and inventory lines).
+Needs a Story Block with hook-given keep cues (testkit commit 44a0e73, "A module's beforeGenerate may give a tail line as { text, keep: true }");
+an older host drops the object and tells nothing. A swipe or regenerate runs the hook again (same decision, same cue); a Continue returns the cue
+again from the state (no step); impersonate/quiet get nothing. Tests: tests/v2/cast/pinned.test.js.

@@ -77,6 +77,13 @@ Delta (`tests/v2/integration/alone.test.js` guards that). NPC State Delta reads 
 Where each lives in the UI. Screens are in Story Block's Game view (Alt+G, or the **Game view** button above the message box)
 and the Story panel (**Story** button). Settings open from the **Suite** button; this module's under **Modules → Story Director**.
 
+- **Seeking a kind of person** (part of the cast, no setting of its own): ask for a healer, a priest, a smith, a guide and the cast
+  answers. The cast planner (its own model call, after the reply) reads your latest message and the story's last reply; if an unmet
+  person's calling fits, it names them and quotes the words that ask, and code accepts only words that stand in the message or reply
+  as whole words. Used by the next reply (at once on a named planner connection). At your place the person comes in as a meeting
+  ("Paths crossed: Name — you sought “a healer”"); elsewhere the narrator hears one nameless line ("People here know of a
+  saintess candidate, healer, at ...") and the card says "Heard of: ...", told once until they move. Same limits as any meeting:
+  one new face a reply, the pace setting, never in a fight, never someone present or pinned.
 - **Quests** (`story-director/quests`, `screens/quests.js`): quests and goals with status; older quest history stays readable.
 - **Director** (`story-director/director`, `screens/director.js`): arc panel, Quests, Hooks, World events, **Behind the scenes**
   (widget `story-director.behind`, Reveal), and Problems. Under **More** unless the reader puts it in the bar.
@@ -160,7 +167,8 @@ Tail (rebuilt each reply, cut to budget; fixed budgets in tokens):
 | `On the road: ...` and a reached-a-place cue | a trip is on (`trip`) | 90 |
 | `[World] Under way off-screen:` up to three open events | feature `threads` | 120 |
 | `[Key people] Away from the scene:` one line per away person | someone is away | `keypeople.tokens` |
-| `[Cast] Name comes into the scene in this reply ...` | only the reply of a meeting | 220 |
+| `[Cast] Name comes into the scene in this reply ...` | only the reply of a meeting (also one you sought) | 220 |
+| `[Cast] People here know of a ... (no name)` | only the reply that tells a rumor of a person you sought who is elsewhere | within the 220 |
 | `Arc: Name — what it is about` | an arc runs | 60 |
 | `[Last day] ...` | after a time skip, `chronicle.digestTail` | 60 |
 | A check's outcome | the reply after a roll (through Story Block's `[Happened]`) | with receipts |
@@ -171,7 +179,7 @@ share cap everything. **What is shown in the Game view is worked out on read and
 Never sent: unmet cast (not even a name); the reader's Reveal choice; anything a feature that is off owns. The note does tell the
 narrator agendas, beats and clocks (Reveal hides them only from the reader's screens). The World screen and the Initiative and
 Elsewhere lines use only what {{user}} knows. Two separate model calls carry more: the **cast planner**
-(describes unmet people to move them; never output to the reader) and the **arc planner** (the last `arc.recent` messages,
+(describes unmet people to move them, and, when your message may seek a kind of person, their calling and who they are; never output to the reader) and the **arc planner** (the last `arc.recent` messages,
 up to 24000 characters, plus a thread summary). Both go through `sdk.callModel` on the chosen connection.
 
 ## Reply format the model writes
@@ -230,7 +238,7 @@ Commands:
 | `chronicle.surface`, `chronicle.note`, `chronicle.digest`, `chronicle.threadOutcome` | System steps: pick the open events for the next tail; keep the day's facts; write a finished day; record a thread's outcome |
 | `chronicle.lasting` | A pack event writes a lasting world change (system, `event:<id>` caller only) |
 | `keypeople.pin`, `keypeople.unpin`, `keypeople.sync`, `keypeople.tell` | Pin or unpin (reader); take people off when NPC State Delta archives them; tell the card |
-| `cast.sync`, `cast.advance`, `cast.meet` | System steps: join the pack's people; move them on; the first meeting |
+| `cast.sync`, `cast.advance`, `cast.meet`, `cast.rumor` | System steps: join the pack's people; move them on; the first meeting (by place, goal or because you sought them); a rumor of someone you sought who is elsewhere |
 | `director.arc.accept`, `.update`, `.end` | The reader accepts, updates or ends an arc |
 | `checks.actor`, `checks.roll` | Reader's check settings; one d20 roll from a `? check` line (not callable by buttons) |
 

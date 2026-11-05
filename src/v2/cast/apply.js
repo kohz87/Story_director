@@ -193,6 +193,7 @@ const lowerFirst = text => text.replace(/^(\p{Lu})(\p{Ll})/u, (_all, first, seco
 export function whyText({ name, why, reason, doing, where }) {
     if (why === 'story') return `${name} was already in the story when the cast reached them (met in the story); no roll.`;
     if (why === 'goal') return `${cutPoints(reason, MAX_REASON - 60)} Their own goal pulls them to you, so they arrive; no roll.`.trim();
+    if (why === 'sought') return `You sought “${cutPoints(reason, 80)}”, and ${name} is${where ? ` at ${where}` : ' here'}. No roll.`;
     const at = where ? ` at ${where}` : '';
     const said = lowerFirst(short(doing));
     return `${name} ${said ? `${said}${at}` : `is${at || ' here'}`}, and you are there: your first time here while they are. No roll.`;
@@ -201,6 +202,7 @@ export function whyText({ name, why, reason, doing, where }) {
 /** The narrator's words for why now: where they are, or what pulls them. */
 export function whyNarrator(person) {
     const met = person?.met ?? {};
+    if (met.why === 'sought') return `{{user}} asked for "${cutPoints(met.reason, 80)}"; they are at ${met.where || person?.where || 'this place'}, the place of this scene.`;
     if (met.why === 'goal') return `${cutPoints(met.reason, 200)} Their own goal brings them to {{user}}.`.trim().replace(/^(\p{Ll})/u, c => c.toUpperCase());
     const said = lowerFirst(short(person?.doing));
     return `${said ? `${said}, ` : ''}they are at ${met.where || person?.where || 'this place'}, the place of this scene.`.replace(/^(\p{Ll})/u, c => c.toUpperCase());
@@ -219,11 +221,13 @@ export function applyMeet(cast, payload, env) {
         const person = Object.hasOwn(cast.people, item.key) && isRecord(cast.people[item.key]) ? cast.people[item.key] : null;
         if (!person || !isAlive(person) || isMet(person)) continue;
         touch(item.key);
-        const reason = item.why === 'goal' ? cutPoints(item.reason, MAX_REASON) : '';
+        const reason = item.why === 'goal' || item.why === 'sought' ? cutPoints(item.reason, MAX_REASON) : '';
         const here = cutPoints(item.place, MAX_PLACE);
         // A goal arrival leaves where they were, in case the reply does not show them (`applyWithdraw`).
-        const was = item.why !== 'place' && here && person.where !== here ? person.where : undefined;
-        if (item.why !== 'place' && here) person.where = here;
+        // (Someone sought is already at the party's place: they do not move.)
+        const arrives = item.why !== 'place' && item.why !== 'sought';
+        const was = arrives && here && person.where !== here ? person.where : undefined;
+        if (arrives && here) person.where = here;
         person.met = { on: isInt(now) ? now : null, where: person.where, why: item.why, reason, rev, ...(was === undefined ? {} : { was }) };
         const shown = cutPoints(whyText({ name: person.name, why: item.why, reason, doing: person.doing, where: person.where }), 400);
         met.push(item.key);
@@ -232,7 +236,7 @@ export function applyMeet(cast, payload, env) {
             note({
                 kind: 'met', head: `Paths crossed: ${person.name}`, tag: `${packName(person.pack)} cast · ${item.why === 'story' ? 'met in the story' : 'first meeting'}`,
                 rest: item.why === 'story' ? `Why: ${shown}` : `Why: ${shown} The narrator is told to bring them in; a swipe rewrites the scene, not who you meet.`,
-                line: `Paths crossed: ${person.name}`,
+                line: item.why === 'sought' ? `Paths crossed: ${person.name} — you sought “${cutPoints(reason, 80)}”` : `Paths crossed: ${person.name}`,
             });
         }
     }
@@ -265,4 +269,32 @@ export function applyWithdraw(cast, payload, env) {
         out.push(key);
     }
     return out;
+}
+
+// ---- rumor ---------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Applies a `cast.rumor` payload (`{ at, who: [{ key, where, text }] }`): the reader sought a kind of person who is elsewhere, so the narrator
+ * is told of them without a name in this reply (`at`) and the card says "Heard of". The person is marked in a slot written whole, so it is told
+ * once, until they are met or move. Nobody is met and the pace is not used. Returns the keys told.
+ */
+export function applyRumor(cast, payload, env) {
+    const { now = null, rev = 0, touch = noop, note = null, packName = pack => pack } = env;
+    const told = [];
+    for (const item of payload.who ?? []) {
+        const person = Object.hasOwn(cast.people, item.key) && isRecord(cast.people[item.key]) ? cast.people[item.key] : null;
+        if (!person || !isAlive(person) || isMet(person)) continue;
+        touch(item.key);
+        person.rumored = [{ on: isInt(now) ? now : null, where: cutPoints(item.where, MAX_PLACE), at: payload.at, rev }];
+        told.push(item.key);
+        if (typeof note === 'function') {
+            const heard = cutPoints(String(item.text ?? '').replace(/^People here know of\s+/i, ''), 180).replace(/\.$/, '');
+            note({
+                kind: 'heard', head: `Heard of: ${heard}`, tag: `${packName(person.pack)} cast · rumor`,
+                rest: 'You sought someone like this. They are not here, so the narrator is told only that people know of them (no name); you may meet them when you find them.',
+                line: `Heard of: ${heard}`,
+            });
+        }
+    }
+    return told;
 }

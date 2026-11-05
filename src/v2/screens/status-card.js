@@ -25,7 +25,7 @@ export const STATUS_CARD_ID = 'story-director/status-card';
 const TEMPLATE = `
 <div class="sd-castnotes" data-if="len(state.cast.notes) > 0">
   <div class="sd-castnote" data-each="state.cast.notes as n" data-if="n.at == index" data-kind="{{ n.kind }}">
-    <span class="sd-castnote-ico" aria-hidden="true"><i class="fa-solid fa-user-plus" data-if="n.kind == 'met'"></i><i class="fa-solid fa-hourglass-half" data-if="n.kind == 'moved'"></i><i class="fa-solid fa-cloud-arrow-up" data-if="n.kind == 'updated'"></i></span>
+    <span class="sd-castnote-ico" aria-hidden="true"><i class="fa-solid fa-user-plus" data-if="n.kind == 'met'"></i><i class="fa-solid fa-hourglass-half" data-if="n.kind == 'moved'"></i><i class="fa-solid fa-cloud-arrow-up" data-if="n.kind == 'updated'"></i><i class="fa-solid fa-ear-listen" data-if="n.kind == 'heard'"></i></span>
     <span class="sd-castnote-body"><span class="sd-castnote-head"><b>{{ n.head }}</b> <span class="ss-pill ss-pill-soft">{{ n.tag }}</span></span><small>{{ n.rest }}</small></span>
   </div>
 </div>

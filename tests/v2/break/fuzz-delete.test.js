@@ -241,9 +241,18 @@ const CAST_PLACES = [...BASE_PLACES, 'Wayside4', 'Kesh'];
 const castEntry = (id, rc, version) => ({
     pack: 'ersveil', packVersion: version, id, name: id[0].toUpperCase() + id.slice(1), about: `${id} is somebody.`, look: 'weathered',
     start: { place: rc.pick(CAST_PLACES), goal: `${id} goal`, routine: rc.pick(['', 'works the night ferry', 'at the forge in the morning', 'sells wares by day']) },
-    drawnTo: rc.chance(0.4) ? ['the reply'] : [], canDieUnmet: rc.chance(0.3),
+    drawnTo: rc.chance(0.4) ? ['the reply'] : [], canDieUnmet: rc.chance(0.3), fields: { Calling: callingOf(id) },
 });
 const CAST_IDS = ['aino', 'borka', 'cael', 'dren', 'eska', 'fotu'];
+// A calling each person can be sought by ("Is there a ferryman around?"): the reader asks for one now and then and the scripted planner names the person.
+const CALLINGS = { aino: 'ferryman', borka: 'scout', cael: 'smith', dren: 'healer', eska: 'priest', fotu: 'guide' };
+const callingOf = id => CALLINGS[id] ?? 'tinker';
+const SOUGHT_ASK = ['ferryman', 'scout', 'smith', 'healer', 'priest', 'guide', 'tinker', 'cartographer', 'cartographer', 'cartographer'];
+// Ylva is the one the replies name when she is asked for (a meeting counts only if the reply shows the person), so a sought meeting survives.
+// She is not one of CAST_IDS: the guard that no prompt names an unmet person holds for the others; a rumor must not name her either.
+const ylvaEntry = version => ({ pack: 'ersveil', packVersion: version, id: 'ylva', name: 'Ylva', about: 'Ylva is somebody.', look: 'weathered', fields: { Calling: 'cartographer' }, start: { place: BASE_PLACES[0], goal: 'ylva goal', routine: '' }, drawnTo: [] });
+let soughtRumors = 0;
+let soughtMeetings = 0;
 function castEdits(rc, source, n) {
     if (!rc.chance(0.3)) return;
     const roll = rc();
@@ -254,8 +263,16 @@ function castEdits(rc, source, n) {
     else if (roll < 0.75 && source.entries.length > 2) source.entries.splice(rc.int(0, source.entries.length - 1), 1);
     else source.enabled = !source.enabled;
 }
-function castAnswer(rc) {
+function castAnswer(rc, rs) {
     return call => {
+        // A 'sought' call: the person whose calling the reader's message names (most of the time), by the words of the message.
+        if (/People who might fit/.test(call.prompt)) {
+            const message = /latest message:\n([^\n]*)/.exec(call.prompt)?.[1] ?? '';
+            for (const match of String(call.prompt).matchAll(/^- (\S+) \|[^\n]*calling: ([^|\n]+?) \|/gm)) {
+                if (message.toLowerCase().includes(match[2].toLowerCase()) && rs.chance(0.85)) return `? cast ${match[1]} | "${match[2]}"`;
+            }
+            return '';
+        }
         const lines = [];
         for (const match of String(call.prompt).matchAll(/^- (\S+) \| ([^|\n]+)(\|[^\n]*)?$/gm)) {
             const [, ref, , rest = ''] = match;
@@ -323,15 +340,16 @@ for (const seed of SEEDS) {
         const rt = prng(seed ^ 0x7121);
         const rk = prng(seed ^ 0x4B50);
         const rc = prng(seed ^ 0xCA57);
+        const rs = prng(seed ^ 0x50C7);
         const re = prng(seed ^ 0xC10C);
         const rn = prng(seed ^ 0x4EA2);
         const source = { version: '1.0.0', enabled: true, entries: [] };
-        source.entries = CAST_IDS.map(id => castEntry(id, rc, source.version));
+        source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version)];
         castPlans.clear();
         let host = null;
         const delta = Object.fromEntries(KEY_BASE.map(name => [name, {}]));
         const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat } });
-        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc) }), settings: { modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
+        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc, rs) }), settings: { modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
         // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
         const installCast = async () => {
             const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
@@ -348,11 +366,17 @@ for (const seed of SEEDS) {
             const start = host.head().domains.director.time.minutes;
             const times = new Map();
             let editsMade = 0;
+            let sought = '';
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
                 const near = nearLines(rn, n);
                 const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
-                await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
+                const seeking = rs.chance(0.6) ? rs.pick(SOUGHT_ASK) : '';
+                // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
+                const names = seeking === 'cartographer' || sought === 'cartographer';
+                sought = seeking;
+                await host.send(seeking ? `Is there a ${seeking} around (${n})?` : r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.${names ? ' Ylva nods.' : ''}`, lines));
+                if (host.head().domains.cast.people['ersveil:ylva']?.met?.why === 'sought') soughtMeetings += 1;
                 if (near.tie) {
                     tieLinesMade += 1;
                     const director = host.head().domains.director;
@@ -445,11 +469,16 @@ for (const seed of SEEDS) {
             const tripsMade = summaries.filter(text => /^On the road to /.test(text)).length;
             assert.ok(tripsMade >= 1, `seed ${seed}: the fuzz set out on a trip`);
             const castDone = summaries.filter(text => /^(The cast|Paths crossed)/.test(text));
+            soughtRumors += host.sdk.receipts().filter(entry => entry.receipt.type === 'cast.rumor').length;
+            t.diagnostic(`seed ${seed}: rumors ${host.sdk.receipts().filter(entry => entry.receipt.type === 'cast.rumor').length}, sought meetings seen so far ${soughtMeetings}`);
             assert.ok(castDone.length >= 1, `seed ${seed}: the cast joined the world`);
             const world = Object.values(host.head().domains.cast.people);
             t.diagnostic(`seed ${seed}: cast steps ${castDone.length} (met ${castDone.filter(text => /^Paths crossed/.test(text)).length}, moved ${castDone.filter(text => /moved on/.test(text)).length}), people ${world.length}, met ${world.filter(person => person.met).length}, dead ${world.filter(person => !person.alive).length}`);
             // The narrator hears of the cast only in a meeting's cue (a meeting a later delete took back was still told then): no other text of any prompt names them.
             const told = host.st.promptLog.filter(entry => entry.value).flatMap(entry => String(entry.value).split('\n')).filter(line => !line.startsWith('[Cast]'));
+            // A rumor describes; it never names (it is a [Cast] line too, so it is checked on its own).
+            const rumors = host.st.promptLog.filter(entry => entry.value).flatMap(entry => String(entry.value).split('\n')).filter(line => line.startsWith('[Cast] People here know of'));
+            for (const id of [...CAST_IDS, 'ylva']) assert.ok(!rumors.some(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line)), `seed ${seed}: ${id} is named in a rumor`);
             for (const id of CAST_IDS) assert.ok(!told.some(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line)), `seed ${seed}: ${id} is named outside a meeting's cue`);
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
@@ -470,6 +499,11 @@ for (const seed of SEEDS) {
         }
     });
 }
+
+test('delete fuzz: the reader sought a kind of person and the cast answered (a meeting, a rumor) in the seeds', () => {
+    assert.ok(soughtMeetings > 0, 'a person the reader sought came in');
+    assert.ok(soughtRumors > 0, 'a person the reader sought who was elsewhere was heard of');
+});
 
 test('delete fuzz: near-name quest lines were reached, and settled on the quest', t => {
     t.diagnostic(`near-name quest lines ${nearLinesMade}, settled on the quest ${nearPicks}`);

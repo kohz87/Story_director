@@ -9,19 +9,24 @@
 //   ~ cast ref | place | what they are doing now        (moves on)
 //   > cast ref | what in the story pulls them to {{user}}   (their goal brings them to the party; only for people with `drawnTo`)
 //   ! cast ref | how they died                         (only for people marked "may die")
+//   ? cast ref | "the words that ask for them"        (mode 'sought': the reader's message looks for a kind of person; sought.js checks the words)
 //
 // The same call, asked only for the `>` lines, judges a goal touched by the story between two days (index.js `touched`).
 
 import { MAX_DOING, MAX_PLACE, MAX_REASON, cutPoints, cutWords, flat } from './domain.js';
+import { citedClean, citedIn, citesKind, words } from './sought.js';
 
 export const MAX_ANSWER_CHARS = 8000;
 export const MAX_LINES = 60;
 /** The most lines of each label one answer keeps. */
-export const CAPS = Object.freeze({ move: 16, come: 3, die: 2 });
+export const CAPS = Object.freeze({ move: 16, come: 3, die: 2, seek: 1 });
 /** The most people one call describes, and the longest recent story it reads (characters). */
 export const MAX_PEOPLE_ASKED = 24;
 export const RECENT_CHARS = 3500;
 export const MAX_TOKENS = 700;
+/** The most people a 'sought' call describes, and the longest message or reply it reads (characters). */
+export const MAX_SOUGHT = 8;
+export const SOUGHT_CHARS = 1200;
 
 export const SYSTEM = `You run the off-screen cast of an ongoing story between {{user}} and {{char}}. These people live their own lives while {{user}} is somewhere else. You decide only what changes for them, and which of them, if any, are pulled towards {{user}}. You do not write the story, and you never decide what {{user}} does.
 
@@ -40,6 +45,20 @@ const FORMAT = `Answer with only lines, one per change, in this form:
 const JUDGE_FORMAT = `Answer with only lines, in this form, for the people whose drawn-to phrase the recent story touches (none at all is fine):
 > cast ref | what in the story pulls them to {{user}}`;
 
+// Mode 'sought': {{user}} may be looking for a kind of person ("a healer or sister around"). The call answers at most one line, and only with
+// words that stand in the message or the reply; code refuses any others (sought.js `citedIn`).
+export const SOUGHT_SYSTEM = `You run the off-screen cast of an ongoing story between {{user}} and {{char}}. You decide only whether {{user}} is looking for a KIND of person (a healer, a priest, a smith, a guide, a sister...) that one of the people listed fits. You do not write the story, and you never decide what {{user}} does.
+
+## Rules
+- Look at {{user}}'s latest message first, then at the story's last reply. Only a request for a kind of person counts: {{user}} asking for, hoping to find, or looking around for such a person. A person merely mentioned or already present does not count.
+- Choose a person only when their calling or what is said about them fits the kind asked for. Never choose someone for a loose or doubtful fit.
+- Quote the exact words of the message or reply that ask for them, copied letter for letter. Never invent a request or reword it.
+- At most one person. When nobody fits, answer nothing.
+- Plain words. No commentary, no markdown.`;
+
+const soughtFormat = ref => `Answer with only one line, in this form, or nothing at all (the ref is the first word of the person's line above, for example ${ref}):
+? cast ref | "the words that ask for them, copied from the message or the reply"`;
+
 const NONE = '(none)';
 
 /** A person as the planner reads them: `{ ref, name, goal, routine, where, doing, drawnTo, met, mayDie }`. */
@@ -51,6 +70,7 @@ function personLine(person) {
         `now at: ${cutPoints(person.where, MAX_PLACE) || 'unknown'}`,
         person.doing ? `doing: ${cutWords(person.doing, MAX_DOING)}` : '',
         person.drawnTo?.length ? `drawn to: ${person.drawnTo.map(phrase => cutPoints(phrase, 80)).join('; ')}` : '',
+        person.kind ? `calling: ${cutPoints(person.kind.calling, 100) || 'none'} | about: ${cutPoints(person.kind.lead, 100)}` : '',
         person.met ? 'has met them' : 'has not met them',
         person.mayDie ? 'may die' : '',
     ];
@@ -61,7 +81,8 @@ function personLine(person) {
  * The call's `{ system, prompt }`. `mode`: 'batch' (moves, comes, deaths) or 'judge' (comes only). `people` are the ones asked about (at
  * most MAX_PEOPLE_ASKED, the caller's order); `elapsed` the time that passed in words; `places` the world's place names.
  */
-export function castRequest({ mode = 'batch', people = [], now = '', elapsed = '', place = '', places = [], recent = '' } = {}) {
+export function castRequest({ mode = 'batch', people = [], now = '', elapsed = '', place = '', places = [], recent = '', texts = null } = {}) {
+    if (mode === 'sought') return soughtRequest({ people, now, place, texts });
     const list = people.slice(0, MAX_PEOPLE_ASKED).map(personLine);
     const body = [
         `Now: ${flat(now) || 'unknown'}${elapsed ? ` (${flat(elapsed)} since the cast last moved)` : ''}`,
@@ -79,12 +100,33 @@ export function castRequest({ mode = 'batch', people = [], now = '', elapsed = '
     return { system: SYSTEM, prompt: body };
 }
 
+/** The 'sought' call: the unmet people who might fit (`kind`: calling and lead, no more) and the two texts it reads (`texts`: { reader, reply }). */
+function soughtRequest({ people, now, place, texts }) {
+    const cut = value => String(value ?? '').slice(-SOUGHT_CHARS).trim() || NONE;
+    const body = [
+        `Now: ${flat(now) || 'unknown'}`,
+        `{{user}} is at: ${flat(place) || 'unknown'}`,
+        '',
+        'People who might fit (none of them has met {{user}}):',
+        people.slice(0, MAX_SOUGHT).map(personLine).join('\n') || NONE,
+        '',
+        "{{user}}'s latest message:",
+        cut(texts?.reader),
+        '',
+        "The story's last reply:",
+        cut(texts?.reply),
+        '',
+        soughtFormat(people[0]?.ref ?? 'ref'),
+    ].join('\n');
+    return { system: SOUGHT_SYSTEM, prompt: body };
+}
+
 // ---- reading the answer --------------------------------------------------------------------------------------------------
 
 const THINK_BLOCK = /<(think|thinking|reasoning)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
 const THINK_CLOSE = /<\/(?:think|thinking|reasoning)\s*>/gi;
-const DECORATION = /^(?:#{1,6}\s+|>\s+(?=[~>!])|(?:[*•+-]|\d{1,2}[.)])\s+)+/;
-const LINE = /^([~>!])\s*cast\s+(.+)$/i;
+const DECORATION = /^(?:#{1,6}\s+|>\s+(?=[~>!?])|(?:[*•+-]|\d{1,2}[.)])\s+)+/;
+const LINE = /^([~>!?])\s*cast\s+(.+)$/i;
 const FENCE = /^(?:```|~~~)/;
 
 // A part as one plain line: markup out, a separator the line form reads never survives inside it.
@@ -94,23 +136,31 @@ const refOf = value => String(value ?? '').replace(/^[\s"'`*_[(]+|[\s"'`*_\])]+$
 /**
  * The answer read strictly. `refs`: Map of a ref (lower case) → the key of a person who may be named. `allow`: { come: Set of keys,
  * die: Set of keys } (who a `>` or `!` line may name). Returns `{ moves: [{ key, where, doing }], comes: [{ key, reason }], died:
- * [{ key, text }] }`: at most CAPS of each, a person once per label, nothing for a ref it does not know.
+ * [{ key, text }], sought?: [{ key, words }] }` (`sought` only when a `?` line passed): at most CAPS of each, a person once per label, nothing for a ref it does not know.
  */
-export function readCast(text, { refs = new Map(), allow = {} } = {}) {
+export function readCast(text, { refs = new Map(), allow = {}, texts = [] } = {}) {
     const out = { moves: [], comes: [], died: [] };
     let clean = String(text ?? '').slice(0, MAX_ANSWER_CHARS).replace(THINK_BLOCK, '');
     const closes = [...clean.matchAll(THINK_CLOSE)];
     if (closes.length) clean = clean.slice(closes.at(-1).index + closes.at(-1)[0].length);
-    const seen = { move: new Set(), come: new Set(), die: new Set() };
+    const seen = { move: new Set(), come: new Set(), die: new Set(), seek: new Set() };
     for (const raw of clean.split(/\r?\n/).slice(0, MAX_LINES)) {
         const trimmed = raw.trim();
         if (!trimmed || FENCE.test(trimmed)) continue;
-        const match = LINE.exec(trimmed.replace(DECORATION, ''));
+        const plain = trimmed.replace(DECORATION, '');
+        let match = LINE.exec(plain);
+        // The 'sought' call carries one kind of line, so `? ref | "words"` (no `cast`) is read the same.
+        if (!match && allow.seek && !allow.come && !allow.die) match = /^(\?)\s*(.+\|.+)$/.exec(plain);
+        // A 'sought' answer that leaves off the `? cast` (just `ref | "words"`) is read the same: it is the only line that call can carry.
+        if (!match && allow.seek && !allow.come && !allow.die) match = /^()(.+\|.+)$/.exec(plain.replace(/^cast\s+/i, ''));
+        // One person was offered and the model left the ref off (`? "words"`): the words are checked all the same (cited, and a word of the kind).
+        let alone = null;
+        if (!match && allow.seek?.size === 1 && !allow.come && !allow.die) { match = /^\?\s*(?:cast\s+)?([^|]+)$/.exec(plain); if (match) { alone = [...allow.seek][0]; match = ['', '?', `${alone}|${match[1]}`]; } }
         if (!match) continue;
-        const bits = match[2].split('|').map(bit => bit.trim());
-        const key = refs.get(refOf(bits[0]));
+        const bits = alone ? [alone, match[2].slice(alone.length + 1).trim()] : match[2].split('|').map(bit => bit.trim());
+        const key = alone ?? refs.get(refOf(bits[0]));
         if (!key) continue;
-        const label = match[1];
+        const label = match[1] || '?';
         if (label === '~') {
             if (seen.move.has(key) || out.moves.length >= CAPS.move) continue;
             // One part is what they do; two are where and what.
@@ -125,6 +175,12 @@ export function readCast(text, { refs = new Map(), allow = {} } = {}) {
             if (!reason) continue;
             seen.come.add(key);
             out.comes.push({ key, reason: /[.!?…]$/.test(reason) ? reason : `${reason}.` });
+        } else if (label === '?') {
+            // A request the planner says it read: its words must stand in the message or the reply (whole words), else it is refused.
+            const cited = citedClean(bits.slice(1).join(' / '));
+            if (!allow.seek?.has(key) || seen.seek.has(key) || (out.sought?.length ?? 0) >= CAPS.seek || !citedIn(cited, texts) || (allow.kind?.has(key) && !citesKind(allow.kind.get(key), cited))) continue;
+            seen.seek.add(key);
+            (out.sought ??= []).push({ key, words: cited });
         } else {
             if (!allow.die?.has(key) || seen.die.has(key) || out.died.length >= CAPS.die) continue;
             seen.die.add(key);
@@ -135,9 +191,6 @@ export function readCast(text, { refs = new Map(), allow = {} } = {}) {
 }
 
 // ---- a goal the story touched ------------------------------------------------------------------------------------------------
-
-const STOP = new Set(['that', 'this', 'with', 'from', 'they', 'them', 'their', 'there', 'then', 'what', 'when', 'where', 'which', 'while', 'about', 'after', 'before', 'have', 'been', 'were', 'will', 'would', 'could', 'should', 'into', 'over', 'under', 'again', 'still', 'only', 'some', 'such', 'than', 'very', 'your', 'ever', 'also']);
-const words = text => (String(text ?? '').toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []).filter(word => !STOP.has(word));
 
 /**
  * Whether the recent story touches one of a person's `drawnTo` phrases: all the telling words of a short phrase, two thirds of a longer
@@ -163,7 +216,7 @@ export function touches(drawnTo, recent) {
  * used before the next one; a swipe, a Re-read or a second look at the same key finds the same answer, so who the cast brings does not
  * change with a rewrite of the scene. In memory only (a reload asks again). `size`: how many are kept.
  */
-export function createPlans({ size = 24, timer = { setTimeout, clearTimeout } } = {}) {
+export function createPlans({ size = 24, timer = { setTimeout: (...args) => setTimeout(...args), clearTimeout: id => clearTimeout(id) } } = {}) {
     const held = new Map();
     const trim = () => { while (held.size > size) held.delete(held.keys().next().value); };
     return {

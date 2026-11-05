@@ -281,6 +281,8 @@ function own(table, name, ns, what) {
     table[name] = ns;
 }
 
+// A hook's line: a string, or `{ text, keep: true }` (a pinned cue: Story Block keeps it whatever the tail budget says).
+const cueLinesOf = value => (Array.isArray(value) ? value.filter(line => typeof line === 'string' || (line !== null && typeof line === 'object' && typeof line.text === 'string')) : []);
 const linesOf = value => (Array.isArray(value) ? value.filter(line => typeof line === 'string') : []);
 
 // A wrapped handler or query keeps the part's `feature` tag (MODULES §F100: a function with a `feature`
@@ -309,7 +311,7 @@ function mergeHook(name, entries, shared) {
             for (const [ns, fn] of entries) {
                 if (rest[0]?.always === true && fn?.always !== true) continue;
                 const out = await fn(partView_(ns, view), ...rest);
-                lines.push(...linesOf(Array.isArray(out) ? out : out?.lines));
+                lines.push(...cueLinesOf(Array.isArray(out) ? out : out?.lines));
                 if (Array.isArray(out?.commands)) commands.push(...out.commands);
             }
             return { lines, commands };
