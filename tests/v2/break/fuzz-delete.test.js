@@ -163,9 +163,16 @@ function replyLines(r, n) {
 // name that only reads near it, and a closing or progress line under a third near spelling ("Cellar-Rat Cull"), all of the
 // reply's own. The hook stays live beside the quest, so the line finds two near matches and the quest line's kind settles it.
 const NEAR = { hook: 'Rats', quest: 'Cellar-Rats', line: 'Cellar-Rat Cull' };
+const TIE = { hook: 'Hunt South', quest: 'Hunt North', line: 'Hunt' };
 function nearLines(rn, n) {
     if (!rn.chance(0.4)) return { lines: [] };
     const base = `${word(rn)}${String(n).padStart(2, '0')}77`;
+    // (stage73) Now and then a tie: a quest and a hook that match the line equally well ("Hunt North" / "Hunt South" for "Hunt"):
+    // the line must stay unclear, both records as they were.
+    if (rn.chance(0.3)) {
+        return { base, tie: true, lines: [`+ hook ${base} ${TIE.hook} — wolves on the ridge | giver: Fenna | reward: 5 gold`,
+            `+ quest ${base} ${TIE.quest} — a job | giver: Fenna | reward: 6 copper | step: Find the trail`, `- quest ${base} ${TIE.line} — done`] };
+    }
     const close = rn.chance(0.6);
     const lines = [`+ hook ${base} ${NEAR.hook} — rats under the store | giver: Fenna | reward: 5 gold`,
         `+ quest ${base} ${NEAR.quest} — a job | giver: Fenna | reward: 6 copper | step: Find the key`,
@@ -304,6 +311,7 @@ function validatorErrors(host) {
 // Near-name quest lines that settled on the quest (counted over all seeds, asserted after them).
 let nearPicks = 0;
 let nearLinesMade = 0;
+let tieLinesMade = 0;
 
 for (const seed of SEEDS) {
     test(`delete fuzz, seed ${seed}: ${REPLIES} replies with middle deletes replay cleanly`, async t => {
@@ -345,7 +353,18 @@ for (const seed of SEEDS) {
                 const near = nearLines(rn, n);
                 const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
                 await host.send(r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.`, lines));
-                if (near.base) {
+                if (near.tie) {
+                    tieLinesMade += 1;
+                    const director = host.head().domains.director;
+                    const quest = Object.values(director.threads).find(thread => thread.key === `${near.base} ${TIE.quest}`);
+                    const hook = Object.values(director.threads).find(thread => thread.key === `${near.base} ${TIE.hook}`);
+                    assert.ok(quest && hook, `seed ${seed}, reply ${n}: the tie's hook and quest exist`);
+                    assert.equal(quest.status, 'active', `seed ${seed}, reply ${n}: a tie leaves the quest open`);
+                    assert.equal(hook.status, 'active', `seed ${seed}, reply ${n}: a tie leaves the hook open`);
+                    const unclear = problemList(director).find(problem => problem.kind === 'unknown-key' && problem.key === `${near.base} ${TIE.line}`);
+                    assert.ok(unclear, `seed ${seed}, reply ${n}: the tie is reported as unclear`);
+                    assert.deepEqual(unclear.candidates.slice().sort(), [quest.key, hook.key].sort());
+                } else if (near.base) {
                     // The line read as the quest (a near-key note), not the hook beside it: the quest took it, the hook is as it was.
                     nearLinesMade += 1;
                     const director = host.head().domains.director;
@@ -456,4 +475,9 @@ test('delete fuzz: near-name quest lines were reached, and settled on the quest'
     t.diagnostic(`near-name quest lines ${nearLinesMade}, settled on the quest ${nearPicks}`);
     assert.ok(nearPicks > 0, 'the narrowing picked a quest at least once');
     assert.equal(nearPicks, nearLinesMade);
+});
+
+test('delete fuzz: tied near-name quest lines were reached, and stayed unclear', t => {
+    t.diagnostic(`tied quest lines ${tieLinesMade}`);
+    assert.ok(tieLinesMade > 0, 'a tie was made at least once');
 });
