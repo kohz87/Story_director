@@ -10,7 +10,7 @@ import { DAY, initialCast, validateCast } from '../../../src/v2/cast/domain.js';
 import { castOf, readEntry } from '../../../src/v2/cast/entries.js';
 import { citedIn, citesKind, gateWords, kindTouches, nameTester, rumorText } from '../../../src/v2/cast/sought.js';
 import { chooseMeetings, chooseRumor, paceOf } from '../../../src/v2/cast/world.js';
-import { createPlans, readCast } from '../../../src/v2/cast/plan.js';
+import { castRequest, createPlans, readCast } from '../../../src/v2/cast/plan.js';
 import { OPENING, castCue, castHost, castSource, createFakeModel, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
 
 const castFor = (...entries) => castOf((name, args) => (name === 'packs.content' && args?.kind === 'cast' ? entries : name === 'packs.list' ? [{ id: 'ersveil', name: 'Ersveil', version: '1.1.0', enabled: true }] : null));
@@ -435,4 +435,16 @@ test('a sought answer that leaves off "? cast" is read the same; the default pla
     const plans = createPlans();
     plans.start('k', () => new Promise(() => {}));
     await assert.doesNotReject(async () => { await plans.settled('k', 1); });
+});
+
+test('one person offered and the ref left off: `? "words"` is read for that person, with the same checks; the example in the prompt is a real ref', () => {
+    const entryOf = readEntry({ pack: 'ersveil', packVersion: '1', ...temiwa('Harrow') });
+    const allow = { seek: new Set(['ersveil:temiwa']), kind: new Map([['ersveil:temiwa', entryOf]]) };
+    const read = (text, extra = {}) => readCast(text, { refs: new Map([['temiwa', 'ersveil:temiwa']]), allow: { ...allow, ...extra }, texts: ['Is there a healer around? I need help.'] });
+    assert.deepEqual(read('? "a healer"').sought, [{ key: 'ersveil:temiwa', words: 'a healer' }]);
+    assert.deepEqual(read('? Is there a healer around?"').sought, [{ key: 'ersveil:temiwa', words: 'Is there a healer around?' }]);
+    assert.equal(read('? "I need help"').sought, undefined, 'no word of her kind');
+    assert.equal(read('? "a priest"').sought, undefined, 'not in the message');
+    assert.equal(read('? "a healer"', { seek: new Set(['ersveil:temiwa', 'ersveil:other']) }).sought, undefined, 'with two offered it cannot tell which');
+    assert.match(castRequest({ mode: 'sought', people: [{ ref: 'temiwa', name: 'Sister Temiwa', where: 'Kesh', kind: { calling: 'healer', lead: '' } }], texts: { reader: 'Is there a healer around?', reply: '' } }).prompt, /for example temiwa\)/);
 });

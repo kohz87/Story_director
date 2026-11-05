@@ -56,7 +56,7 @@ export const SOUGHT_SYSTEM = `You run the off-screen cast of an ongoing story be
 - At most one person. When nobody fits, answer nothing.
 - Plain words. No commentary, no markdown.`;
 
-const SOUGHT_FORMAT = `Answer with only one line, in this form, or nothing at all:
+const soughtFormat = ref => `Answer with only one line, in this form, or nothing at all (the ref is the first word of the person's line above, for example ${ref}):
 ? cast ref | "the words that ask for them, copied from the message or the reply"`;
 
 const NONE = '(none)';
@@ -116,7 +116,7 @@ function soughtRequest({ people, now, place, texts }) {
         "The story's last reply:",
         cut(texts?.reply),
         '',
-        SOUGHT_FORMAT,
+        soughtFormat(people[0]?.ref ?? 'ref'),
     ].join('\n');
     return { system: SOUGHT_SYSTEM, prompt: body };
 }
@@ -153,9 +153,12 @@ export function readCast(text, { refs = new Map(), allow = {}, texts = [] } = {}
         if (!match && allow.seek && !allow.come && !allow.die) match = /^(\?)\s*(.+\|.+)$/.exec(plain);
         // A 'sought' answer that leaves off the `? cast` (just `ref | "words"`) is read the same: it is the only line that call can carry.
         if (!match && allow.seek && !allow.come && !allow.die) match = /^()(.+\|.+)$/.exec(plain.replace(/^cast\s+/i, ''));
+        // One person was offered and the model left the ref off (`? "words"`): the words are checked all the same (cited, and a word of the kind).
+        let alone = null;
+        if (!match && allow.seek?.size === 1 && !allow.come && !allow.die) { match = /^\?\s*(?:cast\s+)?([^|]+)$/.exec(plain); if (match) { alone = [...allow.seek][0]; match = ['', '?', `${alone}|${match[1]}`]; } }
         if (!match) continue;
-        const bits = match[2].split('|').map(bit => bit.trim());
-        const key = refs.get(refOf(bits[0]));
+        const bits = alone ? [alone, match[2].slice(alone.length + 1).trim()] : match[2].split('|').map(bit => bit.trim());
+        const key = alone ?? refs.get(refOf(bits[0]));
         if (!key) continue;
         const label = match[1] || '?';
         if (label === '~') {
