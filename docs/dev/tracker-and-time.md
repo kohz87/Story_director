@@ -30,7 +30,14 @@ this repo's AI-README "Reply format the model writes" and "Data the model sees" 
 - **Per-reply bookkeeping:** `turn.now` is a slot written whole for each reply. Later replies do not write inside an earlier reply's slot.
 - **Quests:** the story records quests as threads and tells their goals and rewards. Earlier quest extensions are read-only.
 - **Time settle** (`time/settle.js`): beats slip after two story days, unaccepted offers lapse, accepted quests
-  go overdue then fail after the same grace; each closing is claimed (`lapse:<thread id>`) and its writes are
+  go overdue then fail after the same grace. An offer with a `due` lapses at its deadline (two more days when the
+  reader spoke of it). **An offer with no `due` lapses `UNDATED_OFFER_DAYS` (3, a constant in `lapses.js`, no
+  setting) story days after the later of `track.created.time` and `track.seen.time`**, at the first settle at or
+  after that minute. In v2 `seen` is stamped by any line that touches the thread (`~ Key | now: …`); the reply's
+  text is not scanned for names (v1's `markSeen` is not run in v2). An offer with neither time never lapses by
+  this rule; with `time.lapses` off it only stays open (an undated offer is never "overdue"). A thread read as an
+  untaken offer is settled even when a touch made its kind `quest`. Same closing as a deadline lapse (`- Key —
+  offer lapsed`, claim, `ctx.ifThere`); each closing is claimed (`lapse:<thread id>`) and its writes are
   `ctx.ifThere` the thread, so deleting the reply that made the thread passes over the closing on replay.
 - **Weather by rule** (`time/weather.js`, feature `story-director.weather`, Story Block MODULES §F122): the
   time part's afterCapture asks for Story Block's `scene.weather { text, key }` when the key (`day <n>|<region>`)
@@ -69,7 +76,7 @@ this repo's AI-README "Reply format the model writes" and "Data the model sees" 
 - `tests/v2/tracker/`, `tests/v2/time/`, `tests/v2/integration/` (`alone.test.js`:
   standalone).
 - Break findings in `tests/v2/break/` include time jumps, Continue, and deleting earlier replies.
-- Fuzz: `tests/v2/break/fuzz-delete.test.js`, `fuzz-delete-days.test.js` (add new kinds to the generator).
+- Fuzz: `tests/v2/break/fuzz-delete.test.js`, `fuzz-delete-days.test.js` (add new kinds to the generator; both run undated offers, mentions and their lapses and assert counts > 0). Undated offers: `tests/v2/time/undated-offer.test.js`, `tests/lapses.test.js`, `integration/alone.test.js`.
 
 ## When you change it
 

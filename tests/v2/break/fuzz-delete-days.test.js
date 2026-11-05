@@ -78,6 +78,22 @@ function replyLines(r, n) {
     return lines;
 }
 
+// (stage73) Offers with no deadline (own stream, so the seeds' stories stay as they were): the first reply offers two, a reply
+// now and then offers one of its own, and a reply now and then touches one of the first two, which starts its lapse clock over;
+// the rest lapse three story days after they were offered or last touched (UNDATED_OFFER_DAYS), mid-day or across days.
+const BASE_OFFERS = ['Wharf Haul', 'Mill Repair'];
+let offerMentions = 0;
+let undatedLapsed = 0;
+function offerLines(ro, n) {
+    const lines = [];
+    if (ro.chance(0.5)) lines.push(`+ hook Haul ${n} — a job on offer | giver: Brom | reward: ${ro.int(1, 30)} gold`);
+    if (ro.chance(0.4)) {
+        offerMentions += 1;
+        lines.push(`~ hook ${ro.pick(BASE_OFFERS)} | now: still wanted`);
+    }
+    return lines;
+}
+
 const said = (text, lines) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 
 function validatorErrors(host) {
@@ -119,6 +135,7 @@ for (const seed of SEEDS) {
         const restore = seedCrypto(seed);
         const r = prng(seed);
         const rl = prng(seed ^ 0x1A57);
+        const ro = prng(seed ^ 0x0FFE);
         const whole = seed > 12;
         const caps = whole ? { FULL: 60, KEEP: 60 } : { FULL: 3, KEEP: 5 };
         const settings = settingsOf(caps);
@@ -127,9 +144,10 @@ for (const seed of SEEDS) {
         const host = await createHost({ modules: [fakeFightRunner(), createModule(), fakeCraft()], settings });
         try {
             assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
-            await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5']));
+            await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5',
+                ...BASE_OFFERS.map(key => `+ hook ${key} — a job on offer | giver: Brom | reward: 8 gold`)]));
             for (let n = 1; n <= REPLIES; n += 1) {
-                await host.send(`On we go (${n}).`, said(`Reply ${n}.`, [...replyLines(r, n), ...lastingLines(rl)]));
+                await host.send(`On we go (${n}).`, said(`Reply ${n}.`, [...replyLines(r, n), ...lastingLines(rl), ...offerLines(ro, n)]));
                 const edit = lastingEdit(rl, host, n);
                 if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
                 const head = host.head();
@@ -181,6 +199,8 @@ for (const seed of SEEDS) {
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === 'events.fire' && entry.receipt.data?.then?.includes('chronicle.lasting')), `seed ${seed}: a pack event wrote a lasting change`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
+            undatedLapsed += host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle')
+                .flatMap(entry => entry.receipt.data?.lapsed ?? []).filter(entry => BASE_OFFERS.includes(entry.key) || /^Haul \d+$/.test(entry.key)).length;
             const again = await createHost({ modules: [fakeFightRunner(), createModule(), fakeCraft()], settings });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
@@ -195,3 +215,9 @@ for (const seed of SEEDS) {
         }
     });
 }
+
+test('day-crossing fuzz: offers with no deadline were mentioned again, and time closed some as lapsed', t => {
+    t.diagnostic(`undated offers mentioned again ${offerMentions}, lapsed ${undatedLapsed}`);
+    assert.ok(offerMentions > 0, 'an undated offer was mentioned again at least once');
+    assert.ok(undatedLapsed > 0, 'an undated offer lapsed at least once');
+});

@@ -180,6 +180,26 @@ function nearLines(rn, n) {
     return { lines, base, close };
 }
 
+// (stage73) Offers with no deadline (own stream): a hook with a giver and a reward and no `due:`, offered and then now and then
+// kept open by a later reply's line that touches it (the first reply's two offers, which no delete takes, are mentioned now and
+// then, so the lapse clock starts over), and a jump of days now and then so some lapse (UNDATED_OFFER_DAYS). A reply's own offers
+// are never named by a later reply (a delete would take the thing the line names).
+const BASE_OFFERS = ['Wharf Haul', 'Mill Repair'];
+function offerLines(ro, n, made) {
+    const lines = [];
+    if (ro.chance(0.55)) {
+        const key = `${word(ro)}${String(n).padStart(2, '0')}55`;
+        made.push(key);
+        lines.push(`+ hook ${key} — a job on offer | giver: Brom | reward: ${ro.int(1, 30)} gold`);
+    }
+    if (ro.chance(0.4)) {
+        offerMentions += 1;
+        lines.push(`~ hook ${ro.pick(BASE_OFFERS)} | now: still wanted`);
+    }
+    if (ro.chance(0.25)) lines.push(`! time +${ro.int(1, 4)}d`);
+    return lines;
+}
+
 // A reply's trip lines (own stream): routes from both of the first reply's places to a waypoint of the reply's own (so there is a way to go from
 // wherever the scene is; routes of the reply's own, as the other lines' routes are, so a delete never takes what a later route line changes), then a
 // trip, a delay or a stop. The scene starts at Bluewatch (the first reply). Reply 4 always sets out, so every seed has a trip to delete around.
@@ -329,6 +349,9 @@ function validatorErrors(host) {
 let nearPicks = 0;
 let nearLinesMade = 0;
 let tieLinesMade = 0;
+// Undated offers (counted over all seeds): lines that mention one again, and those time closed as lapsed.
+let offerMentions = 0;
+let undatedLapsed = 0;
 
 for (const seed of SEEDS) {
     test(`delete fuzz, seed ${seed}: ${REPLIES} replies with middle deletes replay cleanly`, async t => {
@@ -343,6 +366,8 @@ for (const seed of SEEDS) {
         const rs = prng(seed ^ 0x50C7);
         const re = prng(seed ^ 0xC10C);
         const rn = prng(seed ^ 0x4EA2);
+        const ro = prng(seed ^ 0x0FFE);
+        const madeOffers = [...BASE_OFFERS];
         const source = { version: '1.0.0', enabled: true, entries: [] };
         source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version)];
         castPlans.clear();
@@ -360,6 +385,7 @@ for (const seed of SEEDS) {
         try {
             assert.equal((await host.packs.packs.install(LASTING_PACK, { origin: 'pack.json' })).ok, true);
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', `~ place ${BASE_PLACES[0]} | kind: town`, ...BASE.map(key => `+ hook ${key} — an old tale | now: the inn`),
+                ...BASE_OFFERS.map(key => `+ hook ${key} — a job on offer | giver: Brom | reward: 8 gold`),
                 ...BASE_PLACES.map(place => `+ landmark ${place} | region: Vale | kind: town`),
                 ...BASE_WORLD.map(key => `+ world ${key} — afoot | state: ongoing`)]));
             for (const name of KEY_BASE) assert.ok((await host.sdk.command('keypeople.pin', { name })).ok);
@@ -370,7 +396,7 @@ for (const seed of SEEDS) {
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
                 const near = nearLines(rn, n);
-                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n)];
+                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...offerLines(ro, n, madeOffers)];
                 const seeking = rs.chance(0.6) ? rs.pick(SOUGHT_ASK) : '';
                 // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
                 const names = seeking === 'cartographer' || sought === 'cartographer';
@@ -485,6 +511,8 @@ for (const seed of SEEDS) {
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
+            undatedLapsed += host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle')
+                .flatMap(entry => entry.receipt.data?.lapsed ?? []).filter(entry => madeOffers.includes(entry.key)).length;
             const again = await createHost({ modules: [fakeFightRunner(), createModule()] });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
@@ -514,4 +542,10 @@ test('delete fuzz: near-name quest lines were reached, and settled on the quest'
 test('delete fuzz: tied near-name quest lines were reached, and stayed unclear', t => {
     t.diagnostic(`tied quest lines ${tieLinesMade}`);
     assert.ok(tieLinesMade > 0, 'a tie was made at least once');
+});
+
+test('delete fuzz: offers with no deadline were mentioned again, and time closed some as lapsed', t => {
+    t.diagnostic(`undated offers mentioned again ${offerMentions}, lapsed ${undatedLapsed}`);
+    assert.ok(offerMentions > 0, 'an undated offer was mentioned again at least once');
+    assert.ok(undatedLapsed > 0, 'an undated offer lapsed at least once');
 });

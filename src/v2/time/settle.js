@@ -65,7 +65,9 @@ export function standing(director, { calendar, now, met = () => false, claimed =
     const lapsed = new Set(lapsedOffers(tracker, options));
     for (const record of tracker.records) {
         const thread = threadOf.get(record);
-        if (thread.rpg || thread.kind === 'quest') continue;
+        // A quest is the story's (overdue, then failed below, once taken on). An offer not yet taken is a job
+        // offered: a line that touched it (`~ Key | now: …`) reads its kind as a quest, but it still lapses.
+        if (thread.rpg || (thread.kind === 'quest' && !(thread.offer && !thread.taken))) continue;
         const id = thread.id;
         const closes = reason => {
             if (lapse && !claimed(claimKey(id))) out.lapses.push({ id, reason });
@@ -78,7 +80,10 @@ export function standing(director, { calendar, now, met = () => false, claimed =
             continue;
         }
         if (lapsed.has(record)) {
-            closes(LAPSED_REASON);
+            // An offer with no deadline has nothing to be overdue of: it only closes (or, with
+            // lapses off or its claim taken, stays as it is).
+            if (String(record.fields.due ?? '').trim()) closes(LAPSED_REASON);
+            else if (lapse && !claimed(claimKey(id))) out.lapses.push({ id, reason: LAPSED_REASON });
             continue;
         }
         const job = Boolean(thread.taken || thread.offer);
