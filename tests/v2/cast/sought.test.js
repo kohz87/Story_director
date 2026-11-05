@@ -32,10 +32,10 @@ const tailOf = host => (sent(host, TAIL_KEY).at(-1) ?? '').split('\n');
 const castLines = host => tailOf(host).filter(line => line.startsWith('[Cast]'));
 
 /** The story so far: the opening reply, then the reader asks; the planner answers after that reply and is used by the next one. */
-async function asked(options, text = ASK) {
+async function asked(options, text = ASK, reply = 'Nobody answers.') {
     const host = await castHost(options);
     await host.send('Hello.', said('Dawn in Harrow.', OPENING));
-    await host.send(text, said('Nobody answers.'));
+    await host.send(text, said(reply));
     await settle();
     return host;
 }
@@ -104,10 +104,10 @@ test('sought but the cited words are not in the message or the reply: refused, n
     }
 });
 
-test('a message that cannot be asking for her kind does not even ask the planner', async t => {
+test('a message that cannot be asking for her kind does not even ask the planner, whatever the story\'s reply says', async t => {
     quiet(t);
     const model = planner({ sought: () => '? cast temiwa | "the road"' });
-    const host = await asked({ source: castSource([temiwa('Harrow')]), model }, 'Let us walk down the road.');
+    const host = await asked({ source: castSource([temiwa('Harrow')]), model }, 'Let us walk down the road.', 'A healer, a sister, a saintess candidate and a candle pass by, tired and cold, behind a long grey veil.');
     try {
         assert.equal(soughtCalls(model).length, 0);
         await host.send('I look around.', said('Quiet.'));
@@ -150,7 +150,7 @@ test('sought elsewhere: a rumor, not a meeting; the tail describes her with no n
     }
 });
 
-test('a rumor is told again after she moves; a rumored person who is met stops being heard of', async t => {
+test('a rumor is told again after she moves', async t => {
     quiet(t);
     const model = planner({
         sought: () => '? cast temiwa | "a healer"',
@@ -321,6 +321,9 @@ test('the rules in code: sought comes after a goal arrival and before a place me
     assert.equal(chooseRumor(slice, cast, { party: there, sought }), null, 'told once');
     slice.people['ersveil:temiwa'].where = 'Ashford';
     assert.equal(chooseRumor(slice, cast, { party: there, sought }).where, 'Ashford', 'told again once she has moved');
+    slice.people['ersveil:temiwa'].met = { on: 7 * DAY, where: 'Kesh', why: 'sought', reason: 'x', rev: 3 };
+    assert.equal(chooseRumor(slice, cast, { party: there, sought }), null, 'once met she is no rumor');
+    slice.people['ersveil:temiwa'].met = null;
     slice.people['ersveil:temiwa'].alive = false;
     assert.equal(chooseRumor(slice, cast, { party: there, sought }), null, 'the dead are not talked about');
     assert.deepEqual(validateCast(slice), []);
@@ -330,9 +333,14 @@ test('the rumor never carries the name, an alias or a name-like word of the entr
     const read = more => readEntry({ pack: 'ersveil', packVersion: '1', ...temiwa('Harrow', more) });
     assert.equal(rumorText(read(), { where: 'Kesh' }), 'People here know of a saintess candidate, healer, found in Kesh.');
     assert.equal(rumorText(read(), { where: 'Harrow', home: true }), 'People here know of a saintess candidate, healer, at Watchhouse infirmary by day in Harrow.');
-    // A calling that carries a name is left out, and so is an about sentence that does.
-    assert.equal(rumorText(read({ fields: { Calling: 'Temiwa the Last Candle' }, about: 'Temiwa is a healer. A sarcastic mender of the frontier: the Flame sister.' }), { where: 'Kesh' }), 'People here know of a the Flame sister, found in Kesh.'.replace('a the', 'the'));
+    // A calling that carries a name is left out, and so is an about sentence that does (the next sentence's opening phrase stands in).
+    assert.equal(rumorText(read({ fields: { Calling: 'Temiwa the Last Candle' }, about: 'Temiwa is a healer. A sarcastic mender of the frontier: the Flame sister.' }), { where: 'Kesh' }), 'People here know of a sarcastic mender of the frontier, found in Kesh.');
     assert.equal(rumorText(read({ fields: {}, about: 'Sister Temiwa heals.' }), { where: 'Kesh' }), '', 'nothing left to say');
+    // No calling: who they are comes from the opening noun phrase of `about` (not the clause after its last colon, not a lone adjective).
+    const ysmeth = { name: 'Ysmeth', aliases: [], fields: {}, about: 'A dwelf rune-collar artificer, enslaved when you meet her: the Grey Ledger holds her as collateral on a debt.', start: { place: 'Chainmarket', goal: 'g', routine: 'The Ledger\'s collar forge by day' } };
+    assert.equal(rumorText(read(ysmeth), { where: 'Chainmarket' }), 'People here know of a dwelf rune-collar artificer, found in Chainmarket.');
+    assert.equal(rumorText(read({ ...ysmeth, about: 'Proud, prickly and hiding behind her hair.' }), { where: 'Chainmarket' }), '', 'adjectives are not a person');
+    assert.equal(rumorText(read({ ...ysmeth, fields: { Calling: 'Knife-grinder' }, about: 'An elf freed by the Broken Chain, who grinds knives.' }), { where: 'Chainmarket' }), 'People here know of a Knife-grinder (elf freed by the Broken Chain), found in Chainmarket.');
     assert.equal(rumorText(read(), { where: 'Temiwa Rest' }), 'People here know of a saintess candidate, healer.', 'a place that carries the name is left out');
     assert.equal(rumorText(read({ start: { place: 'Kesh', goal: 'g', routine: 'Temiwa\'s chapel by day' } }), { where: 'Kesh', home: true }), 'People here know of a saintess candidate, healer, found in Kesh.', 'a routine part with the name is left out');
     assert.ok(Array.from(rumorText(read({ fields: { Calling: 'x'.repeat(90) } }), { where: 'Kesh' })).length <= 240);

@@ -51,12 +51,13 @@ export function nameTester(entryOrPerson) {
 
 const sentencesOf = text => String(text ?? '').split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(Boolean);
 
-/** What the entry's `about` says of who they are, in one short clause and with no name: its first sentence with none, after its last colon. */
+/** What the entry's `about` says of who they are: the opening noun phrase of its first sentence with no name (up to the first `:`, `,` or `;`, no article). */
 export function leadOf(entry, mentions = nameTester(entry)) {
     const sentence = sentencesOf(entry?.about).find(one => !mentions(one));
     if (!sentence) return '';
-    const clause = sentence.includes(':') ? sentence.slice(sentence.lastIndexOf(':') + 1) : sentence;
-    return cutWords(clause.trim().replace(/[.!?]+$/, ''), 70);
+    const phrase = sentence.split(/[:,;]/)[0].trim().replace(/^(?:the|a|an)\s+/i, '').replace(/[.!?]+$/, '');
+    // A lone adjective or a pair of them ("Proud", "Stoic and tired") says nothing about who someone is.
+    return mentions(phrase) || phrase.split(/\s+/).length < 3 || /^\S+ and \S+$/i.test(phrase) ? '' : cutWords(phrase, 70);
 }
 
 /** The words a person is sought by: their calling and the lead of their `about` (name-free). */
@@ -67,14 +68,14 @@ export function kindWords(entry) {
 }
 
 /**
- * Whether `texts` (the reader's message, the story's last reply) may be asking for this person's kind: a telling word of their calling or the
- * lead of their `about`, as a whole word (a plural or the same first five letters counts). A cheap check so the planner is asked only then.
+ * Whether the reader's `text` may be asking for this person's kind: a telling word of their calling (else, with no calling, of the lead of their
+ * `about`) as a whole word, a plural counting. A cheap check so the planner is asked only then; a word of ordinary prose that the entry's
+ * other sentences happen to use does not count.
  */
-export function kindTouches(entry, texts) {
+export function kindTouches(entry, text) {
     const { calling, lead } = kindWords(entry);
-    const have = new Set(words((Array.isArray(texts) ? texts : [texts]).join('\n')));
-    const stems = new Set([...have].map(word => word.slice(0, 5)));
-    return words(`${calling} ${lead}`).some(word => have.has(word) || have.has(`${word}s`) || have.has(`${word}es`) || (word.length >= 5 && stems.has(word.slice(0, 5))));
+    const have = new Set(words(Array.isArray(text) ? text.join('\n') : text));
+    return words(calling || lead).some(word => have.has(word) || have.has(`${word}s`) || have.has(`${word}es`));
 }
 
 // ---- the rumor ---------------------------------------------------------------------------------------------------------------------------
@@ -96,10 +97,12 @@ export function rumorText(entry, { where = '', home = false } = {}) {
     // Who they are: their calling, else the lead of their `about`.
     const kind = calling ? lowerFirst(cutPoints(calling, 80)) : lowerFirst(lead);
     if (!kind) return '';
+    // The lead says more of who they are when there is a calling too ("a saintess candidate, healer (fox-eared saintess candidate of the Church...)").
+    const extra = calling && lead && !words(calling).some(word => words(lead).includes(word)) ? ` (${cutPoints(lead, 60)})` : '';
     // Where to find them: what their routine has them at (only at their start, and only a short noun phrase), then the place.
     const routine = home ? shortRoutine(entry?.routine, mentions) : '';
     const spot = routine && place && !routine.toLowerCase().includes(place.toLowerCase()) ? `${routine} in ${place}` : routine || (place ? `in ${place}` : '');
-    const text = `People here know of ${article(kind)}${kind}${spot ? `, ${routine ? 'at ' : 'found '}${spot}` : ''}.`;
+    const text = `People here know of ${article(kind)}${kind}${extra}${spot ? `, ${routine ? 'at ' : 'found '}${spot}` : ''}.`;
     if (mentions(text)) return '';
     return cutPoints(text, MAX_RUMOR);
 }

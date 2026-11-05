@@ -173,7 +173,7 @@ export function createCastHooks({ plans }) {
         if (typeof view?.model?.callModel !== 'function') return [];
         const chat = view.model.chat?.();
         const base = baseOf(chat, type);
-        const gate = texts => seekable(world, frame.cast, { present: frame.present, pinned: frame.pinned, texts: [texts.reader, texts.reply] });
+        const gate = texts => seekable(world, frame.cast, { present: frame.present, pinned: frame.pinned, text: texts.reader });
         const now = soughtTexts(base);
         if (now && frame.settings.profile) {
             const list = gate(now);
@@ -198,10 +198,11 @@ export function createCastHooks({ plans }) {
         if (!castOn(view)) return undefined;
         if (typeof view?.model?.callModel !== 'function') return undefined;
         const frame = frameOf(view);
-        if (frame.cast.listed && frame.cast.entries.length) {
-            // The reader may be looking for a kind of person: asked of the planner now, used by the next reply.
+        if (frame.cast.listed && frame.cast.entries.length && !frame.settings.profile) {
+            // The reader may be looking for a kind of person: asked of the planner now, used by the next reply. (A named connection is asked
+            // in `beforeGenerate` instead, about the message that is going out, and waited for.)
             const texts = soughtTexts(view?.model?.chat?.());
-            const list = texts ? seekable(frame.slice, frame.cast, { present: frame.present, pinned: frame.pinned, texts: [texts.reader, texts.reply] }) : [];
+            const list = texts ? seekable(frame.slice, frame.cast, { present: frame.present, pinned: frame.pinned, text: texts.reader }) : [];
             if (list.length) askSought(view, frame, soughtKey(fingerprint(frame.slice, chatId()), texts), list, texts);
         }
         if (!frame.cast.listed || !frame.cast.entries.length || !isInt(frame.now)) return undefined;

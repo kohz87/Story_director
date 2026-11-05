@@ -155,9 +155,9 @@ export function chooseRumor(slice, cast, { party = {}, sought = [], fight = fals
     return null;
 }
 
-/** The unmet, living, placed people (not in the scene, not pinned) a message may be asking for, by their calling: the planner's list. */
-export function seekable(slice, cast, { present = new Set(), pinned = new Set(), texts = [] } = {}) {
-    return movable(slice, cast, { present, pinned }).filter(item => !item.met && item.person.where && kindTouches(item.entry, texts));
+/** The unmet, living, placed people (not in the scene, not pinned) the reader's `text` may be asking for, by their calling: the planner's list. */
+export function seekable(slice, cast, { present = new Set(), pinned = new Set(), text = '' } = {}) {
+    return movable(slice, cast, { present, pinned }).filter(item => !item.met && item.person.where && kindTouches(item.entry, text));
 }
 
 // Story Block's present list drops a leading article ("the scout" is listed as "scout"), so an alias is matched with it too.
