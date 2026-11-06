@@ -5,45 +5,20 @@
 // line per kind, what not to reveal, corrections, and the instruction for writing change
 // lines. The note keeps within a token budget by dropping the least relevant records, and
 // writes no part longer than NOTE_PART_WORDS (the tracker keeps the whole text).
+//
+// This path stays the public facade: fixed text, formatting, item lines and header/distance
+// helpers moved to small note-*.js files.
 
-import { questDifficulty } from './changes.js';
 import { awayIn, estimateTokens } from './relevance.js';
-import { looksFinished, waitsForPay } from './tracker.js';
+import { looksFinished } from './tracker.js';
+import { CHANGE_INSTRUCTION, ENCOUNTER_CUE, NPC_PLANS_ONLY, PACING, PACING_NO_CHANGES } from './note-text.js';
+import { ITEM_SEPARATOR, notePart, part } from './note-format.js';
+import { addBeats, addLine, arrivalItem, awayPart, dueItem, encounterOf, recordItem, withFight, withReach } from './note-items.js';
+import { distancesLine, header, noWeekLine } from './note-extra.js';
 
-// About 165 tokens. {{user}} stays a literal macro: SillyTavern substitutes it.
-export const CHANGE_INSTRUCTION = [
-    'End your reply with one <Director>…</Director> block of change lines, one per line:',
-    '+ kind Key — summary | label: value (new; kind: agenda, event, hook, quest, clock, beat or secret)',
-    '~ Key — label: value (change only what changed)',
-    '- Key — reason (resolved)',
-    '! Key — what happened (a due item fired)',
-    'Fields: now, then, on, due, leg, arrive, shown, encounter; a quest (a job {{user}} accepted, not an errand; a job only offered: + hook with giver, reward; done or failed: - it): type, giver, goal, reward, step, due, difficulty. Dates go only in on, due and arrive, with a clock time.',
-    'Write only changes, never the whole list. Never write actions for {{user}}.',
-].join('\n');
-// How a schedule meets a scene, about 70 tokens; only when something is scheduled. Without
-// it a model handed "Due now: the warrant is filed" tends to stop the scene and stage it.
-export const PACING = [
-    'Pacing: the world keeps its schedule and the scene keeps its flow. Bring a due item in only where it fits: on-screen if {{user}} is there to see it, otherwise later as news, signs or aftermath.',
-    'Never cut into or bend the current scene for a beat, and never decide what {{user}} does. What cannot fit yet happens off-screen (!) or slips (~ on: later).',
-].join(' ');
-// The same, when a capture call writes the changes and the model writes none.
-export const PACING_NO_CHANGES = PACING.replace(/ What cannot fit yet happens off-screen \(!\) or slips \(~ on: later\)\./, ' What cannot fit yet can happen off-screen or later.');
-// Added to the Pacing line only while a due or arriving record carries an encounter, about 35
-// tokens. The fight is resolved by another extension; a storyteller left
-// alone would narrate the whole fight and decide how it ends, so it stops at the first blow.
-export const ENCOUNTER_CUE = 'A due fight starts when the scene reaches it: show the foes appear and stop at the first blow; the fight is resolved outside the story.';
-// While NPC State Delta is the source of truth for who an NPC is (Story Suite, area `npc`),
-// about 20 tokens after the instruction (and in the planner's and capture's request), so an
-// agenda never restates a dossier the reader keeps there.
-export const NPC_PLANS_ONLY = 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.';
-// (0.9.19) After the While away list, about 20 tokens: what came due in a skipped stretch of
-// time already happened, so the story tells its outcome rather than staging it now.
-export const AWAY_CUE = 'Show what came of them as news, signs or aftermath, not as scenes {{user}} lived through.';
-// Added only where the model writes change lines: about 10 tokens, 10 more with an arrival and
-// 20 more with a passed deadline.
-export const AWAY_RECORD = 'Record each with ! Key — what came of it.';
-export const AWAY_ARRIVAL = 'An arrival: ~ Key — now: where it is.';
-export const AWAY_DEADLINE = 'A passed deadline: - Key — failed, or ~ Key — due: later if it still stands.';
+export { CHANGE_INSTRUCTION, PACING, PACING_NO_CHANGES, ENCOUNTER_CUE, NPC_PLANS_ONLY, AWAY_CUE, AWAY_RECORD, AWAY_ARRIVAL, AWAY_DEADLINE } from './note-text.js';
+export { NOTE_PART_WORDS, notePart } from './note-format.js';
+export { DISTANCES_OFF, NO_WEEKDAYS, noteHeader } from './note-extra.js';
 
 // Kind lines, in the order the note shows them.
 const KIND_LINES = [
@@ -54,45 +29,6 @@ const KIND_LINES = [
     ['clock', 'Clocks'],
     ['beat', 'Beats'],
 ];
-
-const ITEM_SEPARATOR = ' · ';
-
-// The most words of one part the note writes (v0.8.4): what a record is doing and when in 12,
-// what it is (desc, a quest's goal, step, giver and reward, the foes of a fight) in 16. A longer
-// part ends in "…" in the note only; the tracker, the tabs and the API keep every word.
-export const NOTE_PART_WORDS = Object.freeze({
-    now: 12, then: 12, on: 12, due: 12, arrive: 12,
-    desc: 16, goal: 16, step: 16, reward: 16, giver: 16, encounter: 16, type: 16, shown: 16,
-    // (0.9.19) A beat's reach, on Due now only: enough for one consequence and who it falls on.
-    reach: 16,
-});
-const DEFAULT_PART_WORDS = 16;
-const ELLIPSIS = '…';
-
-/**
- * `text` as the note writes it for `field`: trimmed, and cut after the field's word limit at a
- * word boundary with "…". A cut that would leave a bracket open goes back to before it, when
- * words are left; trailing commas, semicolons and dashes go.
- */
-export function notePart(text, field) {
-    const value = String(text ?? '').trim();
-    const limit = NOTE_PART_WORDS[field] ?? DEFAULT_PART_WORDS;
-    const words = value.split(/\s+/).filter(Boolean);
-    if (words.length <= limit) return value;
-    let kept = words.slice(0, limit);
-    const open = kept.reduce((last, word, index) => {
-        const opens = (word.match(/[([]/g) ?? []).length;
-        const closes = (word.match(/[)\]]/g) ?? []).length;
-        return opens > closes ? index : closes > opens ? -1 : last;
-    }, -1);
-    if (open > 0) kept = kept.slice(0, open);
-    return `${kept.join(' ').replace(/[\s,;:—–-]+$/u, '')}${ELLIPSIS}`;
-}
-
-// A record's field as the note writes it.
-function fieldOf(record, field) {
-    return notePart(record?.fields?.[field], field);
-}
 
 // What the model is allowed for writing the change lines the instruction asks for, in tokens:
 // the two tags and about two lines of 20 to 25 tokens, a usual reply's worth. A rough
@@ -233,10 +169,6 @@ export function noteTokens(parts, { outputTokens = DIRECTOR_OUTPUT_TOKENS } = {}
     };
 }
 
-function part(label, text, join = '\n') {
-    return { label, text, join };
-}
-
 function joinParts(parts) {
     return parts.map((entry, index) => (index ? entry.join : '') + entry.text).join('');
 }
@@ -344,213 +276,4 @@ function scheduled(selection, due, arriving, relevant) {
     if (selection?.arc || due.length || arriving.length) return true;
     return relevant.some(({ record }) => record.kind === 'beat' || record.kind === 'clock' || Boolean(record.fields?.then)
         || (record.kind === 'quest' && Boolean(record.fields?.due)));
-}
-
-function header(selection, calendar) {
-    const parts = ['Story Director'];
-    const now = selection?.now;
-    if (calendar && typeof now === 'number' && Number.isFinite(now)) {
-        // (0.9.21) Today's weekday leads the date when the world has a week.
-        const day = typeof calendar.weekday === 'function' ? calendar.weekday(now) : '';
-        parts.push(day ? `${day}, ${calendar.format(now)}` : calendar.format(now));
-    }
-    if (selection?.place) parts.push(selection.place);
-    return `[${parts.join(ITEM_SEPARATOR)}]`;
-}
-
-/** The note's header for a selection ("[Story Director · date · place]"), for a note with no other part (v2's tail). */
-export const noteHeader = header;
-
-// (0.9.22) The places the story or the reader just named, by the world pack's roads: about 12
-// tokens a place, and a few more when the reply said a time far off the map.
-export const DISTANCES_OFF = 'Keep to these when the trip comes up again.';
-const MODE_WORDS = Object.freeze({ foot: 'foot', ride: 'riding', wagon: 'wagon', boat: 'boat' });
-
-function daysText(days) {
-    return days < 3 ? String(Math.round(days * 2) / 2) : String(Math.round(days));
-}
-
-function distanceItem({ place, fastest, slowest, said }) {
-    const low = daysText(fastest.days);
-    const high = daysText(slowest.days);
-    const how = low === high || fastest.mode === slowest.mode
-        ? `${low} ${low === '1' || Number(low) < 1 ? 'day' : 'days'} by ${MODE_WORDS[fastest.mode] ?? fastest.mode}`
-        : `${low}–${high} days (${MODE_WORDS[fastest.mode] ?? fastest.mode} to ${MODE_WORDS[slowest.mode] ?? slowest.mode})`;
-    return `${place} ${how}${said ? `, not ${said.text}` : ''}`;
-}
-
-function distancesLine(distances, from) {
-    const list = (distances ?? []).filter(entry => entry?.place && entry.fastest && entry.slowest);
-    if (!list.length || !from) return '';
-    const off = list.some(entry => entry.said);
-    return `Distances from ${from}: ${list.map(distanceItem).join(ITEM_SEPARATOR)}.${off ? ` ${DISTANCES_OFF}` : ''}`;
-}
-
-// (0.9.21) About 20 tokens after the header, only for a calendar with no week: without it a
-// model gives deadlines as "Friday noon", which no one in the world can count to.
-export const NO_WEEKDAYS = 'This world has no weekdays: name a day by its date ({{date}}), never Monday to Sunday.';
-
-function noWeekLine(selection, calendar) {
-    const now = selection?.now;
-    // A real custom calendar only (makeCalendar's config names its preset; Gregorian has a week).
-    if (calendar?.config?.preset !== 'custom' || (calendar.config.week ?? []).length) return '';
-    if (typeof now !== 'number' || !Number.isFinite(now) || typeof calendar.format !== 'function') return '';
-    return NO_WEEKDAYS.replace('{{date}}', calendar.format(calendar.addDays(now, 2), { time: false, era: false }));
-}
-
-// The foes of a planned fight, as written ('' for a record that is not one).
-function encounterOf(record) {
-    return fieldOf(record, 'encounter');
-}
-
-// "Ambush at the weir (Haywane 14) (fight: 3 bandit, bandit captain (boss))": a due fight
-// says who is coming, so the storyteller can bring them on.
-function withFight(item, record) {
-    const foes = encounterOf(record);
-    return foes ? `${item} (fight: ${foes})` : item;
-}
-
-// (0.9.19) "… · reach: the inn shuts for repairs": what a due beat changes for {{user}} wherever
-// they are, so a story away from it has concrete aftermath to show rather than nothing. Due
-// now only: a beat still ahead keeps its reach off the Beats line, so the note stays short and
-// the story is not handed an aftermath before the beat has happened.
-function withReach(item, record) {
-    const reach = fieldOf(record, 'reach');
-    return reach ? `${item}${ITEM_SEPARATOR}reach: ${reach}` : item;
-}
-
-// The compact form for the kind lines: the fight is planned, not happening yet.
-function fightPart(record) {
-    const foes = encounterOf(record);
-    return foes ? `${ITEM_SEPARATOR}fight: ${foes}` : '';
-}
-
-// The arc is carried by its beats (0.9.3): its name and what it is about head the Beats line,
-// "Beats — The Weir Debt (who sold the route): Toll riders reach the ford (Goldwane 19)", so
-// the note has no separate arc line to weigh against them. With every beat due (on Due now)
-// or none left, the line is the arc alone.
-function addBeats(parts, arc, items) {
-    const present = items.filter(Boolean);
-    if (!arc) {
-        addLine(parts, 'Beats', present);
-        return;
-    }
-    const desc = notePart(fieldOf(arc, 'desc'), 'desc');
-    const head = `Beats — ${arc.key}${desc ? ` (${desc})` : ''}`;
-    parts.push(part('Beats', present.length ? `${head}: ${present.join(ITEM_SEPARATOR)}` : head));
-}
-
-function addLine(parts, label, items, separator = ITEM_SEPARATOR) {
-    const present = items.filter(Boolean);
-    if (present.length) parts.push(part(label, `${label}: ${present.join(separator)}`));
-}
-
-// The record's fields as the note writes them, each within its word limit. The leg stays
-// whole: only its destination is shown, and it is read from the full text.
-function noteFields(record) {
-    const fields = record?.fields ?? {};
-    return Object.fromEntries(Object.entries(fields).map(([name, value]) => [name, name === 'leg' ? value : notePart(value, name)]));
-}
-
-// "Saartje's sale (Goldwane 16)", or with what is meant to happen: "Geva — files the warrant (Goldwane 17)".
-function dueItem(record, clock = text => text) {
-    const f = noteFields(record);
-    // (0.9.28) The work done and only the pay left, its time is when the pay can be had.
-    if (record.kind === 'quest' && waitsForPay(record)) return payItem(record, clock);
-    // A quest's due is its deadline: reaching it means time ran out.
-    if (record.kind === 'quest') return `${record.key} — deadline${f.due ? ` ${clock(f.due)}` : ''} reached${f.goal ? ` (${f.goal})` : ''}`;
-    const when = record.kind === 'clock' ? f.due || f.on : f.on || f.due;
-    const what = f.then || (record.kind === 'clock' ? f.desc : '');
-    return `${record.key}${what ? ` — ${what}` : ''}${when ? ` (${when})` : ''}`;
-}
-
-// (0.9.19) "While away (Goldwane 12, 08:00 pm → Goldwane 15, 07:00 am): Stray Oar — sacked
-// (Goldwane 13) · Bond collector reached Hollin's Reach (Goldwane 14) · Bounty — deadline
-// Goldwane 14, 11:59 pm passed. Show what came of them …". A planned fight in the gap was fought
-// off-screen. '' with nothing in the gap.
-function awayPart(away, calendar, clock, instruction) {
-    const items = [
-        // A beat's reach is the aftermath to show: most needed here, where it happened unseen.
-        ...(away?.due ?? []).map(record => withReach(withAwayFight(awayDueItem(record, clock), record), record)),
-        ...(away?.arriving ?? []).filter(record => !(away?.due ?? []).includes(record)).map(record => withAwayFight(arrivalItem(record, 'reached'), record)),
-    ].filter(Boolean);
-    if (!items.length) return '';
-    const span = `${calendar.format(away.from, { era: false })} → ${calendar.format(away.to, { era: false })}`;
-    const record = instruction
-        ? [AWAY_RECORD, away.arriving?.length ? AWAY_ARRIVAL : '', (away.due ?? []).some(entry => entry.kind === 'quest' && !waitsForPay(entry)) ? AWAY_DEADLINE : '']
-        : [];
-    const list = items.join(ITEM_SEPARATOR);
-    // A list ending in a trimmed part ("…") needs no full stop after it.
-    return [`While away (${span}): ${list}${/[.…]$/u.test(list) ? '' : '.'}`, AWAY_CUE, ...record].filter(Boolean).join(' ');
-}
-
-// A due item as it reads in the past: a quest's deadline "passed", not "reached".
-// "Lone Grey Wolf — pay waiting from Goldwane 14, 12:00 pm (turn in voucher at the bailiff hatch);
-// the work is done, the hour fails nothing".
-function payItem(record, clock) {
-    const f = noteFields(record);
-    const step = f.step || f.now;
-    return `${record.key} — pay waiting${f.due ? ` from ${clock(f.due)}` : ''}${step ? ` (${step})` : ''}; the work is done, the hour fails nothing`;
-}
-
-function awayDueItem(record, clock) {
-    if (record.kind !== 'quest' || waitsForPay(record)) return dueItem(record, clock);
-    const f = noteFields(record);
-    return `${record.key} — deadline${f.due ? ` ${clock(f.due)}` : ''} passed${f.goal ? ` (${f.goal})` : ''}`;
-}
-
-function withAwayFight(item, record) {
-    const foes = encounterOf(record);
-    return foes ? `${item} (fought off-screen: ${foes})` : item;
-}
-
-// "Courier arrives Varnhold Watch (Goldwane 16, morning)".
-function arrivalItem(record, verb = 'arrives') {
-    const f = noteFields(record);
-    const where = destination(f.leg);
-    // With nowhere to reach, an arrival in the past just "arrived".
-    const said = where ? verb : verb === 'reached' ? 'arrived' : verb;
-    return `${record.key} ${said}${where ? ` ${where}` : ''}${f.arrive ? ` (${f.arrive})` : ''}`;
-}
-
-// "Geva — Bailiff Court → files the warrant (Goldwane 17)",
-// "Hollin's Reach graves — the dead rise (Goldwane 28) · shown: sign".
-// "Bounty on Kettle Jack — bring him in alive · at: cornered at the weir · for Warden Hale · 40 crowns · by Haywane 30".
-function questItem(record, clock = text => text) {
-    const f = noteFields(record);
-    const parts = [f.goal || f.desc, f.step ? `at: ${f.step}` : '', f.giver ? `for ${f.giver}` : '', f.reward, f.due ? `by ${clock(f.due)}` : '']
-        .map(part => String(part ?? '').trim())
-        .filter(Boolean);
-    // A normal difficulty goes without saying; a set one rides with the type: "(bounty, hard)".
-    const difficulty = questDifficulty(f.difficulty);
-    const tags = [String(f.type ?? '').trim(), difficulty === 'normal' ? '' : difficulty].filter(Boolean);
-    return record.key + (tags.length ? ` (${tags.join(', ')})` : '') + (parts.length ? ` — ${parts.join(ITEM_SEPARATOR)}` : '') + fightPart(record);
-}
-
-function recordItem(record, clock) {
-    if (record.kind === 'quest') return questItem(record, clock);
-    const f = noteFields(record);
-    const body = [];
-    const state = f.now || f.desc;
-    if (state) body.push(state);
-    const when = record.kind === 'clock' ? f.due : f.on;
-    if (f.then) body.push(`${state ? '→ ' : ''}${f.then}${when ? ` (${when})` : ''}`);
-    if (f.arrive) {
-        const where = destination(f.leg);
-        body.push(`${body.length ? '→ ' : ''}arrives${where ? ` ${where}` : ''} (${f.arrive})`);
-    }
-
-    let item = record.key + (body.length ? ` — ${body.join(' ')}` : '');
-    // With no then, the date belongs to the record itself (a beat's on, a clock's due).
-    if (when && !f.then) item += ` (${when})`;
-    if (record.kind === 'clock' && f.shown && !/^none$/i.test(f.shown.trim())) item += `${ITEM_SEPARATOR}shown: ${f.shown}`;
-    return item + fightPart(record);
-}
-
-// The far end of a one-hop leg: "Shorn → Varnhold Watch 35 B, courier 70/day → 0.5" gives
-// "Varnhold Watch" (the distance, road code and pace after it are not a place).
-function destination(leg) {
-    const hops = String(leg ?? '').split(/\s*(?:→|->)\s*/);
-    if (hops.length < 2) return '';
-    return hops[1].split(',')[0].replace(/\s+\d.*$/, '').trim();
 }

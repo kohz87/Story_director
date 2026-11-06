@@ -32,6 +32,7 @@ Story Director works without NPC State Delta. Read other modules through guarded
 - `tests/vendor/story-block/`: Story Block's testkit + runtime, vendored (VERSION names the commit).
   `tests/v2/screens/vendor/` is an older pinned copy of Story Block's screens registry (or `STORY_BLOCK_DIR`).
 - `docs/`: `ARCHITECTURE.md`, `DESIGN.md`, `STORY_SUITE.md`; `docs/dev/`: short area notes.
+- Additional source files and recent splits: `docs/dev/codemap.md`.
 
 ## Commands
 
