@@ -23,15 +23,19 @@
 // Story Block draws its screens zoomed (its size.css): pointer and measured positions are drawn pixels, the stage's own
 // lengths (style.left, the view) are not, so every measure is divided by the stage's zoom (zoomOf).
 //
-// The stylesheet is in widget-css.js; the prop readers and small helpers are in widget-view.js; the drawing is in widget-draw.js.
+// The stylesheet is in widget-css.js; the prop readers and small helpers are in widget-view.js; the drawing is in widget-draw.js;
+// the DOM is built in widget-dom.js; place details, search and moves are in widget-places.js; pointer input is in widget-pointer.js.
 
 import {
-    NEAR_PX, between, boundsOf, centreOn, clampView, fitView, mapPoint, nearestGap, panBy, placeUnplaced, searchPlaces, zoomAt, zoomLevel,
+    NEAR_PX, between, boundsOf, clampView, fitView, mapPoint, nearestGap, panBy, placeUnplaced, zoomAt, zoomLevel,
     zoomLimits,
 } from './view.js';
 import { ensureStyle } from './widget-css.js';
-import { SVG_NS, createDraw } from './widget-draw.js';
-import { ALL, button, h, humanize, icon, layerFor, onLayer, readTrip, readView, text } from './widget-view.js';
+import { createDraw } from './widget-draw.js';
+import { createDom } from './widget-dom.js';
+import { createPlaces } from './widget-places.js';
+import { createPointer } from './widget-pointer.js';
+import { ALL, onLayer, readTrip, readView, text } from './widget-view.js';
 
 export { MAP_CSS } from './widget-css.js';
 export { onLayer, readTrip, readView } from './widget-view.js';
@@ -40,12 +44,7 @@ export const MAP_WIDGET = 'story-director.map';
 const FALLBACK_SIZE = Object.freeze({ width: 640, height: 480 });
 const BUTTON_ZOOM = 1.5;
 const KEY_PAN = 0.15;              // share of the stage an arrow key moves
-const WHEEL_RATE = 0.0015;
-const DRAG_THRESHOLD = 4;
 const EASE_MS = 260;
-const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (the phone line, PHONE)
-// The phone line, as Story Block's (its size.css): a narrow screen or a coarse pointer gets the dots' 44px tap areas.
-const PHONE = '(max-width: 759.98px), (pointer: coarse)';
 
 // Remembered views for this page: `${viewKey}|${layer}` → { cx, cy, zoom (× fit) }. Never story state.
 const views = new Map();
@@ -63,77 +62,10 @@ function render(el, props, api) {
     };
 
     // ---- the DOM --------------------------------------------------------------------------------
-    const root = h(doc, 'div', 'sd-map ss-glass');
-    root.setAttribute('role', 'group');
-    const bar = h(doc, 'div', 'sd-map-bar');
-    const searchBox = h(doc, 'div', 'sd-map-search');
-    const input = h(doc, 'input');
-    input.setAttribute('type', 'search');
-    input.setAttribute('placeholder', 'Find a place');
-    input.setAttribute('aria-label', 'Find a place by name, other name or region');
-    input.setAttribute('autocomplete', 'off');
-    const results = h(doc, 'ul', 'sd-map-results');
-    results.setAttribute('aria-label', 'Places found');
-    results.hidden = true;
-    searchBox.append(input, results);
-    const tools = h(doc, 'div', 'sd-map-tools');
-    tools.setAttribute('role', 'toolbar');
-    tools.setAttribute('aria-label', 'Zoom');
-    const zoomIn = button(doc, 'sd-map-btn sd-map-zoom-in', '+', 'Zoom in');
-    const zoomOut = button(doc, 'sd-map-btn sd-map-zoom-out', '−', 'Zoom out');
-    const fitAll = button(doc, 'sd-map-btn sd-map-fit', '', 'Show the whole layer');
-    fitAll.append(icon(doc, 'fa-expand'));
-    const centreMe = button(doc, 'sd-map-btn sd-map-me', '', 'Centre on where you are');
-    centreMe.append(icon(doc, 'fa-location-crosshairs'));
-    tools.append(zoomIn, zoomOut, fitAll, centreMe);
-    // The layers as a Region list between the search box and the zoom buttons (All first; the shown one selected).
-    const regionBox = h(doc, 'label', 'sd-map-region');
-    const regions = h(doc, 'select', 'sd-map-regions');
-    regions.setAttribute('aria-label', 'Region');
-    regionBox.append(h(doc, 'span', 'sd-map-region-cap', 'Region'), regions);
-    bar.append(searchBox, regionBox, tools);
-
-    const stage = h(doc, 'div', 'sd-map-stage');
-    stage.setAttribute('tabindex', '0');
-    stage.setAttribute('role', 'group');
-    stage.setAttribute('aria-roledescription', 'map');
-    stage.setAttribute('aria-label', 'Map. Drag or use the arrow keys to move; scroll, pinch, or plus and minus to zoom; 0 shows the whole layer.');
-    const svg = doc.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('class', 'sd-map-svg');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
-    const worldGroup = doc.createElementNS(SVG_NS, 'g');
-    worldGroup.setAttribute('class', 'sd-map-world');
-    svg.appendChild(worldGroup);
-    const placesLayer = h(doc, 'div', 'sd-map-places');
-    placesLayer.setAttribute('role', 'group');
-    placesLayer.setAttribute('aria-label', 'Places');
-    const labelsLayer = h(doc, 'div', 'sd-map-labels');
-    labelsLayer.setAttribute('aria-hidden', 'true');
-    const hereRing = h(doc, 'div', 'sd-map-here');
-    hereRing.setAttribute('aria-hidden', 'true');
-    // The trip's marks above the places: "You" on the current leg, the movers on theirs, each with its pin (all drawn by paint()).
-    const markLayer = h(doc, 'div', 'sd-map-marks');
-    markLayer.setAttribute('aria-hidden', 'true');
-    markLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
-    stage.append(svg, placesLayer, labelsLayer, hereRing, markLayer);
-    const road = h(doc, 'section', 'sd-map-road');
-    road.setAttribute('aria-label', 'On the road');
-    road.hidden = true;
-    const frame = h(doc, 'div', 'sd-map-frame');
-    frame.append(stage, road);
-
-    const empty = h(doc, 'p', 'sd-map-empty', 'No places to show yet.');
-    const details = h(doc, 'section', 'sd-map-details');
-    details.setAttribute('aria-live', 'polite');
-    details.hidden = true;
-    const legend = h(doc, 'ul', 'sd-map-legend ss-listcard-rows');
-    legend.setAttribute('aria-label', 'Legend');
-    const legendCard = h(doc, 'section', 'sd-map-legend-card ss-listcard');
-    legendCard.setAttribute('aria-label', 'Legend');
-    legendCard.append(h(doc, 'h4', 'ss-label ss-listcard-head', 'Legend'), legend);
-    root.append(bar, frame, empty, details, legendCard);
-    el.appendChild(root);
+    const {
+        root, searchBox, input, results, zoomIn, zoomOut, fitAll, centreMe, regionBox, regions, stage, worldGroup, placesLayer, labelsLayer, hereRing,
+        markLayer, road, empty, details, legend, legendCard,
+    } = createDom(el, doc);
 
     // ---- state ----------------------------------------------------------------------------------
     // The state the drawing reads and writes: one object, so the drawing functions can live in a file of their own.
@@ -152,7 +84,6 @@ function render(el, props, api) {
         marks: [],                   // [{ node, ids: [from, to], t }]: "You" and the movers, placed by paint()
     };
     let viewKey = text(props?.viewKey) || 'map';
-    let onSelect = text(props?.onSelect);
     s.layer = s.data.layer;
     let box = boundsOf([]);
     let limits = { min: 0.5, max: 8 };
@@ -164,6 +95,11 @@ function render(el, props, api) {
     const { drawLayers, drawShown, drawRoad, paint } = createDraw(s, {
         doc, regions, regionBox, worldGroup, nodes, labels, placesLayer, labelsLayer, empty, stage, markLayer, road, legend, legendCard, placeAt, hereRing,
     });
+    const places = createPlaces({
+        s, byId, doc, details, input, results, api, paint, initialOnSelect: props?.onSelect, setLayer, measure, moveTo,
+        getBox: () => box, getLimits: () => limits, closeEnough,
+    });
+    const { showDetails, pick, goTo, runSearch, chooseHit } = places;
 
     // The zoom the stage is drawn at (Story Block's roots are zoomed): the browser's currentCSSZoom, else drawn over own width.
     function zoomOf() {
@@ -269,92 +205,6 @@ function render(el, props, api) {
         paint();
     }
 
-    // ---- details --------------------------------------------------------------------------------
-    let asked = 0;
-    function showDetails(id) {
-        const place = byId(id);
-        s.picked = place ? id : '';
-        if (!place) {
-            details.hidden = true;
-            details.replaceChildren();
-            paint();
-            return;
-        }
-        const close = button(doc, 'sd-map-btn sd-map-close', '×', 'Close');
-        const about = [place.kind && humanize(place.kind), place.region].filter(Boolean).join(' · ');
-        const status = place.id === s.data.current ? 'You are here.' : place.visited ? 'Visited.' : 'Not visited yet.';
-        const trip = h(doc, 'p', 'sd-map-trip');
-        details.replaceChildren(h(doc, 'h3', 'sd-map-name', place.name), ...(about ? [h(doc, 'p', 'sd-map-about', about)] : []), h(doc, 'p', 'sd-map-status', status), trip, close);
-        details.setAttribute('data-id', place.id);
-        details.hidden = false;
-        paint();
-        if (place.id === s.data.current) return;
-        // The trip from the current place, by known routes: code's figures (travel.js), not the story's.
-        const ticket = ++asked;
-        let detail = null;
-        try {
-            detail = typeof api?.query === 'function' ? api.query('atlas.place', { id: place.id }) : null;
-        } catch {
-            detail = null;
-        }
-        const fill = out => {
-            if (ticket !== asked) return;
-            const route = out?.trip;
-            if (route) {
-                const by = route.by?.length ? ` by ${route.by.join(', ')}` : '';
-                trip.textContent = `From ${route.fromName}: ${route.km ? `${route.km} km, ` : ''}${route.text}${by}.`;
-                trip.className = 'sd-map-trip';
-            } else if (s.data.current) {
-                trip.textContent = 'No known route from where you are.';
-                trip.className = 'sd-map-trip sd-map-none';
-            }
-        };
-        if (detail && typeof detail.then === 'function') detail.then(fill, () => fill(null));
-        else fill(detail);
-    }
-
-    function pick(id) {
-        showDetails(id);
-        if (onSelect && typeof api?.command === 'function') {
-            try {
-                const out = api.command(onSelect, { node: id });
-                if (out && typeof out.catch === 'function') out.catch(() => {});
-            } catch { /* a click never breaks the map */ }
-        }
-    }
-
-    // Moves the map to a place (switching layer when it is not on this one), picks it.
-    function goTo(id) {
-        const place = byId(id);
-        if (!place) return;
-        if (!onLayer(place, s.layer)) setLayer(layerFor(place, s.layer));
-        measure();
-        moveTo(centreOn(s.view, s.points.get(id), box, limits, closeEnough(id)));
-        pick(id);
-    }
-
-    // ---- search ---------------------------------------------------------------------------------
-    let hits = [];
-    function runSearch() {
-        hits = searchPlaces(s.data.places, input.value);
-        const items = hits.map(hit => {
-            const place = byId(hit.id);
-            const li = h(doc, 'li');
-            const choose = button(doc, 'sd-map-result');
-            choose.setAttribute('data-id', place.id);
-            const about = [place.region, place.id === s.data.current ? 'you are here' : place.visited ? '' : 'not visited'].filter(Boolean).join(' · ');
-            choose.append(h(doc, 'span', 'sd-map-result-name', place.name), h(doc, 'span', 'sd-map-result-about', about));
-            li.append(choose);
-            return li;
-        });
-        if (input.value.trim() && !items.length) items.push(h(doc, 'li', 'sd-map-none', 'No place by that name.'));
-        results.replaceChildren(...items);
-        results.hidden = !input.value.trim();
-    }
-    function chooseHit(id) {
-        results.hidden = true;
-        goTo(id);
-    }
     // The Region list, and clicks on the results and the details' Close button (delegated: they are redrawn).
     const closestWith = (target, stop, test) => {
         for (let node = target; node && node !== stop; node = node.parentNode) if (test(node)) return node;
@@ -373,13 +223,13 @@ function render(el, props, api) {
     });
     listen(input, 'input', runSearch);
     listen(input, 'keydown', event => {
-        if (event.key === 'Enter' && hits.length) {
+        if (event.key === 'Enter' && places.hits.length) {
             event.preventDefault?.();
-            chooseHit(hits[0].id);
+            chooseHit(places.hits[0].id);
         } else if (event.key === 'Escape') {
             input.value = '';
             runSearch();
-        } else if (event.key === 'ArrowDown' && hits.length) {
+        } else if (event.key === 'ArrowDown' && places.hits.length) {
             event.preventDefault?.();
             results.querySelector('.sd-map-result')?.focus?.();
         }
@@ -417,126 +267,10 @@ function render(el, props, api) {
         event.preventDefault?.();
     });
 
-    // A place: click, tap, Enter or Space (it is a button). Hover and focus show its name.
-    const placeOf = target => {
-        for (let node = target; node && node !== placesLayer; node = node.parentNode) if (node.getAttribute?.('data-id') && nodes.get(node.getAttribute('data-id')) === node) return node.getAttribute('data-id');
-        return '';
-    };
-    let dropClick = false;
-    // On a phone the tap went to a button whose 44px square holds the tap; where two squares
-    // cover one dot, the place whose dot is nearest the tap is the one picked (desktop: as is).
-    // A click from the keyboard (Enter or Space on a focused place: detail 0, no pointer position)
-    // is that place's own, never the nearest dot's.
-    const phone = () => Boolean(win?.matchMedia?.(PHONE)?.matches);
-    const tapped = event => {
-        const own = placeOf(event.target);
-        if (!phone() || typeof event.clientX !== 'number' || event.detail === 0) return own;
-        const tap = local(event);
-        const half = TAP_HALF / zoomOf();
-        let best = '';
-        let bestD = Infinity;
-        for (const [id, dot] of placeAt) {
-            if (Math.abs(dot.x - tap.x) > half || Math.abs(dot.y - tap.y) > half) continue;
-            const d = Math.hypot(dot.x - tap.x, dot.y - tap.y);
-            if (d < bestD) { best = id; bestD = d; }
-        }
-        return best || own;
-    };
-    listen(placesLayer, 'click', event => {
-        const id = tapped(event);
-        if (!id) return;
-        if (dropClick) {
-            dropClick = false;
-            return;
-        }
-        pick(id);
+    createPointer({
+        s, win, doc, stage, placesLayer, nodes, placeAt, results, searchBox, pick, paint, listen, stopAnimation, measure, zoomOf,
+        setView, getBox: () => box, getLimits: () => limits,
     });
-    const hover = id => {
-        if (s.hovered === id) return;
-        s.hovered = id;
-        paint();
-    };
-    listen(placesLayer, 'pointerover', event => hover(placeOf(event.target)));
-    listen(placesLayer, 'pointerout', () => hover(''));
-    listen(placesLayer, 'focusin', event => hover(placeOf(event.target)));
-    listen(placesLayer, 'focusout', () => hover(''));
-
-    // Pointer pan (mouse, pen, one finger) and pinch (two fingers).
-    const pointers = new Map();
-    let moved = 0;
-    let captured = null;
-    const local = event => {
-        const rect = stage.getBoundingClientRect?.() ?? { left: 0, top: 0 };
-        const z = zoomOf();
-        return { x: (event.clientX - rect.left) / z, y: (event.clientY - rect.top) / z };
-    };
-    listen(stage, 'pointerdown', event => {
-        if (event.pointerType === 'mouse' && event.button) return;
-        stopAnimation();
-        measure();
-        if (!pointers.size) {
-            moved = 0;
-            dropClick = false;
-        }
-        pointers.set(event.pointerId, local(event));
-    });
-    listen(stage, 'pointermove', event => {
-        const before = pointers.get(event.pointerId);
-        if (!before) return;
-        const now = local(event);
-        if (pointers.size === 1) {
-            moved += Math.abs(now.x - before.x) + Math.abs(now.y - before.y);
-            pointers.set(event.pointerId, now);
-            if (moved > DRAG_THRESHOLD && captured === null) {
-                captured = event.pointerId;
-                try { stage.setPointerCapture?.(event.pointerId); } catch { /* not capturable */ }
-                stage.classList.add('sd-map-dragging');
-            }
-            if (moved > DRAG_THRESHOLD) setView(panBy(s.view, now.x - before.x, now.y - before.y, box, limits));
-            return;
-        }
-        const [a, b] = [...pointers.values()];
-        const oldMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        const oldDistance = Math.hypot(a.x - b.x, a.y - b.y);
-        pointers.set(event.pointerId, now);
-        const [c, d] = [...pointers.values()];
-        const newMid = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
-        const newDistance = Math.hypot(c.x - d.x, c.y - d.y);
-        moved = Infinity;
-        let next = oldDistance > 0 && newDistance > 0 ? zoomAt(s.view, newDistance / oldDistance, oldMid.x, oldMid.y, s.size.width, s.size.height, box, limits) : s.view;
-        next = panBy(next, newMid.x - oldMid.x, newMid.y - oldMid.y, box, limits);
-        setView(next);
-    });
-    const release = event => {
-        if (!pointers.delete(event.pointerId) || pointers.size) return;
-        // A drag that ends on a place must not pick it: the click that follows is dropped.
-        if (moved > DRAG_THRESHOLD) {
-            dropClick = true;
-            win?.setTimeout?.(() => { dropClick = false; }, 0);
-        }
-        if (captured !== null) {
-            try { stage.releasePointerCapture?.(captured); } catch { /* already released */ }
-            captured = null;
-        }
-        stage.classList.remove('sd-map-dragging');
-    };
-    listen(stage, 'pointerup', release);
-    listen(stage, 'pointercancel', release);
-    listen(stage, 'wheel', event => {
-        event.preventDefault?.();
-        stopAnimation();
-        measure();
-        const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * s.size.height : event.deltaY;
-        const at = local(event);
-        setView(zoomAt(s.view, Math.exp(-(Number(delta) || 0) * WHEEL_RATE), at.x, at.y, s.size.width, s.size.height, box, limits));
-    }, { passive: false });
-
-    // A click elsewhere closes the results list.
-    if (typeof doc.addEventListener === 'function') {
-        listen(doc, 'click', event => {
-            if (!results.hidden && !searchBox.contains?.(event.target)) results.hidden = true;
-        });
-    }
 
     const Observer = win?.ResizeObserver ?? globalThis.ResizeObserver;
     let observer = null;
@@ -564,7 +298,7 @@ function render(el, props, api) {
             if (!s.trip.legs.every(leg => here.has(leg.fromId) && here.has(leg.toId))) s.data.layer = ALL;
         }
         viewKey = text(next?.viewKey) || 'map';
-        onSelect = text(next?.onSelect);
+        places.setOnSelect(next?.onSelect);
         root.setAttribute('aria-label', text(next?.label) || 'Map');
         // "Centre on where you are" works once a place is known (breaker a3-2): until then it is off and says why.
         centreMe.disabled = !s.data.current;
