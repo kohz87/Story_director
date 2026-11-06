@@ -47,3 +47,13 @@ Generated 2026-11-07.
 
 ## Pointer to add
 - Source codemap for files not covered above: `docs/dev/codemap.md`.
+
+## Split files (7 Nov: files over 450 lines split into small parts; each original keeps its path and re-exports its public names)
+- `src/planner.js` → `src/planner/`: `prompt.js` prompt, summary and messages; `parse.js` answer parsing; `relative.js` relative dates; `validate.js` findings and ops; `auto.js` automatic planning; `note.js` the accepted note; `shared.js` helpers.
+- `src/tracker.js` → `src/tracker-records.js` record shape, copy-on-write helpers and constants; `src/tracker-apply.js` applying change lines (`applyOps`); `src/tracker-replay.js` mention marks and replay from chat entries; `src/tracker-queries.js` corrections, quest outcomes and record queries.
+- `src/note.js` → `src/note-text.js` fixed note instructions, cues and Pacing text; `src/note-format.js` word limits, field trimming and parts; `src/note-items.js` Due now, Arriving, record and While-away lines; `src/note-extra.js` note header, no-weekday line and distance lines.
+- `src/v2/module.js` → `src/v2/module/`: `parts.js` identity and parts; `shared.js` host access and helpers; `host.js` fight detection; `settings.js` namespacing and reads; `contexts.js` ctx, view and tools; `merge.js` merge rules; `create.js` the module builder.
+- `src/v2/arc/plan.js` → `src/v2/arc/plan/`: `shared.js` constants and text; `prompt.js` prompt and summary; `read.js` plan read and write; `auto.js` auto-plan rules.
+- `src/v2/atlas/widget.js` (render coordinator) → `widget-dom.js` the DOM, `widget-places.js` place details, search and moves, `widget-pointer.js` pointer input, for the Map widget.
+- `src/v2/chronicle/capture.js` → `src/v2/chronicle/capture/`: `text.js`, `world.js`, `faction.js`, `commands.js`: chronicle change lines and reader commands.
+- `src/v2/chronicle/days.js` → `src/v2/chronicle/days/`: `shared.js` constants and text; `state.js` state, settings and receipts; `facts.js` day facts; `summary.js` summary lines and output; `validate.js` validation.
