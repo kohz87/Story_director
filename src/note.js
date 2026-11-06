@@ -30,6 +30,9 @@ const KIND_LINES = [
     ['beat', 'Beats'],
 ];
 
+// What the model is allowed for writing the change lines the instruction asks for, in tokens:
+// the two tags and about two lines of 20 to 25 tokens, a usual reply's worth. A rough
+// allowance for the reader, not a limit.
 export const DIRECTOR_OUTPUT_TOKENS = 60;
 
 export function buildNote(selection, options = {}) {

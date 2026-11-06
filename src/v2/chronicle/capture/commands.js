@@ -8,6 +8,8 @@ import { CLEAR, clockOf, readNames, readState } from './text.js';
 import { changeEvent, rememberName } from './world.js';
 import { changeFaction } from './faction.js';
 
+// ---- the reader's commands -----------------------------------------------------------------------
+
 const EVENT_FIELDS = ['id', 'name', 'summary', 'state', 'place', 'factions', 'keep', 'locked'];
 // The text fields of an event edit (`keep` and `locked` are true/false).
 const EVENT_TEXT = ['name', 'summary', 'state', 'place', 'factions'];

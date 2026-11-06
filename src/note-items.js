@@ -6,6 +6,7 @@ import { waitsForPay } from './tracker.js';
 import { AWAY_ARRIVAL, AWAY_CUE, AWAY_DEADLINE, AWAY_RECORD } from './note-text.js';
 import { ITEM_SEPARATOR, fieldOf, notePart, part } from './note-format.js';
 
+// The foes of a planned fight, as written ('' for a record that is not one).
 export function encounterOf(record) {
     return fieldOf(record, 'encounter');
 }

@@ -80,4 +80,3 @@ function addOp(kind, key, fields, extra) {
     const op = { op: '+', kind, key, id: lineKey(key), fields, extra, reason: '' };
     return { ...op, raw: formatOp(op) };
 }
-

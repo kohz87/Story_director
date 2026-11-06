@@ -72,4 +72,5 @@ export function labelOf(labels, names) {
     return undefined;
 }
 
+// A summary text as the receipt tells it: the sentence's own full stop is not doubled.
 export const sentence = text => text.replace(/([.!?…])\.$/, '$1');

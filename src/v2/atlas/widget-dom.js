@@ -1,6 +1,6 @@
 // Story Director v2, atlas part: the DOM the Map widget is built from (moved out of widget.js unchanged;
 // widget.js still exports its public names): `createDom` makes the search bar, Region list, zoom controls,
-// stage, layers, details, legend and frame, appends them to the widget element, and returns their nodes.
+// stage, layers, details, legend and frame, appends them to the widget element, and returns the nodes the coordinator uses.
 
 import { SVG_NS } from './widget-draw.js';
 import { button, h, icon } from './widget-view.js';

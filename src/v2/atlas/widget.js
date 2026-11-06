@@ -84,6 +84,7 @@ function render(el, props, api) {
         marks: [],                   // [{ node, ids: [from, to], t }]: "You" and the movers, placed by paint()
     };
     let viewKey = text(props?.viewKey) || 'map';
+    const initialOnSelect = text(props?.onSelect);
     s.layer = s.data.layer;
     let box = boundsOf([]);
     let limits = { min: 0.5, max: 8 };
@@ -96,7 +97,7 @@ function render(el, props, api) {
         doc, regions, regionBox, worldGroup, nodes, labels, placesLayer, labelsLayer, empty, stage, markLayer, road, legend, legendCard, placeAt, hereRing,
     });
     const places = createPlaces({
-        s, byId, doc, details, input, results, api, paint, initialOnSelect: props?.onSelect, setLayer, measure, moveTo,
+        s, byId, doc, details, input, results, api, paint, initialOnSelect, setLayer, measure, moveTo,
         getBox: () => box, getLimits: () => limits, closeEnough,
     });
     const { showDetails, pick, goTo, runSearch, chooseHit } = places;

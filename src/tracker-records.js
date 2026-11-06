@@ -137,14 +137,3 @@ export function aliasIndexOf(records, indexById) {
     });
     return index;
 }
-
-/**
- * Applies ops for one reply. A `~`, `-` or `!` on a key that is not tracked goes to the one
- * active record it plainly means (nearMatches); failing that, a `~` that carries something
- * becomes a new hook, and anything else is reported and ignored. (0.9.19) A key read so is
- * remembered on the record (an alias), and a later line with it, `+` included, is that record's
- * as its own key would be, with no further finding.
- * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
- */
-// `direct` (Story Director v2): the story's `+ quest` is the reader's acceptance, so a job is never
-// held as an offer; a hook or event becomes a quest only by `+ quest` (or a `-` that says it was taken

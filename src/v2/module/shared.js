@@ -1,5 +1,6 @@
 // Story Director v2: the live host access and small shared object helpers.
 
+// Story Block's sdk when it is up (SillyTavern): what queries are handed when the host's tools lack it.
 export function liveSdk() {
     try {
         return globalThis.StoryBlock?.sdk ?? null;

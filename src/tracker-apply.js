@@ -7,6 +7,17 @@ import { nearMatches } from './tracker-words.js';
 import { ACCEPT_WORDS, AGREE_WORDS, BECOMES_QUEST, CHOSEN_END, FAILED, GIVE_UP, LOOKS_OVER, OVER_VALUE, QUEST_OVER_FIELDS, QUEST_OVER_TEXT, REFUSE_WORDS, TIME_FAIL, allJobsIn, closingReason, endsJob, isJob, isOffer, namesJob, offersInQuestion, overByChange, overStep, saidAbout, sentencesOf, takenOn, takesOnQuest, waitsForPay } from './tracker-said.js';
 import { MAX_ALIASES, NOT_STARTED, SUPERSEDED, aliasIndexOf, applyFields, blankFields, cloneRecord, finding, hasContent, isLabelKey, newRecord, touch, untrackedRecordOp, withArticle } from './tracker-records.js';
 
+/**
+ * Applies ops for one reply. A `~`, `-` or `!` on a key that is not tracked goes to the one
+ * active record it plainly means (nearMatches); failing that, a `~` that carries something
+ * becomes a new hook, and anything else is reported and ignored. (0.9.19) A key read so is
+ * remembered on the record (an alias), and a later line with it, `+` included, is that record's
+ * as its own key would be, with no further finding.
+ * Returns `{ tracker, problems }`; `tracker.message`/`time` move to this reply.
+ */
+// `direct` (Story Director v2): the story's `+ quest` is the reader's acceptance, so a job is never
+// held as an offer; a hook or event becomes a quest only by `+ quest` (or a `-` that says it was taken
+// on), never by a `~` that gives it a giver or a reward, and closing a hook never makes it a quest.
 export function applyOps(tracker, ops, { message, time = null, said, chosen = [], taken = [], direct = false } = {}) {
     const records = [...tracker.records];
     // (0.9.15) With the reader's message given (null: there was none), their choices are theirs.

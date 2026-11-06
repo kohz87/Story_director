@@ -342,6 +342,57 @@ test('a pick writes nothing unless the screen asks: then onSelect runs with { no
     assert.equal(quiet.handle.state.picked, placeButton(quiet.root, 'Coinwater').getAttribute('data-id'));
 });
 
+test('updated selection commands stay live, keep the API receiver and remove listeners on destroy', () => {
+    forgetViews();
+    const state = story();
+    const data = query(state, 'atlas.view', {}, { pack: PACK });
+    const doc = installFakeDom();
+    const added = [];
+    const removed = [];
+    doc.addEventListener = (...args) => added.push(args);
+    doc.removeEventListener = (...args) => removed.push(args);
+    const el = doc.createElement('div');
+    doc.body.appendChild(el);
+    const calls = [];
+    const api = {
+        query(name, args) {
+            calls.push(['query', name, args.id, this === api]);
+            return query(state, name, args, { pack: PACK });
+        },
+        command(name, args) { calls.push(['command', name, args.node, this === api]); },
+    };
+    const handle = atlasMapWidget.render(el, { value: data, onSelect: 'atlas.first' }, api);
+    const root = el.querySelector('.sd-map');
+    chooseRegion(root, 'all');
+    let coin = placeButton(root, 'Coinwater');
+    const id = coin.getAttribute('data-id');
+    coin.click();
+    assert.deepEqual(calls, [['query', 'atlas.place', id, true], ['command', 'atlas.first', id, true]]);
+
+    handle.update({ value: data, onSelect: 'atlas.second' });
+    calls.length = 0;
+    coin = placeButton(root, 'Coinwater');
+    coin.click();
+    assert.deepEqual(calls, [['query', 'atlas.place', id, true], ['command', 'atlas.second', id, true]]);
+
+    handle.update({ value: data, onSelect: '' });
+    calls.length = 0;
+    coin = placeButton(root, 'Coinwater');
+    coin.click();
+    assert.deepEqual(calls, [['query', 'atlas.place', id, true]]);
+    const stage = root.querySelector('.sd-map-stage');
+    const listening = root.descendants().filter(node => node.listeners.length);
+    const before = handle.state.view;
+    handle.destroy();
+    assert.ok(listening.every(node => node.listeners.length === 0));
+    assert.deepEqual(removed, added);
+    calls.length = 0;
+    coin.click();
+    stage.dispatch('wheel', { deltaY: -200, clientX: 100, clientY: 100 });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(handle.state.view, before);
+});
+
 test('reduced motion: moves jump; otherwise they ease over animation frames to the same place', () => {
     const frames = [];
     const motion = { matches: false };

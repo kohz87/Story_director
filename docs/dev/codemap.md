@@ -1,22 +1,22 @@
 # Story Director Source Codemap
 
-This map covers source files under `src/` that are not already named in the project's main documentation.
-Files already mapped are named in `CLAUDE.md`, `AI-README.md`, `README.md`, and `docs/**/*.md`; this map does not repeat them.
+This map describes selected source files and the recent file splits. The project's main documentation
+also maps the broader source directories.
 Generated 2026-11-07.
 
 ## src/v2/
-- `src/v2/fights.js`: Detects whether another ready module registers combat commands, so Story Director avoids encounters.
+- `src/v2/fights.js`: Detects whether another module registers combat commands, requiring it to be ready when lifecycle status is available.
 - `src/v2/hash.js`: Pure SHA-256 and canonical JSON helpers used for contract hashes and policy fingerprints.
 - `src/v2/rare.js`: Decides which rare Chronicle, route and map grammar the story currently needs.
-- `src/v2/slot.js`: Slot helpers that store rewrite-prone bookkeeping whole so deleting a reply cannot corrupt later replay.
+- `src/v2/slot.js`: Slot helpers that store rewrite-prone bookkeeping whole to avoid breaking later replay when a reply is deleted.
 
 ## src/v2/arc/
 - `src/v2/arc/commands.js`: Arc reader commands: accept a reviewed plan, update tracked threads, and end the current arc.
 - `src/v2/arc/controller.js`: Browser-side arc planner using `callModel`, draft persistence, auto-accept and turn-triggered planning.
 
 ## src/v2/atlas/
-- `src/v2/atlas/canonical.js`: Resolves pack and atlas places to stable canonical IDs; reports ambiguous or unbound identities.
-- `src/v2/atlas/map.js`: Builds `ss.map` and atlas widget props: icons, nodes, routes, layers, current place and fog.
+- `src/v2/atlas/canonical.js`: Resolves pack and atlas places to stable canonical IDs, holding ambiguous or unbound identities for binding.
+- `src/v2/atlas/map.js`: Builds `ss.map` and atlas widget props: icons, places, routes, layers, current place and discovery status.
 - `src/v2/atlas/policy.js`: Region, place-binding and danger policies plus canonical/candidate queries and policy hashes.
 
 ## src/v2/cast/
@@ -45,10 +45,7 @@ Generated 2026-11-07.
 - `src/v2/tracker/hash.js`: Synchronous canonical JSON/SHA-256 for public thread hashes, matching Story Block replay hashes.
 - `src/v2/tracker/thread-shape.js`: Validators for thread IDs, metadata, text, hashes, source stamps and replay cursors.
 
-## Pointer to add
-- Source codemap for files not covered above: `docs/dev/codemap.md`.
-
-## Split files (7 Nov: files over 450 lines split into small parts; each original keeps its path and re-exports its public names)
+## Split files (7 Nov: files over 450 lines split into small parts; each original keeps its path and public names)
 - `src/planner.js` → `src/planner/`: `prompt.js` prompt, summary and messages; `parse.js` answer parsing; `relative.js` relative dates; `validate.js` findings and ops; `auto.js` automatic planning; `note.js` the accepted note; `shared.js` helpers.
 - `src/tracker.js` → `src/tracker-records.js` record shape, copy-on-write helpers and constants; `src/tracker-apply.js` applying change lines (`applyOps`); `src/tracker-replay.js` mention marks and replay from chat entries; `src/tracker-queries.js` corrections, quest outcomes and record queries.
 - `src/note.js` → `src/note-text.js` fixed note instructions, cues and Pacing text; `src/note-format.js` word limits, field trimming and parts; `src/note-items.js` Due now, Arriving, record and While-away lines; `src/note-extra.js` note header, no-weekday line and distance lines.

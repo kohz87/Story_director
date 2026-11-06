@@ -1,6 +1,6 @@
 // Story Director v2, atlas part: the Map widget's place details, search and moves (moved out of widget.js;
 // widget.js still exports its public names): `createPlaces` returns showDetails, pick, goTo, runSearch
-// and chooseHit, with the reader's picked place and search hits held here.
+// and chooseHit. Search hits and the selection command are held here; the picked place is in `s`.
 
 import { centreOn, searchPlaces } from './view.js';
 import { button, h, humanize, layerFor, onLayer, text } from './widget-view.js';
