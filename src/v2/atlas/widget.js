@@ -97,8 +97,9 @@ function render(el, props, api) {
         doc, regions, regionBox, worldGroup, nodes, labels, placesLayer, labelsLayer, empty, stage, markLayer, road, legend, legendCard, placeAt, hereRing,
     });
     const places = createPlaces({
-        s, byId, doc, details, input, results, api, paint, initialOnSelect, setLayer, measure, moveTo,
-        getBox: () => box, getLimits: () => limits, closeEnough,
+        dom: { doc, details, input, results },
+        view: { s, byId, measure, getBox: () => box, getLimits: () => limits, closeEnough },
+        hooks: { api, paint, initialOnSelect, setLayer, moveTo },
     });
     const { showDetails, pick, goTo, runSearch, chooseHit } = places;
 
@@ -269,8 +270,9 @@ function render(el, props, api) {
     });
 
     createPointer({
-        s, win, doc, stage, placesLayer, nodes, placeAt, results, searchBox, pick, paint, listen, stopAnimation, measure, zoomOf,
-        setView, getBox: () => box, getLimits: () => limits,
+        dom: { win, doc, stage, placesLayer, results, searchBox },
+        view: { s, nodes, placeAt, measure, zoomOf, getBox: () => box, getLimits: () => limits },
+        hooks: { pick, paint, listen, stopAnimation, setView },
     });
 
     const Observer = win?.ResizeObserver ?? globalThis.ResizeObserver;

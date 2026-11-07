@@ -5,9 +5,11 @@
 import { centreOn, searchPlaces } from './view.js';
 import { button, h, humanize, layerFor, onLayer, text } from './widget-view.js';
 
-export function createPlaces({
-    s, byId, doc, details, input, results, api, paint, initialOnSelect, setLayer, measure, moveTo, getBox, getLimits, closeEnough,
-}) {
+// Three groups: `dom` (doc and the nodes), `view` (the state `s` and what reads the view) and `hooks` (what the widget lends it).
+export function createPlaces({ dom, view, hooks }) {
+    const { doc, details, input, results } = dom;
+    const { s, byId, measure, getBox, getLimits, closeEnough } = view;
+    const { api, paint, initialOnSelect, setLayer, moveTo } = hooks;
     let onSelect = text(initialOnSelect);
     let asked = 0;
     function showDetails(id) {

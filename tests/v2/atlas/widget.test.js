@@ -393,6 +393,37 @@ test('updated selection commands stay live, keep the API receiver and remove lis
     assert.deepEqual(handle.state.view, before);
 });
 
+test('destroy after search and pick leaves no listener on doc/win', () => {
+    const added = [];
+    const removed = [];
+    const win = {
+        addEventListener: (...args) => added.push(['win', ...args]),
+        removeEventListener: (...args) => removed.push(['win', ...args]),
+        matchMedia: () => ({ matches: false }),
+    };
+    forgetViews();
+    const doc = installFakeDom();
+    doc.defaultView = win;
+    doc.addEventListener = (...args) => added.push(['doc', ...args]);
+    doc.removeEventListener = (...args) => removed.push(['doc', ...args]);
+    const el = doc.createElement('div');
+    doc.body.appendChild(el);
+    const state = story();
+    const api = { query: (name, args) => query(state, name, args, { pack: PACK }) };
+    const handle = atlasMapWidget.render(el, { value: query(state, 'atlas.view', {}, { pack: PACK }) }, api);
+    const root = el.querySelector('.sd-map');
+    const input = root.querySelector('.sd-map-search input');
+    input.value = 'granery';
+    input.dispatch('input');
+    root.querySelectorAll('.sd-map-result')[0].click();
+    assert.ok(handle.state.picked, 'a place was picked');
+    root.querySelector('.sd-map-stage').dispatch('wheel', { deltaY: -200, clientX: 100, clientY: 100 });
+    handle.destroy();
+    const left = added.filter(entry => !removed.some(gone => gone.length === entry.length && gone.every((part, n) => part === entry[n])));
+    assert.ok(added.length > 0, 'doc or win listeners were added');
+    assert.deepEqual(left, [], 'every listener added on doc or win was removed');
+});
+
 test('reduced motion: moves jump; otherwise they ease over animation frames to the same place', () => {
     const frames = [];
     const motion = { matches: false };
