@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.11.1
+
+- Internal: the map widget's place and pointer helpers take their inputs in three groups (dom, view, hooks); a new test checks that closing the map leaves no listener behind. No behaviour change.
+- Requires Story Block 2.24.0 or later; Story Block testkit re-synced to 2.24.0.
+
 ## 2.11.0
 
 - **An offer with no deadline lapses 3 story days after the story last spoke of it.** (The reader asked: "without deadline, it should expire in 2-3 game days".) An offer (a job not yet taken on) with no `due` now closes like a deadline lapse ("- Key — offer lapsed", claimed once, shown in Quests and the next note) at the first reply at or after 3 story days from the later of when it was offered and when a line last touched it; each such line starts the 3 days over. The span is a constant (`UNDATED_OFFER_DAYS`), not a setting; it counts story time only. Offers with a deadline and quests taken on are unchanged. **Existing chats: undated offers not mentioned for 3+ days close at the next reply.** Also fixed: an offer that a line had touched (`~ Key | now: …`) was read as a quest and skipped by time, so it never lapsed even past its deadline; it now lapses as the rule says. No prompt change.
