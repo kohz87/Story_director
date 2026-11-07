@@ -22,7 +22,7 @@ export const KEPT_LINES_MAX = 4;
 export const KEPT_CHARS_MAX = 4000;
 
 export function createPromptBuild(s, deps) {
-    const { ctx, metadata, store, bus, registry, settings, events, timeline, onBlocked, notify, initial, prepare, hostSettings, viewReader, view, contextNow, hasCarrier, lastCarrier, isPrelude, markBusy, markIdle, setPrompts, clearPrompts, problem, trySave, claimQuiet, FOREGROUND, HOOK_TIMEOUT_MS, ASSIST_WAIT_MS, RPG_LOAD_WAIT_MS, OWN_PROMPT_PARTS, OWN_PROMPT_CHARS, STRIP_CACHE, HAS_BLOCK, HAS_LEGACY, hookTimeout, normalizeType } = deps;
+    const { ctx, metadata, store, bus, registry, settings, events, timeline, onBlocked, notify, initial, prepare, hostSettings, viewReader, view, contextNow, hasCarrier, lastCarrier, isPrelude, markBusy, markIdle, setPrompts, clearPrompts, problem, trySave, held, claimQuiet, FOREGROUND, HOOK_TIMEOUT_MS, ASSIST_WAIT_MS, RPG_LOAD_WAIT_MS, OWN_PROMPT_PARTS, OWN_PROMPT_CHARS, STRIP_CACHE, HAS_BLOCK, HAS_LEGACY, hookTimeout, normalizeType } = deps;
     let toldRestore = null;
     let recovering = null;
 
@@ -69,21 +69,6 @@ export function createPromptBuild(s, deps) {
             if (out === TIMED_OUT) {
                 problem({ module: moduleId, code: 'TIMEOUT', message: `beforeGenerate did not answer within ${limit / 1000} s; the reply went on without its notes.` });
                 continue;
-            }
-            if (out?.fightStart?.opening && out.fightStart.original) {
-                const chat = ctx?.chat ?? [], last = chat.at(-1);
-                if (!last?.is_user || readRecord(chat.at(-2))?.sid !== out.fightStart.anchor
-                    || hashText(String(last.mes ?? '').trim()) !== out.fightStart.message) {
-                    return { blocked: { moduleId, reason: 'The chat changed while the fight was being prepared.' } };
-                }
-                const result = bus.run(RPG_RESOLVE, out.fightStart.opening, { cause: 'system' });
-                if (result?.ok && result.receipt?.data?.v2?.result?.opened?.length) {
-                    const pending = holdStart(metadata(), ctx?.chat, { mode: 'new', original: out.fightStart.original,
-                        opening: { payload: out.fightStart.opening, seed: result.receipt.seed }, result: result.receipt.data.v2.result });
-                    if (pending) return { blocked: { moduleId, reason: 'Choose how to play the waiting fight.', fightStart: true } };
-                }
-                // If the opening cannot be prepared, the ordinary planner remains available.
-                out = { ...out, commands: [...(out.commands ?? []), { type: RPG_RESOLVE, payload: out.fightStart.original }] };
             }
             // A merged hook (domains/index.js mergeParts) keeps the answers of the parts that did answer and reports the others.
             for (const entry of Array.isArray(out?.problems) ? out.problems : []) problem({ module: moduleId, code: entry.code, message: entry.message });
@@ -332,7 +317,12 @@ export function createPromptBuild(s, deps) {
             } else await trySave('before the reply');
             // A Regenerate removes the old reply before this runs, without an event for it.
             if (store.headIndex() !== lastCarrier()) store.rebuild();
-            if (hasCarrier()) store.ensureInitial(initial());
+            // Stored packs not yet checked (the checker is late or failed): no state is started from a pack-less read and no prompt goes out; it is said once and the reply stops.
+            if (hasCarrier()) {
+                const why = held();
+                if (why) { block({ moduleId: HOST_MODULE, reason: why }, abort); return; }
+                store.ensureInitial(initial());
+            }
             // A pending barrier may need settling after a head change. Healthy sends do not settle here.
             if (registry.restore?.().state === 'pending') {
                 timeline?.settle();

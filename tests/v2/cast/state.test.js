@@ -221,15 +221,15 @@ test('never during a Lean RPG fight either: a Foes block with a foe in it holds 
     }
 });
 
-for (const [formula, down] of [['classic', '0'], ['standard', 'Down']]) {
+for (const [formula, down] of [['standard', 'Down']]) {
     test(`a won Lean RPG fight (${formula}) no longer holds the meetings back: a Down group stays in its slot, a live one still blocks; the next fight Down too`, async t => {
         quiet(t);
-        const { templatesFor } = await import('../../vendor/story-block/src/v2/lean-rpg/templates.js');
+        const { STANDARD_TEMPLATES } = await import('../../vendor/story-block/src/v2/lean-rpg/templates.js');
         const host = await castHost({ source: castSource([entry('brom', { start: { place: 'Kesh', goal: 'forge', routine: '' } })]) });
         try {
             await host.send('Hello.', said('Dawn.', OPENING));
             host.features.set('story-block.rpg', true);
-            const foes = templatesFor(formula).find(item => item.name === 'Foes').definition;
+            const foes = STANDARD_TEMPLATES.find(item => item.name === 'Foes').definition;
             assert.equal((await host.sdk.command('dm.define', { definition: structuredClone(foes) })).ok, true);
             await host.send('Gnashers!', said('Gnashers pour in.', ['+ dm foes — gnashers | kind: set-slot-1 | name: Gnashers | count: 12 | level: 4', '~ place Kesh | kind: town']));
             assert.equal(leanFight(host.head()), true, 'a live group');
