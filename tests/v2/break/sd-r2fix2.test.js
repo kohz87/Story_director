@@ -211,12 +211,12 @@ test('a zero-width or bidi mark makes no new thread, place or world event', asyn
 
 // ---- B-b7r2-1 ------------------------------------------------------------------------------------------
 
-test('the module needs Story Block 2.23.0 or later', async t => {
+test('the module needs Story Block 2.24.0 or later', async t => {
     const def = createModule();
-    assert.deepEqual(def.requires, { storyBlock: '>=2.23.0' });
-    assert.equal(STORY_BLOCK_RANGE, '>=2.23.0');
+    assert.deepEqual(def.requires, { storyBlock: '>=2.24.0' });
+    assert.equal(STORY_BLOCK_RANGE, '>=2.24.0');
     // Check the release boundary as well as later versions and prereleases.
-    for (const [version, ok] of [['2.22.9', false], ['2.23.0-beta.1', false], ['2.23.0', true], ['2.23.1', true], ['2.24.0', true]]) {
+    for (const [version, ok] of [['2.23.9', false], ['2.24.0-beta.1', false], ['2.24.0', true], ['2.24.1', true], ['2.25.0', true]]) {
         assert.equal(satisfies(version, def.requires.storyBlock), ok, version);
     }
     const host = await fresh(t);
