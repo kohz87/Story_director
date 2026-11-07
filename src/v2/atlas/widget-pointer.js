@@ -10,9 +10,11 @@ const TAP_HALF = 22;               // half of a phone's 44px tap area on the scr
 // The phone line, as Story Block's (its size.css): a narrow screen or a coarse pointer gets the dots' 44px tap areas.
 const PHONE = '(max-width: 759.98px), (pointer: coarse)';
 
-export function createPointer({
-    s, win, doc, stage, placesLayer, nodes, placeAt, results, searchBox, pick, paint, listen, stopAnimation, measure, zoomOf, setView, getBox, getLimits,
-}) {
+// Three groups: `dom` (window, document and the nodes), `view` (the state `s` and what reads the view) and `hooks` (what the widget lends it).
+export function createPointer({ dom, view, hooks }) {
+    const { win, doc, stage, placesLayer, results, searchBox } = dom;
+    const { s, nodes, placeAt, measure, zoomOf, getBox, getLimits } = view;
+    const { pick, paint, listen, stopAnimation, setView } = hooks;
     // A place: click, tap, Enter or Space (it is a button). Hover and focus show its name.
     const placeOf = target => {
         for (let node = target; node && node !== placesLayer; node = node.parentNode) if (node.getAttribute?.('data-id') && nodes.get(node.getAttribute('data-id')) === node) return node.getAttribute('data-id');
