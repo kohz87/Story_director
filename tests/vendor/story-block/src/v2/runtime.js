@@ -45,7 +45,7 @@ import { pageStorage, saveOnUnload, storeSaving } from './runtime/saving.js';
 export { initialWithStart, packsFor, withPackCurrency } from './runtime/start.js';
 export { SAVE_SEQ_KEY, MEMO_PREFIX, markUsed, saveOnUnload, storeSaving } from './runtime/saving.js';
 
-export const VERSION = '2.24.0';
+export const VERSION = '2.25.0';
 
 /**
  * createRuntime({ ctx, packs?, core = true, modules = [], createStore?, createCommandBus?, notify?,
@@ -138,8 +138,8 @@ export function createRuntime({
             version: VERSION,
             timeline: () => timeline,
             dataModules: { state: () => store.head(), lifecycle: id => registry.lifecycle(id), restore: () => registry.restore(), boardOn: () => registry.featureOn(CORE_FEATURE.leanRpg) && registry.featureOn(CORE_FEATURE.fightBoard), persona: () => { try { return (live() ?? ctx)?.name1 ?? ''; } catch { return ctx?.name1 ?? ''; } } },
-            // The RPG's pre-call asks through the same queued call as Assist's helpers (assistCall, set below).
-            leanRpg: { callModel: (prompt, options = {}) => assistCall(prompt, options), chat: () => ctx.chat, chatId: () => ctx.getCurrentChatId?.() ?? ctx.chatId ?? '', metadata: () => { try { return (live() ?? ctx)?.chatMetadata ?? null; } catch { return ctx?.chatMetadata ?? null; } }, onPlanning: working => events?.emit('head', { index: store.headIndex(), reason: working ? 'fight-start' : 'fight-start-done' }) },
+            // The RPG's hooks read the chat and its metadata; no model is asked for rolls.
+            leanRpg: { chat: () => ctx.chat, metadata: () => { try { return (live() ?? ctx)?.chatMetadata ?? null; } catch { return ctx?.chatMetadata ?? null; } } },
             packs: packPart,
             // Due events are the host's own system cues: straight to the bus (the public sdk only runs
             // the reader's 'ui' actions), with the same 'committed' event the sdk sends.
@@ -275,13 +275,23 @@ export function createRuntime({
         });
     }
     const initial = () => initialWithStart(registry);
+    // While stored packs wait for the checker the turn writes no state (their start would be missing): the turn asks `hold`, and `landed` says when to look again.
+    initial.hold = () => { try { return packPart?.packs?.unchecked?.() ?? null; } catch { return null; } };
+    initial.landed = () => { try { return packPart?.packs?.ready?.(); } catch { return undefined; } };
     // The RPG's code comes in before a chat that needs it is read (the turn awaits `prepare`), and the moment the reader switches the feature on.
     const rpgLoader = createRpgLoader({
         ...(rpgLoad ? { load: rpgLoad } : {}),
         featureOn: () => registry.featureOn(CORE_FEATURE.leanRpg), chat: () => ctx.chat, metadata: chatMetadata, problem: entry => turn?.report(entry),
     });
     events.on('feature', () => { rpgLoader.ensure({ scan: false }); });
-    turn = createTurn({ ctx, live, store, bus, timeline, registry, settings, events, onBlocked, initial, prepare: options => rpgLoader.ensure(options), ownPrompt: eventData => ownCalls.owns(eventData), ...(notify ? { notify } : {}) });
+    // The pack checker too (packs/installed.js): fetched at once when packs are stored, awaited before a chat is read; undefined when nothing is to be waited for.
+    const checkerReady = () => { try { return packPart?.packs?.ready?.(); } catch { return undefined; } };
+    const prepareLibs = options => {
+        const rpg = rpgLoader.ensure(options), checker = checkerReady();
+        return rpg && checker ? Promise.all([rpg, checker]) : rpg ?? checker;
+    };
+    checkerReady();
+    turn = createTurn({ ctx, live, store, bus, timeline, registry, settings, events, onBlocked, initial, prepare: options => prepareLibs(options), ownPrompt: eventData => ownCalls.owns(eventData), ...(notify ? { notify } : {}) });
     // The public API (public-api.js, docs/v2/PUBLIC-API.md): the head state read through the queries and readers that exist, events after the store has written.
     const apiPersona = () => { try { return String((live() ?? ctx)?.name1 ?? ''); } catch { return String(ctx?.name1 ?? ''); } };
     const api = createPublicApi({

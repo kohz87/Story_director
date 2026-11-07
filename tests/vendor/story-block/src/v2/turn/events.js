@@ -280,7 +280,7 @@ export function createEvents(s, deps) {
         rebuild({ publish: false });
         const meta = metadata();
         const removedBoard = pruneMissingBoard(meta, ctx?.chat);
-        const removedStart = Boolean(meta?.rpgFightStart && (!pendingStart(meta, ctx.chat) || meta.rpgFightStart.mode === 'working'));
+        const removedStart = Boolean(meta?.rpgFightStart && (!pendingStart(meta, ctx.chat)));
         if (removedStart) clearStart(meta);
         if (removedBoard || removedStart) {
             try { (ctx.saveMetadata ?? ctx.saveMetadataDebounced)?.call(ctx); } catch { /* saved on the next chat write */ }
@@ -306,6 +306,13 @@ export function createEvents(s, deps) {
      * starts nothing. No open chat, or no carrier: nothing to start. → true when the chat has a state.
      */
     function seed() {
+        if (store.head()) return true;
+        // The libraries a chat needs come first, as for CHAT_CHANGED; only when one is on its way is a promise returned (→ Promise<boolean>), else the answer is at once.
+        let waiting;
+        if (typeof prepare === 'function') { try { waiting = prepare(); } catch { waiting = undefined; } }
+        return waiting ? within(waiting, RPG_LOAD_WAIT_MS).then(seedNow, seedNow) : seedNow();
+    }
+    function seedNow() {
         if (store.head()) return true;
         let open = true;
         try { open = typeof ctx?.getCurrentChatId !== 'function' || !!ctx.getCurrentChatId(); } catch { open = true; }
@@ -337,6 +344,7 @@ export function createEvents(s, deps) {
      * 'edit'; anything else is none) rides on the head event for the public API's `story:rebuilt`.
      */
     async function onTimelineChanged(reason) {
+        if (typeof prepare === 'function') { try { await within(prepare({ scan: false }), RPG_LOAD_WAIT_MS); } catch { /* the loader reports its own failure */ } }
         rebuild({ publish: false });
         resumeHeldBoard();
         restoreHeldBoard();

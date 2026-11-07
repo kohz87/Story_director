@@ -13,11 +13,11 @@ import { part as screens } from '../screens/index.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.11.1';
+export const VERSION = '2.11.2';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
-// 2.19.0 reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own); 2.24.0 is the least this release runs on.
-export const STORY_BLOCK_WITH_HEADS = '2.24.0';
+// 2.19.0 reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own); 2.25.0 is the least this release runs on.
+export const STORY_BLOCK_WITH_HEADS = '2.25.0';
 export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */

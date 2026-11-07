@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.2
+
+- Requires Story Block 2.25.0 or later; Story Block testkit re-synced to 2.25.0. No other change.
+
 ## 2.11.1
 
 - Internal: the map widget's place and pointer helpers take their inputs in three groups (dom, view, hooks); a new test checks that closing the map leaves no listener behind. No behaviour change.
