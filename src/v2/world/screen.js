@@ -240,7 +240,7 @@ const CSS = `${BASE_CSS}
 .wv-item .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .wv-item[data-state="resolved"] .ss-listcard-sub { color: var(--sd-muted); }
 .wv-cast { display: block; min-width: 0; margin: 0 0 6px; }
-.wv-cast[hidden], .wv-people[hidden] { display: none; }
+.wv-cast[hidden], .wv-people[hidden], .wv-updating[hidden] { display: none; }
 .wv-thought { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0 0; font-size: 0.85em; font-style: italic; color: var(--sd-text);
   overflow-wrap: anywhere; white-space: normal; text-align: left; }
 .wv-thought i { color: var(--sd-accent); margin-top: 2px; }

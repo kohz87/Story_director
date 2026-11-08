@@ -189,3 +189,60 @@ test('Here: a 200-character thought is kept whole; a 300-character one is cut to
     assert.equal(text('Kell'), `${'b'.repeat(239)}…`);
     assert.equal(Array.from(text('Kell')).length, 240);
 });
+
+// While NPC State Delta reads a new reply (page.busy()): the last cards stay with an "updating" label.
+test('busy with no cards keeps the last cards and the label; done redraws without it; no earlier cards gives a chip; no busy() as before', async () => {
+    const people = { Mira: { rank: 'Friend' }, 'Old Tom': {} };
+    const host = await scene({ delta: people });
+    const { world, journal } = worldData(host);
+    host.close();
+    const cast = fakeCast(() => people);
+    cast.busyNow = false;
+    cast.busy = () => cast.busyNow;
+    const widget = createPeopleWidget({ open: () => () => {}, cast: () => cast });
+    const { el } = drawWorld({ world, journal }, { widgets: { [PEOPLE_WIDGET]: widget } });
+    const names = () => el.querySelector('.wv-cast').querySelectorAll('.npc-state-delta-present-card-name').map(n => n.textContent);
+    const chips = () => el.querySelectorAll('.wv-chip').map(chip => squash(chip.textContent));
+    assert.deepEqual(names(), ['Mira', 'Old Tom']);
+    assert.equal(el.querySelector('.wv-updating').hidden, true);
+    // A new reply: Delta is busy and has no cards for now.
+    cast.busyNow = true;
+    cast.on = false;
+    cast.change();
+    await tick();
+    cast.on = true;
+    const saved = { ...people };
+    for (const key of Object.keys(people)) delete people[key];
+    cast.change();
+    await tick();
+    assert.deepEqual(names(), ['Mira', 'Old Tom'], 'the last cards stay');
+    assert.equal(el.querySelector('.wv-cast').hidden, false);
+    assert.equal(el.querySelector('.wv-updating').hidden, false);
+    assert.equal(squash(el.querySelector('.wv-updating').textContent), 'updating');
+    assert.deepEqual(chips(), ['Kell'], 'no chips for those the cards cover; Kell never had a card');
+    // Done: new cards, no label.
+    Object.assign(people, saved, { Kell: {} });
+    cast.busyNow = false;
+    cast.change();
+    await tick();
+    assert.deepEqual(names(), ['Mira', 'Old Tom', 'Kell']);
+    assert.equal(el.querySelector('.wv-updating').hidden, true);
+    assert.deepEqual(chips(), []);
+    // Busy and never any card before: chips as today.
+    const fresh = fakeCast(() => ({}));
+    fresh.busy = () => true;
+    const first = drawWorld({ world, journal }, { widgets: { [PEOPLE_WIDGET]: createPeopleWidget({ open: () => () => {}, cast: () => fresh }) } });
+    assert.equal(first.el.querySelector('.wv-updating').hidden, true);
+    assert.equal(first.el.querySelector('.wv-cast').hidden, true);
+    assert.deepEqual(first.el.querySelectorAll('.wv-chip').map(chip => squash(chip.textContent)), ['Mira Friend', 'Old Tom', 'Kell']);
+    // An older Delta without busy(): the cards go, chips come, as before.
+    const old = fakeCast(() => saved);
+    const page = drawWorld({ world, journal }, { widgets: { [PEOPLE_WIDGET]: createPeopleWidget({ open: () => () => {}, cast: () => old }) } });
+    assert.equal(page.el.querySelectorAll('.npc-state-delta-present-cell').length, 2);
+    old.on = false;
+    old.change();
+    await tick();
+    assert.equal(page.el.querySelector('.wv-cast').hidden, true);
+    assert.equal(page.el.querySelector('.wv-updating').hidden, true);
+    assert.equal(page.el.querySelectorAll('.wv-chip').length, 3);
+});
