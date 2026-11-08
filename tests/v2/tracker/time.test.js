@@ -82,3 +82,17 @@ test('threads remember the story time they were changed at', () => {
     assert.equal(track.changed.time, gregorian.parse('March 3, 2026, 11:00 am').abs);
     assert.deepEqual([track.created.turn, track.changed.turn], [1, 2]);
 });
+
+test('a date in angle brackets is read, with or without a leading zero; a real non-date still warns', () => {
+    const custom = calendarOf(CUSTOM);
+    for (const clock of ['1:15 pm', '01:15 pm']) {
+        const state = reply(makeState(), `~ time <CY 611, Goldwane 12, ${clock}>`, { settings: CUSTOM }).state;
+        assert.equal(custom.format(minutes(state)), custom.format(custom.parse('CY 611, Goldwane 12, 1:15 pm').abs), clock);
+    }
+    assert.equal(custom.parse('<CY 611, Goldwane 12, 07:30 am>').hasTime, true);
+    assert.equal(custom.parse('on: <CY 611, Goldwane 12, 10:15 am>').minutes, 615);
+    assert.equal(custom.parse('<b>Goldwane 12</b>').day, 12);
+    const bad = reply(makeState(), '~ time <soonish>', { settings: CUSTOM });
+    assert.equal(minutes(bad.state), null);
+    assert.ok(lastProblems(bad.state).length > 0);
+});

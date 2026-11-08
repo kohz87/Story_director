@@ -287,9 +287,13 @@ function formatTime(minutes) {
 function stripMarkdown(text) {
     return String(text)
         .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')    // links keep their text
-        .replace(/<[^>]*>/g, ' ')
-        .replace(/[*_`~#>]+/g, '');
+        .replace(HTML_TAG, ' ')
+        .replace(/<([^<>]*)>/g, ' $1 ')              // a date in angle brackets, as Story Director writes it
+        .replace(/[*_`~#<>]+/g, '');
 }
+
+// A real tag (`<br>`, `</i>`, `<a href="x">`): a name, then only name=value attributes. `<CY 611, Goldwane 12>` is no tag.
+const HTML_TAG = /<\/?[a-z][a-z0-9]*(?:\s+[\w:-]+=(?:"[^"]*"|'[^']*'|[^\s>]*))*\s*\/?>/gi;
 
 const TIME_LEAD = /^[\s,;@–—-]*(?:(?:at|by|around|about|on|in\s+the)\s+)?/iu;
 const TIME_TRAIL = /^[\s,;@–—-]*(?:(?:on|of)\s+)?$/iu;
