@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.3
+
+- **Scene time lines with the date in angle brackets are read again.** A line like "~ time <CY 611, Goldwane 12, 1:15 pm>" was rejected as "not a date or a stretch of time". Re-read an older reply to apply its time line.
+
 ## 2.11.2
 
 - Requires Story Block 2.25.0 or later; Story Block testkit re-synced to 2.25.0. No other change.
