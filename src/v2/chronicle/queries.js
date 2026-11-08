@@ -9,7 +9,7 @@
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { worldLineText } from './capture.js';
 import { findIn, isLocked, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
-import { DIGEST_FEATURE, dayFacts, dayOf, digestOut, entryOf, orderedDays, questLogOf, walkDays } from './days.js';
+import { DIGEST_FEATURE, dayFacts, dayOf, digestOut, entryOf, eventsOf, orderedDays, questLogOf, walkDays } from './days.js';
 
 // A query of the day digest only (MODULES §F100): tagged with its feature, so Story Block answers null
 // while the reader has the digest off (B-c2-2). An older host without features keeps it on.
@@ -221,6 +221,18 @@ export function dayFactsQuery(state, { before = null } = {}, tools) {
 }
 
 /**
+ * `chronicle.dayEvents { day }`: every event of that story day, worked out now from the chat's receipts by the rules the
+ * digest picks its "happened" from (bookkeeping left out), saved nowhere: `{ day, events: [text] }`; null for a day that is not a whole number.
+ */
+export function dayEventsQuery(_state, { day = null } = {}, tools) {
+    const wanted = dayArg(day);
+    if (wanted === null || Number.isNaN(wanted)) return null;
+    let entries = [];
+    try { entries = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { entries = []; }
+    return { day: wanted, events: eventsOf(walkDays(entries).days.get(wanted) ?? []) };
+}
+
+/**
  * `chronicle.noteFacts { after, minutes }`: what the receipts committed after revision `after` hold
  * (fresh: Story Block still keeps their data), by story day, the clock at `minutes` before them:
  * `{ entries: [{ day, entry }], minutes, rev, settle }` (the clock and the last revision after them,
@@ -302,6 +314,7 @@ export const queries = {
     }),
     'chronicle.dayBoard': digestOnly(dayBoard),
     'chronicle.dayFacts': digestOnly(dayFactsQuery),
+    'chronicle.dayEvents': digestOnly(dayEventsQuery),
     'chronicle.noteFacts': noteFactsQuery,
     /** The kept history of a quest or thread `id`: `[{ rev, text }]`, oldest first (the last few). */
     'chronicle.questLog': (state, { id = null } = {}) => questLogOf(state?.domains?.chronicle, id),

@@ -125,8 +125,10 @@ const CSS = `${BASE_CSS}
 .sd-threads { gap: 0; }
 .sd-thread .ss-listcard-title, .sd-thread .ss-listcard-sub { overflow-wrap: anywhere; }
 .sd-thread .sd-meta { margin-top: 2px; }
-.sd-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 42%; min-width: 0; }
-.sd-tags .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.sd-thread .ss-listcard-main { flex: 1 1 0; min-width: 0; }
+/* The status pills ("offered", "ready", the outcome) keep their width and stay on one line beside the name; the description wraps under it. */
+.sd-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; min-width: max-content; }
+.sd-tags .ss-pill { white-space: nowrap; flex: none; }
 .sd-outcome { text-transform: lowercase; }
 /* Ready: an outline pill with a good-coloured border (offered is the soft pill; .ss-pill does not read --ss-ring). */
 .sd-ready { border-color: var(--sd-good); }

@@ -85,6 +85,7 @@ export function knownDay(entry, hidden) {
         facts: list(entry.facts),
         happened,
         more: isInt(entry.more) ? entry.more : 0,
+        total: happened.length + (isInt(entry.more) ? entry.more : 0),
         world,
         met,
         npcs,
@@ -113,6 +114,18 @@ export function journalView(state, _args, tools) {
     const open = pending(state, tools, { calendar, now, written: new Set(days.map(day => day.day)) });
     const out = [...open, ...days].sort((a, b) => b.day - a.day).map(day => knownDay(day, hidden));
     return { on: true, days: out, hasDays: out.length > 0, count: out.length, today: String(board.today ?? '') };
+}
+
+/**
+ * `director.journal.events { day }` → `{ day, events: [text] }`: that day's whole list of events (the Journal's "Show all N events"), loaded
+ * on tap from the chat's receipts (`chronicle.dayEvents`), with what {{user}} must not know left out as the Journal leaves it out. Null for a bad day.
+ */
+export function journalEvents(state, { day } = {}, tools) {
+    const wanted = typeof day === 'string' && day.trim() !== '' ? Number(day) : day;
+    if (!isInt(wanted)) return null;
+    const got = tryQuery(queryOf(tools), 'chronicle.dayEvents', { day: wanted }, null);
+    const hidden = hiddenNames(state);
+    return { day: wanted, events: list(got?.events).filter(line => !namesHidden(line, hidden.words)) };
 }
 
 // ---- one day, for other modules (contract §3: journal.day) ----------------------------------------------------------------
