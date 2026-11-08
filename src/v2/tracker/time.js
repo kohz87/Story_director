@@ -134,6 +134,28 @@ export function durationMinutes(input) {
     return Math.round(total);
 }
 
+/** Minutes a `! time +2h` line passes, or null when the line is a date (or not usable). */
+export function lineStretch(line) {
+    if (line?.op === '-' || line?.op === '?') return null;
+    return durationMinutes([line?.name, line?.text].map(part => String(part ?? '').trim()).filter(Boolean).join(' '));
+}
+
+/** Whether a stretch of `span` minutes and a gap of `gap` minutes are the same stretch of time (within 15 minutes). */
+export const sameStretch = (span, gap) => Number.isFinite(span) && Number.isFinite(gap) && Math.abs(span - gap) <= SAME_STRETCH;
+const SAME_STRETCH = 15;
+
+// "~ time <date> · ! time +2h" on one line (the narrator copies the grammar's joined forms): [date line, advance line].
+const JOINED = /^(.*?)\s+[·|]\s+([!+~])\s*time\s+(\S.*)$/is;
+const unbracket = text => text.trim().replace(/^<\s*([\s\S]*?)\s*>$/, '$1').trim();
+
+/** A `time` line written as two joined forms is read as the two lines; any other line comes back as it is. */
+export function splitTimeLine(line) {
+    const words = [line?.name, line?.text].map(part => String(part ?? '').trim()).filter(Boolean).join(' ');
+    const joined = JOINED.exec(words);
+    if (!joined || !unbracket(joined[1]) || !unbracket(joined[3])) return [line];
+    return [{ ...line, name: unbracket(joined[1]), text: '' }, { ...line, op: joined[2], name: unbracket(joined[3]), text: '' }];
+}
+
 /**
  * What a `time` line does to the story time `minutes` (null: not set yet): `{ minutes }`, or
  * `{ error }` in plain words. A date alone runs from its day's start, as v1 reads the scene's

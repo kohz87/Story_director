@@ -77,7 +77,7 @@
     },
     {
       "kind": "time",
-      "grammar": "~ time <date, clock time such as 9:30 am> (the scene's time) · ! time +2h (time passes)"
+      "grammar": "~ time <date, clock time such as 9:30 am> (the scene's time) or ! time +2h (time passes), never both for one stretch"
     },
     {
       "kind": "trip",

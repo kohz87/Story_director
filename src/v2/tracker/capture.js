@@ -6,7 +6,7 @@ import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toTracker } f
 import { addProblem, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
 import { acceptIntent } from './acceptance.js';
 import { threadWriteId } from './thread-writes.js';
-import { calendarOf, maxJumpMinutes, packCalendarOf, settingsFrom, timeAfter } from './time.js';
+import { calendarOf, lineStretch, maxJumpMinutes, packCalendarOf, sameStretch, settingsFrom, splitTimeLine, timeAfter } from './time.js';
 
 /** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
 export const KEY_CHARS = 120;
@@ -346,17 +346,37 @@ function threadLine(ctx, given) {
 
 /** `apply(ctx, line)` for `time` lines: `~ time <date, clock time>`, `! time +2h`. */
 export function applyTimeLine(ctx, line) {
-    return timeLine(ctx, line);
+    // "~ time <date> · ! time +2h" on one line is the two lines (the same stretch counts once: timeLine).
+    return splitTimeLine(line).map((part, n) => timeLine(ctx, part, n > 0)).at(-1);
 }
 
-function timeLine(ctx, line) {
+// `again`: the second half of a joined line, which is the same line (the same place in the reply), not a new reply.
+function timeLine(ctx, line, again = false) {
     const director = ctx.draft('director');
     // `from`: the clock when this reply's first Director line was read. maxJump holds for the whole
     // reply, so a reply that repeats "! time +30d" moves the clock 30 days in all (C2-5).
-    const { from } = beginTurn(director, ctx, line);
+    const turn = (again && replyDraft(director)) || beginTurn(director, ctx, line);
+    const { from } = turn;
     const settings = settingsFrom(typeof ctx.settings === 'function' ? ctx.settings() : ctx.settings);
     const calendar = calendarOf(settings, packCalendarOf(ctx.query));
-    const next = timeAfter(line, director.time.minutes, calendar, { maxJump: maxJumpMinutes(settings), from });
+    const options = { maxJump: maxJumpMinutes(settings), from };
+    const stretch = lineStretch(line);
+    // The same stretch of time counts once: a date and a "+X" within 15 minutes of the gap from where
+    // the reply began, in either order, are one stretch, and the date is the one that is used.
+    if (stretch !== null && Number.isSafeInteger(turn.setAt) && Number.isSafeInteger(from) && sameStretch(stretch, turn.setAt - from)) {
+        const kept = director.time.minutes;
+        return { summary: `Story time: ${calendar.format(kept)}.`, narrate: false, data: { minutes: kept, from: kept } };
+    }
+    let next = null;
+    if (stretch === null && turn.advanced > 0 && Number.isSafeInteger(from)) {
+        const alone = timeAfter(line, from, calendar, options);
+        if (alone.set && !alone.error && sameStretch(turn.advanced, alone.minutes - from)) next = alone;
+    }
+    next ??= timeAfter(line, director.time.minutes, calendar, options);
+    if (!next.error && Number.isSafeInteger(next.minutes)) {
+        if (stretch !== null) turn.advanced = (turn.advanced ?? 0) + stretch;
+        else if (next.set) turn.setAt = next.minutes;
+    }
     if (next.problem) addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? '').slice(0, KEY_CHARS), op: line?.op, text: next.problem });
     if (next.error) {
         addProblem(director, ctx, { kind: 'time', severity: 'warn', key: String(line?.name ?? '').slice(0, KEY_CHARS), op: line?.op, text: next.error });
