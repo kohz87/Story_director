@@ -81,7 +81,7 @@ const JOURNAL = `
 
 // Around here's heading: the place on one line, cut with "…" when it is long (its full text is the tooltip), then the time of day, which goes
 // first when the two do not fit together (CSS: `.wv-around .wv-label > small`).
-const AROUND_WHERE = '<span class="wv-clip" data-if="q.cast.place" title="{{ q.cast.place }}">{{ q.cast.place }}</span> <span class="wv-day" data-if="q.cast.day">{{ q.cast.dayText }}</span>';
+const AROUND_WHERE = '<span class="wv-clip" data-if="q.cast.place" title="{{ q.cast.place }}">{{ q.cast.place }}</span> <span class="wv-daytime" data-if="q.cast.day">{{ q.cast.dayText }}</span>';
 
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
@@ -232,7 +232,7 @@ const CSS = `${BASE_CSS}
 .wv-around .wv-label { min-width: 0; }
 .wv-around .wv-label > small { display: flex; flex-wrap: wrap; column-gap: .35em; flex: 0 1 auto; min-width: 0; max-width: 100%; line-height: 1.3; max-height: 1.3em; overflow: hidden; }
 .wv-clip { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wv-day { flex: none; white-space: nowrap; }
+.wv-daytime { flex: none; white-space: nowrap; }
 .wv-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 6px 0; border-top: 1px solid var(--sd-border); }
 .wv-row-list { display: grid; gap: 2px; text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .wv-row-item small { color: var(--sd-muted); }
