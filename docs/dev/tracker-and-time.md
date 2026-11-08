@@ -27,6 +27,7 @@ this repo's AI-README "Reply format the model writes" and "Data the model sees" 
   `{ year, month, day, minutes }`, or null while unset), what the editor shows. Tests: `tests/v2/tracker/clock-set*.test.js`,
   the clock stream of `fuzz-delete.test.js`, `tests/v2/break/fuzz-clock-edit.test.js`.
 - Calendar: the reader's, else the enabled pack's (`packs.calendar`), else Gregorian; read-only while "pack".
+- **The same stretch counts once** (`tracker/time.js` `sameStretch`, `lineStretch`, `splitTimeLine`; `tracker/capture.js timeLine`): a date and a `+X` within 15 minutes of the gap from where the reply began, in either order, are one stretch and the date is used; `~ time <date> · ! time +2h` on one line is read as the two lines.
 - **Per-reply bookkeeping:** `turn.now` is a slot written whole for each reply. Later replies do not write inside an earlier reply's slot.
 - **Quests:** the story records quests as threads and tells their goals and rewards. Earlier quest extensions are read-only.
 - **Time settle** (`time/settle.js`): beats slip after two story days, unaccepted offers lapse, accepted quests

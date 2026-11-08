@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.12.0
+
+- **Inner chatter on the World tab shows up to 240 characters** (it was 140).
+- **The same stretch of time is counted once.** When a reply gives both a date and a "+2h" for the same stretch (within 15 minutes of each other, in either order), the clock moves once, to the date. The one-line form "~ time <date> · ! time +2h" is read as the two lines it is, and the grammar now says to write one or the other.
+- **World, Here keeps the last cards while People are being read.** While NPC State Delta reads a new reply, the cards stay on screen, marked "updating", and no longer flash empty. (With NPC State Delta 1.14.0 or later; older versions behave as before.)
+- **The Journal is easier to read.**
+  - **Lines wrap** inside their day card, and the "Around here" time chip no longer shares the day card's look.
+  - **Bookkeeping is not an event:** lines that only keep the books are no longer listed.
+  - **"Show all N events"** loads a day's whole list on tap, and a second tap folds it.
+  - **Old days drop the fight narrator notes** they kept.
+- **The Hooks list keeps the width of its "offered" label.**
+- Requires Story Block 2.25.0 or later (unchanged: nothing here needs a newer Story Block); Story Block testkit re-synced to 2.27.0.
+
 ## 2.11.3
 
 - **Scene time lines with the date in angle brackets are read again.** A line like "~ time <CY 611, Goldwane 12, 1:15 pm>" was rejected as "not a date or a stretch of time". Re-read an older reply to apply its time line.
