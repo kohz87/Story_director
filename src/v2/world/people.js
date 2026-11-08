@@ -11,6 +11,10 @@
 // * Under each person, their thought from the newest reply's Inner chatter (`thought` / `chatter`, matched
 //   by name as the chatter strip links a dossier; known.js hereView). Text goes in as text only.
 //
+// While NPC State Delta reads a new reply it has no cards yet (`page.busy()`, page API version 2, used only when
+// it is a function): the last cards drawn stay, marked "updating", and the people they covered get no chip; a
+// person with no earlier card still gets the chip. An older Delta without `busy` behaves as before.
+//
 // Fresh without a tab switch: Story Block draws the screen again on `head` and `committed` (a new reply, a
 // swipe, a delete, a chat change), and NPC State Delta's changes that come later (a scan that ends after the
 // reply, a dossier added or edited) reach the widget through the page API's `onChange`: it asks
@@ -51,7 +55,11 @@ function render(el, props, api, { open = dossierOpener, cast = castApi } = {}) {
     const make = maker(doc);
     const box = make('div', 'wv-cast');
     const root = make('ul', 'wv-people', undefined, { 'aria-label': 'People here' });
-    el.replaceChildren(box, root);
+    const mark = make('span', 'ss-pill ss-pill-soft wv-updating', 'updating');
+    mark.hidden = true;
+    el.replaceChildren(mark, box, root);
+    let lastCards = [];
+    let lastCovered = new Set();
     let value = props?.value ?? null;
     let off = null;
     let watched = null;
@@ -110,16 +118,26 @@ function render(el, props, api, { open = dossierOpener, cast = castApi } = {}) {
                 })) || 0;
             } catch { cards = 0; }
         }
-        if (cards > 0) box.hidden = false;
-        else {
-            box.replaceChildren();
-            box.hidden = true;
+        let keep = false;
+        if (cards > 0) {
+            box.hidden = false;
+            lastCards = Array.from(box.children);
+            lastCovered = new Set(covered);
+        } else {
+            let busy = false;
+            try { busy = page && typeof page.busy === 'function' && page.busy() === true; } catch { busy = false; }
+            keep = busy && lastCards.length > 0;
+            box.replaceChildren(...(keep ? lastCards : []));
+            box.hidden = !keep;
+            if (keep) lastCovered.forEach(key => covered.add(key));
         }
+        mark.hidden = !keep;
+        const shown = cards > 0 || keep;
         const opener = open?.() ?? null;
         root.replaceChildren(...people
-            .filter(person => !(cards > 0 && covered.has(person.key || lineKey(person.name))))
+            .filter(person => !(shown && covered.has(person.key || lineKey(person.name))))
             .map(person => chip(person, opener, value?.nsd === true && person.dossier === true && opener)));
-        root.hidden = root.children?.length === 0 && cards > 0;
+        root.hidden = root.children?.length === 0 && shown;
     };
 
     // NPC State Delta changed: ask for the here view again (the dossier flags, the stances) and redraw, once.
@@ -146,6 +164,7 @@ function render(el, props, api, { open = dossierOpener, cast = castApi } = {}) {
             gone = true;
             try { off?.(); } catch { /* gone */ }
             off = null;
+            mark.remove();
             box.remove();
             root.remove();
         },
