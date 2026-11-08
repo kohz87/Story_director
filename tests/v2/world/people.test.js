@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PEOPLE_WIDGET, createPeopleWidget } from '../../../src/v2/world/index.js';
+import { hereView } from '../../../src/v2/world/known.js';
 import { drawWorld, said, squash, worldData, worldHost } from './helpers.js';
 
 const CHATTER = { 'story-block.chatter': true };
@@ -177,4 +178,14 @@ test('a new reply, a swipe and a delete: Here follows (the screen is drawn again
     const place = el.querySelector('.wv-place');
     assert.ok(place.classList.contains('wv-moved'));
     assert.match(squash(place.textContent), /^Market settlement · Bluewatch moved here this reply$/, "kind, region (kept from the place before) and the mark");
+});
+
+test('Here: a 200-character thought is kept whole; a 300-character one is cut to 240 with an ellipsis', () => {
+    const lines = [{ name: 'Mira', text: 'a'.repeat(200) }, { name: 'Kell', text: 'b'.repeat(300) }];
+    const query = name => ({ 'scene.present': ['Mira', 'Kell'], 'chatter.head': lines })[name] ?? null;
+    const here = hereView({}, {}, query);
+    const text = who => here.people.find(person => person.name === who).thought;
+    assert.equal(text('Mira'), 'a'.repeat(200));
+    assert.equal(text('Kell'), `${'b'.repeat(239)}…`);
+    assert.equal(Array.from(text('Kell')).length, 240);
 });
