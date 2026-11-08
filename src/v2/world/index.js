@@ -7,7 +7,8 @@
 //   a middle delete or a reload shows what a rebuild shows.
 // * Queries: `director.world` (the Now view), `director.world.here` (the place and who is present, with
 //   NPC State Delta's stance and dossier when it is there; NPC State Delta asks it to know who is here) and
-//   `director.journal` (the Journal: each story day from the day digest, and today so far).
+//   `director.journal` (the Journal: each story day from the day digest, and today so far) and `director.journal.events`
+//   (one day's whole list of events, loaded when the reader taps "Show all N events").
 // * Setting `world.upcomingDays` (30): how many story days ahead Upcoming looks.
 // * The Days screen is folded into the Journal; its id `story-director/days` stays as a dialog of the
 //   Journal alone, for older layouts.
@@ -16,15 +17,17 @@
 // Journal says it is off.
 
 import { DEFAULT_UPCOMING_DAYS, FEATURE, MAX_UPCOMING_DAYS, hereView, worldView } from './known.js';
-import { journalDay, journalView } from './journal.js';
+import { journalDay, journalEvents, journalView } from './journal.js';
 import { PEOPLE_WIDGET, peopleWidget } from './people.js';
+import { EVENTS_WIDGET, eventsWidget } from './events-widget.js';
 import { daysScreen, worldScreen } from './screen.js';
 
 export { FEATURE };
 export { WORLD_ID, DAYS_ID, worldScreen, daysScreen } from './screen.js';
 export { PEOPLE_WIDGET, createPeopleWidget, peopleWidget } from './people.js';
+export { EVENTS_WIDGET, eventsWidget } from './events-widget.js';
 export { hereView, hiddenNames, knownFactions, knownNews, knownUpcoming, holidays, worldView } from './known.js';
-export { journalDay, journalView, knownDay } from './journal.js';
+export { journalDay, journalEvents, journalView, knownDay } from './journal.js';
 
 const tagged = fn => Object.assign(fn, { feature: FEATURE });
 
@@ -41,6 +44,7 @@ export const part = {
         'director.world': tagged((state, args, tools) => worldView(state, args, tools)),
         'director.world.here': tagged((state, args, tools) => hereView(state, args, tools)),
         'director.journal': tagged((state, args, tools) => journalView(state, args, tools)),
+        'director.journal.events': tagged((state, args, tools) => journalEvents(state, args, tools)),
         // Not feature-tagged: other modules' recap works whether or not the World screen or the digest is on (contract P: journal.day).
         'journal.day': (state, args, tools) => journalDay(state, args, tools),
     },
@@ -54,5 +58,5 @@ export const part = {
     },
     tabs: [],
     screens: [worldScreen, daysScreen],
-    widgets: { [PEOPLE_WIDGET]: peopleWidget },
+    widgets: { [PEOPLE_WIDGET]: peopleWidget, [EVENTS_WIDGET]: eventsWidget },
 };

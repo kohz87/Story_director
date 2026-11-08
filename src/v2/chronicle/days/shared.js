@@ -34,7 +34,9 @@ const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'dir
 // The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's
 // name and counts are never a fact of the day (the Journal shows only what {{user}} knows).
 export const PLANNED_TYPES = new Set(['director.arc.accept', 'director.arc.update', 'director.arc.end']);
-export const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause === 'system' && receipt.narrate !== true);
+// The reader's progress is told although the code makes it (cause system): practice lines.
+const SYSTEM_BUT_TOLD = new Set(['rpg.practice']);
+export const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause === 'system' && receipt.narrate !== true && !SYSTEM_BUT_TOLD.has(receipt.type));
 export const SETTLE = 'time.settle';
 // Story Block's scene receipts that name who came into the scene (`data.added`).
 export const PRESENT_TYPES = new Set(['capture.present', 'scene.present']);
@@ -44,6 +46,24 @@ export const TOLD_ELSEWHERE = new Set([
     'capture.place', 'capture.coin', 'capture.world', 'capture.faction', 'wallet.receive', 'wallet.pay',
     'atlas.visit', 'atlas.edit', 'atlas.focus', 'chronicle.edit', 'chronicle.remove', 'combat.act',
 ]);
+// Receipts that are the code's own bookkeeping, never an event of the day (neither picked nor counted under "happened"): Story Block's
+// fight board result (`rpg.resolve`, whose summary is the narrator's instruction), its no-roll step, field edits, timer ticks and
+// reply-end settles (`dm.set`, `dm.tick`, `dm.settle`), the Director's own initiative pick, the story-time settle and the cast's
+// "nothing changed". Practice lines and add-xp are the reader's progress and stay.
+export const BOOKKEEPING_TYPES = new Set([
+    'rpg.resolve', 'rpg.noroll', 'dm.set', 'dm.tick', 'dm.settle', 'director.initiative', 'time.settle', 'cast.advance',
+]);
+// A block's template result (`capture.dm` / `dm.act`, `data.v2.result.kind`) that is a plain meter set (set-health, set-mana,
+// set-stamina, set-slot-N) or a foe slot clear (clear-N) is bookkeeping; every other kind (register, deed, add-xp ...) is a story event.
+const METER_KIND = /^(set-[a-z]+(-\d+)?|clear-\d+)$/;
+const DM_TYPES = new Set(['capture.dm', 'dm.act']);
+/** Whether a receipt is the code's own bookkeeping: by type, by a block result's kind, a clock line "(not used)" or an empty summary (never by other text). */
+export function isBookkeeping(receipt) {
+    if (BOOKKEEPING_TYPES.has(receipt.type)) return true;
+    if (typeof receipt.summary !== 'string' || !receipt.summary.trim()) return true;
+    if (DM_TYPES.has(receipt.type)) return METER_KIND.test(receipt.data?.v2?.result?.kind ?? '');
+    return receipt.type === 'capture.time' && /\(not used\)\.?\s*$/.test(receipt.summary);
+}
 // A tracker line's receipt repeats the line itself ("Director: + quest …"): the model's words, not code's.
 export const ECHO = /^Director: /;
 

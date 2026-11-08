@@ -3,7 +3,7 @@
 import {
     ECHO, ENTRY_HAPPENED, MAX_ITEM, MAX_MET, MAX_NAME, MAX_NPCS, MAX_PLACES, MAX_QUESTS,
     MAX_WORLD, PLANNED_TYPES, PRESENT_TYPES, TOLD_ELSEWHERE, clockSet, cut, dayOf, flat,
-    isInt, isRecord, quiet, text,
+    isBookkeeping, isInt, isRecord, quiet, text,
 } from './shared.js';
 
 // ---- facts out of one day's receipts ----------------------------------------------------------
@@ -76,9 +76,10 @@ export function entryOf(receipts, day = null, { lasting = null } = {}) {
         count += 1;
         const data = isRecord(receipt.data) ? receipt.data : {};
         const said = cut(receipt.summary, MAX_ITEM);
-        if (said && !TOLD_ELSEWHERE.has(receipt.type) && !ECHO.test(said) && !seenHappened.has(said)) {
-            seenHappened.add(said);
-            candidates.push({ text: said, told: receipt.narrate === true, at: candidates.length });
+        const happened = happenedText(receipt);
+        if (happened && !seenHappened.has(happened)) {
+            seenHappened.add(happened);
+            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length });
         }
         if (receipt.type === 'capture.place' && data.moved === true) pushUnique(places, data.name, MAX_PLACES, seenPlaces);
         // Story Block's scene: who came into the scene (`+ present`, the reader's scene.present).
@@ -130,6 +131,29 @@ export function entryOf(receipts, day = null, { lasting = null } = {}) {
         revs: revs.length ? [Math.min(...revs), Math.max(...revs)] : [],
         ...(met.length ? { met } : {}),
     };
+}
+
+/** What a receipt tells under "happened": its summary, or '' for a receipt that is bookkeeping, told elsewhere or the model's own echo. */
+function happenedText(receipt) {
+    if (isBookkeeping(receipt) || TOLD_ELSEWHERE.has(receipt.type)) return '';
+    const said = cut(receipt.summary, MAX_ITEM);
+    return said && !ECHO.test(said) ? said : '';
+}
+
+/** Every event of one day, in chat order, by the rules entryOf picks from (not stored): `[text]`, at most `limit`. */
+export function eventsOf(receipts, limit = 500) {
+    const seen = new Set();
+    const out = [];
+    for (const receipt of receipts) {
+        if (out.length >= limit) break;
+        if (quiet(receipt) || clockSet(receipt) || PLANNED_TYPES.has(receipt.type)) continue;
+        const said = happenedText(receipt);
+        if (said && !seen.has(said)) {
+            seen.add(said);
+            out.push(said);
+        }
+    }
+    return out;
 }
 
 const textOrNull = value => (typeof value === 'string' && value ? cut(value, MAX_NAME) : null);

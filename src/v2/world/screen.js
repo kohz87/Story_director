@@ -25,6 +25,7 @@ import { BASE_CSS } from '../screens/style.js';
 import { DIGEST_FEATURE } from '../chronicle/days.js';
 import { FEATURE } from './known.js';
 import { PEOPLE_WIDGET } from './people.js';
+import { EVENTS_WIDGET } from './events-widget.js';
 import { KEY_PEOPLE_WIDGET } from '../keypeople/widget.js';
 
 export const WORLD_ID = 'story-director/world';
@@ -71,7 +72,7 @@ const JOURNAL = `
           <section class="wv-part" data-if="d.hasHappened">
             ${label('What happened', { level: 'h5' })}
             <ul><li data-each="d.happened as h">{{ h }}</li></ul>
-            <p class="wv-note" data-if="d.more">…and {{ d.more }} more.</p>
+            <ss-widget class="wv-more" name="${EVENTS_WIDGET}" data-props='{"day":"{{ d.day }}","total":"{{ d.total }}"}' data-if="d.more"></ss-widget>
           </section>
         </div>
       </details>
@@ -253,7 +254,17 @@ const CSS = `${BASE_CSS}
 .wv-chip .wv-name { white-space: normal; }
 .wv-chip.wv-link:not(:disabled):hover { border-color: var(--sd-accent); }
 .wv-chip.wv-link:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.wv, .wv-journal, .wv-days, .wv-body, .wv-part, .wv-find { grid-template-columns: minmax(0, 1fr); }
 .wv-journal { display: grid; gap: 10px; min-width: 0; }
+.wv-fold, .wv-part, .wv-find, .wv-days > li { min-width: 0; max-width: 100%; }
+.wv-part { display: grid; gap: 2px; }
+/* Every Journal line wraps inside its card; a section rule stops at the card's edge. */
+.wv-journal, .wv-journal li, .wv-journal .wv-find-label { overflow-wrap: anywhere; }
+.wv-part .wv-label { overflow: hidden; max-width: 100%; }
+.wv-part .wv-label::after { min-width: 0; }
+.wv-more { display: block; min-width: 0; }
+.wv-more-btn { justify-self: start; min-height: 40px; }
+.wv-events { margin: 6px 0 0; padding-left: 1.2em; display: grid; gap: 2px; overflow-wrap: anywhere; min-width: 0; }
 .wv-empty { margin: 0; color: var(--sd-muted); font-style: italic; }
 .wv-find { display: grid; gap: 2px; font-size: 0.85em; }
 .wv-find-label { color: var(--sd-muted); }

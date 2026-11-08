@@ -54,3 +54,4 @@ Generated 2026-11-07.
 - `src/v2/atlas/widget.js` (render coordinator) → `widget-dom.js` the DOM, `widget-places.js` place details, search and moves, `widget-pointer.js` pointer input, for the Map widget.
 - `src/v2/chronicle/capture.js` → `src/v2/chronicle/capture/`: `text.js`, `world.js`, `faction.js`, `commands.js`: chronicle change lines and reader commands.
 - `src/v2/chronicle/days.js` → `src/v2/chronicle/days/`: `shared.js` constants and text; `state.js` state, settings and receipts; `facts.js` day facts; `summary.js` summary lines and output; `validate.js` validation.
+- `src/v2/world/events-widget.js`: The Journal's "Show all N events" button (widget `story-director.journal-events`): loads one day's whole event list on tap, folds on the next.

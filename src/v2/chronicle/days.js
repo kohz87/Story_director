@@ -40,6 +40,6 @@ export {
     daysOf, followDigest, orderedDays, writtenOf, digestSettings, walkDays,
     questLogOf, notedOf, entriesByDay, rangeDays,
 } from './days/state.js';
-export { entryOf, foldEntries, factsOf, dayFacts, hasFacts } from './days/facts.js';
+export { entryOf, eventsOf, foldEntries, factsOf, dayFacts, hasFacts } from './days/facts.js';
 export { moneyText, fightText, dayLine, makeDigest, briefOf, capDays, digestOut } from './days/summary.js';
 export { validateDays } from './days/validate.js';
