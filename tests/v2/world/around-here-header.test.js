@@ -36,16 +36,16 @@ test('Around here: the place is its own clipped span with the full place as its 
     const clip = h4.querySelector('.wv-clip');
     assert.equal(clip.getAttribute('title'), LONG);
     assert.equal(squash(clip.textContent), LONG);
-    assert.equal(squash(h4.querySelector('.wv-day').textContent), '· morning');
+    assert.equal(squash(h4.querySelector('.wv-daytime').textContent), '· morning');
     assert.equal(squash(h4.textContent), `Around here ${LONG} · morning`);
-    assert.deepEqual([...h4.querySelector('small').children].map(node => node.className), ['wv-clip', 'wv-day']);
+    assert.deepEqual([...h4.querySelector('small').children].map(node => node.className), ['wv-clip', 'wv-daytime']);
 });
 
 test('Around here: a short place reads as before; no time of day, no day part; no place, the time of day alone; nothing, just the words', () => {
     assert.equal(squash(heading(cast('Bluewatch docks', 'evening')).textContent), 'Around here Bluewatch docks · evening');
     const noDay = heading(cast('Harrow', ''));
     assert.equal(squash(noDay.textContent), 'Around here Harrow');
-    assert.equal(noDay.querySelector('.wv-day'), null);
+    assert.equal(noDay.querySelector('.wv-daytime'), null);
     const noPlace = heading(cast('', 'night'));
     assert.equal(squash(noPlace.textContent), 'Around here night');
     assert.equal(noPlace.querySelector('.wv-clip'), null);
@@ -67,7 +67,7 @@ test('Around here: the CSS keeps the words whole, cuts the place with an ellipsi
     for (const rule of ['flex-wrap: wrap', 'min-width: 0', 'max-width: 100%', 'overflow: hidden', 'max-height: 1.3em']) assert.ok(small.includes(rule), `the heading's small has ${rule}`);
     const clip = /\.wv-clip \{([^}]*)\}/.exec(css)?.[1] ?? '';
     for (const rule of ['min-width: 0', 'max-width: 100%', 'overflow: hidden', 'text-overflow: ellipsis', 'white-space: nowrap']) assert.ok(clip.includes(rule), `the place has ${rule}`);
-    assert.match(css, /\.wv-day \{ flex: none; white-space: nowrap; \}/);
+    assert.match(css, /\.wv-daytime \{ flex: none; white-space: nowrap; \}/);
     // The words themselves (the label) stay on one line and are not the part that gives way.
     assert.match(css, /\.wv-label \{ display: flex; align-items: center; gap: 10px; margin: 0 0 6px; min-width: 0; white-space: nowrap; \}/);
 });
