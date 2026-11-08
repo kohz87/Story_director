@@ -28,6 +28,8 @@ export const DEFAULT_UPCOMING_DAYS = 30;
 export const MAX_UPCOMING_DAYS = 365;
 // Story Block's cap on chatter lines a reply (MODULES §F115), read no further.
 const MAX_THOUGHTS = 3;
+// A thought on the World tab is cut to this many code points: the same as Story Block's CHATTER_CHARS (extras.js).
+const THOUGHT_CHARS = 240;
 /** How many of each list the Now view shows. */
 export const NEWS_SHOWN = 20;
 export const FACTIONS_SHOWN = 20;
@@ -204,7 +206,7 @@ export function hereView(state, _args, tools) {
     const lines = tryQuery(query, 'chatter.head', {}, null);
     for (const item of Array.isArray(lines) ? lines.slice(0, MAX_THOUGHTS) : []) {
         const who = cut(item?.name, 40);
-        const thought = cut(item?.text, 140);
+        const thought = cut(item?.text, THOUGHT_CHARS);
         const key = who ? keyOf(who) : '';
         if (!key || !thought) continue;
         thoughts.delete(key);
