@@ -7,7 +7,7 @@
     "secret": "",
     "hook": "+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type",
     "quest": "",
-    "time": "~ time <date, clock time such as 9:30 am> (the scene's time) · ! time +2h (time passes)"
+    "time": "~ time <date, clock time such as 9:30 am> (the scene's time) or ! time +2h (time passes), never both for one stretch"
   },
   "text": [
     "Director lines: ~ only what changed, never the whole list; - closes it (— reason); ! fires a due item (— what happened). Only on, due and arrive take a date, as <date, clock time>. Never write or decide what {{user}} does.\nPacing: a due item comes in only where it fits (on-screen if {{user}} is there, else later as news, signs or aftermath); never cut into or bend the scene for a beat. What cannot fit yet happens off-screen (!) or slips (~ on: later).",

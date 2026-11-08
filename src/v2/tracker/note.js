@@ -77,7 +77,7 @@ export const GRAMMAR = Object.freeze({
     secret: '',
     hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type',
     quest: '',
-    time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) · ! time +2h (time passes)',
+    time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) or ! time +2h (time passes), never both for one stretch',
 });
 
 // The grammar Story Director alone writes (no fight runner): a beat is a turn of the story only.

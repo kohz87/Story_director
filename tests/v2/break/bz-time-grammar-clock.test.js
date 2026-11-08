@@ -4,5 +4,5 @@ import assert from 'node:assert/strict';
 import { GRAMMAR } from '../../../src/v2/tracker/note.js';
 
 test('the time grammar line gives a clock-time example', () => {
-    assert.match(GRAMMAR.time, /^~ time <date, clock time such as 9:30 am> \(the scene's time\)/);
+    assert.match(GRAMMAR.time, /^~ time <date, clock time such as 9:30 am> \(the scene's time\) or ! time \+2h \(time passes\), never both for one stretch/);
 });
