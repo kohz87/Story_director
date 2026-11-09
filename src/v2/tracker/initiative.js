@@ -29,6 +29,7 @@ import { waitsForPay } from '../../tracker.js';
 import { slotValue, toSlot } from '../slot.js';
 import { orderedThreads, toTracker } from './convert.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
+import { dropThreads, quietThreads } from './quiet.js';
 import { ask, cutPoints, dueWithin, flat, knownToUser, namesPerson, sceneOf } from './scene.js';
 
 export const FEATURE = 'story-director.initiative';
@@ -114,8 +115,10 @@ function nearbyPeople(query, scene) {
  * Who could take the initiative now: `[{ key, name, weight, urgency, topic, dueNow, nearby }]`, by key.
  * `topic`: the key of their most urgent thread when {{user}} knows of it, else ''.
  */
-export function initiativeCandidates({ director, state = null, query = null, settings = {}, scene = null } = {}) {
-    if (!director) return [];
+export function initiativeCandidates({ director: given, state = null, query = null, settings = {}, scene = null } = {}) {
+    if (!given) return [];
+    // A fired beat and a dead person's own threads give nobody the first step (quiet.js).
+    const director = dropThreads(given, quietThreads(given, { state, query }));
     const seen = scene ?? sceneOf(query, state);
     const own = settingsFrom(settings);
     let calendar = null;
