@@ -41,6 +41,7 @@ import { slotIn, slotValue, toSlot } from '../slot.js';
 import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 import { initiativeErrors } from './initiative.js';
+import { quietThreads } from './quiet.js';
 
 export const PROBLEM_LIMIT = 50;
 /** How many problems are kept; the newest PROBLEM_LIMIT are shown. */
@@ -301,9 +302,14 @@ export const queries = {
         return calendarConfig(settings, pack);
     },
     /** Threads in tracker order, filtered by `kind`, `status` and `offer` when given. */
-    'director.threads': (state, { kind = null, status = null, offer = null } = {}) => orderedThreads(state?.domains?.director)
-        .filter(thread => (!kind || thread.kind === kind) && (!status || thread.status === status) && (offer === null || thread.offer === offer))
-        .map(plain),
+    // `open: true` (the screens' open lists): a fired beat and a dead person's own agenda or beat are left out (quiet.js).
+    'director.threads': (state, { kind = null, status = null, offer = null, open = false } = {}, tools) => {
+        const director = state?.domains?.director;
+        const quiet = open === true ? quietThreads(director, { state, query: typeof tools?.query === 'function' ? (name, args) => tools.query(name, args) : null }) : null;
+        return orderedThreads(director)
+            .filter(thread => (!kind || thread.kind === kind) && (!status || thread.status === status) && (offer === null || thread.offer === offer) && !quiet?.has(thread.id))
+            .map(plain);
+    },
     /** One thread by `id`, or by `key` (its own or a name it was reached by), else null. */
     'director.thread': (state, { key = null, id = null } = {}) => {
         const director = state?.domains?.director;

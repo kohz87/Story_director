@@ -177,7 +177,7 @@ const data = {
 };
 for (const [kind] of OPEN_KIND_GROUPS) {
     data[kind] = { query: 'director.threads', args: { kind } };
-    data[`${kind}_open`] = { query: 'director.threads', args: { kind, status: 'active' } };
+    data[`${kind}_open`] = { query: 'director.threads', args: { kind, status: 'active', ...(kind === 'agenda' || kind === 'beat' ? { open: true } : {}) } };
     data[`${kind}_closed`] = { query: 'director.threads', args: { kind, status: 'resolved' } };
 }
 

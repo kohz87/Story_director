@@ -61,6 +61,8 @@ function wordPattern(name) {
     return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu');
 }
 const names = (value, name) => name.length >= MIN_NAME && wordPattern(name).test(value);
+/** Whether `value` holds `name` as whole words (and `name` is at least MIN_NAME long): "Vorn" is in "Vorn's Return", "Ann" is not in "Annual Fair". */
+export const wholeWord = names;
 
 /**
  * The scene as the tail reads it: `{ place, region, people: [{ name, names }], known, nsd }`.

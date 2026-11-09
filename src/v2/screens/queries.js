@@ -281,7 +281,7 @@ export function behindView(state, args, tools) {
     const kinds = BEHIND_KINDS.map(([kind, title]) => ({
         kind,
         title,
-        open: threadsOf(state, query, { kind, status: 'active' }).filter(isRecord).map(behindThread),
+        open: threadsOf(state, query, { kind, status: 'active', open: true }).filter(isRecord).map(behindThread),
         closed: threadsOf(state, query, { kind, status: 'resolved' }).filter(isRecord).map(behindThread),
     })).filter(group => group.open.length || group.closed.length);
     const open = kinds.reduce((sum, group) => sum + group.open.length, 0);

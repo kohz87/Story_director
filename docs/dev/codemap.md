@@ -43,6 +43,7 @@ Generated 2026-11-07.
 ## src/v2/tracker/
 - `src/v2/tracker/convert.js`: Converts director threads to and from v1 tracker records and compares/canonicalizes records for replay-safe writes.
 - `src/v2/tracker/hash.js`: Synchronous canonical JSON/SHA-256 for public thread hashes, matching Story Block replay hashes.
+- `src/v2/tracker/quiet.js`: Read-time set of threads that stop counting as open: a beat the Chronicle's quest log shows fired, and a dead person's own agenda and named beat (NPC State Delta `lifeState: deceased`, or the story's recorded death of a pinned person).
 - `src/v2/tracker/thread-shape.js`: Validators for thread IDs, metadata, text, hashes, source stamps and replay cursors.
 
 ## Split files (7 Nov: files over 450 lines split into small parts; each original keeps its path and public names)

@@ -17,6 +17,7 @@ import { givenUpIn, offersChosenIn, untrackedCorrections } from '../../tracker.j
 import { orderedThreads, toTracker } from './convert.js';
 import { problemList } from './domain.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
+import { dropThreads, quietThreads } from './quiet.js';
 import { elsewhereCap, elsewhereItem, elsewhereLine, knownToUser, sceneOf, splitByScene } from './scene.js';
 import { initiativeTail } from './initiative.js';
 import { threadsOn, withoutOwnedThreads } from '../threads.js';
@@ -154,7 +155,7 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     // agendas, events, clocks, beats and secrets the story may still hold (they are kept, not told).
     const threads = threadsOn(view);
     const kept = threads ? stored : withoutOwnedThreads(stored);
-    const director = tailThreads(kept, { said, place: String(state?.domains?.scene?.place?.name ?? '') });
+    const director = tailThreads(dropThreads(kept, quietThreads(kept, { state, query: typeof view.query === 'function' ? view.query : null })), { said, place: String(state?.domains?.scene?.place?.name ?? '') });
     const settings = settingsFrom(typeof view.settings === 'function' ? view.settings() : view.settings);
     const calendar = calendarOf(settings, packCalendarOf(view.query));
     const fights = view?.fights !== false;
