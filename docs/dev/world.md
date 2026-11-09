@@ -24,6 +24,9 @@ of `src/v2/world/index.js` and `known.js` (the exact PC-known rules), Story Bloc
   PC-known rule: only quests, hooks and events the story wrote are named; nothing behind the scenes or planned.
 - NSD asks `director.world.here` to know who is present (its scan reads the present list); the people widget
   shows NSD's present-cast cards and latest chatter when NSD is there.
+- While NSD reads a new reply (`page.busy()`, page API 2) the People widget keeps its last cards, marked updating (`world/people.js`).
+  The Journal's lines wrap, bookkeeping is not an event, "Show all N events" (`world/events-widget.js`, `director.journal.events { day }`)
+  loads a day's whole list on tap, and old days drop both fight narrator notes. The Inner chatter shown is up to 240 characters.
 - Queries: `director.world` (Now), `director.world.here`, `director.journal` (each story day from the digest,
   and today so far). The Days screen is folded into the Journal (`story-director/days` kept as a dialog).
 
