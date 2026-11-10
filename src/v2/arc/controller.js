@@ -159,7 +159,7 @@ export function createArcController({ sdk = liveSdk, chat = stChat, chatId = stC
         })();
         return {
             state,
-            threads: threadsWithArc(director),
+            threads: threadsWithArc(director, state),
             arc: arcQuery(state),
             current: currentArc(state?.domains?.arc),
             calendar,
