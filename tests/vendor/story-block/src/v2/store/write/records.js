@@ -50,13 +50,13 @@ export function createRecords(s, deps) {
 
         /**
          * Marks the reply at `index` as captured under the rule that a new foe's guessed level may reach the party's highest + 20 (`foeCap: 20` on its record).
-         * Only a reply captured live with a foe line gets it (capture-flow.js); an older reply has none and keeps the +10 cap on a Re-read. Not a replay input.
+         * A reply's first live capture gets it (capture-flow.js); an older reply has none and keeps the +10 cap on a Re-read. Not a replay input.
          */
         setFoeCap(index) { markRecord(index, 'foeCap', 20); },
 
         /**
          * Adds rule marks (turn/rule-marks.js) to the reply at `index`: `rules: [names]` on its record, kept with the reply like `foeCap`. A module reads them as
-         * `ctx.carrier.rules`. Only a reply captured live with such a line gets one; an older reply has none. Not a replay input. Unknown names are dropped.
+         * `ctx.carrier.rules`. A reply's first live capture gets every current mark; an older reply has none. Not a replay input. Unknown names are dropped.
          */
         setRuleMarks(index, names) {
             markRecord(index, 'rules', old => ruleMarksOf([...ruleMarksOf(old), ...(names ?? [])]));
