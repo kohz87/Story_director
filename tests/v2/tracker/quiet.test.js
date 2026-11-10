@@ -68,17 +68,18 @@ test('the open lists leave a fired beat, but the Chronicle history and the plain
     assert.equal(fired.domains.chronicle.questLog['10'].text.startsWith('! event'), true);
 });
 
-test('a dead person\'s agenda and the beat naming them leave; secret, hook, clock and others stay; no match by accident', () => {
+test('a dead person\'s agenda leaves; the beat naming them, secret, hook, clock and others stay; no match by accident', () => {
     const state = baseState();
     const query = nsd();
     const quiet = quietThreads(state.domains.director, { state, query });
     const keys = [...quiet].map(id => state.domains.director.threads[id].key).sort();
-    assert.deepEqual(keys, ['Vorn', 'Vorn\'s Return']);
+    assert.deepEqual(keys, ['Vorn']);
     const text = lines(state, query);
     assert.doesNotMatch(text, /pawns the rations/);
     assert.match(text, /Vorn's Debt|Pawned Strongbox|Vorn Waits/);
-    // The beat that waited on his own beat is free.
-    assert.match(text, /Peat-Cutter/);
+    // His own beat stays and still blocks what waits on it.
+    assert.match(text, /Vorn comes back/);
+    assert.doesNotMatch(text, /Peat-Cutter/, 'still waits on the open beat');
     const open = part.queries['director.threads'](state, { kind: 'agenda', status: 'active', open: true }, { query }).map(item => item.key);
     assert.deepEqual(open, ['Ann']);
 });
@@ -86,9 +87,11 @@ test('a dead person\'s agenda and the beat naming them leave; secret, hook, cloc
 test('an alias counts; "Ann" does not match "Annual Fair"', () => {
     const state = baseState();
     const next = structuredClone(state);
-    const probe = story([{ lines: '+ beat The Branch Master Arrives — a visit | now: the quay' }], next);
+    const probe = story([{ lines: ['+ agenda The Branch Master — a visit | now: the quay', '+ beat The Branch Master Arrives — a visit | now: the quay'].join('\n') }], next);
     const quiet = quietThreads(probe.domains.director, { state: probe, query: nsd() });
-    assert.ok([...quiet].some(id => probe.domains.director.threads[id].key === 'The Branch Master Arrives'));
+    const quietKeys = [...quiet].map(id => probe.domains.director.threads[id].key);
+    assert.ok(quietKeys.includes('The Branch Master'));
+    assert.ok(!quietKeys.includes('The Branch Master Arrives'), 'a beat that names them stays');
     const annDead = quietThreads(state.domains.director, { state, query: nsd(['ann']) });
     const annKeys = [...annDead].map(id => state.domains.director.threads[id].key);
     assert.deepEqual(annKeys, ['Ann']);
@@ -108,7 +111,7 @@ test('the story\'s own death line for a pinned person counts; a person who is ba
     const dead = structuredClone(state);
     dead.domains.keypeople = { pins: {}, away: {}, notes: {}, gone: { vorn: { name: 'Vorn', reason: 'died', on: null, rev: 3 } } };
     const keys = [...quietThreads(dead.domains.director, { state: dead })].map(id => dead.domains.director.threads[id].key).sort();
-    assert.deepEqual(keys, ['Vorn', 'Vorn\'s Return']);
+    assert.deepEqual(keys, ['Vorn']);
     assert.equal(quietThreads(state.domains.director, { state, query: nsd([]) }).size, 0);
 });
 

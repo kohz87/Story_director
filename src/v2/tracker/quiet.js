@@ -3,8 +3,8 @@
 // Two kinds, both worked out from what the state already holds, so a rebuilt, swiped or reloaded chat reads the same:
 // * a beat the story has fired: the quest log the Chronicle keeps (`chronicle.questLog`, each line as the story wrote it) says
 //   its last line that mattered was a `!`; a line that writes its date again (`+`, `on:`, `due:`) makes it live (v1's lapses.js rule);
-// * a dead person's own threads: their agenda (the key is their name or an alias) and a beat whose key names them in whole words
-//   ("Vorn's Return"). Dead = NPC State Delta's `npc.dossier` says `lifeState: 'deceased'` (by name or alias, and by the np_ id
+// * a dead person's own agenda (the key is their name or an alias). A beat whose key names them ("Vorn's Return") stays: it is a
+//   valid beat that can still be played (an avenging, a burial). Dead = NPC State Delta's `npc.dossier` says `lifeState: 'deceased'` (by name or alias, and by the np_ id
 //   a pinned person carries, which also answers for an archived dossier), or the story's own "- key Name | died" for a pinned person
 //   (the `gone` record). Without NPC State Delta, and with nobody dead, nothing is quiet. Secrets, hooks, quests, clocks, events
 //   and any thread that merely mentions someone are never touched. If Delta stops saying deceased the threads are back.
@@ -12,10 +12,9 @@
 // `quietThreads` → Set of thread ids; `dropThreads(director, ids)` → the same director without them (the same object when none).
 
 import { lineKey } from '../../changes.js';
-import { ask, cutPoints, flat, wholeWord } from './scene.js';
+import { ask, cutPoints, flat } from './scene.js';
 
 const MAX_PROBES = 60;
-const PER_THREAD = 12;
 const NP_ID = /^np_[0-9a-z]{8}$/;
 const WRITES_DATE = /(?<![\p{L}\p{N}])(?:on|due)\s*:/iu;
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -41,14 +40,6 @@ function logsById(chronicle) {
     return out;
 }
 
-// The words a beat's key may name a person by: runs of 1 to 3 words, "'s" taken off ("Vorn's Return" → Vorn, Vorn's Return…).
-function candidates(key) {
-    const words = flat(key).split(' ').map(word => word.replace(/['’]s$/iu, '')).filter(Boolean);
-    const out = [];
-    for (let size = 1; size <= 3; size += 1) for (let at = 0; at + size <= words.length; at += 1) out.push(words.slice(at, at + size).join(' '));
-    return out.filter(name => name.length >= 3).slice(0, PER_THREAD);
-}
-
 const aliasesOf = value => (Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : []);
 const namesOf = dossier => [dossier?.name, ...aliasesOf(dossier?.aliases)].map(name => cutPoints(name, 80)).filter(name => name.length >= 3);
 
@@ -66,8 +57,8 @@ function deadPeople(query, director, state) {
     };
     const asked = new Set();
     for (const thread of Object.values(isRecord(director?.threads) ? director.threads : {})) {
-        if (!isRecord(thread) || thread.status !== 'active' || (thread.kind !== 'agenda' && thread.kind !== 'beat')) continue;
-        for (const name of thread.kind === 'agenda' ? [flat(thread.key)] : candidates(thread.key)) {
+        if (!isRecord(thread) || thread.status !== 'active' || thread.kind !== 'agenda') continue;
+        for (const name of [flat(thread.key)]) {
             const key = lineKey(name);
             if (!key || asked.has(key) || probes >= MAX_PROBES) continue;
             asked.add(key);
@@ -93,7 +84,7 @@ function storyDead(state) {
     return gone.filter(entry => isRecord(entry) && entry.reason === 'died').map(entry => ({ names: [cutPoints(entry.name, 80)].filter(name => name.length >= 3) })).filter(person => person.names.length);
 }
 
-/** The ids of the open threads that no longer wait on the story: a fired beat, and a dead person's agenda or named beat. */
+/** The ids of the open threads that no longer wait on the story: a fired beat, and a dead person's own agenda. */
 export function quietThreads(director, { state = null, query = null } = {}) {
     const ids = new Set();
     const threads = Object.values(isRecord(director?.threads) ? director.threads : {}).filter(thread => isRecord(thread) && thread.status === 'active');
@@ -105,7 +96,6 @@ export function quietThreads(director, { state = null, query = null } = {}) {
     for (const thread of threads) {
         const key = flat(thread.key);
         if (thread.kind === 'agenda' && dead.some(person => person.names.some(name => lineKey(name) === lineKey(key)))) ids.add(thread.id);
-        else if (thread.kind === 'beat' && dead.some(person => person.names.some(name => wholeWord(key, name)))) ids.add(thread.id);
     }
     return ids;
 }
