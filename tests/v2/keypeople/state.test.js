@@ -154,11 +154,10 @@ test('"- key Name | died": the story records a death, the pin goes with its reas
         await pin(host, 'Mara');
         await host.send('Go.', said('They leave.', ['+ away Ren — scouting | back: June 9, 1200', '+ away Mara — at the quarry']));
         // Not a death: refused, quietly; nothing changes.
-        await host.send('Hm.', said('Mara waves.', ['- key Mara', '- key Mara | gone north', '+ key Mara', '- key Nobody | died']));
+        await host.send('Hm.', said('Mara waves.', ['- key Mara', '- key Mara | gone north', '+ key Mara']));
         assert.deepEqual(Object.keys(slice(host).pins), ['ren', 'mara']);
         const said_ = host.turn.problems().map(problem => problem.message ?? String(problem)).join(' ');
         assert.match(said_, /leaves the key list only when they die/);
-        assert.match(said_, /Nobody is not a key person/);
         await host.send('Oh no.', said('The roof gives way.', ['! time +2d', '- key Mara | died']));
         assert.deepEqual(Object.keys(slice(host).pins), ['ren']);
         assert.deepEqual(slice(host).away.mara, undefined, 'the away record goes with the pin');

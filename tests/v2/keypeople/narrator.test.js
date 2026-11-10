@@ -32,7 +32,7 @@ test('the grammar: one line each for away and key; the paragraph names no one an
     assert.match(GRAMMAR.away, /^\+ away Name — what they are doing \| back: date/);
     assert.match(GRAMMAR.away, /! away Name/);
     assert.match(GRAMMAR.away, /- away Name when they are back/);
-    assert.equal(GRAMMAR.key, '- key Name | died (a key person who dies)');
+    assert.equal(GRAMMAR.key, '- key Name | died (anyone who dies)');
     assert.doesNotMatch(STATIC_TEXT, /\d/, 'no counts, dates or numbers in the fixed prompt');
     assert.match(STATIC_TEXT, /- key Name \| died/);
     assert.ok(STATIC_TEXT.length < 600, 'a short paragraph');

@@ -18,7 +18,7 @@ const MAX_LATEST = 80;
 /** The kinds' one line for the change-line instruction (SPEC §4.4). */
 export const GRAMMAR = Object.freeze({
     away: '+ away Name — what they are doing | back: date (~ away Name to change it; ! away Name — where they got to; - away Name when they are back)',
-    key: '- key Name | died (a key person who dies)',
+    key: '- key Name | died (anyone who dies)',
 });
 
 /** The paragraph of the fixed prompt: no names, counts, times or dice. */
