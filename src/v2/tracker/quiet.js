@@ -84,13 +84,22 @@ function storyDead(state) {
     return gone.filter(entry => isRecord(entry) && entry.reason === 'died').map(entry => ({ names: [cutPoints(entry.name, 80)].filter(name => name.length >= 3) })).filter(person => person.names.length);
 }
 
+/** The ids of the open beats the story has fired (see `firedByLog`); the arc's played count reads the same set. */
+export function firedBeatIds(director, state) {
+    const ids = new Set();
+    const logs = logsById(state?.domains?.chronicle);
+    for (const thread of Object.values(isRecord(director?.threads) ? director.threads : {})) {
+        if (isRecord(thread) && thread.status === 'active' && thread.kind === 'beat' && logs.has(thread.id) && firedByLog(logs.get(thread.id))) ids.add(thread.id);
+    }
+    return ids;
+}
+
 /** The ids of the open threads that no longer wait on the story: a fired beat, and a dead person's own agenda. */
 export function quietThreads(director, { state = null, query = null } = {}) {
     const ids = new Set();
     const threads = Object.values(isRecord(director?.threads) ? director.threads : {}).filter(thread => isRecord(thread) && thread.status === 'active');
     if (!threads.some(thread => thread.kind === 'beat' || thread.kind === 'agenda')) return ids;
-    const logs = logsById(state?.domains?.chronicle);
-    for (const thread of threads) if (thread.kind === 'beat' && logs.has(thread.id) && firedByLog(logs.get(thread.id))) ids.add(thread.id);
+    for (const id of firedBeatIds(director, state)) ids.add(id);
     const dead = [...deadPeople(query, director, state), ...storyDead(state)];
     if (!dead.length) return ids;
     for (const thread of threads) {

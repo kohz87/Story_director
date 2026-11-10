@@ -8,10 +8,10 @@ export const DEFAULT_LOW_THREADS = 3;
 /** Replies the story must move on after a plan was asked for before "running low" asks again (v1 0.9.19). */
 export const LOW_THREADS_REPLIES = 5;
 
-/** The arc's beats: `{ done, total, active }` (threads tagged with the arc's id). */
+/** The arc's beats: `{ done, total, active }` (threads tagged with the arc's id). A beat is played when it is not active or the story fired it (`fired`, set by threadsWithArc); `active` holds the beats still to play. */
 export function arcBeats(threads, arcId) {
     const beats = arcId ? threads.filter(thread => thread?.kind === 'beat' && thread.arc === arcId) : [];
-    const active = beats.filter(thread => thread.status === 'active');
+    const active = beats.filter(thread => thread.status === 'active' && !thread.fired);
     return { done: beats.length - active.length, total: beats.length, active };
 }
 

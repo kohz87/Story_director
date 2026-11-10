@@ -15,6 +15,7 @@
 // other thread.
 
 import { arcBeats } from './plan.js';
+import { firedBeatIds } from '../tracker/quiet.js';
 
 export const ARC_ROOM = 20;
 /** The tail's budget (tokens): one short line. */
@@ -70,12 +71,13 @@ export function validateArc(slice) {
     return errors;
 }
 
-/** The tracker's threads with the arc each belongs to (`arc`, from `track.arc`), in tracker order. */
-export function threadsWithArc(director) {
+/** The tracker's threads with the arc each belongs to (`arc`, from `track.arc`), in tracker order; `fired`: a beat the story fired with `!` (read from the quest log, nothing stored). */
+export function threadsWithArc(director, state = null) {
+    const fired = state ? firedBeatIds(director, state) : new Set();
     const threads = isRecord(director?.threads) ? Object.values(director.threads).filter(isRecord) : [];
     return threads
         .sort((a, b) => (a.track?.order ?? 0) - (b.track?.order ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        .map(thread => ({ id: thread.id, kind: thread.kind, key: thread.key, summary: thread.summary, status: thread.status, fields: thread.fields ?? {}, offer: Boolean(thread.offer), ended: thread.ended ?? null, arc: thread.track?.arc ?? null }));
+        .map(thread => ({ id: thread.id, kind: thread.kind, key: thread.key, summary: thread.summary, status: thread.status, fields: thread.fields ?? {}, offer: Boolean(thread.offer), ended: thread.ended ?? null, arc: thread.track?.arc ?? null, fired: fired.has(thread.id) }));
 }
 
 /**
@@ -88,7 +90,7 @@ export function arcQuery(state) {
     const list = arcList(slice);
     const current = currentArc(slice);
     if (!current) return { current: null, previous: null, count: 0 };
-    const { done, total } = arcBeats(threadsWithArc(state?.domains?.director), current.id);
+    const { done, total } = arcBeats(threadsWithArc(state?.domains?.director, state), current.id);
     const before = list.at(-2) ?? null;
     return {
         current: {
