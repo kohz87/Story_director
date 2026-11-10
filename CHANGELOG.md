@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.13.0
+
+- **A fired beat no longer blocks the story.** A beat the story has fired (`!`) counts as done: it leaves the Director note and the lists, and a beat that waits for it (`after:`) can now happen. Dating it again brings it back.
+- **A death closes that person's agenda.** When NPC State Delta marks someone dead, or the story writes `- key Name | died`, their own agenda leaves the note and the lists. Beats, secrets, hooks and quests about them stay: they can still be played.
+- **A death line counts for anyone,** not only a pinned key person (the receipt reads "Died: Name"). Needs Story Block 2.28.0; with an older Story Block the line is refused as before. Replies written before this keep the old behaviour.
+- Requires Story Block 2.25.0 or later (unpinned deaths need 2.28.0); Story Block testkit re-synced to 2.28.0.
+
 ## 2.12.0
 
 - **Inner chatter on the World tab shows up to 240 characters** (it was 140).

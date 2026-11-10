@@ -89,7 +89,7 @@ test('the static prompt is byte-identical reply after reply, with the Director\'
 test('the module registers whole: screens instead of tabs, settings fields, capture kinds, queries', async () => {
     const host = await newHost();
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
-    assert.equal(mine.version, '2.12.0');
+    assert.equal(mine.version, '2.13.0');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
     assert.deepEqual([...mine.kinds].sort(), ['agenda', 'away', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'key', 'landmark', 'quest', 'route', 'secret', 'time', 'trip', 'world']);
     assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'cast.advance', 'cast.meet', 'cast.rumor', 'cast.sync', 'cast.withdraw', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.lasting', 'chronicle.note', 'chronicle.remove', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.clock', 'director.initiative', 'director.seed', 'keypeople.pin', 'keypeople.sync', 'keypeople.tell', 'keypeople.unpin', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);

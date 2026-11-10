@@ -18,23 +18,23 @@ import { namedChanges } from './prompt.js';
 const LEARN_KIND = new RegExp(`^learn-${SLOT_NUMBER}$`, 'u');
 const PRACTICE_KIND = new RegExp(`^practice-${SLOT_NUMBER}$`, 'u');
 
+// Resolve an omitted kind only when exactly one kind with this op accepts the labels;
+// capture and record marking share this rule, so a guessed foe still gets its cap mark.
+export function withKind(definition, line) {
+    const labels = line.labels ?? {};
+    if (dmOwn(labels, 'kind')) return labels;
+    const fits = Object.keys(definition.kinds).filter(name => {
+        if (definition.kinds[name].op !== line.op) return false;
+        try { parseLabels(definition, definition.kinds[name], { ...labels, kind: name }, { text: true }); return true; } catch (error) {
+            if (error instanceof DataModuleError) return false;
+            throw error;
+        }
+    });
+    return fits.length === 1 ? { ...labels, kind: fits[0] } : labels;
+}
+
 export function createAct(deps) {
     const { dependency, guard, finish, growSkills, skillRoute, skillRoom, skillWant, settings } = deps;
-    // A story line with no `kind:` (a model often leaves it out, or puts a label like `letter: F` where `kind: promote` belongs): when exactly
-    // one kind of this module, written with the line's op, accepts the line's labels as they are, that is its kind; with none or several
-    // the line is refused as before (kind must be …), never guessed. → the line's labels, with `kind` added when it was found.
-    function withKind(definition, line) {
-        const labels = line.labels ?? {};
-        if (dmOwn(labels, 'kind')) return labels;
-        const fits = Object.keys(definition.kinds).filter(name => {
-            if (definition.kinds[name].op !== line.op) return false;
-            try { parseLabels(definition, definition.kinds[name], { ...labels, kind: name }, { text: true }); return true; } catch (error) {
-                if (error instanceof DataModuleError) return false;
-                throw error;
-            }
-        });
-        return fits.length === 1 ? { ...labels, kind: fits[0] } : labels;
-    }
     // A Foes block of the Levels rules (its set-slot kind has a `level` label): a line that gives a level keeps it; one that gives a rank gets a level drawn inside that
     // rank's band (the `rpg.rank` query names the ranks); one that gives neither gets a level within ±2 of the party's average. The draw is from the reply's seed, so a
     // swipe draws anew and a Re-read keeps it. `rank` is not a label of the kind: it is taken out of the line here.
