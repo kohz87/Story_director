@@ -1,6 +1,6 @@
 // "- key Name | died" for anyone (keypeople/capture.js): a person who is not pinned is recorded as dead (a `gone` record, reason died) when the reply
 // carries Story Block's `diedAny` rule mark; without the mark the line finds nobody, as before. A pinned person is unchanged. The record hides that
-// person's own agenda and named beat at read time (tracker/quiet.js). Old replies (recorded without the mark) gain nothing on a Re-read, a rebuild or a reload.
+// person's own agenda (not a beat that names them) at read time (tracker/quiet.js). Old replies (recorded without the mark) gain nothing on a Re-read, a rebuild or a reload.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -18,7 +18,7 @@ async function start(extra = {}) {
     return host;
 }
 
-test('unpinned + the mark: the death is recorded and told "Died: Name"; the person\'s agenda and named beat are hidden, others stay', async () => {
+test('unpinned + the mark: the death is recorded and told "Died: Name"; the person\'s agenda is hidden, their named beat and others stay', async () => {
     const host = await start();
     try {
         assert.deepEqual(open(host), ['Ann', 'Vorn', 'Vorn\'s Return']);
@@ -27,7 +27,7 @@ test('unpinned + the mark: the death is recorded and told "Died: Name"; the pers
         assert.deepEqual(slice(host).gone.vorn, { name: 'Vorn', reason: 'died', on: host.sdk.query('director.time').minutes, rev: slice(host).gone.vorn.rev });
         assert.deepEqual(slice(host).pins, {});
         assert.deepEqual(slice(host).notes, {}, 'no card line: they were never a key person');
-        assert.deepEqual(open(host), ['Ann']);
+        assert.deepEqual(open(host), ['Ann', 'Vorn\'s Return']);
         assert.deepEqual(validatorErrors(host), []);
     } finally { host.close(); }
 });
@@ -80,7 +80,7 @@ test('replay == live: a Re-read, a rebuild and a reload of a marked reply give t
         await host.st.loadChat(JSON.parse(JSON.stringify(host.ctx.chat)));
         assert.equal(JSON.stringify(host.head()), rebuilt, 'a reload');
         assert.equal(JSON.parse(live).domains.keypeople.gone.vorn.name, 'Vorn');
-        assert.deepEqual(open(host), ['Ann']);
+        assert.deepEqual(open(host), ['Ann', 'Vorn\'s Return']);
     } finally { host.close(); }
 });
 
