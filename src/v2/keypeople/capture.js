@@ -5,7 +5,8 @@
 //   they do or when they are due back), `! away Ren — reached Wolfmere Outpost` (a step on the timeline; `back:` may move
 //   the date), `- away Ren` (they are back). Only a pinned person may be away.
 // - `key`: `- key Ren | died` (the story records a death: the pin goes, with its reason). Nothing else takes someone off
-//   the list from the story: the reader unpins.
+//   the list from the story: the reader unpins. A person who is not pinned is recorded as dead too (a `gone` record with reason `died`, no pin
+//   to take off) when the reply carries Story Block's `diedAny` rule mark (`ctx.carrier.rules`); on a reply without it the line finds nobody, as before.
 //
 // Commands:
 // - `keypeople.pin { name, aliases?, nsd? }` and `keypeople.unpin { name }` (cause `ui`: the reader's, on the latest reply).
@@ -81,14 +82,18 @@ function addNote(ctx, kp, { kind, name, head, rest, key, goneRev }) {
  * Takes `key` off the list (the draft `kp`): the pin and its away record go, `gone` records why, and the reply's card is
  * told. `reason`: died | archived | unpinned. Returns the sentence for the receipt.
  */
+function writeGone(ctx, kp, key, name, reason, now, defer = false) {
+    delete kp.gone[key];
+    // `owed`: the card line is for the reply that follows this step (`keypeople.tell`), not the reply that holds it.
+    kp.gone[key] = { name, reason, on: now, rev: revOf(ctx), ...(defer ? { owed: true } : {}) };
+    const keys = Object.keys(kp.gone);
+    for (const old of keys.slice(0, Math.max(0, keys.length - MAX_GONE))) delete kp.gone[old];
+}
+
 function removePin(ctx, kp, key, pin, reason, calendar, now, { defer = false } = {}) {
     delete kp.pins[key];
     if (Object.hasOwn(kp.away, key)) delete kp.away[key];
-    delete kp.gone[key];
-    // `owed`: the card line is for the reply that follows this step (`keypeople.tell`), not the reply that holds it.
-    kp.gone[key] = { name: pin.name, reason, on: now, rev: revOf(ctx), ...(defer ? { owed: true } : {}) };
-    const keys = Object.keys(kp.gone);
-    for (const old of keys.slice(0, Math.max(0, keys.length - MAX_GONE))) delete kp.gone[old];
+    writeGone(ctx, kp, key, pin.name, reason, now, defer);
     const why = whyText(reason, calendar, now);
     if (!defer) addNote(ctx, kp, { kind: 'gone', name: pin.name, head: `${pin.name} is no longer a key person`, rest: `(${why}).` });
     return `${pin.name} is no longer a key person (${why}).`;
@@ -191,7 +196,14 @@ export function applyKeyLine(ctx, line) {
     }
     const kp = ctx.draft('keypeople');
     const found = findPin(kp, name);
-    if (!found) return ctx.fail('NOT_FOUND', `${name} is not a key person.`);
+    if (!found) {
+        // Anyone the story kills, not only a pinned person, but only on a reply captured under that rule (Story Block's `diedAny` mark, `ctx.carrier.rules`):
+        // a reply recorded before it keeps the old answer when it is read again, so it never gains a death it did not have. Same `gone` record, no card line.
+        if (!(Array.isArray(ctx.carrier?.rules) && ctx.carrier.rules.includes('diedAny'))) return ctx.fail('NOT_FOUND', `${name} is not a key person.`);
+        const key = keyOf(name);
+        writeGone(ctx, kp, key, name, 'died', nowOf(ctx));
+        return { summary: `Died: ${name}`, narrate: false, data: { person: key, died: true } };
+    }
     const summary = removePin(ctx, kp, found.key, found.pin, 'died', calendarFrom(query(ctx)), nowOf(ctx));
     return { summary: `Key person: ${summary}`, narrate: false, data: { person: found.key, removed: 'died' } };
 }

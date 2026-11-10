@@ -17,6 +17,7 @@ import { within, TIMED_OUT } from './text.js';
 import { occurrenceOf, operationKey } from '../evidence.js';
 import { hash, readRecord } from '../persist.js';
 import { LEAN_RPG_FEATURE, practiceFromRollsOnly } from '../lean-rpg/names.js';
+import { ruleMarksFor, ruleMarksOf } from './rule-marks.js';
 import { boardFailure, boardStep } from './held-board.js';
 import { earlierReceipts, moneyWarning } from './money-guard.js';
 
@@ -271,6 +272,7 @@ export function createCaptureFlow(s, deps) {
         return always || Object.keys(caps).length ? markCaps(mes, caps, from) : mes;
     };
 
+    const FOE_LINE = /\|\s*kind\s*:\s*set-slot-\d\b/iu;
     async function captureEach(index, lines, receipts, found, base = null, seeds = null, shown = new Map(), assist = null, plan = null) {
         const collected = [];
         const firstProblem = found.length;
@@ -289,6 +291,16 @@ export function createCaptureFlow(s, deps) {
         else if (base === null && lines.some(line => PRACTICE_LINE.test(line.raw ?? '')) && practiceFromRollsOnly(registry.featureOn?.(LEAN_RPG_FEATURE) === true, settings?.('story-block'))) {
             try { store.setPracticeRule?.(index); carrier.practiceRule = 'rolls'; } catch { /* an unmarked reply is judged as before */ }
         }
+        // The foe level cap recorded with the reply: a new foe's guessed level may reach the party's highest + 20 (data-modules/part/act.js). A reply captured live with a
+        // foe line (a set-slot line) is marked; a Re-read or an edit goes by the mark the reply has, so an older reply keeps its +10 cap.
+        if (readRecord(message)?.foeCap === 20) carrier.foeCap = 20;
+        else if (base === null && lines.some(line => FOE_LINE.test(line.raw ?? ''))) {
+            try { store.setFoeCap?.(index); carrier.foeCap = 20; } catch { /* an unmarked reply keeps the old cap */ }
+        }
+        // Rule marks (rule-marks.js): a reply captured live with a line a newer rule covers is marked; a Re-read goes by the marks it has (a module reads `ctx.carrier.rules`).
+        const marks = ruleMarksOf(readRecord(message)?.rules), fresh = base === null ? ruleMarksFor(lines).filter(name => !marks.includes(name)) : [];
+        if (fresh.length) { try { store.setRuleMarks?.(index, fresh); marks.push(...fresh); } catch { /* an unmarked reply keeps the old rule */ } }
+        if (marks.length) carrier.rules = marks;
         // The message right before the reply (system messages aside), and only when it is the reader's: a reply that
         // follows another reply has no message of the reader's to quote (proof, EVIDENCE.md).
         const before = (ctx?.chat ?? []).slice(0, index).findLast(item => !item?.is_system);
