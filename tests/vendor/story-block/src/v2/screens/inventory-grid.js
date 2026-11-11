@@ -257,7 +257,7 @@ export function itemSheet(doc, { item, row = null, wearer = '', actions = [], re
     };
 }
 
-/** The Grid view's CSS, added after the screen's own CSS (BASE_CSS first). Tiles are square, four to a line on a phone. (The sheet's CSS is in view/mounts.css: it is outside the screen.) */
+/** The Grid view's CSS, added after the screen's own CSS (BASE_CSS first). Tiles are square, four to a line on a phone. (The sheet's CSS is in view/mounts-*.css: it is outside the screen.) */
 export const GRID_CSS = `
 .tile-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; list-style: none; margin: 0; padding: 0; }
 @media (min-width: 760px) { .tile-grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); } }

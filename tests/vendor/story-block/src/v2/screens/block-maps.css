@@ -1,6 +1,6 @@
 /* The number lists and the guild card of the data-module screens, and the Enable all box of Settings → Tabs & Packs → Data modules
    (REPUI, option B, 7 Nov). Rules here override host.css's .ss-b-* rules (screens/block-layouts.js draws the markup), with more specific
-   selectors, so host.css, glass.css and mounts.css stay as they are. The classes the wiring step adds are listed in REPUI-A.REPORT.md:
+   selectors, so host.css, glass-*.css and mounts-*.css stay as they are. The classes the wiring step adds are listed in REPUI-A.REPORT.md:
    .ss-rm-head / .ss-rm-edit-btn (heading + Edit), .ss-rm-editing (on the list's section: reveals the pencils), .ss-rm-pos / .ss-rm-neg
    (value colour), .ss-rm-scale (the scale line), .ss-rm-fold (the one fold row), .ss-rm-tiles (guild facts as tiles), .ss-rm-badge,
    .ss-rm-warn, .ss-rm-enable-all, .ss-rm-confirm and its parts, .ss-rm-btn / .ss-rm-btn-pri, .ss-rm-refusal. Nunito 400/600/700 only. */

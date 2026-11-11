@@ -236,6 +236,7 @@ export const SCREEN_STRINGS = {
         quests: 'Quests',
         progress: 'Progress',
         moreQuests: 'and more on the Quests screen',
+        openQuests: 'Open Quests ›',
         offered: 'Offered',
     },
 };

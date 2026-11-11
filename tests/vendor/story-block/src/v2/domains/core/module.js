@@ -12,6 +12,7 @@ import { screens as defaultScreens } from '../../screens/index.js';
 import { youRankOf } from '../../packs/content.js';
 import { createPacksPart, packs as liveInstalled, part as livePart, resolveItem as liveResolve, startState as liveStart } from '../../packs/index.js';
 import { createTimelinePart } from '../../timeline/part.js';
+import { stateHash } from '../../timeline/host-block.js';
 import { createDataModulesPart, dataModuleGuard } from '../../data-modules/part.js';
 import { CHECK_STEP as RPG_CHECK, FIGHT as RPG_FIGHT, PRACTICE_STEP as RPG_PRACTICE, RESOLVE as RPG_RESOLVE } from '../../lean-rpg/names.js';
 // The RPG's code is loaded only when it is needed (rpg-lazy.js): this part answers for it until it is there.
@@ -58,6 +59,11 @@ export function createCoreModule({ hooks = () => [], settings = () => ({}), vers
         if (kind.startsWith('dm.')) return dataModuleGuard(view, info);
         if (kind === RPG_RESOLVE || kind === RPG_FIGHT || kind === RPG_PRACTICE || kind === RPG_CHECK) return rpg.guard(view, info);
         if (kind === INVENTORY_EDIT_GUARD) return inventoryEditGuard(view, info);
+        if (kind === 'events.decision') {
+            const guard = info.guard;
+            return guard.owner === 'story-block' && guard.version === 2 && guard.rulesHash === null && guard.inputHash === stateHash(view.state)
+                ? { ok: true } : { ok: false, reason: 'the story before this event decision changed' };
+        }
         return LOOT_KINDS.includes(kind) ? lootTakeGuard(view, info) : timelineGuard(view, info);
     }, { hostOwned: true });
     return {

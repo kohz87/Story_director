@@ -35,14 +35,11 @@ export function installUiEvents({ replyOffs, offs0, registry, store, events, ctx
     }));
     // A feature turned on or off: its screens, tabs, widgets and cards come and go; nothing else changes.
     for (const name of ['head', 'committed', 'turn']) offs.push(events.on(name, () => getOverlay()?.refreshSize?.()));
-    // A chat change closes the dialogs (their drafts were for the chat they were opened in), the game view's More sheet and the
-    // Story panel's More sheet.
+    // A chat change closes the dialogs (their drafts were for the chat they were opened in).
     const chatTypes = ctx.eventTypes ?? ctx.event_types ?? {};
     const onChatChanged = () => {
         blockWidgets.reset();
         mounts.dialog?.closeAll();
-        mounts.screen?.closeMore?.();
-        getTabHost()?.bar?.closeMore?.({ focus: false });
         // The new chat's card is read for its offer (a read of the chat before is dropped).
         cardOffer?.refresh().catch(error => console.warn('[Story Suite] the card offer could not be read', error));
     };

@@ -1,7 +1,7 @@
 // Story Suite v2: the `screen` mount (SPEC §13.4), a full-screen game view over the chat. Its navigation is the screen bar
-// (view/screen-bar.js): one strip of every screen that scrolls sideways (no More); from 1000px wide
-// it is one full row (mounts.css does the switch). The navigation is in Home-first order
-// (screens.js screenOrder). A close button, and Escape closes it (Escape first closes More, if it is open). It shows the
+// (view/screen-bar.js): one strip of every screen that scrolls sideways; from 1000px wide
+// it is one full row (mounts-*.css does the switch). The navigation is in Home-first order
+// (screens.js screenOrder). A close button, and Escape closes it. It shows the
 // head state and redraws when the head changes while it is open.
 //
 // The reader's order and hidden screens (Settings → Tabs & Packs → Tabs, view/tab-order.js) come in through
@@ -68,7 +68,7 @@ export function createScreenMount(deps) {
                 moreOnly: typeof deps.inBar === 'function' && !deps.inBar(entry.id) };
         });
         // One scrolling strip with every screen (nothing is under More); the bar's CSS makes it one full row from 1000px.
-        view.bar.update({ items, current: view.screenId, strip: true });
+        view.bar.update({ items, current: view.screenId });
         return entries;
     }
 
@@ -151,8 +151,6 @@ export function createScreenMount(deps) {
 
     function show(screenId, { byName = false } = {}) {
         if (!view) return false;
-        // Every navigation closes More's sheet first (its scrim and its keys with it); the focus goes back to More, as a tile's does.
-        if (view.bar.isMoreOpen()) view.bar.closeMore({ focus: true });
         view.screenId = screenId;
         const entries = drawBar();
         const entry = entries.find(item => item.id === screenId);
@@ -200,12 +198,12 @@ export function createScreenMount(deps) {
         const body = make(doc, 'div', 'ss-gameview-body');
         main.append(bar, heroSlot, body);
         root.append(main);
-        // The bar comes last in the window (after the body): created here, it appends its own bar, scrim and sheet to the window.
+        // The bar comes last in the window (after the body): created here, it appends its own bar to the window.
         const screenBar = createScreenBar(doc, main, {
             label: STRINGS.bar.screens,
             className: 'ss-gameview-nav',
             onSelect: id => show(id),
-            // a slot or a tile names its screen, as the game view's buttons always did (the tests and the modules use it)
+            // a slot names its screen, as the game view's buttons always did (the tests and the modules use it)
             decorate: (node, item) => node.setAttribute('data-ss-target', item.id),
         });
         (deps.container?.() ?? doc.body).appendChild(root);
@@ -215,7 +213,7 @@ export function createScreenMount(deps) {
         root.addEventListener('click', event => { if (event.target === root && pressedScrim) close(); });
         doc.body?.classList?.add('ss-gameview-open');
 
-        // A layer of the shared stack (modal-stack.js): Escape closes the view when no layer above it (the More sheet, a dialog) is open,
+        // A layer of the shared stack (modal-stack.js): Escape closes the view when no layer above it (a dialog) is open,
         // Tab stays in it, and closing it hands the focus back to what opened it.
         const layer = stackOf(doc).push({ name: 'game view', root, onEscape: () => { close(); return true; } });
         const Observer = doc.defaultView?.MutationObserver;
@@ -268,10 +266,6 @@ export function createScreenMount(deps) {
         update,
         isOpen: () => !!view,
         current: () => view?.screenId ?? null,
-        /** The bar's More sheet: opened, closed (focus back to More) and asked. */
-        openMore: () => !!view && view.bar.openMore(),
-        closeMore: () => { if (view) view.bar.closeMore({ focus: true }); },
-        isMoreOpen: () => !!view && view.bar.isMoreOpen(),
         destroy() {
             close();
             doc.removeEventListener?.('pointerdown', onPointer, true);

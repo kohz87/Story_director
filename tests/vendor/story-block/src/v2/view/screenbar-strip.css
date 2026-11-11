@@ -1,10 +1,8 @@
 /* Story Suite's screen bar as one scrolling strip (view/screen-bar.js: the `ss-screenbar-strip` class on the bar's nav).
    Every screen is a slot in one row; a narrow bar scrolls sideways, with the scroll snapping to each slot and a soft fade at
    the edge that has more to show. From 1000px the slots are even and centred in one full row, with no scrolling (the game
-   view's wide bar). Placement and the slot look are the host's (mounts.css, glass.css); this file holds only the strip's rules,
-   so it loads after both and works without editing either. The old wide row rules (`ss-screenbar-row`, 760px in mounts.css)
-   do not apply in strip mode: a strip nav that also carries `ss-screenbar-row` gets the strip's slots and placement.
-   Tokens only; the base rules are :where() ones, like glass.css. */
+   view's wide bar). Placement and the slot look are the host's (mounts-game.css, glass-screenbar.css); this file holds only the strip's rules,
+   so it loads after both and works without editing either. Tokens only; the base rules are :where() ones, like glass-screenbar.css. */
 
 /* ---- the strip: a flex row that scrolls sideways, its scrollbar hidden ---- */
 :where(.story-suite-overlay, .story-suite-sheet, .ss-gameview, .ss-dialog, .ss-cards, .ss-card, .ss-hud, [data-ss-screen], .story-suite-bar, .story-suite-extras, .story-suite-reply-note, .rpg-fight-offer, .rpg-fight-pause) .ss-screenbar-strip {
@@ -49,22 +47,12 @@
 :where(.story-suite-overlay, .story-suite-sheet, .ss-gameview, .ss-dialog, .ss-cards, .ss-card, .ss-hud, [data-ss-screen], .story-suite-bar, .story-suite-extras, .story-suite-reply-note, .rpg-fight-offer, .rpg-fight-pause) .ss-screenbar-strip > .ss-screenbar-edge-alert[data-edge="start"]::before { left: 0; transform: rotate(-135deg); }
 :where(.story-suite-overlay, .story-suite-sheet, .ss-gameview, .ss-dialog, .ss-cards, .ss-card, .ss-hud, [data-ss-screen], .story-suite-bar, .story-suite-extras, .story-suite-reply-note, .rpg-fight-offer, .rpg-fight-pause) .ss-screenbar-strip > .ss-screenbar-edge-alert[data-edge="end"]::before { right: 0; transform: rotate(45deg); }
 
-
 /* ---- the focus ring stays inside the strip (the strip clips it above and below otherwise) ---- */
 :where(.story-suite-overlay, .story-suite-sheet, .ss-gameview, .ss-dialog, .ss-cards, .ss-card, .ss-hud, [data-ss-screen], .story-suite-bar, .story-suite-extras, .story-suite-reply-note, .rpg-fight-offer, .rpg-fight-pause) .ss-screenbar-strip > .ss-screenbar-item:focus-visible { outline-offset: -3px; }
 
-/* ---- the strip beats the old wide row (mounts.css, 760px): a nav with both classes keeps the strip's slots, not 112px ones ---- */
-.ss-gameview-nav.ss-screenbar-strip.ss-screenbar-row {
-    justify-content: normal;
-}
-.ss-gameview-nav.ss-screenbar-strip.ss-screenbar-row > .ss-screenbar-item {
-    flex: 0 0 76px;
-}
-
 /* ---- from 760px: a row that fits is centred, not left-aligned (safe: one that overflows still starts at the left and scrolls) ---- */
 @media (min-width: 760px) {
-    .ss-gameview-nav.ss-screenbar-strip,
-    .ss-gameview-nav.ss-screenbar-strip.ss-screenbar-row {
+    .ss-gameview-nav.ss-screenbar-strip {
         justify-content: safe center;
     }
 }
