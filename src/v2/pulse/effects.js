@@ -29,7 +29,7 @@
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { slotValue, toSlot } from '../slot.js';
-import { castOf, fightOn, foesSignature } from '../cast/entries.js';
+import { castOf, fightOn, foesLeftover, foesSignature } from '../cast/entries.js';
 import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
@@ -374,7 +374,7 @@ export function pulseCommand(ctx, payload = {}) {
     const scene = sceneOf(query, state);
     // Only a step that carries `age` (every new reply) knows a leftover Foes slot; an older reply re-read keeps the rule it was written under.
     const foes = foesSignature(state);
-    const stale = payload?.age === 1 && foes !== '' && before.length >= STALE_REPLIES && before.slice(-STALE_REPLIES).every(entry => entry.foes === foes);
+    const stale = payload?.age === 1 && foesLeftover(state, before, STALE_REPLIES);
     const skipped = skipReason({
         fight: fightOn(query, state, { leanOn: !stale }), rested: restedSince(state, last?.clock, clock), quiet: slotValue(director.pulseQuiet)?.on === true, clock,
         jumpMinutes: isInt(last?.clock) && isInt(clock) ? clock - last.clock : null,
@@ -387,7 +387,7 @@ export function pulseCommand(ctx, payload = {}) {
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
     const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text);
     // A chance meeting also carries the cast's cue for the person met: the prelude is previewed on the head state, which has no meeting yet.
-    return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
+    return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { keep: true, kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
 }
 
 /** `director.pulse.quiet { on }` (the reader's): the quiet-scene flag, a slot written whole; while it is on every reply is skipped. */

@@ -21,7 +21,7 @@ import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
 import { PULSE_STATIC, STALE_REPLIES, pulseCommand, pulseHook } from '../../../src/v2/pulse/effects.js';
-import { foesSignature, leanFight } from '../../../src/v2/cast/entries.js';
+import { foesLeftover, foesSignature, leanFight, pulseResults } from '../../../src/v2/cast/entries.js';
 import { slotValue } from '../../../src/v2/slot.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { fakeDelta } from '../keypeople/helpers.js';
@@ -515,4 +515,17 @@ test('names is on by default like the pulse: a chat that never touched the switc
     } finally {
         host.close();
     }
+});
+
+test('cast: a Foes slot the pulse recorded unchanged on the last two replies is a leftover for chance meetings too (one rule with the pulse)', () => {
+    const foes = foesState();
+    const sig = foesSignature(foes);
+    const results = [{ at: 2, foes: sig }, { at: 4, foes: sig }, { at: 6, foes: sig }];
+    assert.equal(foesLeftover(foes, results), true);
+    assert.equal(foesLeftover(foes, [{ at: 2, foes: sig }, { at: 4, foes: '1:Ridge cutpurses:2:2' }]), false, 'a slot that moved is a fight');
+    assert.equal(foesLeftover(foes, [{ at: 4, foes: sig }]), false, 'one reply is not enough');
+    assert.equal(foesLeftover({}, results), false, 'no Foes slot: nothing is a leftover');
+    const state = { domains: { director: { pulse: [{ results }] } } };
+    assert.deepEqual(pulseResults(state, 6).map(entry => entry.at), [2, 4], 'the reply being written is not read');
+    assert.deepEqual(pulseResults({}, 6), []);
 });

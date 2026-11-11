@@ -16,7 +16,7 @@ import { applyAdvance, applyMeet, applyRumor, applySync, planSync, syncEmpty, sy
 import { sha256 } from '../hash.js';
 import { cueLines, pinned } from './note.js';
 import { cutPoints, isInt, keysOfPerson } from './domain.js';
-import { castOf, fightOn, packName, partyPlace, presentKeys, seenKeys, ask } from './entries.js';
+import { castOf, fightOn, foesLeftover, packName, pulseResults, partyPlace, presentKeys, seenKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { kindWords } from './sought.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
@@ -290,7 +290,9 @@ export function createCastHooks({ plans }) {
 
         // 3. Paths cross.
         if (at !== null) {
-            const fight = fightOn(frame.query, view?.state, { leanOn: typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false });
+            // A Foes slot that has not moved over the last replies (the pulse's records) is a leftover, not a fight (the pulse's own rule).
+            const leanOn = (typeof view?.feature !== 'function' || view.feature('story-block.rpg') !== false) && !foesLeftover(view?.state, pulseResults(view?.state, at));
+            const fight = fightOn(frame.query, view?.state, { leanOn });
             const sought = await soughtFor(view, frame, world, print, normalizeType(info?.type), Math.max(0, HOLD_MS - (Date.now() - startedAt)));
             // (The hook as a whole has HOOK_MS: the planner's batch and the sought answer share the one wait, so a slow connection cannot time the step out.)
             const picks = chooseMeetings(world, frame.cast, {

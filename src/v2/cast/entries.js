@@ -7,6 +7,7 @@
 
 import { hashJson } from '../hash.js';
 import { DAY, MAX_ALIASES, MAX_NAME, MAX_PEOPLE, MAX_PLACE, cutPoints, flat, isInt, isRecord, keyOf, personKey } from './domain.js';
+import { slotValue } from '../slot.js';
 
 const MIN_NAME = 3;
 
@@ -246,6 +247,23 @@ export function foesSignature(state) {
         }
     }
     return live.join('|');
+}
+
+/**
+ * Whether the Foes slots are a leftover: set, and the same text on each of the last `replies` recorded world-pulse results (`results`, oldest
+ * first, each with the `foes` it saw): the narrator never empties a won fight's slot, so a fight that does not move is not a fight. The world
+ * pulse and the chance meetings both read it, so one stuck slot gives the same answer in both.
+ */
+export function foesLeftover(state, results, replies = 2) {
+    const foes = foesSignature(state);
+    const list = Array.isArray(results) ? results : [];
+    return foes !== '' && list.length >= replies && list.slice(-replies).every(entry => entry?.foes === foes);
+}
+
+/** The world pulse's recorded results of replies before `at` (`state.domains.director.pulse`), oldest first: what `foesLeftover` reads. */
+export function pulseResults(state, at = null) {
+    const results = slotValue(state?.domains?.director?.pulse)?.results;
+    return (Array.isArray(results) ? results : []).filter(entry => isRecord(entry) && entry.at !== at);
 }
 
 /**
