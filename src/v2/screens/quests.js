@@ -103,10 +103,8 @@ const CSS = `${BASE_CSS}
 @container (max-width: 420px) {
   .sd-pills { flex-basis: 100%; justify-content: flex-start; }
 }
-/* The game view's wide screen: at most about three columns, not rows across the whole window. */
-@media (min-width: 900px) {
-  .sd-active .sd-cards, .sd-finished .sd-cards { max-width: 1000px; }
-}
+/* A wide screen: at most about three columns, not rows across the whole window (a cap on the content, not a window query). */
+.sd-active .sd-cards, .sd-finished .sd-cards { max-width: 1000px; }
 `;
 
 export const questsScreen = Object.freeze({
