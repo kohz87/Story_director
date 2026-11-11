@@ -152,7 +152,8 @@ test('the hook asks for one pick per reply; a swipe, regenerate or Continue of i
     assert.equal(initiativeHook(view(picked, 5)), undefined);
     assert.equal(initiativeHook(view(picked, 6)), undefined);
     assert.equal(initiativeTail(view(picked, 6)), line);
-    assert.equal(part.context.tail(view(picked, 6)).lines.filter(entry => entry.startsWith('Initiative:')).join(), line);
+    // The line is a kept tail line (Story Block pins `{ text, keep: true }` under a tight budget).
+    assert.deepEqual(part.context.tail(view(picked, 6)).lines.filter(entry => entry.text?.startsWith('Initiative:')), [{ text: line, keep: true }]);
     // The next reply: a new pick.
     assert.deepEqual(initiativeHook(view(picked, 7)), { commands: [{ type: INITIATIVE, payload: { at: 7 } }] });
     // Without the hook (a host that runs none) the tail picks from the state alone: the same state, the same line.
@@ -168,7 +169,7 @@ test('off (the feature): no step, no line; nothing to pick: no step', () => {
     const view = (s, extra = {}) => ({ state: s, settings: {}, chat: { length: 5, lastUser: '' }, ...extra });
     assert.equal(initiativeHook(view(state, off)), undefined);
     assert.equal(initiativeTail(view(state, off)), '');
-    assert.equal(part.context.tail(view(state, off)).lines.some(line => line.startsWith('Initiative:')), false);
+    assert.equal(part.context.tail(view(state, off)).lines.some(line => (line.text ?? line).startsWith('Initiative:')), false);
     // An older host without features: on.
     assert.ok(initiativeHook(view(state)));
     const nobody = withScene(state, { present: ['A Passer-by'] });

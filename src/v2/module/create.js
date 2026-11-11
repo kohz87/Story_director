@@ -8,7 +8,7 @@ import { LIVE_HOST, isObject, liveSdk, tryLive } from './shared.js';
 import { fightRunner } from './host.js';
 import { namespaced, readsOf, settingsFor } from './settings.js';
 import { memoQueries, partCtx, partTools, partView, withSettingArgs } from './contexts.js';
-import { linesOf, mergeHook, own, sectionOf, withFeature } from './merge.js';
+import { cueLinesOf, linesOf, mergeHook, own, sectionOf, withFeature } from './merge.js';
 
 // Story Block's RPG feature: while it is on, its planner asks for the checks.
 const RPG_FEATURE = 'story-block.rpg';
@@ -191,7 +191,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
                 const optional = [];
                 for (const [ns, tail] of tails) {
                     const out = tail(partView(ns, view, shared)) ?? {};
-                    lines.push(...linesOf(out.lines));
+                    lines.push(...cueLinesOf(out.lines));
                     optional.push(...linesOf(out.optional));
                 }
                 return { lines, optional };
