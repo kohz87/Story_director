@@ -267,7 +267,7 @@ export function validateDirector(slice) {
 function pulseErrors(slice) {
     const errors = [];
     const value = Array.isArray(slice?.pulse) && slice.pulse.length === 1 ? slice.pulse[0] : null;
-    if (slice?.pulse !== undefined && slice.pulse !== null && (!isRecord(value) || !Array.isArray(value.results) || value.results.length > 5
+    if (slice?.pulse !== undefined && slice.pulse !== null && (!isRecord(value) || !Array.isArray(value.results) || value.results.length > 6
         || value.results.some(entry => !isRecord(entry) || !isInt(entry.at) || !(entry.clock === null || entry.clock === undefined || isInt(entry.clock)) || typeof entry.kind !== 'string' || typeof entry.text !== 'string'
             || !(entry.d20 === undefined || (isInt(entry.d20) && entry.d20 >= 1 && entry.d20 <= 20)) || !(entry.skipped === undefined || typeof entry.skipped === 'string')
             || !(entry.effect === undefined || isRecord(entry.effect))))) {

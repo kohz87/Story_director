@@ -368,7 +368,7 @@ const rolls = [
     { at: 6, clock: 2, kind: 'SKIP', skipped: 'fight', text: '' },
     { at: 8, clock: 3, kind: 'OVERHEARD_DETAIL', d20: 14, table: 'std', text: 'The inspector learns Astra paid in false coin.', effect: { type: 'chronicle.rumor', at: 8 } },
 ];
-test('director: the World pulse card (die, kind, line, effect pill, table pill) and Recent rows, newest first; the Quiet scene switch sends the command', { skip }, () => {
+test('director: the World pulse card (die, kind, line, effect pill, table pill) and Recent rows (the earlier rolls, not this roll), newest first; the Quiet scene switch sends the command', { skip }, () => {
     const sent = [];
     const { el, warnings } = draw(DIRECTOR_ID, pulseState(rolls), { command: (type, payload) => sent.push([type, payload]) });
     assert.deepEqual(warnings, []);
@@ -377,11 +377,10 @@ test('director: the World pulse card (die, kind, line, effect pill, table pill) 
     assert.match(squash(card.textContent), /World pulse this reply 14 Overheard detail The inspector learns Astra paid in false coin\. rumour recorded standard · \d+ away Swipe for a fresh roll\./);
     const recent = el.querySelector('section[data-kind="pulse-recent"]');
     assert.deepEqual(recent.querySelectorAll('.sd-li').map(row => squash(row.textContent)), [
-        '14 Overheard detail The inspector learns Astra paid in false coin. rumour recorded',
         '— Skipped fight under way',
         '3 Enter check Joren will reach the Stray Oar soon. arrival set',
     ]);
-    assert.match(squash(recent.querySelector('h4').textContent), /Recent last 3/);
+    assert.match(squash(recent.querySelector('h4').textContent), /Recent last 2/);
     assert.equal(el.querySelector('.sd-quiet small'), null, 'switch off: no "pulse paused"');
     el.querySelector('button.ss-switch').click();
     assert.deepEqual(sent, [['director.pulse.quiet', { on: true }]]);

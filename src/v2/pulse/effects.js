@@ -237,7 +237,7 @@ export const FEATURE = 'story-director.pulse';
 export const PULSE = 'director.pulse';
 export const QUIET = 'director.pulse.quiet';
 export const MODES = Object.freeze(['off', 'quiet', 'lively']);
-export const RESULTS_MAX = 5;
+export const RESULTS_MAX = 6;
 const EFFECTS = new Set(['GOSSIP_SURGE', 'OVERHEARD_DETAIL', 'CHANCE_MEETING', 'ENTER_CHECK', 'TASK_SHIFT']);
 const WEATHER_WORDS = [['rain', /rain|drizzle|shower|storm/i], ['snow', /snow|blizzard|sleet/i], ['fog', /fog|mist|haze/i], ['wind', /wind|gale|gust/i], ['heat', /heat|hot|scorch|swelter/i]];
 

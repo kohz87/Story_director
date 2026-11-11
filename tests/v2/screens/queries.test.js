@@ -138,15 +138,15 @@ test('director.plan: an agenda carries its step progress, place and "arriving wi
     assert.deepEqual(agendaSteps({ stepAt: '2' }, { calendar, now: 0 }), { at: 2, of: 0, line: 'step 2', place: '', arriving: false });
 });
 
-test('pulse.view: this reply\'s roll as a row, the recent rows newest first, the table pill, the settings; null is the feature\'s (off)', () => {
+test('pulse.view: this reply\'s roll as a row, the earlier rows newest first (not this roll), the table pill, the settings; null is the feature\'s (off)', () => {
     const part = createScreensPart({ settings: { 'pulse.mode': 'quiet', 'pulse.showUnderReply': true } });
     assert.equal(part.queries['pulse.view'].feature, 'story-director.pulse');
     const results = [{ at: 2, clock: 1, kind: 'SKIP', skipped: 'quiet', text: '' }, { at: 4, clock: 2, kind: 'CALM', d20: 1, table: 'duo', text: '' }];
     const base = makeState({ threads: [thread('th_a0000001', 'agenda', 'A', { now: 'x' }, {}), thread('th_b0000001', 'agenda', 'B', { now: 'y' }, {})] });
     const state = { ...base, domains: { ...base.domains, director: { ...base.domains.director, pulse: toSlot({ results }), pulseQuiet: toSlot({ on: true }) } } };
     const view = part.queries['pulse.view'](state, {}, {});
-    assert.deepEqual([view.mode, view.quiet, view.card, view.show, view.rollAt, view.count, view.table], ['quiet', true, true, true, 4, 2, 'duo · 2 away']);
-    assert.deepEqual(view.recent.map(row => [row.die, row.label, row.text]), [['1', 'Calm', 'nothing happened'], ['—', 'Skipped', 'quiet scene']]);
+    assert.deepEqual([view.mode, view.quiet, view.card, view.show, view.rollAt, view.count, view.table], ['quiet', true, true, true, 4, 1, 'duo · 2 away']);
+    assert.deepEqual(view.recent.map(row => [row.die, row.label, row.text]), [['—', 'Skipped', 'quiet scene']]);
     // Off hides the card; no results yet is an empty card; the setting reads the module's flat key or the part's own.
     assert.equal(createScreensPart({ settings: { mode: 'off' } }).queries['pulse.view'](state, {}, {}).card, false);
     const empty = createScreensPart({ settings: {} }).queries['pulse.view'](base, {}, {});
