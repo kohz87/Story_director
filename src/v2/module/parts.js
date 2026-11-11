@@ -9,6 +9,7 @@ import { part as keypeople } from '../keypeople/index.js';
 import { part as cast } from '../cast/index.js';
 import { part as arc } from '../arc/index.js';
 import { part as checks } from '../checks/index.js';
+import { part as ripples } from '../ripples/index.js';
 import { part as screens } from '../screens/index.js';
 
 export const MODULE_ID = 'story-director';
@@ -21,4 +22,4 @@ export const STORY_BLOCK_WITH_HEADS = '2.25.0';
 export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['arc', arc], ['checks', checks], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['arc', arc], ['checks', checks], ['ripples', ripples], ['screens', screens]]);

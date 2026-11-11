@@ -348,3 +348,39 @@ test('on the host: a pack that starts on a calendar date has the clock seeded af
     assert.deepEqual(firedIds(host), ['any-parent', 'any-child']);
     host.close();
 });
+
+test('a world line\'s factions tag makes the faction on the host: the reply carries the factionTags mark, a Re-read, rebuild and reload agree, an unmarked reply makes none', async () => {
+    const host = await newHost();
+    const recordOf = index => host.ctx.chat[index].extra.storySuite;
+    const factionNames = () => host.sdk.query('chronicle.factions').map(faction => faction.name).sort();
+    try {
+        // An old reply (recorded before the rule: no mark) names a faction in a tag and makes none.
+        const setRuleMarks = host.store.setRuleMarks;
+        host.store.setRuleMarks = () => { throw new Error('no mark: an old chat'); };
+        await host.send('Old.', reply('Fists fly.', ['+ world Dock Brawl — a fight on the quay | factions: Quay Watch']));
+        host.store.setRuleMarks = setRuleMarks;
+        const old = host.ctx.chat.length - 1;
+        assert.equal(recordOf(old).rules, undefined);
+        assert.deepEqual(factionNames(), []);
+
+        // A new reply is marked, and its tag creates the factions.
+        await host.send('New.', reply('Red cords on the quay.', ['+ world Bluewatch Street Clash — the gangs meet | factions: Red-Cord Gang, Quay Watch']));
+        const at = host.ctx.chat.length - 1;
+        assert.ok(recordOf(at).rules.includes('factionTags'));
+        assert.deepEqual(factionNames(), ['Quay Watch', 'Red-Cord Gang']);
+        assert.deepEqual(host.sdk.query('chronicle.faction', { name: 'Red-Cord Gang' }).events.map(event => event.name), ['Bluewatch Street Clash']);
+        assert.deepEqual(validateChronicle(host.head().domains.chronicle), []);
+
+        // Re-read, rebuild and reload give the same state; the unmarked reply stays unmarked and makes none.
+        const live = JSON.stringify(host.head());
+        assert.equal((await host.turn.reread(at)).ok, true);
+        assert.equal(JSON.stringify(host.head()), live, 'a Re-read');
+        assert.equal((await host.turn.reread(old)).ok, true);
+        assert.equal(recordOf(old).rules, undefined, 'the old reply gains no mark');
+        assert.equal(JSON.stringify(host.head()), live, 'and no faction');
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), live, 'a rebuild');
+        await host.st.loadChat(JSON.parse(JSON.stringify(host.ctx.chat)));
+        assert.equal(JSON.stringify(host.head()), live, 'a reload');
+    } finally { host.close(); }
+});

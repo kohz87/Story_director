@@ -11,7 +11,7 @@
 
 import { BASE_CSS } from './style.js';
 import { BEHIND } from './reveal.js';
-import { PLAN_WIDGET } from './behind.js';
+import { PLAN_WIDGET, RIPPLES_WIDGET } from './behind.js';
 import { ARC_WIDGET } from '../arc/widget.js';
 
 export const DIRECTOR_ID = 'story-director/director';
@@ -34,6 +34,7 @@ const TEMPLATE = `
   <ss-widget class="sd-wide" name="${ARC_WIDGET}" data-props='{"bind":"q.arc","open":"true"}'></ss-widget>
   <p class="sd-empty sd-wide" data-if="!q.plan.any">Nothing planned yet.</p>
   <ss-widget class="sd-wide" name="${PLAN_WIDGET}" data-props='{"bind":"q.plan"}' data-if="q.plan.any"></ss-widget>
+  <ss-widget class="sd-wide" name="${RIPPLES_WIDGET}" data-props='{"bind":"q.ripples"}' data-if="len(q.ripples)"></ss-widget>
 </div>
 `;
 
@@ -77,12 +78,18 @@ const CSS = `${BASE_CSS}
 .sd-unlocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.9em; color: var(--sd-muted); }
 .sd-unlocked .sd-btn { flex: 0 0 auto; }
 .sd-unlocked, .sd-lock, .sd-behind .sd-problems-box { grid-column: 1 / -1; }
+.sd-ripples { display: grid; min-width: 0; }
+.sd-ripple { display: grid; gap: 2px; padding: 4px 0; }
+.sd-ripple-bar { display: block; height: 6px; border-radius: 3px; background: var(--sd-border); overflow: hidden; }
+.sd-ripple-fill { display: block; height: 100%; background: var(--sd-accent); }
 `;
 
 const data = {
     arc: { query: 'director.arc' },
     // The cards below the arc: the hooks with their Next, and (threads feature on) beats, off-screen, secrets, then every problem.
     plan: { query: 'director.plan' },
+    // Each pack power's hidden sway (the Ripples card; empty without a pack table), always shown (no Reveal).
+    ripples: { query: 'ripples.sway' },
 };
 
 export const directorScreen = Object.freeze({

@@ -66,6 +66,12 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         /** Every definition, sorted by id. */
         modules: sorted,
         domainOwner: name => owners.domain.get(name) ?? null,
+        /** The replay rules now registered, as text: each domain with its owner, the owner's version, whether it validates, its scratch fields and counters. It changes when a module registers or goes (the store keys what it kept on it). */
+        rulesSignature: () => [...owners.domain].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, id]) => {
+            const def = defs.get(id)?.domains?.[name] ?? {};
+            const list = value => (Array.isArray(value) ? value.join('+') : '');
+            return `${name}@${id}@${defs.get(id)?.version ?? ''}:${typeof def.validate === 'function' ? 'v' : ''}:${list(def.scratch)}:${list(def.counters)}`;
+        }).join(';'),
         commandOwner,
         captureOwner: kind => captureEntry(kind)?.moduleId ?? null,
         queryOwner: name => owners.query.get(name) ?? null,

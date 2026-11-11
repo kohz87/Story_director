@@ -83,8 +83,8 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.equal(byId[STATUS_CARD_ID].data.progress, undefined);
     assert.equal(byId[STATUS_CARD_ID].data.time.query, 'director.time');
     const director = byId[DIRECTOR_ID].data;
-    // The Director draws the arc and the plan cards only: no Quests list, no World list, no clock line (no time, no thread kinds).
-    assert.deepEqual(director, { arc: { query: 'director.arc' }, plan: { query: 'director.plan' } });
+    // The Director draws the arc, the plan cards and the Ripples card only: no Quests list, no World list, no clock line (no time, no thread kinds).
+    assert.deepEqual(director, { arc: { query: 'director.arc' }, plan: { query: 'director.plan' }, ripples: { query: 'ripples.sway' } });
     const { time } = byId[STATUS_CARD_ID].data;
     // The reply's card shows no next beat (a spoiler); it adds the map coordinates and the weather.
     assert.equal(byId[STATUS_CARD_ID].data.next, undefined);

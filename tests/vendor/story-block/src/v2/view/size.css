@@ -8,6 +8,10 @@
    must stay a screen's length (a full-screen layer in vw/dvh, a 44px tap area). Outside a root `--ss-zoomed` is unset (1).
    Measured distances (getBoundingClientRect, a pointer's clientX) are drawn pixels and a node's own lengths (style.left,
    scrollTop) are not: scripts divide by the node's zoom (view/scroll.js zoomOf; Story Director's map does the same). */
+/* The inventory sheet's and the navigation strip's styles load here, after glass.css (host.css imports glass.css, then settings.css, fonts.css,
+   this file): host.css is over its size limit, so it takes no new import line. */
+@import url('./inv-sheet.css');
+@import url('./screenbar-strip.css');
 :root {
     --ss-zoom: 0.8;
 }

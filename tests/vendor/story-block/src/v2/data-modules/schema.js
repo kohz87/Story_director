@@ -12,7 +12,7 @@ const freeze = value => {
 
 export const DATA_MODULES_CAPABILITY = 'data-modules-v1';
 export const DM_LIMITS = freeze({
-    interpreter: 1, definitions: 8, pins: 16, subjects: 16,
+    interpreter: 1, definitions: 20, pins: 28, subjects: 16,
     definitionBytes: 32768, pinsBytes: 262144, instanceBytes: 16384,
     fields: 32, kinds: 16, rules: 32, timers: 8, templates: 16,
     expressionDepth: 6, expressionNodes: 64, effects: 16, imports: 8, offers: 64,
@@ -160,6 +160,14 @@ export function dmKindWrites(definition, kind) {
     visit(kind?.effects);
     return { fields, computed };
 }
+
+/**
+ * The room a story has for blocks: its own (`definitions`) and all active (`pins`). A reply captured before the `partyRoom` rule mark
+ * (turn/rule-marks.js) keeps the earlier 8 and 16 on a Re-read, so an old refused join stays refused; every other caller gets the current room.
+ * Bytes (`pinsBytes` 262144) cap it too: a companion's two blocks are about 29 KB, so about 8 fit by size before the block counts.
+ */
+export const DM_OLD_ROOM = freeze({ definitions: 8, pins: 16 });
+export const dmRoom = ctx => (ctx?.cause === 'story' && ctx?.carrier && !ctx.carrier.rules?.includes('partyRoom') ? DM_OLD_ROOM : freeze({ definitions: DM_LIMITS.definitions, pins: DM_LIMITS.pins }));
 
 /** Whether a kind writes a hidden field (or might, through a computed path while some field is hidden). */
 export function dmKindWritesHidden(definition, kind) {
