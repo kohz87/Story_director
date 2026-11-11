@@ -94,6 +94,17 @@ function offerLines(ro, n) {
     return lines;
 }
 
+// (night 12 Nov) The last days' kinds, own stream: world lines that name factions, places inside a town, people in the scene who leave again
+// inside the reply (the Earlier days witnesses read the day's present lists), and the quiet scene switch; the Journal, the World screen and
+// the factions must read the same after a rebuild.
+function dayLines(rd, n) {
+    const lines = [];
+    if (rd.chance(0.3)) lines.push(`+ world Faction ${n} — afoot | state: ${rd.pick(['looming', 'ongoing'])} | factions: ${rd.pick(['Red Hand', 'Salt Court'])}, Clan ${n}`);
+    if (rd.chance(0.3)) lines.push(`~ place ${rd.pick(PLACES)} / Spot ${n}`, `~ place ${rd.pick(PLACES)}`);
+    if (rd.chance(0.3)) lines.push(`+ present Passer ${n}`, `+ present Friend ${n % 4}`, `- present Passer ${n}`);
+    return lines;
+}
+
 const said = (text, lines) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 
 function validatorErrors(host) {
@@ -136,6 +147,7 @@ for (const seed of SEEDS) {
         const r = prng(seed);
         const rl = prng(seed ^ 0x1A57);
         const ro = prng(seed ^ 0x0FFE);
+        const rd = prng(seed ^ 0xD0A5);
         const whole = seed > 12;
         const caps = whole ? { FULL: 60, KEEP: 60 } : { FULL: 3, KEEP: 5 };
         const settings = settingsOf(caps);
@@ -147,7 +159,8 @@ for (const seed of SEEDS) {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5',
                 ...BASE_OFFERS.map(key => `+ hook ${key} — a job on offer | giver: Brom | reward: 8 gold`)]));
             for (let n = 1; n <= REPLIES; n += 1) {
-                await host.send(`On we go (${n}).`, said(`Reply ${n}.`, [...replyLines(r, n), ...lastingLines(rl), ...offerLines(ro, n)]));
+                await host.send(`On we go (${n}).`, said(`Reply ${n}.`, [...replyLines(r, n), ...lastingLines(rl), ...offerLines(ro, n), ...dayLines(rd, n)]));
+                if (rd.chance(0.25)) assert.ok((await host.sdk.command('director.pulse.quiet', { on: rd.chance(0.5) })).ok, `seed ${seed}, reply ${n}: quiet scene switch`);
                 const edit = lastingEdit(rl, host, n);
                 if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
                 const head = host.head();
@@ -178,10 +191,10 @@ for (const seed of SEEDS) {
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
                 assert.deepEqual(host.store.problems().map(problem => problem.why ?? problem.message), [], `${where}: a later block no longer applies`);
                 const live = JSON.stringify(host.head());
-                const shown = JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal')]);
+                const shown = JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal'), host.sdk.query('chronicle.factions')]);
                 host.store.rebuild();
                 assert.equal(JSON.stringify(host.head()), live, `${where}: rebuild != live`);
-                assert.equal(JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal')]), shown, `${where}: World and Journal after a rebuild`);
+                assert.equal(JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal'), host.sdk.query('chronicle.factions')]), shown, `${where}: World and Journal after a rebuild`);
                 assert.deepEqual(validatorErrors(host), [], where);
                 capsHold(host, where, caps);
                 digestsFollow(host, where);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Fix: the world pulse line and the Initiative line survive a tight tail budget.** The pulse receipt already marked its cue kept; the Initiative line now goes to Story Block as a kept tail line (`{ text, keep: true }`), so under a small tail budget with many threads both still reach the narrator. Needs Story Block 2.31.1 or later (an older host ignores a kept line object, so it would not tell the Initiative line at all). Replies already written replay as before: only the prompt changes.
+- **Fix: replies after a deleted middle reply keep applying.** A refused name, a key person's death record or a place line that rewrites a record an older reply made is passed over when that reply was deleted, instead of skipping the whole block; a day digest left by a rewind or a deleted cap drop is no longer listed in the Journal or [Earlier days]. Replies already written replay and Re-read exactly as before.
+- **Trips rest like the estimate.** A `~ trip` now counts rest days the way the travel estimate does (a rest day every sixth day on foot or riding; a night's stop on a modern drive), so the party arrives when the estimate said. Applies to replies written after this update; earlier replies, and a Re-read of them, keep their timing exactly.
+
 ## 2.14.0
 
 Update Story Block, Story Director and NPC State Delta together, then re-import the Ersveil pack (2.9.5 needs Story Block 2.31.0). The new features apply to new replies; start a new chat to see them all. Replies already written replay and Re-read exactly as before.

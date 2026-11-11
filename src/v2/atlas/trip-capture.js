@@ -98,6 +98,13 @@ function delayTrip(ctx, line, text) {
     return { summary: `The trip to ${trip.to} is delayed ${hours}${because ? ` (${because})` : ''}: every arrival ahead moves later.`, narrate: false, data: { delayed: minutes } };
 }
 
+/** `atlas.mark { tripRest: true }` (beforeGenerate): trips planned from the next reply on count rest days; a reply recorded before has no mark. */
+export function markTrips(ctx, payload = {}) {
+    if (payload?.tripRest !== true) return ctx.fail('INVALID', 'Say what to mark: { tripRest: true }.');
+    ctx.draft('atlas').tripRest = true;
+    return { summary: '', narrate: false, data: { tripRest: true } };
+}
+
 /** `trip` lines (`~`, or `+`): start a trip, `stop` it, or `delay: …` it. */
 export function applyTripLine(ctx, line) {
     const op = line?.op;
@@ -139,7 +146,7 @@ export function applyTripLine(ctx, line) {
     }
     // A ride goes at Story Block's mount pace (its slowest mount; the walking pace when there are too few), else the default ride pace.
     const ride = mode === 'ride' ? mountPace(ctx) : { pace: basePace(mode, modern), mount: '', short: false };
-    const plan = planTrip(world, { from, via: vias, to: end.id, mode, pace: mode === 'ride' ? ride.pace : null, modern, at: now });
+    const plan = planTrip(world, { from, via: vias, to: end.id, mode, pace: mode === 'ride' ? ride.pace : null, modern, at: now, rest: atlas.tripRest === true });
     if (plan.error) return ctx.fail('REFUSED', plan.error);
     if (plan.legs.length > MAX_LEGS) return ctx.fail('REFUSED', 'That trip has too many stages.');
 

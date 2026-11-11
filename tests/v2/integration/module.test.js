@@ -20,7 +20,9 @@ import { DEFAULT_TOKENS as KEY_PEOPLE_TOKENS } from '../../../src/v2/keypeople/d
 import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
-import { PULSE_STATIC } from '../../../src/v2/pulse/effects.js';
+import { PULSE_STATIC, STALE_REPLIES, pulseCommand, pulseHook } from '../../../src/v2/pulse/effects.js';
+import { foesLeftover, foesSignature, leanFight, pulseResults } from '../../../src/v2/cast/entries.js';
+import { slotValue } from '../../../src/v2/slot.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { fakeDelta } from '../keypeople/helpers.js';
 import {
@@ -381,7 +383,7 @@ test('names on the host: a repeated or overused name is a Problem and a pinned c
         const host = await createHost({ modules: [createModule()], settings: { features: { 'story-director.pulse': false, ...features } } });
         return host;
     };
-    const plain = await run({});
+    const plain = await run({ 'story-director.names': false });
     const on = await run({ 'story-director.names': true });
     try {
         const open = '<Changes>\n~ time June 3, 1200, 08:00 am\n~ place Harrow | kind: settlement\n';
@@ -425,4 +427,105 @@ test('names: the step before a reply notes who else is in use (scene, cast, doss
     assert.equal(again.commands, undefined);
     assert.equal(again.lines.length, 1);
     assert.equal(namesBefore(namesView(initialNames(), { on: false }), {}), undefined);
+});
+
+test('one tail build asks each query once for the same arguments, and the next build asks again', () => {
+    let calls = 0;
+    let answer = 'one';
+    const part = {
+        context: { tail: view => ({ lines: [view.query('x.ask', { a: 1 }), view.query('x.ask', { a: 1 }), view.query('x.ask', { a: 2 })], optional: [] }), budget: 10 },
+    };
+    const def = createModule({ parts: [['a', part]] });
+    const view = { state: {}, settings: () => ({}), query: (name, args) => { if (name === 'x.ask') calls++; return `${answer}${args?.a}`; } };
+    assert.deepEqual(def.context.tail(view).lines, ['one1', 'one1', 'one2']);
+    assert.equal(calls, 2);
+    answer = 'two';
+    assert.deepEqual(def.context.tail(view).lines, ['two1', 'two1', 'two2']);
+    // A query that throws is asked again, not remembered.
+    let tries = 0;
+    const throwing = { context: { tail: view => { const out = []; for (let i = 0; i < 2; i++) { try { out.push(view.query('x.bad', {})); } catch { out.push('threw'); } } return { lines: out, optional: [] }; }, budget: 10 } };
+    const def2 = createModule({ parts: [['a', throwing]] });
+    assert.deepEqual(def2.context.tail({ state: {}, settings: () => ({}), query: name => { if (name === 'x.bad') tries++; throw new Error('x'); } }).lines, ['threw', 'threw']);
+    assert.equal(tries, 2);
+});
+
+// ---- the World pulse and a Foes slot nobody cleared (LIVERUN1 item 2) --------------------------------------------------------------
+
+const foesState = (fields = { foe1: 'Ridge cutpurses', count1: 2, hurt1: 3 }) => ({ domains: { dataModules: {
+    active: { f: { hash: 'h' } }, pins: { h: { definition: { role: 'foes' } } }, instances: { f: { chat: { fields } } },
+} } });
+
+// One pulse step on a fake ctx: the director slice is carried from step to step (what the store's draft does), the Foes block is `foes`.
+function pulseStep(director, foes, payload) {
+    const ctx = {
+        cause: 'system', fail: (code, message) => { throw new Error(`${code}: ${message}`); }, draft: () => director, rng: () => 0.5, settings: {},
+        read: name => (name === 'dataModules' ? foes.domains.dataModules : null), query: () => undefined, call() {},
+    };
+    pulseCommand(ctx, payload);
+    return slotValue(director.pulse).results.at(-1);
+}
+
+test('pulse: a Foes slot read the same on STALE_REPLIES replies running is a leftover, not a fight: the pulse rolls again', () => {
+    const director = { time: { minutes: 600 } };
+    const foes = foesState();
+    assert.equal(leanFight(foes), true);
+    assert.equal(foesSignature(foes), '1:Ridge cutpurses:2:3');
+    assert.equal(foesSignature({}), '');
+    const kinds = [];
+    for (let at = 2; at <= 10; at += 2) {
+        director.time.minutes += 30;
+        kinds.push(pulseStep(director, foes, { at, age: 1 }));
+    }
+    assert.deepEqual(kinds.slice(0, STALE_REPLIES).map(entry => entry.skipped), ['fight', 'fight'], 'while it is new, a fight');
+    assert.ok(kinds.slice(STALE_REPLIES).every(entry => entry.skipped !== 'fight'), 'unchanged for two replies running: rolled again');
+    assert.ok(kinds.every(entry => entry.foes === '1:Ridge cutpurses:2:3'), 'each roll records what the Foes read');
+    // The slot moves (a hit lands): a fight again, for two replies.
+    foes.domains.dataModules.instances.f.chat.fields.hurt1 = 2;
+    director.time.minutes += 30;
+    assert.equal(pulseStep(director, foes, { at: 12, age: 1 }).skipped, 'fight');
+});
+
+test('pulse: a step without the `age` flag (a reply written before the rule, re-read) keeps the old rule and records nothing new', () => {
+    const director = { time: { minutes: 600 } };
+    const foes = foesState();
+    for (let at = 2; at <= 12; at += 2) {
+        director.time.minutes += 30;
+        const entry = pulseStep(director, foes, { at });
+        assert.equal(entry.skipped, 'fight', `reply ${at}: still a fight, as it was`);
+        assert.equal(entry.foes, undefined);
+    }
+});
+
+test('pulse: the hook adds the flag to every new step', () => {
+    const view = { state: { domains: { director: {} } }, chat: { length: 6 }, feature: () => true, settings: {} };
+    assert.deepEqual(pulseHook(view, {}).commands[0].payload, { at: 6, age: 1 });
+    assert.deepEqual(pulseHook(view, { type: 'swipe' }).commands[0].payload, { at: 5, age: 1 });
+});
+
+test('names is on by default like the pulse: a chat that never touched the switch teaches the person line and checks a new named person (LIVERUN1 item 11)', async () => {
+    assert.equal(namesPart.features[0].default, true);
+    const host = await createHost({ modules: [createModule()], settings: { features: { 'story-director.pulse': false } } });
+    try {
+        await host.send('Hello.', '<Changes>\n+ person Corst | look: scarred | flaw: greedy | voice: low | temper: calm\n</Changes>');
+        await host.send('Next.', '<Changes>\n+ person Elara | look: tall\n</Changes>');
+        const names = host.head().domains.names;
+        assert.equal(names.people.corst.profile.look, 'scarred', 'a new named person is stored with the profile');
+        assert.deepEqual(Object.keys(names.taken), ['elara'], 'an overused name is refused');
+        assert.ok(host.st.promptLog.filter(entry => entry.key === 'story_suite_static' && entry.value).at(-1).value.includes('+ person Name'), 'the static prompt teaches the line');
+    } finally {
+        host.close();
+    }
+});
+
+test('cast: a Foes slot the pulse recorded unchanged on the last two replies is a leftover for chance meetings too (one rule with the pulse)', () => {
+    const foes = foesState();
+    const sig = foesSignature(foes);
+    const results = [{ at: 2, foes: sig }, { at: 4, foes: sig }, { at: 6, foes: sig }];
+    assert.equal(foesLeftover(foes, results), true);
+    assert.equal(foesLeftover(foes, [{ at: 2, foes: sig }, { at: 4, foes: '1:Ridge cutpurses:2:2' }]), false, 'a slot that moved is a fight');
+    assert.equal(foesLeftover(foes, [{ at: 4, foes: sig }]), false, 'one reply is not enough');
+    assert.equal(foesLeftover({}, results), false, 'no Foes slot: nothing is a leftover');
+    const state = { domains: { director: { pulse: [{ results }] } } };
+    assert.deepEqual(pulseResults(state, 6).map(entry => entry.at), [2, 4], 'the reply being written is not read');
+    assert.deepEqual(pulseResults({}, 6), []);
 });
