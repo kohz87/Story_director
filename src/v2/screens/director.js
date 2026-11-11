@@ -146,7 +146,7 @@ const CSS = `${BASE_CSS}
 .sd-empty, .sd-wide { grid-column: 1 / -1; }
 .sd-dir-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
 .sd-dir-title { margin: 0; font-size: 1.1em; font-weight: 700; }
-.sd-spoil { border-color: var(--sd-warn); color: var(--sd-warn); font-weight: 600; }
+.sd-spoil { border-color: var(--sd-warn); color: var(--ss-warn-text, var(--sd-warn)); font-weight: 600; }
 .sd-kind { min-width: 0; }
 .sd-thread .sd-key, .sd-thread .sd-line { overflow-wrap: anywhere; }
 .sd-thread .sd-meta { margin-top: 2px; }

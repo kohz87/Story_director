@@ -28,6 +28,7 @@ const CSS = `
 :where(.sd-map :focus-visible) { outline: 2px solid var(--sd-map-accent); outline-offset: 2px; }
 .sd-map.ss-glass { gap: 0.6em; padding: 12px; color: var(--sd-map-fg); border-color: var(--sd-map-border); }
 .sd-map .sd-map-search input::placeholder { color: var(--sd-map-muted); opacity: 1; }
+.sd-map { container-type: inline-size; }
 .sd-map .sd-map-bar { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: flex-start; }
 .sd-map .sd-map-search { position: relative; flex: 1 1 14em; min-width: 0; }
 .sd-map .sd-map-search input { width: 100%; min-height: 40px; padding: 0.3em 0.8em; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-pill); background: var(--sd-map-raised); color: inherit; font: inherit; }
@@ -47,7 +48,7 @@ const CSS = `
 .sd-map .sd-map-region::after { content: ""; position: absolute; right: 1em; top: 50%; width: 0.45em; height: 0.45em; margin-top: -0.3em; border: solid var(--sd-map-muted); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
 .sd-map .sd-map-region select:hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--sd-map-fg) 8%, transparent); }
 .sd-map .sd-map-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; min-height: 14em; overflow: hidden; border: 1px solid var(--sd-map-border); border-radius: var(--ss-radius-m); background: var(--sd-map-bg); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
-@media (max-width: 600px) {
+@container (max-width: 600px) {
   .sd-map .sd-map-stage { aspect-ratio: 1 / 1; max-height: 60vh; }
   /* the bar in three rows: the search box, the Region list (its caption left to its own label), the zoom buttons */
   .sd-map .sd-map-region { flex: 1 1 100%; }
@@ -69,10 +70,10 @@ const CSS = `
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
 .sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }
 .sd-map .sd-map-place.sd-map-picked { border-color: var(--sd-map-accent); border-style: solid; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sd-map-accent) 45%, transparent); opacity: 1; z-index: 2; }
-/* A phone (a narrow screen or a coarse pointer, PHONE): the dot keeps its size; its tap area is a 44px square on the screen (::before,
+/* A phone (a coarse pointer): the dot keeps its size; its tap area is a 44px square on the screen (::before,
    no paint; 44px over Story Block's zoom, --ss-zoomed). Where two squares cover one dot, the click picks the place whose dot is nearest
    (see the click handler). */
-@media (max-width: 759.98px), (pointer: coarse) {
+@media (pointer: coarse) {
   .sd-map .sd-map-place::before { content: ""; position: absolute; left: 50%; top: 50%; width: calc(44px / var(--ss-zoomed, 1)); height: calc(44px / var(--ss-zoomed, 1)); transform: translate(-50%, -50%); }
 }
 .sd-map .sd-map-label { position: absolute; z-index: 2; height: 18px; padding: 0 4px; border-radius: var(--ss-radius-s); background: var(--sd-map-overlay); color: var(--sd-map-fg); font-size: 12px; line-height: 18px; white-space: nowrap; pointer-events: none; }
@@ -119,7 +120,7 @@ const CSS = `
 .sd-map .sd-map-road li[data-kind="mover"] .sd-map-road-name::before { content: "\\25C6\\00a0"; color: var(--sd-map-mover); }
 .sd-map .sd-map-road-bar { margin-top: 0.2em; height: 5px; border-radius: 3px; background: var(--sd-map-raised); overflow: hidden; }
 .sd-map .sd-map-road-bar > span { display: block; height: 100%; background: var(--sd-map-accent); }
-@media (max-width: 759.98px) {
+@container (max-width: 759.98px) {
   .sd-map .sd-map-road { position: static; width: auto; max-height: none; margin-top: 0.6em; box-shadow: none; background: var(--sd-map-raised); }
   .sd-map .sd-map-pin-mover { display: none; }
 }
