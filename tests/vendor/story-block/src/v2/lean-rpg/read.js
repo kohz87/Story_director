@@ -177,7 +177,7 @@ function foesOf(id, fields, offset = 0, hidden = new Set(), state = null) {
  *         counts on across blocks (1–4, then 5–8, …), `filled` = a name and a count above 0
  *   problems: plain sentences for blocks left out (no `who`, two characters of one name)
  */
-export function readSheet(state) {
+export function readSheet(state, { withLeft = false } = {}) {
     const sheet = { characters: [], foes: [], problems: [] };
     const domain = state?.domains?.dataModules;
     if (!isObject(domain) || !isObject(domain.active)) return sheet;
@@ -191,10 +191,13 @@ export function readSheet(state) {
         const hidden = hiddenOf(definition), fields = shownFields(raw, hidden);
         if (role === 'character') {
             // A companion who left the party (`left`) is kept on the Party tab but is not on the sheet the dice are rolled for.
-            if (fields.left === true) continue;
-            const found = character(id, fields, hidden.has('who') ? definition.name : '', hidden, definition);
+            // (`withLeft`, for `party.levels`: read too, `left: true`; `sheetLevel` is the stated level or null.)
+            const gone = fields.left === true;
+            if (gone && !withLeft) continue;
+            const found = character(id, fields, hidden.has('who') || withLeft ? definition.name : '', hidden, definition);   // (`withLeft`: a blank Name uses the block's name, as the Party card does)
+            if (found && withLeft) Object.assign(found, { left: gone, sheetLevel: int(fields.level) !== null || Object.hasOwn(fields, 'soul') ? found.level : null });   // (the level the card shows: clamped 1–99)
             if (!found) sheet.problems.push(`The Character block "${id}" has no name in its Who field, so it is left out.`);
-            else if (sheet.characters.some(other => other.key === found.key)) sheet.problems.push(`Two Character blocks are called ${found.who}; only the first is used.`);
+            else if (!withLeft && sheet.characters.some(other => other.key === found.key)) sheet.problems.push(`Two Character blocks are called ${found.who}; only the first is used.`);
             else sheet.characters.push(found);
         } else if (role === 'skills') {
             const who = text(fields.who) || (hidden.has('who') ? text(definition.name) : '');

@@ -2,7 +2,6 @@
 // The tab host stays available to the page's navigation, refresh and teardown callbacks.
 
 import { createTabHost } from '../host-ui.js';
-import { slotsForWidth } from '../view/screen-bar.js';
 import { isInBar, navKey } from '../view/tab-order.js';
 import { IDS, el, iconButton, S } from './shared.js';
 
@@ -24,12 +23,10 @@ export function createUiPanel({ doc, sdk, tabSource, tabOrder, barDeclared, moun
     panel.append(panelHead, offerBox, panelBody);
     doc.body.appendChild(panel);
 
-    // The strip's slots before More: four on a phone's bottom sheet; on the side sheet (from 760px, the game view's line) as many as its width holds.
-    const panelSlots = () => slotsForWidth(Number(panel.clientWidth), { wide: doc.defaultView?.matchMedia?.('(min-width: 760px)')?.matches === true });
     function openPanel() {
         panel.hidden = false;
         doc.body.classList.add('story-suite-sheet-open');
-        if (!getTabHost()) setTabHost(createTabHost(panelBody, { registry: tabSource, view: () => sdk.view(), api: sdk, doc, barHost: panel, slots: panelSlots,
+        if (!getTabHost()) setTabHost(createTabHost(panelBody, { registry: tabSource, view: () => sdk.view(), api: sdk, doc, barHost: panel,
             inBar: tab => isInBar(tabOrder.choice(), navKey(tab), barDeclared(navKey(tab))) }));
         else getTabHost().refresh();
     }

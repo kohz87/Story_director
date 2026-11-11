@@ -29,6 +29,8 @@ function receiptsOf(store, index) {
     return { slots, ended };
 }
 
+// `enabled` is a flag or a function that answers it: the function is asked last, only once a foe stands and no board is staged, because
+// the answer reads the pack's rules through sdk queries, each of which settles the timeline (the Fight tab asks this on every redraw).
 function findFightOffer(chat, store, meta, enabled = true) {
     // A board with exchanges staged hides the offer (never clobbered), and so does one the reader opened on the offered reply itself. A segment carried
     // on from an earlier fight follows every later reply (receiveBoard), so it is not the fight a new group starts: a group that arrived on the reply the segment now sits on still gets its offer, an older arrival (the fight in hand) does not.
@@ -37,6 +39,12 @@ function findFightOffer(chat, store, meta, enabled = true) {
     let current;
     try { current = standing(store.head()); } catch { return null; }
     if (!current.length) return null;
+    if (typeof enabled === 'function') {
+        if (!enabled()) return null;
+        // (the answer may have settled the timeline: the foes that stand are the head's after it)
+        try { current = standing(store.head()); } catch { return null; }
+        if (!current.length) return null;
+    }
     let next = byIdentity(current);
     const messages = Array.isArray(chat) ? chat : [];
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -69,7 +77,7 @@ function hideFightOffer(meta, sid) {
 }
 
 export function createFightOffers({ ctx, doc, store, meta, on, view, open, save, refresh } = {}) {
-    const find = () => findFightOffer(ctx?.chat, store, meta(), on());
+    const find = () => findFightOffer(ctx?.chat, store, meta(), on);
     const update = () => {
         const offer = find();
         const message = offer && doc.querySelector?.(`.mes[mesid="${offer.index}"]`);
