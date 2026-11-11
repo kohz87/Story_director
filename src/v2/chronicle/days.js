@@ -33,13 +33,13 @@
 export {
     DIGEST_FEATURE, DIGEST, DAY_MINUTES, DIGEST_DEFAULTS, FULL_MAX, KEEP_MAX,
     MAX_HAPPENED, MAX_PLACES, MAX_QUESTS, MAX_NPCS, MAX_WORLD, MAX_ITEM, MAX_LINE,
-    MAX_DATE, MAX_NAME, MAX_MET, agoText, flat, cut, dayOf, QUEST_LOG_KEPT, QUEST_LOG_TEXT,
+    MAX_DATE, MAX_NAME, MAX_MET, MAX_WHO, agoText, flat, cut, dayOf, QUEST_LOG_KEPT, QUEST_LOG_TEXT,
     FOLD_AT, FOLLOW_MAX,
 } from './days/shared.js';
 export {
     daysOf, followDigest, orderedDays, writtenOf, digestSettings, walkDays,
     questLogOf, notedOf, entriesByDay, rangeDays,
 } from './days/state.js';
-export { entryOf, eventsOf, foldEntries, factsOf, dayFacts, hasFacts } from './days/facts.js';
+export { entryOf, eventsOf, sceneOf, foldEntries, factsOf, dayFacts, hasFacts } from './days/facts.js';
 export { moneyText, fightText, dayLine, makeDigest, briefOf, capDays, digestOut } from './days/summary.js';
 export { validateDays } from './days/validate.js';

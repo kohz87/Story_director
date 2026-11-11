@@ -38,3 +38,17 @@ test('an old day also drops the older roll planner note', () => {
     assert.equal(isNarratorNote('[Rolls] Code rolled these and has already moved the bars they hit'), true);
     assert.equal(isNarratorNote('Rolls were good today, the boar fell.'), false);
 });
+
+test('witnesses: a day with who carries them to its event lines for [Earlier days]; a hidden person is left out; a day without them has none', () => {
+    const hidden = { words: new Set(['marrow']), behind: new Set() };
+    const day = knownDay({
+        day: 18, date: 'Goldwane 18', happened: ['Astra signed the ledger with the wrong seal.', 'The gate opened.'], tags: ['quest.step th_aaaaaaaa', 'capture.item'],
+        who: [['Bregje', 'Marrow', 'Torka'], ['Bregje']], more: 0, places: [], quests: { taken: [], done: [], failed: [], dropped: [] }, fights: { count: 0 }, money: { in: 0, out: 0 }, npcs: [], world: [], count: 2,
+    }, hidden);
+    assert.deepEqual(day.happenedWho, [['Bregje', 'Torka'], ['Bregje']]);
+    assert.equal(day.eventWho.length, day.eventLines.length);
+    assert.ok(day.eventWho.some(names => names.includes('Torka')) && day.eventWho.flat().every(name => name !== 'Marrow'));
+    const old = knownDay({ day: 17, date: 'Goldwane 17', happened: ['The gate opened.'], more: 0, count: 1 }, hidden);
+    assert.deepEqual(old.happenedWho, [[]]);
+    assert.deepEqual(old.eventWho.flat(), []);
+});
