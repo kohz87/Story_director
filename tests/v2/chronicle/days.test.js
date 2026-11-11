@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 
 import {
     DIGEST_DEFAULTS, FULL_MAX, KEEP_MAX, MAX_HAPPENED, MAX_LINE, briefOf, capDays, cut, dayFacts, dayLine, dayOf, digestSettings,
-    entryOf, foldEntries, makeDigest, moneyText, validateDays, walkDays,
+    entryOf, factsOf as factsOfEntries, foldEntries, makeDigest, moneyText, validateDays, walkDays,
 } from '../../../src/v2/chronicle/days.js';
 import { bucketDay, classify, classifyText, trimCats } from '../../../src/v2/chronicle/backlog.js';
+import { noteFactsQuery } from '../../../src/v2/chronicle/queries.js';
 import { initialChronicle, validateChronicle } from '../../../src/v2/chronicle/domain.js';
 
 const DAY = 1440;
@@ -309,4 +310,44 @@ test('F10: a short day keeps at most 40 lines of a kind', () => {
     const cats = trimCats({ events: Array.from({ length: 60 }, (_, i) => `e${i}`) });
     assert.equal(cats.events.length, 40);
     assert.deepEqual(validateDays({ days: { [D]: [{ day: D, date: 'D', line: 'D: x.', brief: true, count: 60, made: 1, cats }] } }), []);
+});
+
+// ---- witnesses: who was there for a line (new days only) --------------------------------------------------------------------
+
+const here = (present, added = []) => r('capture.present', { module: 'story-block', summary: `${added.join(', ')} is here.`, data: { added, removed: [], present } });
+const told = summary => r('quest.step', { summary, data: { thread: 'th_aaaaaaaa' } });
+
+test('witnesses: a line keeps who was in the scene then; one who left mid-day is not on the later line; the walk starts from the seed', () => {
+    const entry = entryOf([told('Astra signed the ledger.'), here(['Bregje', 'Torka'], ['Torka']), told('Torka paid the toll.'), here(['Bregje'], []), told('Bregje counted the coin.')], D, { present: ['Bregje'] });
+    const byText = Object.fromEntries(entry.happened.map(item => [item.text, item.who]));
+    assert.deepEqual(byText['Astra signed the ledger.'], ['Bregje']);
+    assert.deepEqual(byText['Torka paid the toll.'], ['Bregje', 'Torka']);
+    assert.deepEqual(byText['Bregje counted the coin.'], ['Bregje'], 'Torka left before this line');
+    // Folded entries and the facts keep them, parallel to happened.
+    assert.deepEqual(foldEntries([entry], D).happened.map(item => item.who), entry.happened.map(item => item.who));
+    assert.deepEqual(factsOfEntries([entry]).who, entry.happened.map(item => item.who ?? []));
+});
+
+test('witnesses: an older day (no present list given, or no names) has none and stays as it was; the digest stores them only when there are some', () => {
+    const plain = entryOf([told('Astra signed the ledger.'), here(['Bregje'], ['Bregje'])], D);
+    assert.ok(plain.happened.every(item => item.who === undefined), 'no seed: nothing recorded');
+    assert.equal(makeDigest(D, factsOfEntries([plain]), { date: 'D' }).who, undefined);
+    const empty = entryOf([told('Astra signed the ledger.')], D, { present: [] });
+    assert.ok(empty.happened.every(item => item.who === undefined));
+    const entry = entryOf([told('Astra signed the ledger.')], D, { present: ['Bregje', 'Torka', 'Dag', 'Eli', 'Fay', 'Gus', 'Hal'] });
+    assert.equal(entry.happened[0].who.length, 6, 'at most 6 names are kept');
+    const digest = makeDigest(D, factsOfEntries([entry]), { date: 'D' });
+    assert.deepEqual(digest.who, [entry.happened[0].who]);
+    assert.deepEqual(validateDays({ days: { [D]: [digest] } }), []);
+    assert.ok(validateDays({ days: { [D]: [{ ...digest, who: [['x'.repeat(200)]] }] } }).length > 0, 'the validator holds the names to their size');
+});
+
+test('witnesses: the note query starts from the scene the last note left and hands on the scene it leaves', () => {
+    const list = [told('Astra paid the toll.'), here(['Bregje', 'Dag'], ['Dag']), told('Dag cursed the gate.')];
+    const tools = { receipts: () => entries(list) };
+    const first = noteFactsQuery({}, { after: null, minutes: D * DAY, present: ['Bregje'] }, tools);
+    assert.deepEqual(first.entries[0].entry.happened.map(item => item.who), [['Bregje'], ['Bregje', 'Dag']]);
+    assert.deepEqual(first.present, ['Bregje', 'Dag']);
+    const bare = noteFactsQuery({}, { after: null, minutes: D * DAY }, tools);
+    assert.deepEqual(bare.entries[0].entry.happened.map(item => item.who), [undefined, ['Bregje', 'Dag']], 'nobody recorded before the first present receipt');
 });

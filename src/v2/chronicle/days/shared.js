@@ -25,6 +25,8 @@ export const MAX_LINE = 200;
 export const MAX_DATE = 80;
 export const MAX_NAME = 80;
 export const MAX_MET = 8;
+// Who was in the scene at a line (its witnesses): at most this many names are kept with it (the [Earlier days] block shows three).
+export const MAX_WHO = 6;
 
 // Receipts that set the clock (module story-director, `data.minutes`; `director.clock` is the reader's own edit of it).
 // `director.advance` called by another module's command has no receipt of its own; the time part's settle before the

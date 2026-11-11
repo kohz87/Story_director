@@ -9,7 +9,7 @@
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { worldLineText } from './capture.js';
 import { findIn, isLocked, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
-import { DIGEST_FEATURE, agoText, dayFacts, dayOf, digestOut, entryOf, eventsOf, orderedDays, questLogOf, walkDays } from './days.js';
+import { DIGEST_FEATURE, agoText, dayFacts, dayOf, digestOut, entryOf, eventsOf, sceneOf, orderedDays, questLogOf, walkDays } from './days.js';
 
 // A query of the day digest only (MODULES §F100): tagged with its feature, so Story Block answers null
 // while the reader has the digest off (B-c2-2). An older host without features keeps it on.
@@ -224,17 +224,24 @@ export function dayEventsQuery(_state, { day = null } = {}, tools) {
 }
 
 /**
- * `chronicle.noteFacts { after, minutes }`: what the receipts committed after revision `after` hold
+ * `chronicle.noteFacts { after, minutes, present }`: what the receipts committed after revision `after` hold
  * (fresh: Story Block still keeps their data), by story day, the clock at `minutes` before them:
  * `{ entries: [{ day, entry }], minutes, rev, settle }` (the clock and the last revision after them,
- * and the last time settle's jump among them). The note command keeps the entries (digest.js).
+ * and the last time settle's jump among them; `present`: the scene they leave, from where the last note left it). The note command keeps the entries (digest.js).
  */
-export function noteFactsQuery(state, { after = null, minutes = null } = {}, tools) {
+export function noteFactsQuery(state, { after = null, minutes = null, present = null } = {}, tools) {
     let list = [];
     try { list = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { list = []; }
     const walk = walkDays(list, { after: Number.isSafeInteger(after) ? after : null, minutes });
     const lasting = lastingByRev(state);
-    const entries = [...walk.days.keys()].sort((a, b) => a - b).map(day => ({ day, entry: entryOf(walk.days.get(day), day, { lasting }) }));
+    // Who was in the scene: the note's own (`present`, where the last note left it), moved on day by day through the present receipts.
+    let scene = Array.isArray(present) ? present : [];
+    const entries = [...walk.days.keys()].sort((a, b) => a - b).map(day => {
+        const receipts = walk.days.get(day);
+        const entry = entryOf(receipts, day, { lasting, present: scene });
+        scene = sceneOf(receipts, scene);
+        return { day, entry };
+    });
     const revs = [...walk.revs.keys()];
     // The receipts that touched a quest or thread (their own commands' `data.quest`, their lines'
     // `data.thread`), for the quest history (quest.details), kept by the note before the trim.
@@ -250,7 +257,7 @@ export function noteFactsQuery(state, { after = null, minutes = null } = {}, too
             if (typeof item?.quest === 'string' && item.quest !== thread && said) quests.push({ rev: receipt.rev, thread: item.quest, text: said });
         }
     }
-    return { entries, quests, minutes: walk.minutes, rev: revs.length ? Math.max(...revs) : null, settle: walk.settle ? { ...walk.settle } : null };
+    return { entries, quests, present: scene, minutes: walk.minutes, rev: revs.length ? Math.max(...revs) : null, settle: walk.settle ? { ...walk.settle } : null };
 }
 
 export const queries = {

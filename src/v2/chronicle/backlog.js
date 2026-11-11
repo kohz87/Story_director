@@ -9,7 +9,8 @@
 // relevance (people present now, the current place, open threads), and always the last two past days. A line reads
 // "Goldwane 18 (3 days ago): …": the relative day is counted in code from the story clock (agoWords), never by the
 // model. Each day gives one line; a thread's several lines of one day keep only the latest, and the body is cut to
-// BODY_CHARS. The days come from the Journal's known days (world/journal.js knownDay), so what {{user}} does not
+// BODY_CHARS, then the people who were there for it (the day's recorded present lists, new days only) follow in brackets: at most three names, then "+N";
+// when the block runs over its budget the names go first, lowest-ranked line first. The days come from the Journal's known days (world/journal.js knownDay), so what {{user}} does not
 // know (secrets, planner text) never goes in. Nothing on the first day or with no clock. The block is about
 // 200 tokens (BACKLOG_CHARS): when space is short, the lowest-ranked lines go first. Pure and deterministic.
 
@@ -122,6 +123,8 @@ export const BACKLOG_CHARS = 800;
 export const ALWAYS_DAYS = 2;
 /** A day's body (its relevant lines) cut to this many characters. */
 export const BODY_CHARS = 100;
+/** A line names at most this many of the people who were there, then "+N". */
+export const WITNESS_NAMES = 3;
 // Relevance: a present person or the current place counts more than an open thread.
 const WEIGHT = Object.freeze({ person: 2, place: 2, thread: 1 });
 
@@ -156,17 +159,29 @@ function relevanceOf(haystack, rel) {
 const threadKey = line => flat(line).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').split(' ').slice(0, 3).join(' ');
 
 // The day's body: its latest line per thread, the lines that touch the scene (or the day's own line when none does), two at most.
+// `who`: the people there for those lines (the recorded present lists of the day; a day stored before them has none).
 function bodyOf(day, rel) {
     const latest = new Map();
     // The Journal's own event rows are already one per thread (knownDay `eventLines`); a day without them keeps its latest line per thread by the line's first words.
-    for (const line of Array.isArray(day.eventLines) ? list(day.eventLines) : list(day.happened)) {
+    const rows = Array.isArray(day.eventLines) ? { lines: day.eventLines, who: day.eventWho } : { lines: day.happened, who: day.happenedWho };
+    list(rows.lines).forEach((line, index) => {
         const key = threadKey(line);
         latest.delete(key);
-        latest.set(key, line);
-    }
-    const touching = [...latest.values()].filter(line => relevanceOf(line, rel) > 0);
-    const parts = touching.length ? touching : [flat(day.short)].filter(Boolean);
-    return cut(parts.slice(0, 2).join('; '), BODY_CHARS);
+        latest.set(key, { line, who: list(Array.isArray(rows.who?.[index]) ? rows.who[index] : []) });
+    });
+    const touching = [...latest.values()].filter(item => relevanceOf(item.line, rel) > 0);
+    const parts = touching.length ? touching : [{ line: flat(day.short), who: [] }].filter(item => item.line);
+    const shown = parts.slice(0, 2);
+    const body = cut(shown.map(item => item.line).join('; '), BODY_CHARS);
+    return { body, who: [...new Set(shown.flatMap(item => item.who))] };
+}
+
+// The witnesses as a suffix: at most three names, then "+N" for the rest ("(Bregje, Torka, Dag +2)"); '' for none.
+export function witnessText(who) {
+    const names = [...new Set(list(who))];
+    if (!names.length) return '';
+    const shown = names.slice(0, WITNESS_NAMES).join(', ');
+    return ` (${shown}${names.length > WITNESS_NAMES ? ` +${names.length - WITNESS_NAMES}` : ''})`;
 }
 
 // The days' text to match names against: the Journal's own search text, else their lines joined.
@@ -193,12 +208,16 @@ export function backlogBlock({ days = [], now = null, present = [], place = '', 
     const ranked = [];
     for (const day of [...always, ...rest]) {
         if (ranked.length >= BACKLOG_LINES) break;
-        const body = bodyOf(day, rel);
+        const { body, who } = bodyOf(day, rel);
         if (!body) continue;
         const date = flat(day.date) || `Day ${day.day}`;
         const ago = agoWords(today - day.day);
-        ranked.push({ day: day.day, line: `${date}${ago ? ` (${ago})` : ''}: ${body}` });
+        const plain = `${date}${ago ? ` (${ago})` : ''}: ${body}`;
+        ranked.push({ day: day.day, plain, line: `${plain}${witnessText(who)}` });
     }
+    // The budget is unchanged: the names go first, from the lowest-ranked line up, before any line is skipped.
+    const size = items => items.reduce((sum, item) => sum + 1 + item.line.length, BACKLOG_TAG.length);
+    for (let index = ranked.length - 1; index >= 0 && size(ranked) > BACKLOG_CHARS; index -= 1) ranked[index].line = ranked[index].plain;
     const block = [];
     let used = BACKLOG_TAG.length;
     for (const item of ranked) {
