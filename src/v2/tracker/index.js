@@ -8,7 +8,8 @@ import { applyThreadLine, applyTimeLine } from './capture.js';
 import { THREAD_KINDS } from './convert.js';
 import { initialDirector, queries, validateDirector } from './domain.js';
 import { GRAMMAR, GRAMMAR_ALONE, PACING_TEXT, TAIL_BUDGET, directorTail, grammarOf, staticText } from './note.js';
-import { threadCommands, threadReplayGuard } from './writers.js';
+import { foldCommand, threadCommands, threadReplayGuard } from './writers.js';
+import { FOLD, foldHook } from './fold.js';
 import { intentCommand } from './acceptance.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
 import { CLOCK, clockCommand } from './clock-set.js';
@@ -32,15 +33,19 @@ kinds.time = { grammar: GRAMMAR.time, apply: applyTimeLine };
 
 function beforeGenerate(view) {
     const outs = [seedHook(view), initiativeHook(view)].filter(Boolean);
-    if (!outs.length) return undefined;
-    return { lines: [], commands: outs.flatMap(out => out.commands ?? []) };
+    // The fold (fold.js) rides last: it only takes threads no digest can read again, whatever order the parts' commands run in.
+    const fold = foldHook(view);
+    if (!outs.length && !fold) return undefined;
+    return { lines: [], commands: [...outs.flatMap(out => out.commands ?? []), ...(fold ? [fold] : [])] };
 }
 
 export const part = {
     domains: {
         // The story clock is a count (SPEC §2.2 "Counts move"): every move keeps the minutes it replaced
         // (`was`), so a reply deleted in the middle takes its own move back and later moves add theirs.
-        director: { initial: initialDirector, validate: validateDirector, counters: ['time/minutes'] },
+        director: { initial: initialDirector, validate: validateDirector, counters: ['time/minutes'],
+            // `folded` (fold.js): one bucket per fold run under the receipt's rev, so a deleted first fold takes no parent away from a later one.
+            scratch: ['folded'] },
     },
     // NPC initiative (initiative.js): a seeded pick by code before each reply, its line in the tail and,
     // while the feature is on, one static line (a context part under the feature, MODULES §F100).
@@ -58,7 +63,7 @@ export const part = {
         default: true,
         presets: { lean: false },
     }],
-    commands: { [SEED]: seedCommand, [CLOCK]: clockCommand, ...threadCommands, 'threads.intent': intentCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
+    commands: { [SEED]: seedCommand, [CLOCK]: clockCommand, [FOLD]: foldCommand, ...threadCommands, 'threads.intent': intentCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
     queries,
     kinds,
     context: {

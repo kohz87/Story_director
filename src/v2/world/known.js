@@ -23,6 +23,7 @@ import { PRESETS, makeCalendar } from '../../calendar.js';
 import { parseLocation } from '../../places.js';
 import { BEHIND } from '../screens/reveal.js';
 import { threadsOn } from '../threads.js';
+import { foldedHidden } from '../tracker/fold.js';
 
 export const FEATURE = 'story-director.world';
 export const DEFAULT_UPCOMING_DAYS = 30;
@@ -141,6 +142,10 @@ export function hiddenNames(state) {
             words.add(key);
         }
     }
+    // Finished behind-the-scenes threads the fold took keep their names here (tracker/fold.js).
+    const folded = foldedHidden(director);
+    for (const name of folded.behind) behind.add(name);
+    for (const name of folded.words) words.add(name);
     return { behind, words };
 }
 

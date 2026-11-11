@@ -44,6 +44,7 @@ import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 import { initiativeErrors } from './initiative.js';
 import { quietThreads } from './quiet.js';
+import { foldedErrors, foldedItems } from './fold.js';
 
 export const PROBLEM_LIMIT = 50;
 /** How many problems are kept; the newest PROBLEM_LIMIT are shown. */
@@ -279,7 +280,7 @@ export function validateDirector(slice) {
         || (now && (!Array.isArray(now.quests) || !(now.from === null || isInt(now.from)) || !(now.lone === null || isRecord(now.lone))))) {
         errors.push('director.turn is malformed.');
     }
-    errors.push(...initiativeErrors(slice), ...pulseErrors(slice));
+    errors.push(...initiativeErrors(slice), ...pulseErrors(slice), ...foldedErrors(slice));
     return errors;
 }
 
@@ -349,6 +350,13 @@ export const queries = {
         return orderedThreads(director)
             .filter(thread => (!kind || thread.kind === kind) && (!status || thread.status === status) && (offer === null || thread.offer === offer) && !quiet?.has(thread.id))
             .map(plain);
+    },
+    /** The folded older finished threads (fold.js): `{ items: [record], counts: { <kind>: { <outcome>: n } } }`, the records in tracker order. */
+    'director.folded': state => {
+        const items = foldedItems(state?.domains?.director);
+        const counts = {};
+        for (const item of items) counts[item.kind] = { ...counts[item.kind], [item.outcome]: (counts[item.kind]?.[item.outcome] ?? 0) + 1 };
+        return copy({ items, counts });
     },
     /** One thread by `id`, or by `key` (its own or a name it was reached by), else null. */
     'director.thread': (state, { key = null, id = null } = {}) => {

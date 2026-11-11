@@ -20,7 +20,7 @@
 // and `chronicle.digest` (the hook's, cause `system`), and `chronicle.lasting` (a pack event's step: the
 // world's lasting change, which the story's own `world` lines cannot move on, see capture.js).
 
-import { threadOutcome } from './thread-outcome.js';
+import { forget, threadOutcome } from './thread-outcome.js';
 import { applyFactionLine, applyWorldLine, edit, lasting, remove, rumor } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
 import { BACKLOG_BUDGET, DIGEST_TAIL_BUDGET, NOTE, backlogCue, backlogOlder, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
@@ -78,6 +78,7 @@ export const part = {
     },
     commands: {
         'chronicle.threadOutcome': threadOutcome,
+        'chronicle.forget': forget,
         'chronicle.edit': edit,
         'chronicle.remove': remove,
         'chronicle.lasting': lasting,

@@ -28,6 +28,7 @@
 // Names match case-folded, as whole words ("Corvin's" matches Corvin; "Chasseurs" does not match Hasse).
 
 import { questDifficulty } from '../../changes.js';
+import { foldedQuests } from '../tracker/fold.js';
 
 export const RIPPLES_SECTION = 'ripples';
 export const DEFAULT_TIERS = Object.freeze({ small: 4, great: 8, failed: 3, abandoned: 1, fight: 2 });
@@ -332,6 +333,10 @@ export function inputsOf(state, tools, table) {
         outcome: ['done', 'failed', 'abandoned'].includes(thread.ended?.outcome) ? thread.ended.outcome : null,
         great: GREAT.has(questDifficulty(thread.fields?.difficulty)), at: thread.ended?.at ?? null,
     }));
+    // Finished quests and hooks the fold took still count: their records carry what is scored (tracker/fold.js).
+    for (const row of foldedQuests(state?.domains?.director)) {
+        quests.push({ key: row.key, name: row.name, giver: row.giver, summary: row.summary, outcome: row.outcome, great: GREAT.has(questDifficulty(row.difficulty)), at: null });
+    }
     const events = listOf(ask(tools, 'chronicle.events', { open: false })).map(event => ({
         id: event.id, name: event.name, aka: listOf(event.aka), summary: event.summary, factions: listOf(event.factions).map(item => item?.name ?? item), open: event.open, at: event.updated ?? null,
     }));

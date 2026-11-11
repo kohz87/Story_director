@@ -9,7 +9,8 @@
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { worldLineText } from './capture.js';
 import { findIn, isLocked, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
-import { DIGEST_FEATURE, agoText, dayFacts, dayOf, digestOut, entryOf, eventsOf, sceneOf, orderedDays, questLogOf, walkDays } from './days.js';
+import { DAY_MINUTES, DIGEST_FEATURE, agoText, dayFacts, dayOf, digestOut, entryOf, eventsOf, entriesByDay, notedOf, sceneOf, orderedDays, questLogOf, walkDays, writtenOf } from './days.js';
+import { slotValue } from '../slot.js';
 
 // A query of the day digest only (MODULES §F100): tagged with its feature, so Story Block answers null
 // while the reader has the digest off (B-c2-2). An older host without features keeps it on.
@@ -314,6 +315,23 @@ export const queries = {
     'chronicle.dayFacts': digestOnly(dayFactsQuery),
     'chronicle.dayEvents': digestOnly(dayEventsQuery),
     'chronicle.noteFacts': noteFactsQuery,
+    /**
+     * What the Director's fold needs to know of the digest (plain data; null while the digest is off): `on` (a note and a written
+     * day exist), `gap` (the note was off for a while: it will read days from the live threads again), `throughMinutes` (days from
+     * here on are not written yet), `ranges` (the revision ranges of the kept day entries) and `fullMinutes` (the minutes of days whose
+     * digest is whole, which a delete may work out again from the live threads).
+     */
+    'chronicle.foldGate': digestOnly(state => {
+        const chronicle = state?.domains?.chronicle;
+        const noted = notedOf(chronicle);
+        const written = writtenOf(chronicle);
+        const ranges = [];
+        for (const list of entriesByDay(chronicle).values()) for (const { entry } of list) if (entry.revs.length === 2) ranges.push([entry.revs[0], entry.revs[1]]);
+        const fullMinutes = Object.values(chronicle?.days ?? {}).map(slotValue)
+            .filter(digest => digest && isInt(digest.day) && !digest.brief)
+            .map(digest => [digest.day * DAY_MINUTES, (digest.day + 1) * DAY_MINUTES - 1]);
+        return { on: Boolean(noted) && isInt(written?.through), gap: Boolean(noted?.gap), throughMinutes: isInt(written?.through) ? written.through * DAY_MINUTES : 0, ranges, fullMinutes };
+    }),
     /** The kept history of a quest or thread `id`: `[{ rev, text }]`, oldest first (the last few). */
     'chronicle.questLog': (state, { id = null } = {}) => questLogOf(state?.domains?.chronicle, id),
 };

@@ -54,6 +54,7 @@ Generated 2026-11-07.
 
 ## src/v2/tracker/
 - `src/v2/tracker/convert.js`: Converts director threads to and from v1 tracker records and compares/canonicalizes records for replay-safe writes.
+- `src/v2/tracker/fold.js`: Pure fold rules for old finished threads: which resolved threads fold (after 200 replies, newest kept per kind, the newest arc and done quest kept, the chronicle gate), each folded record (giver, people, summary and difficulty for scored quests, hidden names), the guard and the validator for `director.folded`.
 - `src/v2/tracker/hash.js`: Synchronous canonical JSON/SHA-256 for public thread hashes, matching Story Block replay hashes.
 - `src/v2/tracker/quiet.js`: Read-time set of threads that stop counting as open: a beat the Chronicle's quest log shows fired, and a dead person's own agenda (a beat that names them stays) (NPC State Delta `lifeState: deceased`, or the story's recorded death: a pinned person, or anyone on a reply with the `diedAny` rule mark).
 - `src/v2/tracker/thread-shape.js`: Validators for thread IDs, metadata, text, hashes, source stamps and replay cursors.

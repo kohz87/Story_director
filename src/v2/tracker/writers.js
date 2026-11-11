@@ -2,7 +2,8 @@
 import { hashJson } from './hash.js';
 import { lineKey } from '../../changes.js';
 import { THREAD_KINDS } from './convert.js';
-import { replyDraft, replyTurn } from './domain.js';
+import { replyDraft, replyTurn, turnNumber } from './domain.js';
+import { FOLDED_CEILING, FORGET, arcIdOf, foldGuardInputs, foldGuardOk, planFold } from './fold.js';
 import { neutralAcceptance, prepareThreadWrite, threadProjection, threadWriteEntry } from './thread-writes.js';
 import { closed, cursor, hash, map, recordId, source, text } from './thread-shape.js';
 
@@ -85,8 +86,46 @@ export function writeThread(type, ctx, payload) {
 export const threadCommands = Object.fromEntries(['offer', 'accept']
     .map(name => [`threads.${name}`, (ctx, payload) => writeThread(`threads.${name}`, ctx, payload)]));
 
+/**
+ * `director.fold { after?, keep? }` (cause `system`, from the hook; refused from a click): takes the old finished threads
+ * fold.js picks out of the state, writes their records under `director.folded["<rev>"]`, removes them with their keys and
+ * write entries, asks the chronicle to forget their quest log lines and records a replay guard (replay applies these ops
+ * only while the same threads are still finished; otherwise the block is skipped and the next reply folds again).
+ */
+export function foldCommand(ctx, payload = {}) {
+    if (ctx.cause === 'ui') return ctx.fail('REFUSED', 'Older threads are folded by Story Director itself.');
+    if (!closed(payload ?? {}, [], ['after', 'keep']) || ['after', 'keep'].some(name => payload?.[name] !== undefined && !Number.isSafeInteger(payload[name]))) {
+        return ctx.fail('INVALID', 'director.fold takes { after?, keep? } as whole numbers.');
+    }
+    const director = ctx.draft('director');
+    if (Object.keys(director.folded ?? {}).length >= FOLDED_CEILING) return ctx.fail('LIMITED', 'The folded records are full.');
+    const query = (name, args) => ctx.query(name, args);
+    let gate = null;
+    try { gate = ctx.query('chronicle.foldGate', {}); } catch { gate = null; }
+    const arc = arcIdOf(query);
+    const plan = planFold(director, { turn: turnNumber(director), gate, arc, after: payload?.after, keep: payload?.keep });
+    if (!plan.ids.length) return ctx.fail('REFUSED', 'No finished thread is ready to fold.');
+    const inputs = foldGuardInputs(director, plan.ids, arc, ctx.hash);
+    ctx.replayGuard({ owner: 'story-director', version: 2, epoch: ctx.epoch, rulesHash: null, inputHash: ctx.hash(inputs),
+        predicate: { kind: 'director.fold', inputs } });
+    for (const id of plan.ids) delete director.threads[id];
+    for (const name of plan.keys) delete director.keys[name];
+    director.writes ??= {};
+    for (const write of plan.writes) delete director.writes[write];
+    director.folded ??= {};
+    director.folded[String(ctx.rev)] = { rev: ctx.rev, items: plan.items };
+    ctx.call(FORGET, { threads: plan.ids });
+    return { summary: `Older finished threads were summarised (${plan.ids.length}).`, narrate: false, data: { folded: plan.ids.length } };
+}
+
 /** Neutral accept binds the offer and proof bytes, independent of transport revision/ordinal. */
 export function threadReplayGuard({ state, query }, { guard, recorded }) {
+    if (guard?.predicate?.kind === 'director.fold') {
+        const inputs = guard.predicate.inputs;
+        const ok = guard.version === 2 && inputs && hashJson(inputs) === guard.inputHash
+            && foldGuardOk(state?.domains?.director, inputs, arcIdOf(query), hashJson);
+        return ok ? { ok: true } : { ok: false, reason: 'The folded threads or the newest arc changed.' };
+    }
     if (guard?.predicate?.kind !== 'threads.accept') return undefined;
     const off = () => ({ ok: false, reason: 'The offer or reader acceptance evidence changed.' });
     if (guard.version !== 2 || guard.epoch !== (state?.domains?.savepoints?.epoch ?? 'ep_00000000')) return off();

@@ -5,6 +5,7 @@
 
 import { lineKey } from '../../changes.js';
 import { parseLeg } from '../../routes.js';
+import { foldedHidden } from '../tracker/fold.js';
 import { scenePlace } from './note.js';
 import { calendarOf, dateText, tripView } from './trip.js';
 import { packWorld, worldOf } from './world.js';
@@ -41,6 +42,7 @@ export function moversOf(state, world, { now, calendar }) {
     if (!isInt(now) || !threads.length) return [];
     const hidden = new Set();
     for (const thread of threads) if (BEHIND.has(thread.kind)) hidden.add(lineKey(text(thread.key)));
+    for (const name of foldedHidden(director).behind) hidden.add(name);
     for (const arc of Object.values(isRecord(state?.domains?.arc?.arcs) ? state.domains.arc.arcs : {})) if (isRecord(arc)) hidden.add(lineKey(text(arc.key)));
     const out = [];
     for (const thread of threads) {
