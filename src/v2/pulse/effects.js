@@ -29,7 +29,8 @@
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { slotValue, toSlot } from '../slot.js';
-import { fightOn } from '../cast/entries.js';
+import { castOf, fightOn } from '../cast/entries.js';
+import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
 import { orderedThreads } from '../tracker/convert.js';
@@ -111,7 +112,7 @@ export function rumourEntry(kind, { known = [], behind = new Set(), at = null, p
 
 /**
  * CHANCE_MEETING: one unmet, living cast person (`cast`: the cast domain) comes across the party at `place` (required: a place
- * the reader is at). Met by the pulse, so the person is met now; the note's line does not name them.
+ * the reader is at). Met by the pulse, so the person is met now; the line names them (the cast's own cue rides with it, see `rollEntry`).
  */
 export function meetEntry({ cast = null, at = null, place = '', draw = {} } = {}) {
     const where = plainSlot(place, NAME_MAX);
@@ -125,8 +126,8 @@ export function meetEntry({ cast = null, at = null, place = '', draw = {} } = {}
         kind: 'CHANCE_MEETING',
         type: 'cast.meet',
         payload: { at, who: [{ key: pick.key, why: 'goal', reason: 'chance meeting', place: where }] },
-        // Unnamed: the cast's own cue (`[Cast] …`, pinned) is the only text that names an unmet person.
-        tail: `Someone new crosses your path in ${where}.`,
+        // The person is met in this reply, so the line may name them; the cast's cue (who they are, how to bring them in) goes with it.
+        tail: `${plainSlot(pick.person.name, NAME_MAX)} crosses your path in ${where}, by chance.`,
         receipt: { who: pick.key },
     };
 }
@@ -286,7 +287,9 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
     // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
     if (open.some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the roll goes on */ } }
     const room = open.length < RUMOUR_ROOM;
-    const known = room ? open.filter(event => !event?.rumour) : [];
+    // A fact already told as a rumour (open or over) is not told again: the roll steps down rather than write nothing.
+    const told = new Set(ask(query, 'chronicle.events', {}, []).filter(event => event?.rumour).map(event => lineKey(event.rumour)));
+    const known = room ? open.filter(event => !event?.rumour && !told.has(lineKey(event?.name))) : [];
     const behind = hiddenNames(state).behind;
     const converge = thread => {
         const fields = thread.fields ?? {};
@@ -316,10 +319,21 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
             known, behind, at, place, draw, cast: state.domains.cast, now: clock, format: minutes => calendar.format(minutes),
             agendas: agendas.filter(rolled.kind === 'ENTER_CHECK' ? converge : () => true).map(thread => ({ id: thread.id, name: thread.key, named: false, arrive: thread.fields?.arrive, text: thread.fields?.on, abs: dateOf(thread, 'on', { calendar, reference: clock })?.abs })),
         });
-        if (made && applyEffect(ctx, director, made)) return { ...base, text: cutWord(made.tail, TAIL_CHARS), effect: { type: made.type, ...made.receipt } };
+        if (made && applyEffect(ctx, director, made)) {
+            const cue = made.type === 'cast.meet' ? meetingCue(ctx, query, made.receipt.who) : '';
+            return { ...base, ...(cue ? { cue } : {}), text: cutWord(made.tail, TAIL_CHARS), effect: { type: made.type, ...made.receipt } };
+        }
         blocked.add(rolled.kind);
     }
     return { d20, table, kind: 'CALM', text: '' };
+}
+
+// The cast's own cue for the person the pulse just met (read from this step's draft), as the cast part tells a meeting: '' when it cannot be made.
+function meetingCue(ctx, query, key) {
+    try {
+        const person = ctx.read('cast')?.people?.[key];
+        return isRecord(person?.met) ? `[Cast] ${cueOf(person, castOf(query).byKey.get(key))}` : '';
+    } catch { return ''; }
 }
 
 // The effect's step: another part's command (the same receipt), or the agenda's own date on the thread (marked ctx.ifThere).
@@ -357,12 +371,15 @@ export function pulseCommand(ctx, payload = {}) {
         fight: fightOn(query, state), rested: restedSince(state, last?.clock, clock), quiet: slotValue(director.pulseQuiet)?.on === true, clock,
         jumpMinutes: isInt(last?.clock) && isInt(clock) ? clock - last.clock : null,
     });
-    const entry = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode });
+    // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
+    if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
+    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
     const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text);
-    return { summary: line, narrate: Boolean(line), data: { kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
+    // A chance meeting also carries the cast's cue for the person met: the prelude is previewed on the head state, which has no meeting yet.
+    return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
 }
 
 /** `director.pulse.quiet { on }` (the reader's): the quiet-scene flag, a slot written whole; while it is on every reply is skipped. */

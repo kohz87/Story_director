@@ -157,3 +157,25 @@ test('pulse: a regenerate, a swipe or a delete of the reply takes its roll and e
         host.close();
     }
 });
+
+test('pulse: a chance meeting reaches the narrator with the cast cue, names the person, and survives the reply that shows them', async () => {
+    const { castHost, castSource, entry, said, sent: sentTo } = await import('../cast/helpers.js');
+    const host = await castHost({ source: castSource([entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother', routine: '' } })]), features: { 'story-director.pulse': true } });
+    try {
+        await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Elula', '+ present Bram', '+ present Orsa', '+ agenda Courier — rides in | now: far north | on: June 3, 1200, 06:00 pm', '+ world Plague — coughing in the fold | state: ongoing']));
+        await host.send('Go.', said('Reply.', ['~ time June 3, 1200, 08:10 am']));
+        const last = () => host.head().domains.director.pulse[0].results.at(-1);
+        // Every swipe's reply shows Sera (the reply is written before the roll is known), so a roll that meets her must keep the meeting.
+        let tries = 0;
+        while (last().kind !== 'CHANCE_MEETING' && tries < 80) { await host.swipe(said('Sera steps out of the crowd.', ['~ time June 3, 1200, 08:10 am'])); tries += 1; }
+        assert.equal(last().kind, 'CHANCE_MEETING', 'a swipe rolled the chance meeting');
+        const tail = sentTo(host, TAIL_KEY).at(-1) ?? '';
+        assert.match(tail, /World this reply: Sera crosses your path in Harrow/, 'the pulse line names the person');
+        assert.match(tail, /\[Cast\] Sera comes into the scene in this reply/, 'the narrator got the cast cue for the person met');
+        assert.ok(!('cue' in last()), 'the cue is told, not stored in the roll');
+        assert.equal(host.head().domains.cast.people['ersveil:sera']?.met?.why, 'goal', 'the meeting survives the reply that shows her');
+        assert.ok(!host.sdk.receipts().some(item => item.receipt.type === 'cast.withdraw'), 'nothing was taken back');
+    } finally {
+        host.close();
+    }
+});
