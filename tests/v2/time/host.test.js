@@ -9,6 +9,9 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { PARTS, createModule } from '../../../src/v2/module.js';
 import { part as time } from '../../../src/v2/time/index.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
+import { BACKLOG_STATIC } from '../../../src/v2/chronicle/digest.js';
+// The static part without the one sentence that explains [Earlier days] (taught once a past day is told, module/create.js `backlog`).
+const bare = text => String(text).split('\n').filter(line => line !== BACKLOG_STATIC).join('\n');
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
@@ -47,7 +50,7 @@ test('on the host: the lapse is told once in [Happened], the recap once in the t
     assert.equal(host.sdk.query('time.recap'), null);
 
     // The static part never changed.
-    assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
+    assert.equal(new Set(sent(host, STATIC_KEY).map(bare)).size, 1);
     host.close();
 });
 

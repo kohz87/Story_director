@@ -157,7 +157,7 @@ test('the Journal: each day with places, people met, news and quests; today so f
     assert.equal(el.querySelectorAll('.wv-now').length, 0, 'Journal picked: the Now view is not drawn');
     const days = el.querySelectorAll('.wv-day');
     assert.deepEqual(days.map(node => node.querySelector('.wv-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
-    assert.match(squash(days[2].textContent), /Met ?Mira ?Old Tom/);
+    assert.match(squash(days[2].textContent), /Met 2 ?Mira ?Old Tom/);
     set({ find: 'brecht' });
     assert.deepEqual(el.querySelectorAll('.wv-day').map(node => node.querySelector('.wv-date').textContent), ['June 4, 1200']);
 });

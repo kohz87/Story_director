@@ -10,6 +10,7 @@
 // a secret or an arc, or an arc planner's own line in an older digest, is left out. While the digest is off
 // the Journal says so and shows nothing.
 
+import { agoWords, bucketDay, classify, parseTag } from '../chronicle/backlog.js';
 import { boardDay } from '../chronicle/queries.js';
 import { dayLine, dayOf, digestOut, entriesByDay, factsOf, makeDigest, notedOf, orderedDays, rangeDays } from '../chronicle/days.js';
 import { calendarFrom, hiddenNames, namesHidden, nowFrom, queryOf, tryQuery } from './known.js';
@@ -65,15 +66,109 @@ const NARRATOR_NOTE = /^(?:Tell (?:the approach, then )?the settled fight result
 /** Whether a stored "happened" line is that narrator note (the receipt is no longer known, so by its form). */
 export const isNarratorNote = line => NARRATOR_NOTE.test(String(line ?? '').trim());
 
-/** One board day with what {{user}} must not see taken out, its line, facts and search text made again. */
-export function knownDay(entry, hidden) {
+// ---- the day's lines by kind (the Journal's folds) ------------------------------------------------------------------------
+
+const KINDS = [['met', 'Met'], ['relationships', 'Relationships'], ['events', 'Events'], ['party', 'Party & gear'], ['items', 'Items & money'], ['reputation', 'Reputation'], ['news', 'News']];
+const ARROW = /^(\S+) (.+?) (?:->|→) (.+)$/;
+const LOST = /^Lost (.+?)(?: x(\d+))? \((\d+) left\)\.?$/;
+const plain = detail => ({ title: '', chip: '', detail, note: '', tags: [] });
+
+// "Torka: affection 9 -> 10, desire 7 -> 8 (held at 7)" → one row per person, its meter changes as tags (a meter moved twice: first from, last to).
+function relationRows(lines) {
+    const rows = new Map();
+    const loose = [];
+    for (const line of lines) {
+        const at = line.indexOf(': ');
+        const name = at > 0 ? line.slice(0, at) : '';
+        const moves = (at > 0 ? line.slice(at + 2) : line).replace(/\([^)]*\)/g, '').split(',').map(part => ARROW.exec(part.trim())).filter(Boolean);
+        if (!name || !moves.length) { loose.push(plain(line)); continue; }
+        const row = rows.get(name.toLowerCase()) ?? { title: name, chip: '', detail: '', note: '', tags: [], meters: new Map() };
+        rows.set(name.toLowerCase(), row);
+        for (const [, meter, from, to] of moves) row.meters.set(meter, { from: row.meters.get(meter)?.from ?? from, to: to.replace(/[\s.]+$/, '') });
+    }
+    return [...rows.values()].map(({ meters, ...row }) => ({ ...row, tags: [...meters].map(([meter, move]) => `${meter} ${move.from} → ${move.to}`) })).concat(loose);
+}
+
+// A day's repeated "Lost X xN (n left)" lines are one: "Lost: A x36, B x12" (a lone one stays as it was).
+function itemRows(lines) {
+    const lost = lines.map(line => LOST.exec(line)).filter(Boolean);
+    if (lost.length < 2) return lines.map(plain);
+    const merged = new Map(lost.map(([, name, count]) => [name, count ? `${name} x${count}` : name]));
+    return [...lines.filter(line => !LOST.test(line)).map(plain), plain(`Lost: ${[...merged.values()].join(', ')}`)];
+}
+
+// Events: one row per thread (a quest or thread the lines or the stamps name): its latest line, "N steps today", and "began <date>" on the day it ends.
+function eventRows(day, events, { threads, format }) {
+    const groups = new Map();
+    const rows = [];
+    for (const { line, thread } of events) {
+        const known = thread ? threads.get(thread) : null;
+        const title = known ? String(known.key ?? '') : '';
+        if (!title || day.hide(title)) { rows.push({ ...plain(line), order: rows.length }); continue; }
+        const key = title.toLowerCase();
+        const group = groups.get(key) ?? { title, lines: [], thread: known, order: rows.length };
+        if (!groups.has(key)) rows.push(group);
+        groups.set(key, group);
+        group.lines.push(line);
+    }
+    const stamps = [['taken', 'began'], ['done', 'finished'], ['failed', 'failed'], ['dropped', 'gave up']];
+    for (const [list, chip] of stamps) {
+        for (const title of day.quests[list] ?? []) {
+            if (day.hide(title)) continue;
+            const key = String(title).toLowerCase();
+            const group = groups.get(key) ?? { title, lines: [], thread: [...threads.values()].find(item => String(item?.key ?? '').toLowerCase() === key) ?? null };
+            if (!groups.has(key)) { groups.set(key, group); rows.push(group); }
+            group.chip = list === 'taken' && group.chip ? group.chip : chip;
+        }
+    }
+    return rows.map(row => {
+        if (!row.lines) return { title: '', chip: '', detail: row.detail, note: '', tags: [] };
+        const ends = ['finished', 'failed', 'gave up'].includes(row.chip);
+        const began = ends && isInt(row.thread?.taken?.at) && typeof format === 'function' ? format(row.thread.taken.at) : '';
+        const note = [row.lines.length > 1 ? `${row.lines.length} steps today` : '', began && dayOfMinutes(row.thread.taken.at) !== day.day ? `began ${began}` : ''].filter(Boolean).join(' · ');
+        return { title: row.title, chip: row.chip || 'step', detail: row.lines.at(-1) ?? '', note, tags: [] };
+    });
+}
+
+const dayOfMinutes = minutes => Math.floor(minutes / 1440);
+const textOf = row => [row.title, row.chip, row.detail, row.note, ...row.tags].filter(Boolean).join(' ');
+
+/** The Journal's folds of one known day: `[{ id, label, count, items: [{ title, chip, detail, note, tags }], search }]`, only kinds with something. */
+function foldsOf(entry, { kept, quests, hidden, threads, format }) {
+    const hide = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
+    const made = bucketDay({ ...entry, happened: kept.map(item => item.line), tags: kept.map(item => item.tag) });
+    // Events keep their thread (a short day has only the lines).
+    const events = entry.brief ? (made.events ?? []).map(line => ({ line, thread: '' }))
+        : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events').map(item => ({ line: item.line, thread: parseTag(item.tag).thread }));
+    const items = [...(made.items ?? []), ...(entry.moneyText && !entry.brief ? [`Money: ${entry.moneyText}`] : [])];
+    const rows = {
+        met: list(entry.met).map(name => ({ ...plain(''), title: name })),
+        relationships: relationRows((made.relationships ?? []).filter(line => !hide(line))),
+        events: eventRows({ day: entry.day, quests, hide }, events, { threads, format }),
+        party: (made.party ?? []).map(plain),
+        items: itemRows(items),
+        reputation: (made.reputation ?? []).map(plain),
+        news: list(entry.world).filter(line => !hide(line)).map(plain),
+    };
+    if (entry.brief) rows.met = (made.met ?? []).map(name => ({ ...plain(''), title: name }));
+    return KINDS.filter(([id]) => rows[id].length).map(([id, label]) => ({ id, label, count: rows[id].length, items: rows[id], search: rows[id].map(textOf).join(' • ') }));
+}
+
+/**
+ * One board day with what {{user}} must not see taken out, its line, facts and search text made again, and its folds by kind
+ * (`cats`: Met, Relationships, Events, Party & gear, Items & money, Reputation, News). `context`: `{ now, threads, format }`: the story clock
+ * (for "3 days ago"), the threads by id and the calendar's date text of story minutes.
+ */
+export function knownDay(entry, hidden, { now = null, threads = new Map(), format = null } = {}) {
     const drop = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
-    const happened = list(entry.happened).filter(line => !namesHidden(line, hidden.words) && !isNarratorNote(line));
+    const lines = list(entry.happened);
+    const kept = lines.map((line, index) => ({ line, tag: entry.tags?.[index] ?? '' })).filter(item => !namesHidden(item.line, hidden.words) && !isNarratorNote(item.line));
+    const happened = kept.map(item => item.line);
     const world = list(entry.world).filter(line => !drop(line));
     const met = list(entry.met);
     const npcs = list(entry.npcs);
     const quests = isRecord(entry.quests) ? entry.quests : { taken: [], done: [], failed: [], dropped: [] };
-    const removed = list(entry.happened).length - happened.length;
+    const removed = lines.length - happened.length;
     let short = String(entry.short ?? '');
     if (entry.brief) {
         if (namesHidden(short, hidden.words)) short = '';
@@ -82,7 +177,10 @@ export function knownDay(entry, hidden) {
         const line = dayLine(entry.date, { places: list(entry.places), quests, fights: entry.fights ?? { count: 0 }, money: entry.money ?? { in: 0, out: 0 }, npcs, world, happened, count: Math.max(0, (entry.count ?? 0) - removed) });
         short = entry.date && line.startsWith(`${entry.date}: `) ? line.slice(entry.date.length + 2) : line;
     }
-    const search = [entry.date, short, ...happened, ...list(entry.places), ...Object.values(quests).flatMap(list), ...npcs, ...world, ...met].join(' • ');
+    const cats = foldsOf(entry, { kept, quests, hidden, threads, format });
+    const events = cats.find(cat => cat.id === 'events');
+    const search = [entry.date, short, ...happened, ...list(entry.places), ...Object.values(quests).flatMap(list), ...npcs, ...world, ...met, ...cats.map(cat => cat.search)].join(' • ');
+    const ago = isInt(now) && isInt(entry.day) ? agoWords(dayOf(now) - entry.day) : '';
     return {
         day: entry.day,
         date: String(entry.date ?? ''),
@@ -96,6 +194,13 @@ export function knownDay(entry, hidden) {
         world,
         met,
         npcs,
+        cats,
+        hasCats: cats.length > 0,
+        ago,
+        eventCount: events?.count ?? 0,
+        meta: [ago, events ? `${events.count} ${events.count === 1 ? 'event' : 'events'}` : ''].filter(Boolean).join(' · '),
+        // One line per event row (the thread's latest), for the narrator's [Earlier days] block.
+        eventLines: (events?.items ?? []).map(row => (row.title ? `${row.title} (${row.chip}${row.note ? `, ${row.note}` : ''}): ${row.detail}`.replace(/: $/, '') : row.detail)),
         hasFacts: list(entry.facts).length > 0,
         hasHappened: happened.length > 0,
         hasWorld: world.length > 0,
@@ -119,7 +224,9 @@ export function journalView(state, _args, tools) {
     const hidden = hiddenNames(state);
     const days = board.days.filter(isRecord);
     const open = pending(state, tools, { calendar, now, written: new Set(days.map(day => day.day)) });
-    const out = [...open, ...days].sort((a, b) => b.day - a.day).map(day => knownDay(day, hidden));
+    const threads = new Map(Object.entries(isRecord(state?.domains?.director?.threads) ? state.domains.director.threads : {}).filter(([, thread]) => isRecord(thread)));
+    const format = minutes => { try { return calendar.format(minutes, { time: false }); } catch { return ''; } };
+    const out = [...open, ...days].sort((a, b) => b.day - a.day).map(day => knownDay(day, hidden, { now, threads, format }));
     return { on: true, days: out, hasDays: out.length > 0, count: out.length, today: String(board.today ?? '') };
 }
 

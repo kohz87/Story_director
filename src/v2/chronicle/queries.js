@@ -9,7 +9,7 @@
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { worldLineText } from './capture.js';
 import { findIn, isLocked, isOpen, keyOf, orderedEvents, orderedFactions } from './domain.js';
-import { DIGEST_FEATURE, dayFacts, dayOf, digestOut, entryOf, eventsOf, orderedDays, questLogOf, walkDays } from './days.js';
+import { DIGEST_FEATURE, agoText, dayFacts, dayOf, digestOut, entryOf, eventsOf, orderedDays, questLogOf, walkDays } from './days.js';
 
 // A query of the day digest only (MODULES §F100): tagged with its feature, so Story Block answers null
 // while the reader has the digest off (B-c2-2). An older host without features keeps it on.
@@ -45,18 +45,7 @@ export function nowFrom(query, state) {
     return isInt(minutes) ? minutes : null;
 }
 
-/** "this hour", "5 h ago", "3 days ago", "2 weeks ago", "4 months ago"; '' for an unknown span. */
-export function agoText(minutes) {
-    if (!isInt(minutes) || minutes < 0) return '';
-    if (minutes < 60) return 'this hour';
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} h ago`;
-    const days = Math.floor(minutes / 1440);
-    if (days < 14) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
-    if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
-    const months = Math.floor(days / 30);
-    return months < 24 ? `${months} months ago` : `${Math.floor(days / 365)} years ago`;
-}
+export { agoText };
 
 function dateText(calendar, minutes) {
     if (!isInt(minutes)) return '';

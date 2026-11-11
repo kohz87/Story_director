@@ -25,7 +25,6 @@ import { BASE_CSS } from '../screens/style.js';
 import { DIGEST_FEATURE } from '../chronicle/days.js';
 import { FEATURE } from './known.js';
 import { PEOPLE_WIDGET } from './people.js';
-import { EVENTS_WIDGET } from './events-widget.js';
 import { KEY_PEOPLE_WIDGET } from '../keypeople/widget.js';
 
 export const WORLD_ID = 'story-director/world';
@@ -50,32 +49,30 @@ const JOURNAL = `
   </label>
   <ol class="wv-days" data-if="q.journal.hasDays" aria-label="Story days, newest first">
     <li class="wv-day ss-glass" data-each="q.journal.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
-      <details class="wv-fold">
-        <summary class="wv-head"><span class="wv-top"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today so far</span></span> <span class="wv-line">{{ d.short }}</span></summary>
+      <details class="wv-fold" data-if="!draft.find">
+        <summary class="wv-head"><span class="wv-top"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today</span> <small class="wv-meta" data-if="d.meta">{{ d.meta }}</small></span></summary>
         <div class="wv-body">
-          <p class="wv-note" data-if="d.brief">Only this line is kept for an older day.</p>
-          <ul class="wv-facts" data-if="d.hasFacts">
-            <li data-each="d.facts as f">{{ f }}</li>
-          </ul>
-          <section class="wv-part" data-if="d.hasMet">
-            ${label('Met', { level: 'h5' })}
-            <ul><li data-each="d.met as m">{{ m }}</li></ul>
-          </section>
-          <section class="wv-part" data-if="d.hasWorld">
-            ${label('News', { level: 'h5' })}
-            <ul><li data-each="d.world as w">{{ w }}</li></ul>
-          </section>
-          <section class="wv-part" data-if="d.hasNpcs">
-            ${label('People', { level: 'h5' })}
-            <ul><li data-each="d.npcs as n">{{ n }}</li></ul>
-          </section>
-          <section class="wv-part" data-if="d.hasHappened">
-            ${label('What happened', { level: 'h5' })}
-            <ul><li data-each="d.happened as h">{{ h }}</li></ul>
-            <ss-widget class="wv-more" name="${EVENTS_WIDGET}" data-props='{"day":"{{ d.day }}","total":"{{ d.total }}"}' data-if="d.more"></ss-widget>
-          </section>
+          <p class="wv-line" data-if="d.short">{{ d.short }}</p>
+          <p class="wv-note" data-if="d.brief && !d.hasCats">Only this line is kept for an older day.</p>
+          <details class="wv-cat" data-each="d.cats as c" data-kind="{{ c.id }}">
+            <summary class="wv-cathead"><b>{{ c.label }}</b> <small>{{ c.count }}</small></summary>
+            <ul class="wv-items">
+              <li class="wv-item" data-each="c.items as i"><b data-if="i.title">{{ i.title }}</b> <span class="ss-pill ss-pill-soft" data-if="i.chip">{{ i.chip }}</span> <span class="wv-tag" data-each="i.tags as t">{{ t }}</span> <span data-if="i.detail">{{ i.detail }}</span> <small class="wv-sub" data-if="i.note">{{ i.note }}</small></li>
+            </ul>
+          </details>
         </div>
       </details>
+      <div class="wv-found" data-if="draft.find">
+        <p class="wv-head"><span class="wv-top"><span class="wv-date">{{ d.date }}</span> <small class="wv-meta" data-if="d.ago">{{ d.ago }}</small></span></p>
+        <div class="wv-body">
+          <section class="wv-cat wv-hit" data-each="d.cats as c" data-if="contains(c.search, draft.find)" data-kind="{{ c.id }}">
+            <p class="wv-cathead"><b>{{ c.label }}</b> <small>{{ c.count }}</small></p>
+            <ul class="wv-items">
+              <li class="wv-item" data-each="c.items as i"><b data-if="i.title">{{ i.title }}</b> <span class="ss-pill ss-pill-soft" data-if="i.chip">{{ i.chip }}</span> <span class="wv-tag" data-each="i.tags as t">{{ t }}</span> <span data-if="i.detail">{{ i.detail }}</span> <small class="wv-sub" data-if="i.note">{{ i.note }}</small></li>
+            </ul>
+          </section>
+        </div>
+      </div>
     </li>
   </ol>`;
 
@@ -272,13 +269,23 @@ const CSS = `${BASE_CSS}
 .wv-days { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .wv-day { min-width: 0; padding: 0; }
 .wv-day[data-today="true"] { border-color: var(--sd-accent); }
-.wv-head { cursor: pointer; padding: 10px 14px; min-height: 40px; overflow-wrap: anywhere; list-style-position: inside; }
+.wv-head { cursor: pointer; padding: 10px 14px; min-height: 40px; overflow-wrap: anywhere; }
 .wv-date { font-weight: 800; color: var(--sd-text); }
 /* The date and the pill on the first line; the summary below it, in body text, wrapping normally (4px between the lines). */
 .wv-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.wv-line { display: block; margin-top: 4px; color: var(--sd-text); }
+.wv-line { display: block; margin: 0; color: var(--sd-text); }
+.wv-meta { color: var(--sd-muted); }
 .wv-body { display: grid; gap: 6px; padding: 0 14px 12px; overflow-wrap: anywhere; }
 .wv-body ul { margin: 0; padding-left: 1.2em; }
+/* A fold's head: the chevron centred on the line (drawn by the border, turned when open), the label and its count. */
+.wv-head, .wv-cathead { display: flex; align-items: center; gap: 8px; list-style: none; margin: 0; }
+.wv-head::-webkit-details-marker, .wv-cathead::-webkit-details-marker { display: none; }
+summary.wv-head::before, summary.wv-cathead::before { content: ''; flex: none; width: 6px; height: 6px; border-right: 2px solid var(--sd-muted); border-bottom: 2px solid var(--sd-muted); transform: rotate(-45deg); }
+details[open] > summary.wv-head::before, details[open] > summary.wv-cathead::before { transform: rotate(45deg); }
+.wv-cathead { cursor: pointer; min-height: 32px; }
+.wv-items { list-style: none; padding-left: 0 !important; display: grid; gap: 4px; }
+.wv-tag { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--sd-border, currentColor); font-size: 0.85em; }
+.wv-sub { display: block; color: var(--sd-muted); }
 .wv-facts { list-style: none; padding-left: 0 !important; }
 .wv-note { margin: 0; font-size: 0.85em; color: var(--sd-muted); }
 @media (min-width: 720px) {

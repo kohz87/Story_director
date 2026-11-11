@@ -12,10 +12,12 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 import { DIGEST, DIGEST_FEATURE, dayOf, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
-import { LAST_DAY_TAG, YESTERDAY_TAG, digestCommands, digestTailLine } from '../../../src/v2/chronicle/digest.js';
+import { BACKLOG_STATIC, LAST_DAY_TAG, YESTERDAY_TAG, digestCommands, digestTailLine } from '../../../src/v2/chronicle/digest.js';
 import { features, part } from '../../../src/v2/chronicle/index.js';
 
 const STATIC_KEY = 'story_suite_static';
+// The static part without the one sentence that explains [Earlier days] (taught once a past day is told, module/create.js `backlog`).
+const bare = text => String(text).split('\n').filter(line => line !== BACKLOG_STATIC).join('\n');
 const TAIL_KEY = 'story_suite_tail_1';
 const sent = (host, key) => host.st.promptLog.filter(entry => entry.key === key && entry.value).map(entry => entry.value);
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
@@ -190,7 +192,7 @@ test('the reply after a time skip hears the last day\'s line, once; a short nigh
     await host.send('More.', reply('Later.'));
     assert.doesNotMatch(sent(host, TAIL_KEY).at(-1), /\[Yesterday\]/, 'only the reply after the skip');
     // The static part is the same bytes throughout.
-    assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
+    assert.equal(new Set(sent(host, STATIC_KEY).map(bare)).size, 1);
     host.close();
 
     const short = await newHost();
@@ -295,4 +297,22 @@ test('neutral outcome journal entries survive receipt-data trimming', async t =>
     trimAll(host);
     assert.deepEqual(host.sdk.query('chronicle.questLog', { id }), before);
     sameOnReload(host, 'neutral journal after trim');
+});
+
+test('8/9 on the host: a first-day chat sends no [Earlier days] and no sentence; once a day has passed the tail has it, dated by code, and the sentence is taught once', async () => {
+    const host = await newHost();
+    await host.send('Start.', reply('Evening.', ['~ time June 3, 1200, 08:00 pm', '~ place Harrow', '+ coin 40']));
+    await host.send('On.', reply('Later.', ['! time +1h']));
+    assert.ok(sent(host, TAIL_KEY).every(text => !text.includes('[Earlier days]')), 'a first day: nothing');
+    assert.ok(sent(host, STATIC_KEY).every(text => !text.includes(BACKLOG_STATIC)), 'and no sentence');
+    await host.send('Sleep.', reply('A long sleep.', ['! time +14h']));
+    await host.send('Wake.', reply('Morning.'));
+    await host.send('More.', reply('Later.'));
+    const tail = sent(host, TAIL_KEY).at(-1);
+    assert.match(tail, /\[Earlier days\]\nJune 3, 1200 \(yesterday\): /);
+    const statics = sent(host, STATIC_KEY);
+    assert.ok(statics.at(-1).includes(BACKLOG_STATIC));
+    assert.equal(new Set(statics.map(bare)).size, 1, 'the sentence is the only change');
+    assert.equal(new Set(statics.slice(statics.findIndex(text => text.includes(BACKLOG_STATIC)))).size, 1, 'then the same bytes');
+    host.close();
 });

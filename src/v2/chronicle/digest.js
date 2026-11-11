@@ -14,7 +14,8 @@
 //   older days read from the receipts as before. Replay applies the receipts' ops; it never runs these.
 
 import { DIGEST, DIGEST_FEATURE, FOLD_AT, FOLLOW_MAX, QUEST_LOG_KEPT, QUEST_LOG_TEXT, cut, capDays, dayOf, daysOf, digestSettings, entriesByDay, factsOf, foldEntries, makeDigest, notedOf, orderedDays, rangeDays, writtenOf } from './days.js';
-import { calendarFrom } from './queries.js';
+import { backlogBlock } from './backlog.js';
+import { calendarFrom, nowFrom } from './queries.js';
 import { toSlot } from '../slot.js';
 
 const isInt = value => Number.isSafeInteger(value);
@@ -305,3 +306,33 @@ export function digestTailLine(view) {
     if (!last?.line) return '';
     return `${last.day === today - 1 ? YESTERDAY_TAG : LAST_DAY_TAG} ${last.line}`;
 }
+
+// ---- the [Earlier days] block ----------------------------------------------------------------
+
+/** About 200 tokens: the block is optional, and Story Block drops it before anything else. */
+export const BACKLOG_BUDGET = 200;
+/** The one static sentence that explains the block: taught only while the block is not empty (module/create.js), so older chats' static prompt stays as it was. */
+export const BACKLOG_STATIC = 'Lines under [Earlier days] are what happened on past days, each with how long ago it was (counted by code): let people remember them as dated, and never invent other days.';
+
+const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeof entry === 'string' ? entry : entry?.name)).filter(name => typeof name === 'string' && name.trim());
+
+/**
+ * The [Earlier days] lines for the next reply: `[]` or `[tag, ...day lines]` (backlog.js). The days are the Journal's known days
+ * (`director.journal`, so secrets and planner text never go in), the scene is who is present now, the current place and the open
+ * quests and threads. Nothing while the digest is off, on a first day, or when the Journal cannot be read.
+ */
+export function backlogLines(view) {
+    if (!digestOn(view) || !view?.state?.domains?.chronicle) return [];
+    const query = typeof view.query === 'function' ? (name, args) => view.query(name, args) : null;
+    const now = nowFrom(query, view.state);
+    if (!isInt(now)) return [];
+    const journal = ask(query, 'director.journal', {});
+    if (!Array.isArray(journal?.days) || !journal.days.length) return [];
+    const place = ask(query, 'scene.place', {}) ?? view.state?.domains?.scene?.place ?? null;
+    const present = [...namesOf(ask(query, 'scene.present', {}) ?? view.state?.domains?.scene?.present), ...namesOf(ask(query, 'npc.present', {}))];
+    const open = (ask(query, 'director.threads', { status: 'active' }) ?? []).filter(thread => thread && thread.status === 'active' && !thread.ended && typeof thread.key === 'string');
+    return backlogBlock({ days: journal.days, now, present, place: String(place?.name ?? ''), threads: open.map(thread => thread.key) });
+}
+
+/** The tail's optional block: the lines of `backlogLines` as one text ('' when there is none). */
+export const backlogTail = view => backlogLines(view).join('\n');

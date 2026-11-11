@@ -38,10 +38,10 @@ test('a story event with the narrator note\'s words is still an event: the rule 
 });
 
 test('the count behind "more" is story events only', () => {
-    const many = Array.from({ length: 12 }, (_, i) => story(`Event ${i}.`));
+    const many = Array.from({ length: 45 }, (_, i) => story(`Event ${i}.`));
     const entry = entryOf([...bookkeeping, ...many], 5);
-    assert.equal(entry.happened.length + entry.more, 12);
-    assert.equal(entry.more, 4);
+    assert.equal(entry.happened.length + entry.more, 45);
+    assert.equal(entry.more, 5, 'a day keeps up to 40 lines');
 });
 
 test('eventsOf gives the whole list in chat order, deduplicated, bookkeeping and echoes left out, capped', () => {
