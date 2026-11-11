@@ -13,6 +13,9 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { MODULE_ID, createModule } from '../../../src/v2/module.js';
 import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 import { problemList } from '../../../src/v2/tracker/domain.js';
+import { BACKLOG_STATIC } from '../../../src/v2/chronicle/digest.js';
+// The static part without the one sentence that explains [Earlier days] (taught once a past day is told, module/create.js `backlog`).
+const bare = text => String(text).split('\n').filter(line => line !== BACKLOG_STATIC).join('\n');
 import { leaderQuery, problemsQuery, swayQuery, validateRipples } from '../../../src/v2/ripples/index.js';
 
 const STATIC_KEY = 'story_suite_static';
@@ -92,7 +95,7 @@ test('the Ersveil pack: its calendar, the clock seeded from its start at the fir
     const visited = host.sdk.query('atlas.place', { name: 'Bluewatch Village' });
     assert.deepEqual([visited.source, visited.discovered, visited.kind, visited.x, visited.y], ['atlas', true, 'settlement', 64, 110]);
     assert.ok(visited.routes.length > 0, 'the pack\'s routes from it');
-    assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
+    assert.equal(new Set(sent(host, STATIC_KEY).map(bare)).size, 1);
     host.close();
 });
 
@@ -135,7 +138,7 @@ test('a custom calendar and a time jump: the deadline lapses and the recap tells
     const later = sent(host, TAIL_KEY).at(-1) ?? '';
     assert.doesNotMatch(later, /\[While away\]/);
     assert.match(later, /Due now[^\n]*Stray Oar/);
-    assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
+    assert.equal(new Set(sent(host, STATIC_KEY).map(bare)).size, 1);
     host.close();
 });
 

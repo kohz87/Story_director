@@ -13,12 +13,15 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { packsFor } from '../../vendor/story-block/src/v2/runtime.js';
 import { stCapabilities } from '../../vendor/story-block/src/v2/packs/st-adapter.js';
 import { createModule } from '../../../src/v2/module.js';
+import { BACKLOG_STATIC } from '../../../src/v2/chronicle/digest.js';
 import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
 import { validateChronicle } from '../../../src/v2/chronicle/domain.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const TAIL_KEY = 'story_suite_tail_1';
 const STATIC_KEY = 'story_suite_static';
+// The static part without the one sentence that explains [Earlier days] (taught once a past day is told, module/create.js `backlog`).
+const bare = text => String(text).split('\n').filter(line => line !== BACKLOG_STATIC).join('\n');
 const sent = (host, key) => host.st.promptLog.filter(entry => entry.key === key && entry.value).map(entry => entry.value);
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const receipts = host => host.sdk.receipts().map(entry => entry.receipt);
@@ -117,7 +120,7 @@ test('on the host: an event\'s step writes the entry, a second event counts a da
     assert.match(tail, /- Seventh seal failed \(Auvoth\)/);
     assert.match(tail, new RegExp(`- ${CRACKS} \\(Auvoth\\)`));
     // The lean diet: the world grammar is taught from the reply after the pack's event wrote the first entry; the story's own lines changed no byte.
-    const statics = sent(host, STATIC_KEY);
+    const statics = sent(host, STATIC_KEY).map(bare);
     assert.equal(new Set(statics).size, 2, 'the static prompt gained the world grammar once, when the first entry was kept');
     assert.match(statics[0], /\+ world Name/, 'the world line is always taught');
     assert.doesNotMatch(statics[0], /Events under \[World\]/);

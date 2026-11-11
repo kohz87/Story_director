@@ -10,11 +10,15 @@ import {
 const QUEST_LOG_CEILING = 3000;
 const THREAD_REF = /^[A-Za-z0-9_.:-]{1,64}$/;
 const ENTRY_CEILING = 4000;
+const TAG_MAX = 130;
+const NAMEISH = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 // ---- the validator ----------------------------------------------------------------------------
 
-const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'met', 'revs', 'made', 'src'];
-const KEYS_BRIEF = ['day', 'date', 'line', 'brief', 'count', 'made'];
+const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'tags', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'met', 'revs', 'made', 'src'];
+const KEYS_BRIEF = ['day', 'date', 'line', 'brief', 'count', 'made', 'cats'];
+const CATS_CEILING = 2400;
+const CAT_NAMES = ['met', 'relationships', 'events', 'party', 'items', 'reputation', 'news'];
 const textOk = (value, max) => typeof value === 'string' && codePoints(value) <= max;
 const textsOk = (list, max, each) => Array.isArray(list) && list.length <= max && list.every(item => textOk(item, each));
 const countOk = value => isInt(value) && value >= 0;
@@ -32,9 +36,16 @@ function digestErrors(key, stored) {
     if (!countOk(digest.made)) errors.push(`${at}.made must be a revision.`);
     const keys = digest.brief === true ? KEYS_BRIEF : KEYS_FULL;
     for (const field of Object.keys(digest)) if (!keys.includes(field)) errors.push(`${at} has an unknown field "${field}".`);
+    if (digest.brief === true && digest.cats !== undefined) {
+        const cats = digest.cats;
+        const lines = isRecord(cats) ? Object.values(cats) : [];
+        if (!isRecord(cats) || Object.keys(cats).some(name => !CAT_NAMES.includes(name)) || !lines.every(list => textsOk(list, 40, MAX_ITEM))
+            || lines.flat().reduce((sum, line) => sum + codePoints(line), 0) > CATS_CEILING) errors.push(`${at}.cats must be short lists of lines by kind.`);
+    }
     if (digest.brief !== false) return errors;
     if (!textsOk(digest.happened, MAX_HAPPENED, MAX_ITEM)) errors.push(`${at}.happened must be at most ${MAX_HAPPENED} lines.`);
     if (!countOk(digest.more)) errors.push(`${at}.more must be a whole number.`);
+    if (digest.tags !== undefined && (!Array.isArray(digest.tags) || digest.tags.length > MAX_HAPPENED || !digest.tags.every(tag => textOk(tag, TAG_MAX)))) errors.push(`${at}.tags must be at most ${MAX_HAPPENED} short texts.`);
     if (!textsOk(digest.places, MAX_PLACES, MAX_NAME)) errors.push(`${at}.places must be at most ${MAX_PLACES} names.`);
     const quests = digest.quests;
     if (!isRecord(quests) || Object.keys(quests).some(name => !['taken', 'done', 'failed', 'dropped'].includes(name))
@@ -81,7 +92,8 @@ function entryErrors(key, entry) {
     const errors = [];
     if (!countOk(entry.count) || !countOk(entry.more)) errors.push(`${at}.count and .more must be whole numbers.`);
     if (!Array.isArray(entry.happened) || entry.happened.length > ENTRY_HAPPENED
-        || !entry.happened.every(item => isRecord(item) && textOk(item.text, MAX_ITEM) && typeof item.told === 'boolean')) errors.push(`${at}.happened must be at most ${ENTRY_HAPPENED} { text, told }.`);
+        || !entry.happened.every(item => isRecord(item) && textOk(item.text, MAX_ITEM) && typeof item.told === 'boolean'
+            && Object.keys(item).every(field => ['text', 'told', 'type', 'thread'].includes(field)) && ['type', 'thread'].every(field => item[field] === undefined || (typeof item[field] === 'string' && NAMEISH.test(item[field]))))) errors.push(`${at}.happened must be at most ${ENTRY_HAPPENED} { text, told, type?, thread? }.`);
     if (!textsOk(entry.places, MAX_PLACES, MAX_NAME)) errors.push(`${at}.places must be at most ${MAX_PLACES} names.`);
     const fights = entry.fights;
     if (!isRecord(fights) || !['count', 'won', 'lost', 'fled'].every(name => countOk(fights[name]))) errors.push(`${at}.fights must be whole numbers.`);

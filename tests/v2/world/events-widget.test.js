@@ -53,8 +53,8 @@ test('an empty answer says so, and an update while open asks again', () => {
     assert.equal(asked.length, 2);
 });
 
-test('the Journal template draws the button only while a day has more, and the part registers the widget and the query', () => {
-    assert.match(worldScreen.template, new RegExp(`name="${EVENTS_WIDGET}"[^>]*data-if="d.more"`));
+test('the Journal template no longer draws the button (the kinds are the whole list, no first-8 list over a full one); the part still registers the widget and the query', () => {
+    assert.doesNotMatch(worldScreen.template, new RegExp(EVENTS_WIDGET));
     assert.doesNotMatch(worldScreen.template, /and \{\{ d\.more \}\} more/);
     assert.ok(part.widgets[EVENTS_WIDGET]);
     assert.equal(part.queries['director.journal.events'].feature, part.features[0].id);

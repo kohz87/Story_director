@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 
 import {
     DIGEST_DEFAULTS, FULL_MAX, KEEP_MAX, MAX_HAPPENED, MAX_LINE, briefOf, capDays, cut, dayFacts, dayLine, dayOf, digestSettings,
-    makeDigest, moneyText, validateDays, walkDays,
+    entryOf, foldEntries, makeDigest, moneyText, validateDays, walkDays,
 } from '../../../src/v2/chronicle/days.js';
+import { bucketDay, classify, classifyText, trimCats } from '../../../src/v2/chronicle/backlog.js';
 import { initialChronicle, validateChronicle } from '../../../src/v2/chronicle/domain.js';
 
 const DAY = 1440;
@@ -78,10 +79,11 @@ test('a day\'s facts: places, money in and out, fights, NPC stages, world news, 
     assert.deepEqual(facts.world, ['World: Red Plague is now ongoing — the docks close.']);
     // What the story was told comes first; nothing another section tells, no fight blow-by-blow, no echoed line.
     assert.ok(facts.happened.includes('You turn in Rat Cellar: 3 rats beaten (target 3), 30 gold paid.'));
-    // Nine left to tell, eight kept: the untold ones go first (the last of them, Brom's numbers).
-    assert.equal(facts.happened.length, MAX_HAPPENED);
-    assert.equal(facts.more, 1);
-    assert.ok(!facts.happened.includes('Brom: tension 5 → 9.'));
+    // Nine to tell, all kept (a day keeps up to MAX_HAPPENED lines, the Journal sorts them by kind).
+    assert.equal(MAX_HAPPENED, 40);
+    assert.equal(facts.happened.length, 9);
+    assert.equal(facts.more, 0);
+    assert.ok(facts.happened.includes('Brom: tension 5 → 9.'));
     assert.ok(facts.happened.indexOf('Sold Rope for 4 gold.') > facts.happened.indexOf('You get away from the Troll.'), 'kept in the order they came');
     for (const text of facts.happened) {
         assert.doesNotMatch(text, /^Director: |scene moves|receives|Ren hits|^World:/, text);
@@ -159,7 +161,7 @@ test('caps: the newest days stay whole, older ones are kept as their line, the o
     assert.deepEqual(Object.keys(changes).sort(), ['1', '2', '4']);
     assert.equal(changes[1], null);
     assert.equal(changes[2], null);
-    assert.deepEqual(changes[4], { day: 4, date: 'Day 4', line: days[4].line, brief: true, count: 1, made: 4 });
+    assert.deepEqual(changes[4], { day: 4, date: 'Day 4', line: days[4].line, brief: true, count: 1, made: 4, cats: { events: ['x'] } }, 'a short day keeps its line and its lines by kind');
     assert.deepEqual(capDays({ 7: days[6] }, { full: 2, keep: 4 }), {});
 });
 
@@ -212,4 +214,99 @@ test('RX-cap-5: per-reply bookkeeping (system receipts the story was not told, d
     // A system receipt the story is told (time closing a quest) is a fact.
     const told = factsOf([...list, r('time.settle-told', { cause: 'system', narrate: true, summary: 'Slipped: Ambush — it happened off-screen.' })]);
     assert.deepEqual([told.count, told.happened], [1, ['Slipped: Ambush — it happened off-screen.']]);
+});
+
+// ---- Journal by kind: what a day keeps (items 2, 3, 5, 7) -------------------------------------------------------------------
+
+const present = (summary, added = []) => r('capture.present', { module: 'story-block', summary, data: { added } });
+
+test('2: a happened line keeps its receipt type and thread; classify sorts by type first, an old line with no type by its text shape, else Events', () => {
+    const entry = entryOf([
+        r('capture.npc', { module: 'npc-state-delta', summary: 'Torka: affection 9 -> 10, desire 7 -> 8.' }),
+        r('capture.item', { module: 'story-block', summary: 'Lost Hide x12 (3 left).' }),
+        r('quest.step', { summary: 'Sweep: the deadfall held.', data: { thread: 'th_aaaaaaaa' } }),
+    ], D);
+    assert.deepEqual(entry.happened.map(item => [item.type, item.thread ?? null]), [['capture.npc', null], ['capture.item', null], ['quest.step', 'th_aaaaaaaa']]);
+    assert.deepEqual(entry.happened.map(item => classify(item)), ['relationships', 'items', 'events']);
+    // Folded entries keep the tags.
+    assert.deepEqual(foldEntries([entry, entry], D).happened, entry.happened);
+    // A stored day with no types: the known shapes, else Events.
+    assert.equal(classify({ text: 'Torka: affection 9 -> 10.' }), 'relationships');
+    assert.equal(classify({ text: 'Torka Bloodsong left the party. Their bound gear leaves with them: a.' }), 'party');
+    assert.equal(classify({ text: 'Lost Ridge Boar Ears x36 (0 left).' }), 'items');
+    assert.equal(classify({ text: 'Fame by region: deed.' }), 'reputation');
+    assert.equal(classifyText('The deadfall held.'), 'events');
+    // A type wins over the words.
+    assert.equal(classify({ type: 'capture.party', text: 'Anything at all.' }), 'party');
+});
+
+test('3: "is here / not here" and "Key people: noted" are bookkeeping: not a happened line; a day of only those has no events', () => {
+    const entry = entryOf([
+        present('Marrit is not here.'), present('Sister Temiwa is here.', ['Sister Temiwa']),
+        r('npc.tick', { module: 'npc-state-delta', summary: 'Key people: noted' }), r('capture.item', { module: 'story-block', summary: 'The party gains Rope.' }),
+    ], D);
+    assert.deepEqual(entry.happened.map(item => item.text), ['The party gains Rope.']);
+    assert.deepEqual(entry.met, ['Sister Temiwa'], 'the arrival stays under Met');
+    assert.equal(classify({ type: 'capture.present', text: 'Marrit is here.' }), 'bookkeeping', 'an older day\'s line is dropped from the kinds too');
+    assert.deepEqual(bucketDay({ happened: ['Marrit is not here.', 'Key people: noted'], tags: ['capture.present', 'npc.tick'] }), {});
+});
+
+test('5: the fight board\'s "Fight won: …" counts as a fight of the day', () => {
+    const facts = factsOf([clock(D * DAY + 60), r('rpg.fight', { module: 'story-block', summary: 'Fight won: Astra +60 XP.' }), r('rpg.fight', { module: 'story-block', summary: 'Fight lost: the party flees.' })]);
+    assert.deepEqual(facts.fights, { count: 2, won: 1, lost: 1, fled: 0 });
+    assert.ok(facts.happened.includes('Fight won: Astra +60 XP.'));
+    assert.deepEqual(facts.tags[facts.happened.indexOf('Fight won: Astra +60 XP.')], 'rpg.fight');
+});
+
+test('7: a full day keeps up to 40 lines with their tags (valid); a short day keeps a compact list by kind, at most about 1 KB, valid and read by the search', () => {
+    const many = Array.from({ length: 45 }, (_, i) => r('capture.item', { module: 'story-block', summary: `Lost Thing${i} x${i + 1} (0 left).` }));
+    const facts = factsOf([clock(D * DAY), ...many]);
+    assert.equal(facts.happened.length, MAX_HAPPENED);
+    assert.equal(facts.more, 5);
+    const full = makeDigest(D, facts, { date: 'Day', made: 1 });
+    assert.equal(full.tags.length, 40);
+    assert.deepEqual(validateDays({ days: { [D]: [full] } }), []);
+    const short = briefOf(full);
+    assert.ok(JSON.stringify(short.cats).length <= 1100, JSON.stringify(short.cats).length);
+    assert.ok(Object.keys(short.cats).every(kind => short.cats[kind].every(line => line.length <= 80)));
+    assert.deepEqual(validateDays({ days: { [D]: [short] } }), []);
+    assert.deepEqual(bucketDay({ ...short, happened: [], brief: true }), short.cats, 'the short day\'s own lists');
+    assert.ok(trimCats({ events: ['x'.repeat(500)] }).events[0].length <= 80);
+    // A stored line's tag is checked by the validator.
+    const bad = { ...full, tags: ['x'.repeat(200)] };
+    assert.match(validateDays({ days: { [D]: [bad] } }).join(' '), /tags/);
+    assert.match(validateDays({ days: { [D]: [{ ...short, cats: { bogus: ['x'] } }] } }).join(' '), /cats/);
+    const entryKey = `${D}.5`;
+    const okEntry = entryOf([clock(D * DAY), r('quest.step', { summary: 'S.', data: { thread: 'th_aaaaaaaa' } })], D);
+    assert.deepEqual(validateDays({ dayFacts: { [entryKey]: okEntry } }), []);
+    assert.match(validateDays({ dayFacts: { [entryKey]: { ...okEntry, happened: [{ text: 'a', told: false, type: 'has space' }] } } }).join(' '), /happened/);
+});
+
+test('F2: the fight board\'s real receipt (a system receipt, not narrated) is counted, listed as an event and kept in the digest', () => {
+    const fight = (summary, fields = {}) => r('rpg.fight', { module: 'story-block', cause: 'system', narrate: false, summary, ...fields });
+    const entry = entryOf([clock(D * DAY + 60), fight('Fight won: Astra +60 XP.'), r('rpg.resolve', { module: 'story-block', cause: 'system', narrate: false, summary: 'Tell the settled fight results in order; do not reroll them.' })], D);
+    assert.deepEqual(entry.fights, { count: 1, won: 1, lost: 0, fled: 0 });
+    assert.deepEqual(entry.happened.map(item => [item.text, item.type]), [['Fight won: Astra +60 XP.', 'rpg.fight']]);
+    assert.equal(classify({ type: 'rpg.fight', text: 'Fight won: Astra +60 XP.' }), 'events');
+    const facts = factsOf([clock(D * DAY + 60), fight('Fight won: Astra +60 XP.')]);
+    assert.match(makeDigest(D, facts, { date: 'Day' }).line, /1 fight \(1 won\)/);
+    assert.deepEqual(bucketDay({ happened: facts.happened, tags: facts.tags }), { events: ['Fight won: Astra +60 XP.'] });
+});
+
+test('F4: real receipt types land in their kind (inventory and gear, money set, the look and the weather are not events)', () => {
+    const kind = (type, text) => classify({ type, text });
+    assert.equal(kind('inventory.add', 'You added Cane Sword.'), 'items');
+    assert.equal(kind('inventory.edit', 'You changed Cane Sword.'), 'items');
+    assert.equal(kind('inventory.carry', 'You carry Cane Sword.'), 'items');
+    assert.equal(kind('wallet.set', 'Wallet set.'), 'items');
+    assert.equal(kind('item.equip', 'The party equips Cane Sword (weapon).'), 'party');
+    assert.equal(kind('capture.mount', 'Mount: a grey mare.'), 'party');
+    assert.equal(kind('capture.you', 'Your look: tall.'), 'bookkeeping');
+    assert.equal(kind('capture.weather', 'Weather: rain.'), 'bookkeeping');
+});
+
+test('F10: a short day keeps at most 40 lines of a kind', () => {
+    const cats = trimCats({ events: Array.from({ length: 60 }, (_, i) => `e${i}`) });
+    assert.equal(cats.events.length, 40);
+    assert.deepEqual(validateDays({ days: { [D]: [{ day: D, date: 'D', line: 'D: x.', brief: true, count: 60, made: 1, cats }] } }), []);
 });

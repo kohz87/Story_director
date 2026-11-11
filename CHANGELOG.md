@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Journal by kind.** Each day folds (today open) into Met, Relationships, Events, Party & gear, Items & money, Reputation and News, each with its count; the day's summary appears once; "X is here / not here" and "Key people: noted" lines are gone; nothing is listed twice; a thread shows one line a day (began, a step, finished) with its steps folded; board fights are listed; search covers every kind of every day and shows how long ago.
+- **Earlier days for the narrator.** A short `[Earlier days]` block (at most 6 dated lines, about 200 tokens, dropped first when space is short) reminds the narrator what happened on past days that matter now (people present, this place, open threads, the last two days), with "N days ago" worked out by code, only from what the player knows. A chat's fixed prompt gains one sentence once it has a past day. A chat run on this build cannot be opened by an older Story Director.
 - **Factions named on a world event become known factions.** A `+ world` or `~ world` line tagged `factions: A, B` adds each newly named faction to World → Factions (with the event's place as its area; stance unknown until a faction line sets it). An existing or removed faction is not duplicated or revived by an unchanged tag. Needs Story Block's `factionTags` rule mark (Story Block main, PR #384); replies written before keep their chronicle.
 
 ## 2.13.0

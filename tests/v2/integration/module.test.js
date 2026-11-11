@@ -12,7 +12,7 @@ import { mapScreen } from '../../../src/v2/atlas/screen.js';
 import { chronicleScreen } from '../../../src/v2/chronicle/screen.js';
 import { daysScreen, worldScreen } from '../../../src/v2/world/index.js';
 import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
-import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
+import { BACKLOG_BUDGET, DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { part as checksPart } from '../../../src/v2/checks/index.js';
 import { part as chroniclePart } from '../../../src/v2/chronicle/index.js';
 import { part as keyPeoplePart } from '../../../src/v2/keypeople/index.js';
@@ -45,7 +45,7 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     assert.equal(hostStatic(def, () => true, {}), `${STATIC_TEXT}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}`);
     assert.equal(keyPeoplePart.context.static({ keyPeople: true }), KEY_PEOPLE_STATIC);
     assert.equal(keyPeoplePart.context.static({ keyPeople: false }), '');
-    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + BACKLOG_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
     assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'arc', 'checks', 'ripples', 'screens']);
     assert.match(def.capture.kinds.hook.grammar, /a quest is a job/);
     assert.equal(def.capture.kinds.quest.grammar(), '', 'the quest rides on the hook line');

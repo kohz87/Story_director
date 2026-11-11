@@ -30,6 +30,7 @@ Generated 2026-11-07.
 ## src/v2/chronicle/
 - `src/v2/chronicle/digest.js`: Note and digest commands that turn fresh change receipts into daily Chronicle facts and tail lines.
 - `src/v2/chronicle/thread-outcome.js`: Records a thread's outcome text in the Chronicle quest log for the committing reply.
+- `src/v2/chronicle/backlog.js`: Pure Journal helpers: `classify` / `bucketDay` / `trimCats` (a day's lines by kind, by receipt type with a text fallback; a short day's compact kept list) and `backlogBlock` (the `[Earlier days]` tail: up to six relevant past-day lines, last two days always, code-counted "N days ago").
 
 ## src/v2/ripples/
 - `src/v2/ripples/index.js`: Hidden sway per named power from quests, world events, standing and fights: validates the pack's `ripples` table, scores with caps, picks the leader, and is the part (queries `ripples.sway` / `ripples.leader`, no stored state).
