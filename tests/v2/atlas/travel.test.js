@@ -144,3 +144,15 @@ test('a trip from or to a place inside a town goes by the town\'s road plus a sh
     assert.deepEqual([plan.legs[0].from, plan.legs[0].to, plan.legs[0].km], ['Auvoth (Gatehouse)', 'Auvoth', 1]);
     assert.equal(plan.legs.at(-1).to, 'Shorn');
 });
+
+test('a pack district "Town / Spot" with no route of its own trips from its town, the leg naming the town', () => {
+    const places = [...PLACES, { name: 'Auvoth / Guild Office', region: 'North', kind: 'district', x: 181, y: 41 }];
+    const world = worldFor({ places, routes: [...ROADS, ...RIVER] });
+    const spot = world.find('Auvoth / Guild Office');
+    assert.equal(spot.parent, null);
+    const plan = planTrip(world, { from: { node: spot.id }, to: world.find('Shorn').id, mode: 'foot', at: 0 });
+    assert.equal(plan.error, undefined);
+    assert.deepEqual([plan.legs[0].from, plan.legs[0].to], ['Auvoth / Guild Office', 'Auvoth']);
+    assert.equal(plan.legs.at(-1).to, 'Shorn');
+    assert.equal(travelTime(world, spot.id, 'Shorn').source, 'routes');
+});
