@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Factions named on a world event become known factions.** A `+ world` or `~ world` line tagged `factions: A, B` adds each newly named faction to World → Factions (with the event's place as its area; stance unknown until a faction line sets it). An existing or removed faction is not duplicated or revived by an unchanged tag. Needs Story Block's `factionTags` rule mark (Story Block main, PR #384); replies written before keep their chronicle.
+
 ## 2.13.0
 
 - **A fired beat no longer blocks the story.** A beat the story has fired (`!`) counts as done: it leaves the Director note and the lists, and a beat that waits for it (`after:`) can now happen. Dating it again brings it back.
