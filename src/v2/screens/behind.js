@@ -135,7 +135,7 @@ export const behindWidget = createBehindWidget();
 
 export const PLAN_WIDGET = 'story-director.plan';
 const PLAN_SHOWN = 3;
-const PLAN_CARDS = [['beats', 'Beats', 'beat'], ['hooks', 'Hooks the story is planning', 'hook'], ['agendas', 'Off-screen', 'agenda'], ['secrets', 'Secrets', 'secret'], ['problems', 'Problems', 'problem']];
+const PLAN_CARDS = [['beats', 'Beats', 'beat'], ['hooks', 'Hooks the story is planning', 'hook'], ['clocks', 'Clocks', 'clock'], ['agendas', 'Off-screen', 'agenda'], ['secrets', 'Secrets', 'secret'], ['problems', 'Problems', 'problem']];
 
 function renderPlan(el, props) {
     const make = maker(el.ownerDocument ?? globalThis.document);
@@ -154,8 +154,13 @@ function renderPlan(el, props) {
         li.append(make('span', 'sd-key', item.key));
         if (kind === 'secret' || kind === 'beat') return li;
         if (item.summary) li.append(' ', make('p', 'sd-line', kind === 'agenda' ? `wants: ${item.summary}` : item.summary));
-        const meta = [kind === 'agenda' && item.fields?.now ? `At: ${item.fields.now}` : '', item.fields?.then ? `Next: ${item.fields.then}` : ''].filter(Boolean);
-        if (meta.length) li.append(' ', make('p', 'sd-meta', meta.join(' · ')));
+        const meta = [kind === 'agenda' && item.fields?.now ? `At: ${item.fields.now}` : '', kind === 'clock' && item.fields?.due ? `Due: ${item.fields.due}` : '', item.fields?.then ? `Next: ${item.fields.then}` : ''].filter(Boolean);
+        // The text sits in a span: the sheet hides a `.sd-meta` with no child element.
+        if (meta.length) {
+            const line = make('p', 'sd-meta');
+            line.append(make('span', '', meta.join(' · ')));
+            li.append(' ', line);
+        }
         return li;
     };
 

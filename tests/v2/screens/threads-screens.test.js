@@ -65,6 +65,21 @@ test('director: the arc, then Beats, the hooks being planned (with Next), Off-sc
     assert.deepEqual(cardsOf(bare), ['hook', 'problem']);
 });
 
+test('director: a Clocks card (name, cause → consequence, Due) so a plan of only clocks is never "Nothing planned yet"; problems newest first; Next/At/Due text is drawn', { skip }, () => {
+    const clock = thread('th_clock001', 'clock', 'Flood Wall', { due: 'June 9, 1200' }, { summary: 'the rains → the wall fails' });
+    const { el, warnings } = draw(directorScreen, headState({ threads: [clock] }));
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(cardsOf(el), ['clock', 'problem']);
+    assert.match(squash(el.querySelector('section[data-kind="clock"]').textContent), /^Clocks 1 Flood Wall the rains → the wall fails Due: June 9, 1200$/);
+    assert.equal(el.querySelector('section[data-kind="clock"] .sd-meta').children.length, 1, 'the text sits in a child element (the sheet hides a bare one)');
+    const only = makeState({ threads: [clock] });
+    assert.equal(makeQueries()['director.plan'](only, {}, { feature: () => true }).any, true);
+    assert.equal(draw(directorScreen, only).el.querySelector('.sd-empty'), null, 'no "Nothing planned yet" while a clock exists');
+    // Problems: the newest first, so the card's first rows are the latest reply's.
+    const plan = makeQueries()['director.plan'](headState(), {}, { feature: () => true });
+    assert.deepEqual(plan.problems.map(problem => problem.rev), [19, 18]);
+});
+
 test('director: each card shows its first three rows and "+N more" opens it; no inner scroll box; no hideBehind lock', { skip }, () => {
     const many = Array.from({ length: 5 }, (_, n) => hook(`th_hook000${n}`, `Lead ${n}`, `next ${n}`));
     const { el } = draw(directorScreen, headState({ threads: many }));

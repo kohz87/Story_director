@@ -87,7 +87,7 @@ const JOURNAL = `
 
 // The head of a folding section (widget story-director.fold, elsewhere.js): a centred chevron, the title and the count, in the
 // section marked `data-fold`. Every Now section folds, remembered per chat on this device.
-const fold = (id, title, count = '') => `<ss-widget class="sd-fold-slot" name="${FOLD_WIDGET}" data-props='{"id":"${id}","title":"${title}","count":"${count}"}'></ss-widget>`;
+const fold = (id, title, count = '') => `<ss-widget class="sd-fold-slot" name="${FOLD_WIDGET}" data-props='{"id":"${id}","title":"${title}","count":"${count}","chat":"{{ q.chat.id }}"}'></ss-widget>`;
 
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
@@ -325,6 +325,7 @@ const DATA = Object.freeze({
     keys: Object.freeze({ query: 'director.keyPeople.view' }),
     // The Leads section: the hooks the player has heard of (elsewhere.js).
     leads: Object.freeze({ query: 'director.world.leads' }),
+    chat: Object.freeze({ query: 'director.world.chat' }),
     // The trip (atlas.trip, feature story-director.trip), shown under the weather while one is on: null with none.
     trip: Object.freeze({ query: 'atlas.trip' }),
 });

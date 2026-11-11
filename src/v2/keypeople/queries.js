@@ -201,6 +201,8 @@ export function keyPeopleView(state, _args, tools) {
             key, name: pin.name, here: present, away: Boolean(entry), due: Boolean(entry?.due),
             status: entry ? (entry.due ? 'Away · due back' : back ? `Away · back ${back}` : 'Away') : present ? 'Here' : 'Not here',
             doing: entry ? (entry.doing ? cutPoints(entry.doing, 160) : 'Away.') : role || (present ? 'In the scene.' : ''),
+            // The newest step's own text (Elsewhere's news line); '' when there is none.
+            step,
             last: step ? `Last news${lastDate ? ` ${lastDate}` : ''}: ${step}` : '',
             // How old the newest news is, in story days ("today", "yesterday", "3 days ago"): Elsewhere's line.
             newsAgo: isInt(now) && isInt(entry?.last?.date) && now >= entry.last.date ? agoOf(Math.floor(now / 1440) - Math.floor(entry.last.date / 1440)) : '',

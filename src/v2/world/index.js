@@ -22,6 +22,7 @@ import { DEFAULT_UPCOMING_DAYS, FEATURE, MAX_UPCOMING_DAYS, hereView, worldView 
 import { journalDay, journalEvents, journalView } from './journal.js';
 import { PEOPLE_WIDGET, peopleWidget } from './people.js';
 import { EVENTS_WIDGET, eventsWidget } from './events-widget.js';
+import { stChatId } from '../screens/reveal.js';
 import { FOLD_WIDGET, foldWidget, leadsOf } from './elsewhere.js';
 import { daysScreen, worldScreen } from './screen.js';
 
@@ -52,6 +53,8 @@ export const part = {
             const rows = leadsOf(state, tools);
             return { rows, has: rows.length > 0, count: rows.length };
         }),
+        // The open chat's id, bound into every fold head so a chat switch re-reads the folds.
+        'director.world.chat': tagged(() => ({ id: stChatId() })),
         'director.journal': tagged((state, args, tools) => journalView(state, args, tools)),
         'director.journal.events': tagged((state, args, tools) => journalEvents(state, args, tools)),
         // Not feature-tagged: other modules' recap works whether or not the World screen or the digest is on (contract P: journal.day).

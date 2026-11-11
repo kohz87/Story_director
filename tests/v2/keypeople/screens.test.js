@@ -77,7 +77,7 @@ function drawWidget(value, command = null) {
 const VIEW = {
     on: true, cap: 3, count: 2, elsewhere: 1, countText: '2 of 3', limitText: 'You can have 3 key people; unpin someone first.', full: false, hasPeople: true,
     people: [
-        { key: 'ren', name: 'Ren', here: false, away: true, due: false, status: 'Away · back June 9', doing: 'scouting the north road', last: 'Last news June 3: reached Wolfmere Outpost', newsAgo: '3 days ago', back: 'June 9' },
+        { key: 'ren', name: 'Ren', here: false, away: true, due: false, status: 'Away · back June 9', doing: 'scouting the north road', step: 'reached Wolfmere Outpost', last: 'Last news June 3: reached Wolfmere Outpost', newsAgo: '3 days ago', back: 'June 9' },
         { key: 'fenna', name: 'Fenna', here: true, away: false, due: false, status: 'Here', doing: 'ferrywoman', last: '', back: '' },
     ],
     choices: [{ name: 'Kell', aliases: [], source: 'here', nsd: false }, { name: 'Brom', aliases: ['the smith'], source: 'npc', nsd: true }],
@@ -90,10 +90,10 @@ test('the widget: a star, the name, the pill, what they do, the last news and Un
     const rows = el.querySelectorAll('.wv-key-row');
     assert.equal(rows.length, 1);
     const pieces = row => [...row.children].map(node => squash(node.textContent));
-    assert.deepEqual(pieces(rows[0]), ['★', 'Ren Away · back June 9', 'Unpin', 'scouting the north road', 'News 3 days ago']);
+    assert.deepEqual(pieces(rows[0]), ['★', 'Ren Away · back June 9', 'Unpin', 'reached Wolfmere Outpost', 'News 3 days ago']);
     assert.ok(rows[0].querySelector('.wv-key-pill').classList.contains('is-away'));
     assert.ok(!text().includes('Fenna'), 'a pinned person who is present is shown only in People here');
-    assert.ok(!text().includes('Last news'), 'the age, not the step\'s words');
+    assert.ok(!text().includes('Last news'), 'the step\'s own text and the age, not the "Last news" label');
     // The token note is an ⓘ fold with the words as its tooltip.
     const info = el.querySelector('.wv-key-info');
     assert.equal(squash(info.querySelector('summary').textContent), 'ⓘ');
@@ -132,7 +132,7 @@ test('the widget: nobody pinned says so, a full list disables + Pin with the rea
     const none = drawWidget({ ...VIEW, choices: [] });
     none.el.querySelector('.wv-key-pin').click();
     assert.match(none.text(), /No one else is known to the story yet\./);
-    const odd = drawWidget({ ...VIEW, people: [{ ...VIEW.people[0], name: '<img src=x onerror=alert(1)>', doing: '<b>bold</b>' }] });
+    const odd = drawWidget({ ...VIEW, people: [{ ...VIEW.people[0], name: '<img src=x onerror=alert(1)>', doing: '<b>bold</b>', step: '' }] });
     assert.equal(odd.el.querySelectorAll('img').length, 0);
     assert.equal(odd.el.querySelectorAll('b').length, 0);
     assert.match(odd.text(), /<img src=x onerror=alert\(1\)> .*<b>bold<\/b>/);

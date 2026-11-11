@@ -290,9 +290,9 @@ export function behindView(state, args, tools) {
 }
 
 /**
- * `director.plan` → `{ hooks, beats, agendas, secrets, problems, any }`: what the Director screen's cards show (the plan; spoilers):
- * the open hooks with their Next, and, while the feature `story-director.threads` is on, the open beats, agendas (off-screen) and
- * secrets (name only), then every problem (the ones about the visible threads, then those behind the scenes). Each thread is
+ * `director.plan` → `{ hooks, clocks, beats, agendas, secrets, problems, any }`: what the Director screen's cards show (the plan; spoilers):
+ * the open hooks with their Next, and, while the feature `story-director.threads` is on, the open clocks (with Due), beats, agendas (off-screen) and
+ * secrets (name only), then every problem, newest first (the ones about the visible threads, then those behind the scenes). Each thread is
  * `{ id, key, summary, fields }` as `director.behind` gives it.
  */
 export function planView(state, args, tools) {
@@ -300,8 +300,9 @@ export function planView(state, args, tools) {
     const hooks = threadsOf(state, query, { kind: 'hook', status: 'active' }).filter(thread => isRecord(thread) && !thread.ended).map(behindThread);
     const behind = threadsOn(tools) ? behindView(state, args, tools) : { kinds: [], problems: [] };
     const open = kind => behind.kinds.find(group => group.kind === kind)?.open ?? [];
-    const problems = [...problemsList(state, { behind: false }, tools), ...behind.problems];
-    const view = { hooks, beats: open('beat'), agendas: open('agenda'), secrets: open('secret'), problems };
+    // Newest first (the lists are kept oldest first), so a card's first rows are the latest reply's problems.
+    const problems = [...problemsList(state, { behind: false }, tools).reverse(), ...[...behind.problems].reverse()];
+    const view = { hooks, clocks: open('clock'), beats: open('beat'), agendas: open('agenda'), secrets: open('secret'), problems };
     return { ...view, any: Object.values(view).some(list => list.length > 0) };
 }
 

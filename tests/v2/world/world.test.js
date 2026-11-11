@@ -371,6 +371,11 @@ test('folds: every Now section folds with a chevron and its count; remembered pe
     const again = drawWorld(data, { widgets });
     assert.equal(again.el.querySelector('[data-fold="news"]').classList.contains('sd-fold-shut'), true);
     assert.equal(again.el.querySelector('[data-fold="upcoming"]').classList.contains('sd-fold-shut'), false);
+    // The chat id is a prop of every head, so a chat switch updates the heads and reads the folds of the new chat.
+    assert.ok(createFoldWidget().props.chat, 'the fold head takes the chat id');
+    assert.match(worldScreen.template, /"chat":"\{\{ q\.chat\.id \}\}"/);
+    assert.equal(worldScreen.data.chat.query, 'director.world.chat');
+    assert.equal(typeof part.queries['director.world.chat']().id, 'string');
     memory.set('chat-2/news', true);
     assert.equal(memory.get('chat-2/news'), true);
     assert.equal(memory.get('chat-1/news'), null);

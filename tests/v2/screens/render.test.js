@@ -66,7 +66,7 @@ test('every screen compiles and renders without a warning, and its CSS scopes cl
 test('director: the arc then the plan cards; secrets by name; problems (visible, then behind the scenes); nothing tracked says so', { skip }, () => {
     const { el } = draw(DIRECTOR_ID, headState());
     const kinds = el.querySelectorAll('section.sd-kind').map(node => node.getAttribute('data-kind'));
-    assert.deepEqual(kinds, ['arc', 'agenda', 'secret', 'problem'], 'no Quests, World or Clocks list');
+    assert.deepEqual(kinds, ['arc', 'clock', 'agenda', 'secret', 'problem'], 'a Clocks card, but no Quests or World list');
     const agenda = squash(el.querySelector('section[data-kind="agenda"]').textContent);
     assert.match(agenda, /Smuggler Vane wants: moving crates at night At: the docks · Next: meet the reeve/);
     assert.equal(squash(el.querySelector('section[data-kind="secret"] .sd-thread').textContent), 'The Reeve Is Bought', 'a secret shows only its name');

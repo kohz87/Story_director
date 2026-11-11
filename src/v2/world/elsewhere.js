@@ -139,6 +139,8 @@ export function createFoldWidget({ memory = foldMemory() } = {}) {
             id: Object.freeze({ type: 'string', default: '' }),
             title: Object.freeze({ type: 'string', default: '' }),
             count: Object.freeze({ type: 'string', default: '' }),
+            // The open chat's id (a query, so a chat switch changes the props and the fold is read again for the new chat).
+            chat: Object.freeze({ type: 'string', default: '' }),
         }),
         primary: 'title',
         validate: () => [],

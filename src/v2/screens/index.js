@@ -63,7 +63,7 @@ export function createScreensPart({ settings = hostSettings } = {}) {
             schema: {
                 // Per chat, Reveal shows them (remembered in this browser); this hides nothing from the story.
                 // Shown only while the feature `story-director.threads` is on (what it hides is that feature's).
-                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press Reveal', feature: THREADS_FEATURE },
+                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets (the Director screen shows everything and ignores this)', feature: THREADS_FEATURE },
             },
         },
     };
