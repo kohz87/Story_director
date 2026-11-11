@@ -45,7 +45,7 @@ import { pageStorage, saveOnUnload, storeSaving } from './runtime/saving.js';
 export { initialWithStart, packsFor, withPackCurrency } from './runtime/start.js';
 export { SAVE_SEQ_KEY, MEMO_PREFIX, markUsed, saveOnUnload, storeSaving } from './runtime/saving.js';
 
-export const VERSION = '2.29.0';
+export const VERSION = '2.30.0';
 
 /**
  * createRuntime({ ctx, packs?, core = true, modules = [], createStore?, createCommandBus?, notify?,

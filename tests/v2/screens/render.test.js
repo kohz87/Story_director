@@ -400,6 +400,22 @@ test('director: the World pulse card (die, kind, line, effect pill, table pill) 
     assert.equal(draw(DIRECTOR_ID, pulseState(rolls), { queries: { ...makeQueries(), ...offMode } }).el.querySelector('.sd-quiet, section[data-kind="pulse"]'), null);
 });
 
+test('director: with a host that has the header slot the Quiet scene switch is not drawn on the tab (the card stays); without one it is', { skip }, () => {
+    const before = globalThis.StoryBlock;
+    try {
+        globalThis.StoryBlock = { sdk: { modules: () => [{ id: 'story-block', headerControls: [] }] } };
+        const hosted = draw(DIRECTOR_ID, pulseState(rolls, true));
+        assert.deepEqual(hosted.warnings, []);
+        assert.equal(hosted.el.querySelector('.sd-quiet'), null, 'the header has the switch');
+        assert.equal(hosted.el.querySelector('button.ss-switch'), null);
+        assert.ok(hosted.el.querySelector('section[data-kind="pulse"]'), 'the World pulse card is still drawn');
+        globalThis.StoryBlock = { sdk: { modules: () => [{ id: 'story-block' }] } };
+        assert.ok(draw(DIRECTOR_ID, pulseState(rolls, true)).el.querySelector('.sd-quiet button.ss-switch'), 'an older host: the tab keeps its switch');
+    } finally {
+        if (before === undefined) delete globalThis.StoryBlock; else globalThis.StoryBlock = before;
+    }
+});
+
 test('status card: the roll row shows only for that reply and only with "Show the roll under replies" on', { skip }, () => {
     const on = { ...makeQueries(), ...createScreensPart({ settings: { 'pulse.showUnderReply': true } }).queries };
     const row = (index, queries) => draw(STATUS_CARD_ID, pulseState(rolls), { index, queries }).el.querySelector('.sd-roll-row');

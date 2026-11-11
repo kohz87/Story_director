@@ -12,6 +12,7 @@
    this file): host.css is over its size limit, so it takes no new import line. */
 @import url('./inv-sheet.css');
 @import url('./screenbar-strip.css');
+@import url('../screens/block-maps.css');   /* the number lists, guild tiles and Enable all box (REPUI) */
 :root {
     --ss-zoom: 0.8;
 }

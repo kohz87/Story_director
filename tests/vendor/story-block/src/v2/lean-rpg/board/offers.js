@@ -21,7 +21,7 @@ function receiptsOf(store, index) {
     try { entries = store.receipts?.() ?? []; } catch { /* no receipts to read */ }
     for (const entry of entries) {
         if (entry?.index !== index) continue;
-        const kind = entry.receipt?.type === 'capture.dm' ? /^set-slot-([1-4])$/u.exec(String(entry.receipt.data?.v2?.result?.kind ?? '')) : null;
+        const kind = entry.receipt?.type === 'capture.dm' ? /^set-slot-([1-6])$/u.exec(String(entry.receipt.data?.v2?.result?.kind ?? '')) : null;
         if (kind) slots.add(Number(kind[1]));
         const result = entry.receipt?.type === 'rpg.resolve' ? entry.receipt.data?.v2?.result : null;
         if (result?.board && ['won', 'fled'].includes(result.stop)) ended = result.stop;
