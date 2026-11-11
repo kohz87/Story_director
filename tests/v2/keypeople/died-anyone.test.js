@@ -23,7 +23,7 @@ test('unpinned + the mark: the death is recorded and told "Died: Name"; the pers
     try {
         assert.deepEqual(open(host), ['Ann', 'Vorn', 'Vorn\'s Return']);
         await host.send('He falls.', said('Vorn dies.', ['- key Vorn | died']));
-        assert.deepEqual(recordOf(host, lastIndex(host)).rules, ['diedAny']);
+        assert.ok(recordOf(host, lastIndex(host)).rules.includes('diedAny'), 'the reply carries the mark (the host may add others)');
         assert.deepEqual(slice(host).gone.vorn, { name: 'Vorn', reason: 'died', on: host.sdk.query('director.time').minutes, rev: slice(host).gone.vorn.rev });
         assert.deepEqual(slice(host).pins, {});
         assert.deepEqual(slice(host).notes, {}, 'no card line: they were never a key person');

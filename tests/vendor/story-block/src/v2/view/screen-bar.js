@@ -1,5 +1,5 @@
-// The screen bar (UI stage 7): the navigation between screens, one component for two places: the game view and the
-// Story panel (desktop and tablet too). On a phone it is a floating glass pill at the foot of the window with five slots:
+// The screen bar (UI stage 7): the navigation between screens for the game view and the Story panel; both draw the strip (below).
+// The older pill is kept for `strip: false`: on a phone a floating glass pill at the foot of the window with five slots:
 // the first four screens that are in the bar (an item says `moreOnly` when it is not; Settings → Tabs & Packs), in the reader's
 // order, then More. More opens a glass sheet over the bar with the remaining screens in a four-column grid; a tap on the scrim,
 // Escape or a tile closes it, and the focus goes back to More. The wide game view draws every screen that is in the bar in one
@@ -9,22 +9,23 @@
 //
 // The current item: the icon and label in the accent colour and a 4px dot under it, no pill or background. While a screen
 // under More is current, More shows that screen's icon and label (More's accessible name says so) and is current itself.
-//
 // createScreenBar(doc, host, { label, onSelect(id), pinned? })
 //   host: the positioned box the bar, its scrim and its sheet are added to (the game view or the Story panel).
 //   className: the host's own class for the bar (its placement: mounts.css, host.css), e.g. `ss-gameview-nav`.
 //   onSelect(id): a slot or a tile was chosen (the caller shows that screen, then calls update).
 //   decorate(node, item): optional; called for each slot and each tile on every draw (the Story panel adds its own names).
-//   → { el, update({ items, current, row, pinned? }), isMoreOpen(), openMore(), closeMore(), destroy() }
+//   → { el, update({ items, current, strip?, row, pinned? }), isMoreOpen(), openMore(), closeMore(), destroy() }
 // items: [{ id, label, icon, moreOnly? }] in the reader's order; current: the id on screen; row: every item that is in the bar in one
 // row, More after them (hidden while nothing is under it).
-//
 // Icons: the item's icon is a `ph-*` id from the Phosphor set (view/icons: iconFor gives it, the screen's own icon or the
 // default for the id); the current one draws the solid weight (`ph-x:fill`), the others the line weight. A Font Awesome class
 // (a module's own icon) still draws as it did. More is `ph-dots-three-outline`.
-//
-// Keys: each slot is a button in the page's Tab order. While the sheet is open Tab stays inside it, Escape closes it.
-// Built with createElement and textContent only, like every standard widget (dom.js). Focus moves with focusNode (scroll.js).
+// The strip (`strip: true`, what the game view and the Story panel pass): every item is a slot in ONE row that scrolls sideways (the
+// CSS snaps it and hides the scrollbar), the ones the reader put in the bar first, the `moreOnly` ones after them in the same order; More
+// is never drawn. `data-fade` on the bar says which edge has more tabs (`start`, `end`, `both`; kept on scroll and on resize) and the CSS fades it;
+// `data-alert` and a dot on that edge say an alerting tab is out of sight beyond it. The current slot is scrolled into view when the bar opens
+// and when the current screen changes. Left and Right (Home, End) move the focus between slots. Slots are buttons in the page's Tab order;
+// the sheet (`strip: false`) keeps Tab inside and closes on Escape. Built with createElement and textContent only (dom.js); focusNode (scroll.js).
 
 import { h, iconNode, str } from './widgets/dom.js';
 import { focusNode, revealIn } from './scroll.js';
@@ -75,24 +76,18 @@ export function pinAlerts(items, pinned = PINNED) {
     return out;
 }
 
-// The Story panel's side sheet (from 760px) is 300 to 420px wide; its bar has 12px of room each side, 6px of padding and a 1px border,
-// and a slot needs about SLOT_WIDTH px for its icon and a short label. A phone's pill, or a panel too narrow, keeps PINNED.
-export const SLOT_WIDTH = 60;
-export const SLOT_MAX = 6;
-const BAR_CHROME = 12 * 2 + 6 * 2 + 2;
-
-/** How many slots before More the Story panel's bar has room for: PINNED unless the panel is a side sheet (`wide`) with room for more. */
-export function slotsForWidth(width, { wide = false } = {}) {
-    if (!wide || !Number.isFinite(width) || width <= 0) return PINNED;
-    return Math.min(SLOT_MAX, Math.max(PINNED, Math.floor((width - BAR_CHROME) / SLOT_WIDTH) - 1));
-}
-
 /** The reader's order split into the slots (the first `pinned` that are in the bar) and what More holds (the rest). */
 export function splitItems(items, pinned = PINNED) {
     const list = Array.isArray(items) ? items : [];
     const visible = list.filter(item => !item.moreOnly).slice(0, pinned);
     const ids = new Set(visible.map(item => item.id));
     return { pinned: visible, more: list.filter(item => !ids.has(item.id)) };
+}
+
+/** The strip's order: the items that are in the bar first, then the `moreOnly` ones, each group in the reader's order. */
+export function stripOrder(items) {
+    const list = Array.isArray(items) ? items : [];
+    return [...list.filter(item => !item.moreOnly), ...list.filter(item => item.moreOnly)];
 }
 
 /** The item under More that is current (More then shows its icon and label), or null. */
@@ -147,7 +142,10 @@ export function createScreenBar(doc, host, options = {}) {
     more.setAttribute('type', 'button');
     more.setAttribute('aria-expanded', 'false');
     more.setAttribute('aria-controls', `${id}-sheet`);
-    nav.appendChild(more);
+    // The strip's edge alert dots (sticky at each edge while an alerting tab is scrolled out past it; see edgeAlerts()).
+    const edgeDot = edge => { const dot = h(doc, 'span', 'ss-screenbar-edge-alert'); dot.hidden = true; dot.setAttribute('aria-hidden', 'true'); dot.setAttribute('data-edge', edge); return dot; };
+    const [startDot, endDot] = [edgeDot('start'), edgeDot('end')];
+    nav.append(startDot, more, endDot);
 
     // The scrim and the sheet: over the host, under the bar (which stays tappable: More closes the sheet).
     const scrim = h(doc, 'div', 'ss-screenbar-scrim');
@@ -173,6 +171,8 @@ export function createScreenBar(doc, host, options = {}) {
     let items = [];
     let current = null;
     let row = false;
+    let strip = false;
+    let scrolledTo = null;    // the current id the strip was last scrolled to
     let open = false;
     let layer = null;         // the sheet's entry in the shared stack (modal-stack.js) while it is open
     const slots = new Map();   // id → the slot button (kept across draws, so a focused slot keeps its focus)
@@ -270,9 +270,9 @@ export function createScreenBar(doc, host, options = {}) {
     function draw() {
         const focusBefore = focusedKey();
         // The row has no room limit: every item that is in the bar is a slot, and More holds the others (it is drawn only then).
-        const { pinned, more: rest } = splitItems(items, row ? Infinity : pinnedCount);
+        const { pinned, more: rest } = strip ? { pinned: stripOrder(items), more: [] } : splitItems(items, row ? Infinity : pinnedCount);
         // More columns than the pill's five only when more than four slots are drawn (the Story panel on a wide window): one for each slot and More.
-        const wideGrid = !row && pinned.length > PINNED;
+        const wideGrid = !row && !strip && pinned.length > PINNED;
         if (wideGrid) {
             nav.style?.setProperty?.('grid-template-columns', `repeat(${pinned.length + 1}, minmax(0, 1fr))`);
             more.style?.setProperty?.('grid-column', String(pinned.length + 1));   // glass.css keeps More in the pill's fifth column
@@ -281,7 +281,8 @@ export function createScreenBar(doc, host, options = {}) {
             more.style?.removeProperty?.('grid-column');
         }
         nav.classList.toggle('ss-screenbar-row', row);
-        more.hidden = row && !rest.length;
+        nav.classList.toggle('ss-screenbar-strip', strip);
+        more.hidden = strip || (row && !rest.length);
         if (more.hidden && open) closeMore({ focus: false });
 
         // The slots, in order, before More.
@@ -336,7 +337,56 @@ export function createScreenBar(doc, host, options = {}) {
         });
         empty.hidden = rest.length > 0;
         restoreFocus(focusBefore);
+        if (strip) showCurrent();
+        else { nav.removeAttribute('data-fade'); edgeAlerts(false); }
     }
+
+    // The strip: the current slot into view (once for each current id), and the fade on the edge that has more tabs.
+    function showCurrent() {
+        if (current !== scrolledTo) {
+            const node = slots.get(current);
+            if (node) { scrolledTo = current; node.scrollIntoView?.({ inline: 'center', block: 'nearest' }); }
+        }
+        fade();
+    }
+    function fade() {
+        const left = Number(nav.scrollLeft) || 0;
+        const room = (Number(nav.scrollWidth) || 0) - (Number(nav.clientWidth) || 0);
+        const edge = room > 1 ? `${left > 1 ? 'start' : ''}${left < room - 1 ? 'end' : ''}` : '';
+        if (edge) nav.setAttribute('data-fade', edge === 'startend' ? 'both' : edge);
+        else nav.removeAttribute('data-fade');
+        edgeAlerts(edge !== '');
+    }
+    // An alerting slot past an edge (its centre in the fade or beyond): a chevron shows on that edge; it clears when the slot is in view.
+    function edgeAlerts(fading) {
+        let before = false, after = false;
+        const box = fading && strip && nav.getBoundingClientRect?.();
+        for (const item of box ? items : []) {
+            const at = item.alert && slots.get(item.id)?.getBoundingClientRect?.();
+            if (!at) continue;
+            const mid = at.left + (at.width ?? at.right - at.left) / 2; // past an edge once its centre is inside the 28px fade
+            if (mid <= box.left + 28) before = true;
+            else if (mid >= box.right - 28) after = true;
+        }
+        startDot.hidden = !before;
+        endDot.hidden = !after;
+        nav.setAttribute('data-alert', `${before ? 'start' : ''} ${after ? 'end' : ''}`.trim());
+    }
+    // Arrow keys between the slots (the strip's own keys; Tab still walks them too).
+    nav.addEventListener('keydown', event => {
+        if (!strip || event.altKey || event.ctrlKey || event.metaKey) return;
+        const at = [...nav.children].filter(node => node !== more && node.getAttribute?.('data-id'));
+        const here = at.indexOf(doc.activeElement);
+        const to = { ArrowRight: here + 1, ArrowLeft: here - 1, Home: 0, End: at.length - 1 }[event.key];
+        if (here < 0 || to === undefined || !at[to]) return;
+        event.preventDefault?.();
+        focusNode(at[to]);
+        at[to].scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+    });
+    nav.addEventListener('scroll', fade);
+    // The fade follows the bar's size (a resize or a rotation that changes what fits); no observer, no recompute.
+    const resizes = typeof globalThis.ResizeObserver === 'function' ? new globalThis.ResizeObserver(() => { if (strip) fade(); }) : null;
+    resizes?.observe(nav);
 
     function tileNodes() {
         return [...grid.children].filter(node => node.getAttribute?.('data-id') && !node.hidden);
@@ -380,6 +430,7 @@ export function createScreenBar(doc, host, options = {}) {
             items = barItems(next.items);
             current = typeof next.current === 'string' && next.current ? next.current : null;
             row = next.row === true;
+            strip = next.strip === true;
             pinnedCount = slotCount(next.pinned) ?? slotCount(options.pinned) ?? PINNED;
             draw();
         },
@@ -388,6 +439,7 @@ export function createScreenBar(doc, host, options = {}) {
         closeMore: (options = {}) => closeMore({ focus: options.focus !== false }),
         destroy() {
             closeMore({ focus: false });
+            resizes?.disconnect();
             nav.remove();
             scrim.remove();
             sheet.remove();

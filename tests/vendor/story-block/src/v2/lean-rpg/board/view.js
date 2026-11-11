@@ -204,7 +204,7 @@ export function createBoardView({ doc, headState, meta, save, store, rules, quer
             return;
         }
         const tools = h(doc, 'div', 'rpg-board-actions');   // Auto / Back on the left, Discard fight at the far end, in one row
-        const state = played.state, { ranks, playerRank } = levels(), party = readParty(state, { own: readerName(), roleOf, ranks, playerRank }), foes = readFoes(state, { roleOf, ranks });
+        const state = played.state, { ranks, playerRank } = levels(), party = readParty(state, { own: readerName(), roleOf, ranks, playerRank }).filter(character => character.left !== true), foes = readFoes(state, { roleOf, ranks });   // a member who left the party is not drawn
         const members = Array.isArray(played.result.members) ? played.result.members : null;
         root.classList.toggle('rpg-board-members', members !== null);
         const status = h(doc, 'div', 'rpg-board-status');

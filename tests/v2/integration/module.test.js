@@ -12,7 +12,7 @@ import { mapScreen } from '../../../src/v2/atlas/screen.js';
 import { chronicleScreen } from '../../../src/v2/chronicle/screen.js';
 import { daysScreen, worldScreen } from '../../../src/v2/world/index.js';
 import { STATIC_TEXT as CHRONICLE_STATIC, TAIL_BUDGET as CHRONICLE_BUDGET } from '../../../src/v2/chronicle/note.js';
-import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
+import { BACKLOG_BUDGET, DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
 import { part as checksPart } from '../../../src/v2/checks/index.js';
 import { part as chroniclePart } from '../../../src/v2/chronicle/index.js';
 import { part as keyPeoplePart } from '../../../src/v2/keypeople/index.js';
@@ -46,8 +46,8 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     assert.equal(hostStatic(def, () => true, {}), `${STATIC_TEXT}\n${def.context.parts.find(part => part.feature === 'story-director.initiative').static()}\n${PULSE_STATIC}`);
     assert.equal(keyPeoplePart.context.static({ keyPeople: true }), KEY_PEOPLE_STATIC);
     assert.equal(keyPeoplePart.context.static({ keyPeople: false }), '');
-    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'pulse', 'arc', 'checks', 'screens']);
+    assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + BACKLOG_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'pulse', 'arc', 'checks', 'ripples', 'screens']);
     assert.match(def.capture.kinds.hook.grammar, /a quest is a job/);
     assert.equal(def.capture.kinds.quest.grammar(), '', 'the quest rides on the hook line');
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
@@ -118,7 +118,7 @@ test('two parts claiming one name is refused', () => {
 test('screens and widgets: every part\'s, in part order; one id in two parts is refused', () => {
     assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, worldScreen, daysScreen, ...SCREENS].map(screen => screen.id));
     assert.deepEqual(storyDirectorModule.tabs, []);
-    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.journal-events', 'story-director.key-people', 'story-director.arc', 'story-director.behind', 'story-director.quests'], 'the atlas\'s Map, the World screen\'s people, journal events and key people, the arc panel, behind the scenes and the Quests cards');
+    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.journal-events', 'story-director.fold', 'story-director.key-people', 'story-director.arc', 'story-director.behind', 'story-director.plan', 'story-director.ripples', 'story-director.quests'], 'the atlas\'s Map, the World screen\'s people, journal events and key people, the arc panel, behind the scenes and the Quests cards');
     const status = storyDirectorModule.screens.find(screen => screen.id === 'story-director/status-card');
     assert.equal(status.defaultOn, true, 'the status card is on under every reply by default (§F24)');
     const widget = { render: () => {} };

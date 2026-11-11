@@ -77,35 +77,14 @@ test('on the host: the note is for the reply they come in (its card, not the one
     }
 });
 
-// ---- World -> Now -> Around here -------------------------------------------------------------------------------------------------------
+// ---- World -> Now: no "Around here" any more (its counts told what the player has not met) ----------------------------------------------
 
-const world = { today: '', here: { place: null, moved: false, weather: '', hasPeople: false, people: [], chatter: [], nsd: false }, clockSet: true, upcomingDays: 30, hasUpcoming: false, upcoming: [], news: [], hasNews: false, factions: [], hasFactions: false };
-const drawWorld = cast => draw(worldScreen.template, { state: {}, q: { world, journal: { on: false, hasDays: false, days: [] }, threads: { on: true }, keys: null, cast }, draft: { view: 'now' }, settings: {}, mount: 'tab', screenId: 'story-director/world', api: {} });
-const VIEW = { on: true, total: 14, met: 3, near: 2, hasNear: true, heading: 'Bluewatch docks · evening', place: 'Bluewatch docks', day: 'evening', dayText: '· evening', packLabel: 'Ersveil cast', hasMet: true, metList: [{ key: 'ersveil:fenna', name: 'Fenna', news: 'upriver at Ashford' }], note: 'Unmet cast stays hidden.' };
-
-test('World -> Now: "Around here" under Here: how many may cross your path here (only when some are), who you met and their news, "Met n of N" always; gone with no cast', () => {
-    const { el, warnings } = drawWorld(VIEW);
-    assert.deepEqual(warnings, []);
-    const section = el.querySelector('.wv-around');
-    assert.ok(section);
-    assert.equal(squash(section.querySelector('h4').textContent), 'Around here Bluewatch docks · evening');
-    const rows = root => root.querySelectorAll('.wv-row').map(row => [...row.children].map(node => squash(node.textContent)));
-    assert.deepEqual(rows(section), [
-        ['Cast whose paths may cross yours here', '2, not yet met'],
-        ['Cast you have met', 'Fenna, last heard: upriver at Ashford'],
-        ['Met from the Ersveil cast', '3 of 14'],
-    ]);
-    assert.equal(squash(section.querySelector('.wv-note').textContent), 'Unmet cast stays hidden.');
-    assert.deepEqual(el.querySelectorAll('section').map(node => node.getAttribute('data-kind')).slice(0, 3), ['here', 'around', 'upcoming']);
-    const far = drawWorld({ ...VIEW, near: 0, hasNear: false, hasMet: false, metList: [], met: 0, heading: '', place: '', day: '', dayText: '' });
-    assert.deepEqual(rows(far.el.querySelector('.wv-around')), [['Met from the Ersveil cast', '0 of 14']]);
-    assert.equal(squash(far.el.querySelector('.wv-around h4').textContent), 'Around here');
-    const off = drawWorld(null);
-    assert.equal(off.el.querySelector('.wv-around'), null);
-    assert.deepEqual(off.warnings, []);
+test('World -> Now has no "Around here" section and does not read the cast view', () => {
+    assert.doesNotMatch(worldScreen.template, /around|q\.cast/i);
+    assert.equal(worldScreen.data.cast, undefined);
 });
 
-test('on the host: the screen\'s data is the view; unmet cast is counted, never named', async t => {
+test('on the host: the cast view counts the unmet and never names them', async t => {
     t.mock.method(console, 'warn', () => {});
     const host = await castHost({
         source: castSource([entry('brom', { start: { place: 'Harrow', goal: 'forge', routine: '' } }), entry('fenna', { start: { place: 'Harrow', goal: 'f', routine: 'works the night ferry' } }), entry('sera', { start: { place: 'Gwenmar', goal: 's', routine: '' } })]),
@@ -118,11 +97,9 @@ test('on the host: the screen\'s data is the view; unmet cast is counted, never 
         await settle();
         await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const view = host.sdk.query('director.cast.view');
-        const drawn = drawWorld(view);
-        assert.deepEqual(drawn.warnings, []);
-        const text = squash(drawn.el.querySelector('.wv-around').textContent);
-        assert.match(text, /Cast you have metBrom, last heard: upriver for the guild/);
-        assert.match(text, /Met from the Ersveil cast1 of 3/);
+        const text = JSON.stringify(view);
+        assert.match(text, /Brom/);
+        assert.deepEqual([view.met, view.total], [1, 3]);
         assert.doesNotMatch(text, /Fenna|Sera/);
     } finally {
         host.close();

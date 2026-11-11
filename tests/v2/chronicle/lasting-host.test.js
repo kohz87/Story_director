@@ -13,12 +13,15 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { packsFor } from '../../vendor/story-block/src/v2/runtime.js';
 import { stCapabilities } from '../../vendor/story-block/src/v2/packs/st-adapter.js';
 import { createModule } from '../../../src/v2/module.js';
+import { BACKLOG_STATIC } from '../../../src/v2/chronicle/digest.js';
 import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
 import { validateChronicle } from '../../../src/v2/chronicle/domain.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
 
 const TAIL_KEY = 'story_suite_tail_1';
 const STATIC_KEY = 'story_suite_static';
+// The static part without the one sentence that explains [Earlier days] (taught once a past day is told, module/create.js `backlog`).
+const bare = text => String(text).split('\n').filter(line => line !== BACKLOG_STATIC).join('\n');
 const sent = (host, key) => host.st.promptLog.filter(entry => entry.key === key && entry.value).map(entry => entry.value);
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const receipts = host => host.sdk.receipts().map(entry => entry.receipt);
@@ -117,7 +120,7 @@ test('on the host: an event\'s step writes the entry, a second event counts a da
     assert.match(tail, /- Seventh seal failed \(Auvoth\)/);
     assert.match(tail, new RegExp(`- ${CRACKS} \\(Auvoth\\)`));
     // The lean diet: the world grammar is taught from the reply after the pack's event wrote the first entry; the story's own lines changed no byte.
-    const statics = sent(host, STATIC_KEY);
+    const statics = sent(host, STATIC_KEY).map(bare);
     assert.equal(new Set(statics).size, 2, 'the static prompt gained the world grammar once, when the first entry was kept');
     assert.match(statics[0], /\+ world Name/, 'the world line is always taught');
     assert.doesNotMatch(statics[0], /Events under \[World\]/);
@@ -344,4 +347,40 @@ test('on the host: a pack that starts on a calendar date has the clock seeded af
     await host.send('Check.', reply('Check.'));
     assert.deepEqual(firedIds(host), ['any-parent', 'any-child']);
     host.close();
+});
+
+test('a world line\'s factions tag makes the faction on the host: the reply carries the factionTags mark, a Re-read, rebuild and reload agree, an unmarked reply makes none', async () => {
+    const host = await newHost();
+    const recordOf = index => host.ctx.chat[index].extra.storySuite;
+    const factionNames = () => host.sdk.query('chronicle.factions').map(faction => faction.name).sort();
+    try {
+        // An old reply (recorded before the rule: no mark) names a faction in a tag and makes none.
+        const setRuleMarks = host.store.setRuleMarks;
+        host.store.setRuleMarks = () => { throw new Error('no mark: an old chat'); };
+        await host.send('Old.', reply('Fists fly.', ['+ world Dock Brawl — a fight on the quay | factions: Quay Watch']));
+        host.store.setRuleMarks = setRuleMarks;
+        const old = host.ctx.chat.length - 1;
+        assert.equal(recordOf(old).rules, undefined);
+        assert.deepEqual(factionNames(), []);
+
+        // A new reply is marked, and its tag creates the factions.
+        await host.send('New.', reply('Red cords on the quay.', ['+ world Bluewatch Street Clash — the gangs meet | factions: Red-Cord Gang, Quay Watch']));
+        const at = host.ctx.chat.length - 1;
+        assert.ok(recordOf(at).rules.includes('factionTags'));
+        assert.deepEqual(factionNames(), ['Quay Watch', 'Red-Cord Gang']);
+        assert.deepEqual(host.sdk.query('chronicle.faction', { name: 'Red-Cord Gang' }).events.map(event => event.name), ['Bluewatch Street Clash']);
+        assert.deepEqual(validateChronicle(host.head().domains.chronicle), []);
+
+        // Re-read, rebuild and reload give the same state; the unmarked reply stays unmarked and makes none.
+        const live = JSON.stringify(host.head());
+        assert.equal((await host.turn.reread(at)).ok, true);
+        assert.equal(JSON.stringify(host.head()), live, 'a Re-read');
+        assert.equal((await host.turn.reread(old)).ok, true);
+        assert.equal(recordOf(old).rules, undefined, 'the old reply gains no mark');
+        assert.equal(JSON.stringify(host.head()), live, 'and no faction');
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), live, 'a rebuild');
+        await host.st.loadChat(JSON.parse(JSON.stringify(host.ctx.chat)));
+        assert.equal(JSON.stringify(host.head()), live, 'a reload');
+    } finally { host.close(); }
 });

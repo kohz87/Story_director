@@ -49,7 +49,8 @@ export function createUiMounts({ screens, renderer, registry, ctx, store, sdk, q
             // The RPG keeps its character in a block, not behind `party.pc`: its stage bars are the header's (lean-rpg/view/hero-data.js).
             rpgLead: getRpg()?.heroLead?.(state) ?? null,
         }),
-        on: (name, fn) => events.on(name, fn),
+        // (the same held `committed` as the panel's: a form's combined Save redraws the game view once, after its last step)
+        on: api.on,
         carriers,
         hasCard,
         swipeAt: index => ctx.chat?.[index]?.swipe_id ?? 0,

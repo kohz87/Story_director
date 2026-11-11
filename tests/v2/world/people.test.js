@@ -176,8 +176,8 @@ test('a new reply, a swipe and a delete: Here follows (the screen is drawn again
     host.close();
     const { el } = drawWorld({ world, journal }, { widgets: { [PEOPLE_WIDGET]: createPeopleWidget({ open: () => null, cast: () => null }) } });
     const place = el.querySelector('.wv-place');
-    assert.ok(place.classList.contains('wv-moved'));
-    assert.match(squash(place.textContent), /^Market settlement · Bluewatch moved here this reply$/, "kind, region (kept from the place before) and the mark");
+    assert.equal(squash(place.textContent), 'Market settlement', 'the place line and its kind chip');
+    assert.deepEqual(el.querySelectorAll('.wv-sub').map(node => squash(node.textContent)), ['Bluewatch', 'moved here this reply'], 'the region on its own line (kept from the place before), then the mark');
 });
 
 test('Here: a 200-character thought is kept whole; a 300-character one is cut to 240 with an ellipsis', () => {
@@ -247,8 +247,14 @@ test('busy with no cards keeps the last cards and the label; done redraws withou
     assert.equal(page.el.querySelectorAll('.wv-chip').length, 3);
 });
 
-test('Here: the place is the atlas\'s place line "Town · Spot" (the name when the atlas gives none)', () => {
-    const ask = line => name => ({ 'atlas.here': { id: 'pl_a', name: 'Auvoth (Southern Gatehouse)', ...line, region: 'Gate Coast', kind: 'gate' } })[name] ?? null;
-    assert.equal(hereView({}, {}, ask({ line: 'Auvoth · Southern Gatehouse' })).place.name, 'Auvoth · Southern Gatehouse');
-    assert.equal(hereView({}, {}, ask({})).place.name, 'Auvoth (Southern Gatehouse)');
+test('Here: the place line is the atlas\'s "Town · Spot" (atlas.here, else atlas.line on the scene name, else the scene name split)', () => {
+    const here = line => ({ id: 'pl_a', name: 'Auvoth', ...line, region: 'Gate Coast', kind: 'gate' });
+    const ask = (atlasHere, atlasLine, scene) => (name, args) => ({
+        'atlas.here': atlasHere, 'atlas.line': atlasLine && args?.name === scene ? atlasLine : '', 'scene.place': { name: scene },
+    })[name] ?? null;
+    const viaHere = hereView({}, {}, ask(here({ line: 'Auvoth · Southern Gatehouse' }), '', 'Auvoth | Southern Gatehouse')).place;
+    assert.deepEqual([viaHere.name, viaHere.line], ['Auvoth', 'Auvoth · Southern Gatehouse']);
+    assert.equal(hereView({}, {}, ask(null, 'Auvoth · Gatehouse', 'Auvoth | Gatehouse')).place.line, 'Auvoth · Gatehouse', 'atlas.line on the scene name');
+    assert.equal(hereView({}, {}, ask(null, '', 'Auvoth | Gatehouse')).place.line, 'Auvoth · Gatehouse', 'fallback: the scene name split');
+    assert.equal(hereView({}, {}, ask(null, '', 'Auvoth')).place.line, 'Auvoth');
 });

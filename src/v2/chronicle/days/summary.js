@@ -1,5 +1,6 @@
 // Story Director v2, chronicle part: digest lines, construction, caps and query output. Pure.
 
+import { bucketDay, trimCats } from '../backlog.js';
 import { MAX_DATE, MAX_LINE, MAX_MET, MAX_NAME, MAX_NPCS, MAX_QUESTS, MAX_WORLD, cut, flat, isInt } from './shared.js';
 
 // ---- the one line -----------------------------------------------------------------------------
@@ -63,6 +64,8 @@ export function makeDigest(day, facts, { date = '', currency = null, made = 0, r
         brief: false,
         count: facts.count,
         happened: [...facts.happened],
+        // Each line's kind, parallel to `happened` (its receipt type, then its thread id); absent when no line has one.
+        ...(Array.isArray(facts.tags) && facts.tags.some(Boolean) ? { tags: facts.tags.slice(0, facts.happened.length) } : {}),
         more: facts.more,
         places: [...facts.places],
         quests: { taken: [...facts.quests.taken], done: [...facts.quests.done], failed: [...facts.quests.failed], dropped: [...facts.quests.dropped] },
@@ -77,9 +80,10 @@ export function makeDigest(day, facts, { date = '', currency = null, made = 0, r
     };
 }
 
-/** An older day kept short: its date, its line and how many things it held. */
+/** An older day kept short: its date, its line, how many things it held and a compact list of them by kind (`cats`, at most about 1 KB: the Journal's search still reaches it). */
 export function briefOf(digest) {
-    return { day: digest.day, date: digest.date, line: digest.line, brief: true, count: digest.count, made: digest.made };
+    const cats = trimCats(bucketDay(digest));
+    return { day: digest.day, date: digest.date, line: digest.line, brief: true, count: digest.count, made: digest.made, ...(Object.keys(cats).length ? { cats } : {}) };
 }
 
 /**
@@ -104,7 +108,7 @@ export function digestOut(digest, { currency = null, substitute = value => value
     const base = { day: digest.day, date: digest.date, line: sub(digest.line), brief: digest.brief, count: digest.count, made: digest.made };
     if (digest.brief) {
         return {
-            ...base, happened: [], more: 0, places: [], quests: { taken: [], done: [], failed: [], dropped: [] },
+            ...base, cats: digest.cats ? JSON.parse(JSON.stringify(digest.cats)) : {}, happened: [], more: 0, places: [], quests: { taken: [], done: [], failed: [], dropped: [] },
             fights: { count: 0, won: 0, lost: 0, fled: 0 }, money: { in: 0, out: 0 }, npcs: [], world: [], met: [], revs: [],
             moneyText: '', fightText: '',
         };
@@ -112,6 +116,7 @@ export function digestOut(digest, { currency = null, substitute = value => value
     return {
         ...base,
         happened: digest.happened.map(sub),
+        tags: Array.isArray(digest.tags) ? [...digest.tags] : [],
         more: digest.more,
         places: [...digest.places],
         quests: { taken: [...digest.quests.taken], done: [...digest.quests.done], failed: [...digest.quests.failed], dropped: [...digest.quests.dropped] },

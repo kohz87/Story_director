@@ -14,7 +14,8 @@ export const FULL_CEILING = FULL_MAX * 2;
 export const KEEP_CEILING = KEEP_MAX * 2;
 
 // What a digest may hold.
-export const MAX_HAPPENED = 8;
+// The kept lines of a day's events: the Journal sorts them into kinds and the search reads them (a day may hold a few dozen).
+export const MAX_HAPPENED = 40;
 export const MAX_PLACES = 8;
 export const MAX_QUESTS = 6;
 export const MAX_NPCS = 6;
@@ -34,8 +35,9 @@ const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'dir
 // The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's
 // name and counts are never a fact of the day (the Journal shows only what {{user}} knows).
 export const PLANNED_TYPES = new Set(['director.arc.accept', 'director.arc.update', 'director.arc.end']);
-// The reader's progress is told although the code makes it (cause system): practice lines.
-const SYSTEM_BUT_TOLD = new Set(['rpg.practice']);
+// The reader's progress is told although the code makes it (cause system): practice lines, and the fight board's result ("Fight won: …",
+// Story Block writes it as a system receipt that is not narrated), which is a fight of the day.
+const SYSTEM_BUT_TOLD = new Set(['rpg.practice', 'rpg.fight']);
 export const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause === 'system' && receipt.narrate !== true && !SYSTEM_BUT_TOLD.has(receipt.type));
 export const SETTLE = 'time.settle';
 // Story Block's scene receipts that name who came into the scene (`data.added`).
@@ -57,9 +59,13 @@ export const BOOKKEEPING_TYPES = new Set([
 // set-stamina, set-slot-N) or a foe slot clear (clear-N) is bookkeeping; every other kind (register, deed, add-xp ...) is a story event.
 const METER_KIND = /^(set-[a-z]+(-\d+)?|clear-\d+)$/;
 const DM_TYPES = new Set(['capture.dm', 'dm.act']);
+export const PRESENCE_TEXT = /\b(?:is|is not) here\.?$/i;
 /** Whether a receipt is the code's own bookkeeping: by type, by a block result's kind, a clock line "(not used)" or an empty summary (never by other text). */
 export function isBookkeeping(receipt) {
     if (BOOKKEEPING_TYPES.has(receipt.type)) return true;
+    // Who is or is not in the scene (state, not an event: "Met" has the arrivals) and the key people's "noted" tick.
+    if (PRESENT_TYPES.has(receipt.type) && PRESENCE_TEXT.test(text(receipt.summary).trim())) return true;
+    if (receipt.type === 'npc.tick' && /^Key people: noted/.test(text(receipt.summary).trim())) return true;
     if (typeof receipt.summary !== 'string' || !receipt.summary.trim()) return true;
     if (DM_TYPES.has(receipt.type)) return METER_KIND.test(receipt.data?.v2?.result?.kind ?? '');
     return receipt.type === 'capture.time' && /\(not used\)\.?\s*$/.test(receipt.summary);
@@ -87,6 +93,19 @@ export function cut(value, max) {
 }
 
 export const codePoints = value => Array.from(text(value)).length;
+
+/** "this hour", "5 h ago", "3 days ago", "2 weeks ago", "4 months ago"; '' for an unknown span. */
+export function agoText(minutes) {
+    if (!isInt(minutes) || minutes < 0) return '';
+    if (minutes < 60) return 'this hour';
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} h ago`;
+    const days = Math.floor(minutes / 1440);
+    if (days < 14) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
+    const months = Math.floor(days / 30);
+    return months < 24 ? `${months} months ago` : `${Math.floor(days / 365)} years ago`;
+}
 
 /** The story day of `minutes` (whole days since the calendar's start). */
 export const dayOf = minutes => Math.floor(minutes / DAY_MINUTES);

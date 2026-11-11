@@ -400,7 +400,7 @@ test('the Journal\'s world line of a day: a pack event\'s lasting change is told
     assert.deepEqual(noted.entries[0].entry.world, [{ id: eventNamed(state, 'Seventh seal failed').id, text: 'World: Seventh seal failed (Auvoth) is ongoing — The seal over Auvoth has failed.' }]);
     const facts = entryOf([fire], 1, { lasting: r => (r === 1 ? [{ id: 'ev_x', by: BY, text: 'World: Seventh seal failed (Auvoth) is ongoing — The seal over Auvoth has failed.' }] : []) });
     assert.deepEqual(facts.world, [{ id: 'ev_x', text: 'World: Seventh seal failed (Auvoth) is ongoing — The seal over Auvoth has failed.' }]);
-    assert.deepEqual(facts.happened, [{ text: 'The seventh seal has failed.', told: true }], 'the cue is still a thing that happened');
+    assert.deepEqual(facts.happened, [{ text: 'The seventh seal has failed.', told: true, type: 'events.fire' }], 'the cue is still a thing that happened');
     // Not for another event's step, nor without the lasting step, nor for a receipt of another revision.
     const other = { ...fire, data: { event: 'another', then: ['chronicle.lasting'] } };
     assert.deepEqual(entryOf([other], 1, { lasting: () => [{ id: 'ev_x', by: BY, text: 'x' }] }).world, []);

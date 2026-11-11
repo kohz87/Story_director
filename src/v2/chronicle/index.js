@@ -23,7 +23,7 @@
 import { threadOutcome } from './thread-outcome.js';
 import { applyFactionLine, applyWorldLine, edit, lasting, remove, rumor } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
-import { DIGEST_TAIL_BUDGET, NOTE, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
+import { BACKLOG_BUDGET, BACKLOG_STATIC, DIGEST_TAIL_BUDGET, NOTE, backlogTail, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
 import { initialChronicle, validateChronicle } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, chronicleTail } from './note.js';
 import { SURFACE, beforeGenerate as surfaceHook, surface } from './pick.js';
@@ -54,11 +54,11 @@ export function beforeGenerate(view) {
     return commands.length ? { commands } : undefined;
 }
 
-/** `context.tail(view)`: the [World] lines (while the threads feature is on), and the last day's line after a time skip (optional). */
+/** `context.tail(view)`: the [World] lines (while the threads feature is on), the last day's line after a time skip and the [Earlier days] block (both optional). */
 export function tail(view) {
     const out = threadsOn(view) ? chronicleTail(view) : { lines: [], optional: [] };
-    const line = digestTailLine(view);
-    return line ? { lines: out.lines, optional: [...out.optional, line] } : out;
+    const optional = [...out.optional, digestTailLine(view), backlogTail(view)].filter(Boolean);
+    return optional.length ? { lines: out.lines, optional } : out;
 }
 
 /** What a pack's `requires.capabilities` can name: Story Director can write a pack event's lasting change (`chronicle.lasting`). */
@@ -94,7 +94,9 @@ export const part = {
         static: env => (env?.chronicle ? STATIC_TEXT : ''),
         staticFeature: THREADS_FEATURE,
         tail: view => tail(view),
-        budget: TAIL_BUDGET + DIGEST_TAIL_BUDGET,
+        budget: TAIL_BUDGET + DIGEST_TAIL_BUDGET + BACKLOG_BUDGET,
+        // The sentence that explains [Earlier days]: taught only while the block has lines (module.js tells the parts `backlog`).
+        inline: [{ feature: DIGEST_FEATURE, static: env => (env?.backlog ? BACKLOG_STATIC : '') }],
     },
     hooks: { beforeGenerate },
     settings: {

@@ -44,6 +44,8 @@ function moneyOf(receipt) {
 // A module can report a finished encounter in its receipt.
 function fightOf(receipt) {
     const data = receipt.data;
+    // The fight board's result line ("Fight won: Astra +60 XP."): a fight of the day all the same.
+    if (receipt.type === 'rpg.fight') return /^Fight (won|lost|fled)\b/i.exec(text(receipt.summary))?.[1].toLowerCase() ?? null;
     if (!['combat.end', 'combat.flee'].includes(receipt.type) || !isRecord(data) || typeof data.session !== 'string') return null;
     return ['won', 'lost', 'fled'].includes(data.outcome) ? data.outcome : null;
 }
@@ -51,7 +53,7 @@ function fightOf(receipt) {
 
 /**
  * What a run of receipts (one reply's, on one day) holds, as a day-facts entry is kept
- * (`chronicle.dayFacts`): `{ day, count, happened: [{ text, told }], more, places, fights, money,
+ * (`chronicle.dayFacts`): `{ day, count, happened: [{ text, told, type?, thread? }], more, places, fights, money,
  * npcs: [{ name, meter, from, to }], world: [{ id, text }], revs: [first, last] }`. Quests are not in
  * it: they are read from the threads' own stamps when the day is written. `lasting(rev)` (queries.js) gives
  * the entries a pack event's `chronicle.lasting` step wrote at that revision, for the day's world lines.
@@ -79,7 +81,9 @@ export function entryOf(receipts, day = null, { lasting = null } = {}) {
         const happened = happenedText(receipt);
         if (happened && !seenHappened.has(happened)) {
             seenHappened.add(happened);
-            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length });
+            // The receipt's type (what kind of line it is) and the thread it touched stay with the line, for the Journal's kinds.
+            const thread = typeof data.thread === 'string' ? data.thread : typeof data.quest === 'string' ? data.quest : '';
+            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length, ...tagOf(receipt.type, thread) });
         }
         if (receipt.type === 'capture.place' && data.moved === true) pushUnique(places, data.name, MAX_PLACES, seenPlaces);
         // Story Block's scene: who came into the scene (`+ present`, the reader's scene.present).
@@ -121,7 +125,7 @@ export function entryOf(receipts, day = null, { lasting = null } = {}) {
     return {
         day,
         count,
-        happened: kept.map(({ text: said, told }) => ({ text: said, told })),
+        happened: kept.map(itemOf),
         more: candidates.length - kept.length,
         places,
         fights,
@@ -156,6 +160,11 @@ export function eventsOf(receipts, limit = 500) {
     return out;
 }
 
+// A line's kind: its receipt's type and thread id, kept only when they are short plain names (a stored entry's `type` / `thread`).
+const NAMEISH = /^[A-Za-z0-9_.:-]{1,64}$/;
+const tagOf = (type, thread) => ({ ...(NAMEISH.test(type) ? { type } : {}), ...(NAMEISH.test(thread) ? { thread } : {}) });
+const itemOf = ({ text: said, told, type, thread }) => ({ text: said, told, ...(type ? { type } : {}), ...(thread ? { thread } : {}) });
+
 const textOrNull = value => (typeof value === 'string' && value ? cut(value, MAX_NAME) : null);
 
 // At most MAX_HAPPENED, those the story was told first, in the order they came.
@@ -180,7 +189,7 @@ export function foldEntries(entries, day) {
         for (const item of entry.happened) {
             if (seenHappened.has(item.text)) continue;
             seenHappened.add(item.text);
-            candidates.push({ text: item.text, told: item.told, at: candidates.length });
+            candidates.push({ ...item, at: candidates.length });
         }
         for (const place of entry.places) pushUnique(out.places, place, MAX_PLACES, seenPlaces);
         for (const name of ['count', 'won', 'lost', 'fled']) out.fights[name] += entry.fights[name];
@@ -199,7 +208,7 @@ export function foldEntries(entries, day) {
         revs.push(...entry.revs);
     }
     const kept = pickHappened(candidates);
-    out.happened = kept.map(({ text: said, told }) => ({ text: said, told }));
+    out.happened = kept.map(itemOf);
     out.more += candidates.length - kept.length;
     out.npcs = [...npcMoves.values()].slice(0, MAX_NPCS * 2);
     out.world = [...world].slice(-MAX_WORLD).map(([id, said]) => ({ id, text: said }));
@@ -220,6 +229,8 @@ export function factsOf(entries, { state = null, day = null, dayOfRev = () => nu
     return {
         count: merged.count,
         happened: merged.happened.map(item => item.text),
+        // What kind each line is (parallel to `happened`): its receipt type, then its thread id, "" when unknown.
+        tags: merged.happened.map(item => (item.type || item.thread ? [item.type || '-', item.thread].filter(Boolean).join(' ') : '')),
         more: merged.more,
         places: merged.places,
         quests: questsOf(state, { dayOfRev, day }),

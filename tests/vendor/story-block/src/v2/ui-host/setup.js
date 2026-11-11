@@ -21,7 +21,7 @@ import { createRebuildBannerWidget, REBUILD_BANNER_WIDGET } from '../screens/reb
 import { createReadyHintWidget, READY_HINT_WIDGET } from '../screens/ready-hint.js';
 import { RPG_START_WIDGET } from '../screens/home.js';
 import { createShowMoreWidget, SHOW_MORE_WIDGET } from '../screens/show-more.js';
-import { createInventoryAddWidget, INVENTORY_ADD_WIDGET } from '../screens/inventory-add.js';
+import { createInventoryAddWidget, createInventoryGridWidget, createInventoryViewWidget, createWornFoldWidget, INVENTORY_ADD_WIDGET, INVENTORY_GRID_WIDGET, INVENTORY_VIEW_WIDGET, WORN_FOLD_WIDGET } from '../screens/inventory-add.js';
 import { readerStore, S } from './shared.js';
 
 export function createHostSetup({ runtime, ctx, doc, registry, store, sdk, openSettings, inspectorProblems, getRpg }) {
@@ -85,6 +85,7 @@ export function createHostSetup({ runtime, ctx, doc, registry, store, sdk, openS
         last: () => (rebuilt?.holder === rebuildScope() ? rebuilt.result : null),
         dismiss: () => { if (rebuilt?.holder === rebuildScope()) rebuilt = null; },
     });
+    const chatKey = () => { try { return String(liveCtx()?.getCurrentChatId?.() ?? liveCtx()?.chatId ?? ''); } catch { return ''; } };
     const hostWidgets = {
         ...blockWidgets.widgets,
         ...createFieldsWidgets(),
@@ -99,6 +100,10 @@ export function createHostSetup({ runtime, ctx, doc, registry, store, sdk, openS
         // A long card's "Show all" / "Show less" (screens/show-more.js).
         [SHOW_MORE_WIDGET]: createShowMoreWidget(),
         [INVENTORY_ADD_WIDGET]: createInventoryAddWidget(),
+        [WORN_FOLD_WIDGET]: createWornFoldWidget({ chatKey }),
+        // Inventory's Grid view: the List | Grid switch (kept per device) and the tiles with their folds (kept per chat on this device).
+        [INVENTORY_VIEW_WIDGET]: createInventoryViewWidget(),
+        [INVENTORY_GRID_WIDGET]: createInventoryGridWidget({ chatKey }),
         // Home's "Your character" card (the RPG's, lean-rpg/view/start.js): this stands in for it while the RPG screens are not loaded.
         [RPG_START_WIDGET]: Object.freeze({
             props: {}, primary: null, validate: () => [],

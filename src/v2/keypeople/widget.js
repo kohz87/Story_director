@@ -1,9 +1,9 @@
 // Story Director v2, part **keypeople**: the Key people section of the World screen's Now view, widget
 // `story-director.key-people` (feature `story-director.key-people`), bound to `director.keyPeople.view`.
 //
-// One row per pinned person: a star, their name, a pill (Away · back <date>, Here or Not here), what they are doing (an away
-// person's `doing`, else the dossier's role) and the last news of an away person, and an Unpin button. Under the rows `+ Pin`
-// opens the people {{user}} may pin (who is here, who the story's threads name, who NPC State Delta tracks), and a quiet note
+// One row per pinned person who is not in the scene (World's Elsewhere; the ones here are in People here): a star, their name, a
+// pill (Away · back <date> or Not here), what an away person is doing now and how old their news is, and an Unpin button. Under the rows `+ Pin`
+// opens the people {{user}} may pin (who is here, who the story's threads name, who NPC State Delta tracks), and an ⓘ fold
 // says what the narrator is told and what it costs. Pin and Unpin are the reader's own tools (cause `ui`, on the latest reply):
 // not story actions. Text goes in as text only (WAVE rule 7). The Pin list stays inside the card (a max height, scrolling there); opening it
 // brings the card into view by moving its own scroller only (screens/scroll.js; never scrollIntoView).
@@ -55,8 +55,11 @@ function render(el, props, api) {
         });
         const star = make('span', 'wv-key-star', '★', { 'aria-hidden': 'true' });
         item.append(star, head, unpin);
-        if (person.doing) item.append(make('span', 'wv-key-sub', person.doing));
-        if (person.last) item.append(make('span', 'wv-key-sub', person.last));
+        // What they are doing now (an away person's own line; never a role, goal or Next), and how old the news is.
+        // Their place when known (an away person's record or newest step), else the away status line stays.
+        if (person.away && person.place) item.append(make('span', 'wv-key-sub wv-key-place', person.place));
+        if (person.away && (person.step || person.doing)) item.append(make('span', 'wv-key-sub wv-key-doing', person.step || person.doing));
+        if (person.newsAgo) item.append(make('span', 'wv-key-sub wv-key-ago', `News ${person.newsAgo}`));
         return item;
     }
 
@@ -85,14 +88,15 @@ function render(el, props, api) {
     function draw() {
         if (gone) return;
         const data = value && typeof value === 'object' ? value : {};
-        const people = (Array.isArray(data.people) ? data.people : []).filter(person => person && typeof person.name === 'string');
+        // Elsewhere: the pinned people who are not in the scene (the ones who are show in People here).
+        const people = (Array.isArray(data.people) ? data.people : []).filter(person => person && typeof person.name === 'string' && person.here !== true);
         const parts = [];
         if (people.length) {
             const list = make('ul', 'wv-key-list');
             list.append(...people.map(row));
             parts.push(list);
         } else {
-            parts.push(make('p', 'sd-empty', 'No one is pinned yet. Pin someone to keep their story going while they are away.'));
+            parts.push(make('p', 'sd-empty', data.hasPeople ? 'Everyone you pinned is here.' : 'No one is pinned yet. Pin someone to keep their story going while they are away.'));
         }
         const actions = make('div', 'wv-key-actions');
         const pin = button(make, choosing ? 'Close' : '+ Pin', 'ss-button-quiet wv-key-pin', null, () => {
@@ -108,7 +112,12 @@ function render(el, props, api) {
         parts.push(actions);
         if (choosing) parts.push(chooser(Array.isArray(data.choices) ? data.choices : []));
         if (error) parts.push(make('p', 'sd-reason', error, { role: 'alert' }));
-        if (data.note) parts.push(make('p', 'wv-key-note', data.note));
+        // The token note is a fold behind an ⓘ (its words are also the tooltip).
+        if (data.note) {
+            const info = make('details', 'wv-key-info');
+            info.append(make('summary', 'wv-key-i', 'ⓘ', { title: data.note, 'aria-label': 'What the narrator is told' }), make('p', 'wv-key-note', data.note));
+            parts.push(info);
+        }
         root.replaceChildren(...parts);
         if (reveal) {
             reveal = false;

@@ -10,7 +10,8 @@ import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, TAIL_HEADER, chronicleTail } from '.
 import { SURFACE, TAIL_EVENTS, beforeGenerate, hashUnit, nearness, pickEvents, pickFresh, tailPick } from '../../../src/v2/chronicle/pick.js';
 import { agoText } from '../../../src/v2/chronicle/queries.js';
 import { part } from '../../../src/v2/chronicle/index.js';
-import { DIGEST_TAIL_BUDGET } from '../../../src/v2/chronicle/digest.js';
+import { BACKLOG_BUDGET, BACKLOG_STATIC, DIGEST_TAIL_BUDGET, backlogLines } from '../../../src/v2/chronicle/digest.js';
+import { BACKLOG_CHARS, BACKLOG_LINES, BACKLOG_TAG, agoWords, backlogBlock } from '../../../src/v2/chronicle/backlog.js';
 import { clockAt, command, eventNamed, lines, makeState, replay, runCommand, sceneAt, viewOf } from './helpers/fake-ctx.js';
 import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
 
@@ -40,7 +41,7 @@ test('the static part is the same bytes whatever the state; it names no event, c
     assert.match(GRAMMAR.world, /; \+ faction Name — /);
     assert.equal(GRAMMAR.faction, '', 'the faction has no line of its own: the world line carries it');
     assert.deepEqual(Object.keys(part.kinds).sort(), ['faction', 'world']);
-    assert.equal(part.context.budget, TAIL_BUDGET + DIGEST_TAIL_BUDGET);
+    assert.equal(part.context.budget, TAIL_BUDGET + DIGEST_TAIL_BUDGET + BACKLOG_BUDGET);
 });
 
 test('no open event, no tail; three or fewer open: all of them, with their place and the last news', () => {
@@ -176,4 +177,68 @@ test('"how long ago" in plain words', () => {
     assert.equal(agoText(null), '');
     const state = lines(makeState({ minutes: DAY }), '+ world Red Plague — coughing').state;
     assert.equal(eventNamed(state, 'Red Plague').updated, DAY);
+});
+
+// ---- [Earlier days] (spec items 8 and 9) -------------------------------------------------------------------------------------
+
+const pastDay = (day, extra = {}) => ({ day, date: `Goldwane ${day}`, short: `a quiet day ${day}.`, happened: [], eventLines: [], search: `Goldwane ${day}`, ...extra });
+
+test('8: [Earlier days]: nothing on a first day or with no clock; "N days ago" counted in code; newest day first; one line per day', () => {
+    assert.deepEqual(backlogBlock({ days: [pastDay(20)], now: 20 * DAY + 600 }), [], 'today only: nothing yet');
+    assert.deepEqual(backlogBlock({ days: [pastDay(19)], now: null }), []);
+    assert.deepEqual([0, 1, 3, 13].map(agoWords), ['today', 'yesterday', '3 days ago', '13 days ago']);
+    const block = backlogBlock({ days: [pastDay(18, { eventLines: ['Astra failed to deliver the salt'] }), pastDay(19), pastDay(20)], now: 21 * DAY });
+    assert.equal(block[0], BACKLOG_TAG);
+    assert.deepEqual(block.slice(1), ['Goldwane 20 (yesterday): a quiet day 20.', 'Goldwane 19 (2 days ago): a quiet day 19.']);
+    assert.ok(!block.join('\n').includes('Goldwane 18'), 'a third-last day with nothing to do with the scene stays out');
+});
+
+test('8: relevance: people present, the current place and open threads pull an older day in; the last two days are always in; at most 6 lines and about 200 tokens', () => {
+    const days = [
+        pastDay(10, { eventLines: ['Derk blamed Astra for the salt'], search: 'Goldwane 10 • Derk blamed Astra for the salt' }),
+        pastDay(11, { eventLines: ['Camped at Charcoal Pits'], search: 'Goldwane 11 • Camped at Charcoal Pits' }),
+        pastDay(12, { eventLines: ['Grey Ledger sealed the tally'], search: 'Goldwane 12 • Grey Ledger sealed the tally' }),
+        pastDay(13, { eventLines: ['Nothing to do with it'], search: 'Goldwane 13 • nothing' }),
+        pastDay(18), pastDay(19),
+    ];
+    const lines = block => block.slice(1).map(line => line.split(':')[0]);
+    assert.deepEqual(lines(backlogBlock({ days, now: 20 * DAY, present: ['Derk'], place: 'Charcoal Pits', threads: ['Grey Ledger'] })), ['Goldwane 19 (yesterday)', 'Goldwane 18 (2 days ago)', 'Goldwane 10 (10 days ago)', 'Goldwane 11 (9 days ago)', 'Goldwane 12 (8 days ago)'].sort((a, b) => Number(b.match(/\d+/)[0]) - Number(a.match(/\d+/)[0])));
+    assert.ok(!backlogBlock({ days, now: 20 * DAY, present: ['Derk'] }).join('\n').includes('Goldwane 13'));
+    // The cap: many relevant days, at most BACKLOG_LINES lines and BACKLOG_CHARS characters.
+    const many = Array.from({ length: 30 }, (_, i) => pastDay(i, { eventLines: [`Derk did thing ${i} ${'x'.repeat(120)}`], search: `Derk ${i}` }));
+    const big = backlogBlock({ days: many, now: 40 * DAY, present: ['Derk'] });
+    assert.ok(big.length - 1 <= BACKLOG_LINES);
+    assert.ok(big.join('\n').length <= BACKLOG_CHARS + 2);
+    assert.equal(backlogBlock({ days: many, now: 40 * DAY, present: ['Derk'] }).join('\n'), big.join('\n'), 'deterministic');
+});
+
+test('8: the per-thread rule: the Journal\'s one row per thread feeds the block, and the line reads "date (N days ago): …"', () => {
+    const day = pastDay(18, { eventLines: ['Perimeter Sweep (finished, 2 steps today): the basilisk bled out.'], search: 'Perimeter Sweep' });
+    const block = backlogBlock({ days: [day], now: 21 * DAY, threads: ['Perimeter Sweep'] });
+    assert.deepEqual(block, [BACKLOG_TAG, 'Goldwane 18 (3 days ago): Perimeter Sweep (finished, 2 steps today): the basilisk bled out.']);
+});
+
+test('8: backlogLines reads the Journal\'s known days (never a hidden line), the scene and the open threads; nothing while the digest is off', () => {
+    const journal = { days: [pastDay(18, { eventLines: ['Derk blamed Astra'], search: 'Derk' }), pastDay(19)] };
+    const query = (name) => ({
+        'director.journal': journal, 'director.time': { minutes: 20 * DAY }, 'scene.place': { name: 'Bluewatch' }, 'scene.present': [{ name: 'Derk' }], 'npc.present': ['Torka'],
+        'director.threads': [{ key: 'Salt run', status: 'active' }, { key: 'Old', status: 'resolved' }],
+    }[name] ?? null);
+    const view = { state: { domains: { chronicle: {}, director: { time: { minutes: 20 * DAY } } } }, query, feature: () => true };
+    const lines = backlogLines(view);
+    assert.equal(lines[0], BACKLOG_TAG);
+    assert.match(lines[1], /^Goldwane 19 \(yesterday\)/);
+    assert.match(lines.join('\n'), /Goldwane 18 \(2 days ago\): Derk blamed Astra/);
+    assert.deepEqual(backlogLines({ ...view, feature: () => false }), []);
+    assert.deepEqual(backlogLines({ ...view, query: () => null }), []);
+});
+
+test('9: the one static sentence is taught only while the block has lines (env.backlog), under the digest feature', () => {
+    const inline = part.context.inline[0];
+    assert.equal(inline.feature, 'story-director.digest');
+    assert.equal(inline.static({ backlog: false }), '');
+    assert.equal(inline.static({}), '');
+    assert.equal(inline.static({ backlog: true }), BACKLOG_STATIC);
+    assert.doesNotMatch(BACKLOG_STATIC, /\d/);
+    assert.equal(part.context.static({ chronicle: false }), '', 'the world paragraph\'s own gate is untouched');
 });

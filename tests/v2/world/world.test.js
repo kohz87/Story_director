@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DAYS_ID, FEATURE, PEOPLE_WIDGET, WORLD_ID, createPeopleWidget, daysScreen, holidays, part, worldScreen } from '../../../src/v2/world/index.js';
+import { DAYS_ID, FEATURE, FOLD_WIDGET, PEOPLE_WIDGET, WORLD_ID, createFoldWidget, createPeopleWidget, daysScreen, foldMemory, holidays, part, worldScreen } from '../../../src/v2/world/index.js';
 import { DIGEST_FEATURE } from '../../../src/v2/chronicle/days.js';
 import { createModule, storyDirectorModule } from '../../../src/v2/module.js';
 import { makeCalendar } from '../../../src/calendar.js';
@@ -75,7 +75,7 @@ test('Story Director alone: Here with plain names, known news and factions newes
     const host = await story();
     const { world, journal } = worldData(host);
     host.close();
-    assert.deepEqual(world.here.place, { name: 'Harbour', region: '', kind: '' });
+    assert.deepEqual(world.here.place, { name: 'Harbour', line: 'Harbour', region: '', kind: '' });
     assert.deepEqual(world.here.present, ['Mira', 'Old Tom', 'Brecht', 'Kell']);
     assert.equal(world.here.nsd, false);
     assert.deepEqual(world.here.people.map(person => [person.name, person.stance, person.dossier]), [['Mira', '', false], ['Old Tom', '', false], ['Brecht', '', false], ['Kell', '', false]]);
@@ -126,7 +126,7 @@ test('with NPC State Delta: each person present is a chip with their stance, and
     assert.deepEqual(opened, ['Old Tom']);
     // Without NPC State Delta on the page the chips are plain names, no button.
     const plain = drawWorld({ world, journal }, { widgets: { [PEOPLE_WIDGET]: createPeopleWidget({ open: () => null }) } });
-    assert.equal(plain.el.querySelectorAll('button').length, 0);
+    assert.equal(plain.el.querySelectorAll('button.wv-link').length, 0);
 });
 
 test('the Journal: each day with places, people met, news and quests; today so far; no arc line', async () => {
@@ -157,7 +157,7 @@ test('the Journal: each day with places, people met, news and quests; today so f
     assert.equal(el.querySelectorAll('.wv-now').length, 0, 'Journal picked: the Now view is not drawn');
     const days = el.querySelectorAll('.wv-day');
     assert.deepEqual(days.map(node => node.querySelector('.wv-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
-    assert.match(squash(days[2].textContent), /Met ?Mira ?Old Tom/);
+    assert.match(squash(days[2].textContent), /Met 2 ?Mira ?Old Tom/);
     set({ find: 'brecht' });
     assert.deepEqual(el.querySelectorAll('.wv-day').map(node => node.querySelector('.wv-date').textContent), ['June 4, 1200']);
 });
@@ -247,7 +247,9 @@ test('Story Director alone with no scene, no clock and no chronicle: plain sente
     const { el, warnings } = drawWorld(data);
     assert.deepEqual(warnings, []);
     const textOf = squash(el.textContent);
-    for (const phrase of ['Nowhere named yet.', 'No one else is in the scene.', 'The story\'s clock is not set', 'No news yet.', 'No factions known yet.']) assert.ok(textOf.includes(phrase), phrase);
+    for (const phrase of ['Nowhere named yet.', 'No one else is in the scene.', 'The story\'s clock is not set', 'No news yet.']) assert.ok(textOf.includes(phrase), phrase);
+    assert.ok(!textOf.includes('Factions'), 'Factions: shown only once one is known');
+    assert.ok(!textOf.includes('Around here'), 'Around here is gone');
     assert.ok(createModule().screens.some(screen => screen.id === WORLD_ID));
 });
 
@@ -265,10 +267,10 @@ test('Here shows the weather: the rule\'s with no ~ weather line, the story\'s o
         assert.equal(ruled, host.sdk.query('scene.weather').text, 'the same words the Status card shows');
         const drawn = drawWorld(worldData(host));
         assert.deepEqual(drawn.warnings, []);
-        assert.ok(squash(drawn.el.textContent).includes(`Weather ${ruled}`), squash(drawn.el.textContent).slice(0, 200));
+        assert.equal(squash(drawn.el.querySelector('.wv-weather').textContent), ruled, 'a cloud icon and the words, no label');
         await host.send('The rain sets in.', said('Rain falls hard.', ['~ weather heavy rain']));
         assert.equal(here().weather, 'heavy rain', 'the story\'s own word wins');
-        assert.ok(squash(drawWorld(worldData(host)).el.textContent).includes('Weather heavy rain'));
+        assert.equal(squash(drawWorld(worldData(host)).el.querySelector('.wv-weather').textContent), 'heavy rain');
         await host.send('Later that day.', said('The rain goes on.', []));
         assert.equal(here().weather, 'heavy rain', 'it stands for the rest of that day and place');
         await host.send('Days later.', said('Another morning.', ['~ time June 9, 1200, 08:00 am']));
@@ -286,8 +288,102 @@ test('Here has no Weather row while the weather is off or there is none', async 
         const data = worldData(host);
         assert.equal(data.world.here.weather, '');
         const drawn = drawWorld(data);
-        assert.ok(!squash(drawn.el.textContent).includes('Weather'), 'no row, no heading, no empty line');
+        assert.equal(drawn.el.querySelector('.wv-weather'), null, 'no row, no empty line');
     } finally {
         host.close();
     }
+});
+
+// ---- World and Director tabs: Here, Leads, folds -----------------------------------------------------------------------
+
+test('Here: the place line "Town · Spot" with the kind, the region, the time then the date; the header carries no date', async () => {
+    const host = await worldHost();
+    try {
+        await host.send('Hello.', said('The overlook.', ['~ time June 3, 1200, 06:20 pm', '~ place Auvoth · Seventh Seal Terrace | kind: wild']));
+        const { world } = worldData(host);
+        assert.match(world.here.place.name, /^Auvoth/);
+        assert.equal(world.here.place.line, 'Auvoth · Seventh Seal Terrace');
+        assert.equal(world.time, '06:20 pm');
+        assert.equal(world.date, 'June 3, 1200');
+        const drawn = drawWorld(worldData(host));
+        assert.deepEqual(drawn.warnings, []);
+        assert.equal(squash(drawn.el.querySelector('.wv-place').textContent), 'Auvoth · Seventh Seal Terrace wild');
+        assert.equal(squash(drawn.el.querySelector('.wv-when').textContent), '06:20 pm · June 3, 1200');
+        assert.equal(drawn.el.querySelector('header .wv-when, .wv-top .wv-when'), null, 'the date is not in the header row');
+        assert.equal(drawn.el.querySelector('[data-kind="around"]'), null, 'Around here is gone');
+    } finally {
+        host.close();
+    }
+});
+
+test('Leads: the hooks the story told, newest first, with what was heard, where and when; never Next; none the planner made', async () => {
+    const host = await story();
+    const planned = host.sdk.query('director.world.leads');
+    assert.deepEqual(planned.rows.map(row => row.name).filter(name => name === 'Salvage Rights'), [], 'a planner hook is no lead');
+    assert.deepEqual(leaks(planned), []);
+    host.close();
+    const alone = await worldHost();
+    try {
+        await alone.send('Hello.', said('The guild.', ['~ time June 3, 1200, 08:00 am', '+ hook Toll Audit — customs dispute the seal | where: Guild Office | then: the wagons are impounded']));
+        await alone.send('Later.', said('Two days on.', ['~ time June 5, 1200, 08:00 am', '+ hook Broken Axle — a hub cracks']));
+        const leads = alone.sdk.query('director.world.leads');
+        assert.deepEqual([leads.has, leads.count], [true, 2]);
+        assert.deepEqual(leads.rows.map(row => [row.name, row.heardAgo]), [['Broken Axle', 'today'], ['Toll Audit', '2 days ago']], 'newest first');
+        const audit = leads.rows.find(row => row.name === 'Toll Audit');
+        assert.equal(audit.heard, 'customs dispute the seal');
+        assert.equal(audit.where, 'Guild Office');
+        assert.ok(!JSON.stringify(leads).includes('impounded'), 'never the Next line');
+        const drawn = drawWorld({ ...worldData(alone), leads });
+        assert.deepEqual(drawn.warnings, []);
+        const section = drawn.el.querySelector('[data-fold="leads"]');
+        assert.equal(squash(section.querySelector('.sd-fold-head').textContent), 'Leads 2');
+        assert.match(squash(section.querySelector('.sd-lead').textContent), /^Broken Axle a hub cracks Heard today$/);
+        assert.match(squash(section.textContent), /Toll Audit customs dispute the seal Guild Office ?Heard 2 days ago/);
+        assert.equal(drawWorld({ ...worldData(alone), leads: { rows: [], has: false, count: 0 } }).el.querySelector('[data-fold="leads"]'), null, 'no leads, no section');
+    } finally {
+        alone.close();
+    }
+});
+
+test('folds: every Now section folds with a chevron and its count; remembered per chat on this device; a blocked storage keeps it for the page', () => {
+    const data = { world: { here: { place: null, moved: false, weather: '', people: [], present: [], chatter: [], nsd: false, hasPeople: false }, news: [{ name: 'A', kind: 'world', state: 'resolved', summary: '', place: '', factions: '', ago: '' }], factions: [{ name: 'Guild', summary: '', area: '', stance: '' }], upcoming: [{ kind: 'event', name: 'Fair', when: 'June 9', label: 'today', overdue: false, goal: '' }], upcomingDays: 30, today: '', date: '', time: '', clockSet: true, hasNews: true, hasFactions: true, hasUpcoming: true, newsCount: 1, factionCount: 1 }, journal: null, trip: null, threads: { on: true }, keys: { on: true, elsewhere: 0, hasPeople: false, people: [], choices: [] }, leads: { rows: [{ name: 'L', heard: 'x', heardAgo: 'today', where: '' }], has: true, count: 1 } };
+    const store = new Map();
+    const storage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    const memory = foldMemory(storage);
+    const widgets = { [FOLD_WIDGET]: createFoldWidget({ memory }), 'story-director.key-people': { props: {}, primary: 'value', validate: () => [], render: () => ({}) } };
+    const drawn = drawWorld(data, { widgets });
+    assert.deepEqual(drawn.warnings, []);
+    const ids = drawn.el.querySelectorAll('[data-fold]').map(node => node.getAttribute('data-fold'));
+    assert.deepEqual(ids, ['people', 'elsewhere', 'leads', 'upcoming', 'news', 'factions']);
+    const head = id => drawn.el.querySelector(`[data-fold="${id}"] .sd-fold-head`);
+    assert.deepEqual(['upcoming', 'news', 'factions', 'leads'].map(id => squash(head(id).textContent)), ['Upcoming next 30 days', 'News and events 1', 'Factions 1', 'Leads 1']);
+    assert.ok(head('news').querySelector('.sd-fold-chev'), 'a chevron in the head');
+    const section = id => drawn.el.querySelector(`[data-fold="${id}"]`);
+    const body = id => section(id).children.find(node => node.classList.contains('sd-fold-body'));
+    assert.equal(body('news').hidden, false, 'open by default');
+    head('news').click();
+    assert.equal(body('news').hidden, true);
+    assert.ok(section('news').classList.contains('sd-fold-shut'));
+    assert.equal(head('news').getAttribute('aria-expanded'), 'false');
+    assert.equal(body('upcoming').hidden, false, 'one fold does not move another');
+    assert.deepEqual(JSON.parse(store.get('story-director.world.folds')), { '/news': false }, 'remembered, keyed by chat (no chat open: an empty id)');
+    // Drawn again (a new reply): it stays folded; the chat's own folds are its own.
+    const again = drawWorld(data, { widgets });
+    assert.equal(again.el.querySelector('[data-fold="news"]').classList.contains('sd-fold-shut'), true);
+    assert.equal(again.el.querySelector('[data-fold="upcoming"]').classList.contains('sd-fold-shut'), false);
+    // The chat id is a prop of every head, so a chat switch updates the heads and reads the folds of the new chat.
+    assert.ok(createFoldWidget().props.chat, 'the fold head takes the chat id');
+    assert.match(worldScreen.template, /"chat":"\{\{ q\.chat\.id \}\}"/);
+    assert.equal(worldScreen.data.chat.query, 'director.world.chat');
+    assert.equal(typeof part.queries['director.world.chat']().id, 'string');
+    memory.set('chat-2/news', true);
+    assert.equal(memory.get('chat-2/news'), true);
+    assert.equal(memory.get('chat-1/news'), null);
+    // A storage that throws (blocked, full): nothing breaks and the page keeps what was set.
+    const blocked = foldMemory({ getItem() { throw new Error('blocked'); }, setItem() { throw new Error('full'); } });
+    assert.equal(blocked.get('c/news'), null);
+    assert.doesNotThrow(() => blocked.set('c/news', false));
+    assert.equal(blocked.get('c/news'), false);
+    // A damaged value is ignored.
+    assert.equal(foldMemory({ getItem: () => '{not json', setItem() {} }).get('c/x'), null);
 });
