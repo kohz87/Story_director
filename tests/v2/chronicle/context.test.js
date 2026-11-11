@@ -240,11 +240,14 @@ test('9: the sentence and the block are one pinned cue (never a static line), un
     const [cue, ...more] = backlogCue(view);
     assert.equal(more.length, 0);
     assert.equal(cue.keep, true, 'pinned: kept whatever the tail budget says');
-    assert.equal(cue.text, `${BACKLOG_STATIC}\n${backlogLines(view).join('\n')}`, 'the sentence first, then the block');
+    const all = backlogLines(view);
+    assert.equal(cue.text, `${BACKLOG_STATIC}\n${all.slice(0, 2).join('\n')}`, 'the sentence, the tag and the newest day only');
+    assert.ok(cue.text.length <= 320, 'about 80 tokens');
+    assert.deepEqual(part.context.tail(view).optional, all.slice(2), 'the older day lines are optional tail lines');
     assert.equal(part.hooks.beforeGenerate(view).lines[0].text, cue.text, 'the hook hands it to the host');
     assert.deepEqual(backlogCue({ ...view, query: () => null }), []);
     assert.equal(part.hooks.beforeGenerate({ ...view, query: () => null }), undefined);
-    assert.equal(part.context.tail(view).optional.some(line => line.includes(BACKLOG_TAG)), false, 'no longer an optional tail line (the host dropped those first)');
+    assert.equal(part.context.tail(view).optional.some(line => line.includes(BACKLOG_TAG)), false, 'the tag rides only in the pinned cue');
     assert.equal(part.context.inline, undefined, 'and no static sentence: the cached prefix never changes mid-chat');
     assert.doesNotMatch(BACKLOG_STATIC, /\d/);
     assert.equal(part.context.static({ chronicle: false }), '', 'the world paragraph\'s own gate is untouched');

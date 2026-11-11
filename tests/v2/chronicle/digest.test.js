@@ -331,3 +331,31 @@ test('8/9 on the host: under a tail budget far too small, the [Earlier days] cue
         host.close();
     }
 });
+
+test('8/9 on the host: with a realistic competing tail (Story Block lines about 540 tokens, tailBudget 550) the pinned cue is at most 320 characters and the current-state lines survive', async () => {
+    const run = async budget => {
+        const host = await newHost({}, { host: { tailBudget: budget } });
+        try {
+            const items = Array.from({ length: 14 }, (_, i) => `+ item Trail ration number ${i} (salted strips of venison wrapped in waxed cloth for the road)`);
+            await host.send('Start.', reply('Evening.', ['~ time June 3, 1200, 08:00 pm', '~ place Harrow', '+ coin 40', ...items, '+ present Maren Galt']));
+            await host.send('Sleep.', reply('A long sleep.', ['! time +14h', '~ quest Find the lost ferry | open']));
+            await host.send('Wake.', reply('Morning.'));
+            await host.send('More.', reply('Later.'));
+            return sent(host, TAIL_KEY).at(-1);
+        } finally {
+            host.close();
+        }
+    };
+    const tight = await run(550);
+    const roomy = await run(3000);
+    const pinned = tight.slice(tight.indexOf(BACKLOG_STATIC)).split('\n').slice(0, 3).join('\n');
+    assert.ok(pinned.length <= 320, `the pinned cue is ${pinned.length} characters`);
+    assert.match(tight, /\[Earlier days\]\nJune 3, 1200 \(yesterday\): /);
+    // The lines of the other sections the narrator needs now are not what the cue pushed out.
+    for (const needle of [/Place/, /Wallet/, /Carried/]) assert.match(tight, needle);
+    // Every current-state line the same chat sends with room is still sent under the tight budget (the cue did not push one out).
+    const required = roomy.split('\n').filter(line => /^(Place|Present|Wallet|Carried|Standing|Fame)\b/.test(line));
+    assert.ok(required.length >= 3, 'the chat has current-state lines');
+    for (const line of required) assert.ok(tight.includes(line), `lost under the budget: ${line}`);
+    assert.ok(tight.length <= 550 * 4 + 320, `the tail is ${tight.length} characters`);
+});

@@ -23,7 +23,7 @@
 import { threadOutcome } from './thread-outcome.js';
 import { applyFactionLine, applyWorldLine, edit, lasting, remove, rumor } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
-import { BACKLOG_BUDGET, DIGEST_TAIL_BUDGET, NOTE, backlogCue, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
+import { BACKLOG_BUDGET, DIGEST_TAIL_BUDGET, NOTE, backlogCue, backlogOlder, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
 import { initialChronicle, validateChronicle } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, chronicleTail } from './note.js';
 import { SURFACE, beforeGenerate as surfaceHook, surface } from './pick.js';
@@ -58,10 +58,10 @@ export function beforeGenerate(view) {
     return commands.length || lines.length ? { ...(commands.length ? { commands } : {}), ...(lines.length ? { lines } : {}) } : undefined;
 }
 
-/** `context.tail(view)`: the [World] lines (while the threads feature is on) and the last day's line after a time skip (optional). The [Earlier days] block is a cue (beforeGenerate). */
+/** `context.tail(view)`: the [World] lines (while the threads feature is on) and the last day's line after a time skip (optional). The [Earlier days] cue is pinned (beforeGenerate); its older day lines are optional. */
 export function tail(view) {
     const out = threadsOn(view) ? chronicleTail(view) : { lines: [], optional: [] };
-    const optional = [...out.optional, digestTailLine(view)].filter(Boolean);
+    const optional = [...out.optional, digestTailLine(view), ...backlogOlder(view)].filter(Boolean);
     return optional.length ? { lines: out.lines, optional } : out;
 }
 
