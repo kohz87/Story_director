@@ -31,8 +31,11 @@ Generated 2026-11-07.
 - `src/v2/chronicle/digest.js`: Note and digest commands that turn fresh change receipts into daily Chronicle facts and tail lines.
 - `src/v2/chronicle/thread-outcome.js`: Records a thread's outcome text in the Chronicle quest log for the committing reply.
 
+## src/v2/ripples/
+- `src/v2/ripples/index.js`: Hidden sway per named power from quests, world events, standing and fights: validates the pack's `ripples` table, scores with caps, picks the leader, and is the part (queries `ripples.sway` / `ripples.leader`, no stored state).
+
 ## src/v2/screens/
-- `src/v2/screens/behind.js`: the Director screen's plan cards (widget `story-director.plan`: Beats, hooks with Next, Off-screen, Secrets, Problems, "+N more") and the older Reveal-locked Behind widget.
+- `src/v2/screens/behind.js`: the Director screen's plan cards (widget `story-director.plan`: Beats, hooks with Next, Off-screen, Secrets, Problems, "+N more") and the older Reveal-locked Behind widget. The Ripples card (widget `story-director.ripples`: sway bars and top reasons) is drawn here too.
 - `src/v2/screens/dom.js`: Shared text-only DOM helpers for Director widgets: elements, buttons, plurals and spacing.
 - `src/v2/screens/quest-cards.js`: Read-only Quests widget drawing active, offered and finished threads as expandable cards.
 - `src/v2/screens/status-card.js`: Inline reply card showing time, place, weather, travel, hero state and current goal from that reply's state.

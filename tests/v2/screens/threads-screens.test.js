@@ -149,7 +149,7 @@ test('the Director\'s layout is one column of cards at every width: the plan car
     assert.match(directorScreen.css, /\.sd-director > \* \{ min-width: 0; \}/);
     assert.match(directorScreen.css, /\.sd-director > ss-widget \{ display: block; \}/);
     assert.match(directorScreen.css, /\.sd-empty, \.sd-wide \{ grid-column: 1 \/ -1; \}/);
-    assert.equal((directorScreen.template.match(/class="sd-wide"/g) ?? []).length, 2, 'the arc and the plan span the whole row');
+    assert.equal((directorScreen.template.match(/class="sd-wide"/g) ?? []).length, 3, 'the arc, the plan and the Ripples card span the whole row');
 });
 
 test('status card: its title is "Where things stand" and its own summary slot reads "<clock time>, <place>"', () => {

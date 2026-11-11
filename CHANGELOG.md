@@ -262,6 +262,7 @@ For a pinned Ersveil adventure, start a fresh chat with **Setup → Pin Ersveil 
 
 ## Unreleased
 
+- **Ripples: a hidden sway per power from the player's deeds.** Story Director works out, from what the chat already recorded (quests done or failed for a power's people, world events that ended for or against them, standing changes, board fights against them), how much each named power or claimant is favoured; nothing new is stored. A pack can read it in its timeline conditions (`ripples.leader`) and the Director tab shows a Ripples card with each power's sway and why. Needs a pack `ripples` table (Ersveil's comes in a later pack release).
 - Licence: MIT (was GPL-3.0), so the module can be a base for other extensions. Releases already published keep the licence they shipped with.
 
 - **Fights only with a ready RPG Battle** (`src/v2/fights.js`, `module.js`, `arc/controller.js`). On a Story Block host with module lifecycle (2.0.0-beta.2 and later, track E), the fight runner counts only when its `sdk.modules()` entry is `ready`: a dormant or restore-pending RPG Battle gets no encounter requests, and the arc planner asks for no fights (one rule, `fightsAmong`, used by both). Older hosts keep the old command probe. Testkit synced to Story Block main cd2e2ec.
