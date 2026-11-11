@@ -53,10 +53,19 @@ export function packWorld(query) {
     // The packs answer with fresh copies each time, so what they gave is compared by content: the same content gives the world built
     // before (one slot; a pack installed, switched or changed gives other content and so a new build).
     if (!readable) return buildPackWorld(rawPlaces, rawRoutes, false);
-    let signature;
-    try { signature = JSON.stringify([rawPlaces, rawRoutes]); } catch { return buildPackWorld(rawPlaces, rawRoutes, true); }
-    if (lastPackWorld?.signature !== signature) lastPackWorld = { signature, world: buildPackWorld(rawPlaces, rawRoutes, true) };
+    if (!(lastPackWorld && sameJson(lastPackWorld.raw, [rawPlaces, rawRoutes]))) lastPackWorld = { raw: [rawPlaces, rawRoutes], world: buildPackWorld(rawPlaces, rawRoutes, true) };
     return { ...lastPackWorld.world };
+}
+
+// Whether two answers of the packs hold the same (JSON values, key order too): a walk with no text made, and an early stop at the first difference.
+function sameJson(a, b) {
+    if (a === b) return true;
+    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return Number.isNaN(a) && Number.isNaN(b);
+    const keys = Object.keys(a);
+    const other = Object.keys(b);
+    if (keys.length !== other.length) return false;
+    for (let i = 0; i < keys.length; i++) if (keys[i] !== other[i] || !sameJson(a[keys[i]], b[keys[i]])) return false;
+    return true;
 }
 
 let lastPackWorld = null;
