@@ -2,11 +2,30 @@
 
 import {
     ECHO, ENTRY_HAPPENED, MAX_ITEM, MAX_MET, MAX_NAME, MAX_NPCS, MAX_PLACES, MAX_QUESTS,
-    MAX_WORLD, PLANNED_TYPES, PRESENT_TYPES, TOLD_ELSEWHERE, clockSet, cut, dayOf, flat,
+    MAX_WHO, MAX_WORLD, PLANNED_TYPES, PRESENT_TYPES, SCENE_TYPES, TOLD_ELSEWHERE, clockSet, cut, dayOf, flat,
     isBookkeeping, isInt, isRecord, quiet, text,
 } from './shared.js';
 
 // ---- facts out of one day's receipts ----------------------------------------------------------
+
+// Plain descriptions Story Block lets a present list hold ("- present clerk", "+ present the collectors"): not people with names.
+const NOT_NAMES = /^(?:the|an?|some|several|many|few|all|both|another|other|one|two|three|four|five|six|seven|eight|nine|ten|dozens?|guards?|crowd|clerks?|collectors?|villagers?|soldiers?|townsfolk|servants?|merchants?|customers?|patrons?|strangers?|man|woman|men|women|children|people|everyone|nobody|someone)(?![\p{L}\p{N}])/iu;
+const isNamed = name => /^\p{L}/u.test(name) && !/^\p{Ll}/u.test(name) && !NOT_NAMES.test(name);
+
+// The people of a present list (named people only, once each, in order, at most MAX_WHO).
+function namesOf(list) {
+    const out = [];
+    const seen = new Set();
+    for (const name of list) if (typeof name === 'string' && isNamed(flat(name))) pushUnique(out, name, MAX_WHO, seen);
+    return out;
+}
+
+/** The scene after a run of receipts: `present` (the people in it before) moved on by each present receipt's `data.present`. */
+export function sceneOf(receipts, present = []) {
+    let scene = namesOf(present);
+    for (const receipt of receipts) if (SCENE_TYPES.has(receipt?.type) && Array.isArray(receipt.data?.present)) scene = namesOf(receipt.data.present);
+    return scene;
+}
 
 const keyOf = name => flat(name).normalize('NFKC').toLowerCase();
 
@@ -54,11 +73,13 @@ function fightOf(receipt) {
 /**
  * What a run of receipts (one reply's, on one day) holds, as a day-facts entry is kept
  * (`chronicle.dayFacts`): `{ day, count, happened: [{ text, told, type?, thread? }], more, places, fights, money,
- * npcs: [{ name, meter, from, to }], world: [{ id, text }], revs: [first, last] }`. Quests are not in
+ * npcs: [{ name, meter, from, to }], world: [{ id, text }], revs: [first, last] }`. `who` on a happened line: the people in the scene
+ * then (the last present receipt's `data.present`, `present` the scene the walk starts with); only when `present` is an array (notes, not an older day read back). Quests are not in
  * it: they are read from the threads' own stamps when the day is written. `lasting(rev)` (queries.js) gives
  * the entries a pack event's `chronicle.lasting` step wrote at that revision, for the day's world lines.
  */
-export function entryOf(receipts, day = null, { lasting = null } = {}) {
+export function entryOf(receipts, day = null, { lasting = null, present = null } = {}) {
+    let scene = Array.isArray(present) ? namesOf(present) : null;
     const candidates = [];
     const seenHappened = new Set();
     const places = [];
@@ -77,13 +98,15 @@ export function entryOf(receipts, day = null, { lasting = null } = {}) {
         if (quiet(receipt) || clockSet(receipt) || PLANNED_TYPES.has(receipt.type)) continue;
         count += 1;
         const data = isRecord(receipt.data) ? receipt.data : {};
+        // The scene after this receipt's own change: the one who came in (or went out, or was left behind by a move) with it was there for the line.
+        if (scene && SCENE_TYPES.has(receipt.type) && Array.isArray(data.present)) scene = namesOf(data.present);
         const said = cut(receipt.summary, MAX_ITEM);
         const happened = happenedText(receipt);
         if (happened && !seenHappened.has(happened)) {
             seenHappened.add(happened);
             // The receipt's type (what kind of line it is) and the thread it touched stay with the line, for the Journal's kinds.
             const thread = typeof data.thread === 'string' ? data.thread : typeof data.quest === 'string' ? data.quest : '';
-            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length, ...tagOf(receipt.type, thread) });
+            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length, ...tagOf(receipt.type, thread), ...(scene?.length ? { who: scene } : {}) });
         }
         if (receipt.type === 'capture.place' && data.moved === true) pushUnique(places, data.name, MAX_PLACES, seenPlaces);
         // Story Block's scene: who came into the scene (`+ present`, the reader's scene.present).
@@ -163,7 +186,7 @@ export function eventsOf(receipts, limit = 500) {
 // A line's kind: its receipt's type and thread id, kept only when they are short plain names (a stored entry's `type` / `thread`).
 const NAMEISH = /^[A-Za-z0-9_.:-]{1,64}$/;
 const tagOf = (type, thread) => ({ ...(NAMEISH.test(type) ? { type } : {}), ...(NAMEISH.test(thread) ? { thread } : {}) });
-const itemOf = ({ text: said, told, type, thread }) => ({ text: said, told, ...(type ? { type } : {}), ...(thread ? { thread } : {}) });
+const itemOf = ({ text: said, told, type, thread, who }) => ({ text: said, told, ...(type ? { type } : {}), ...(thread ? { thread } : {}), ...(Array.isArray(who) && who.length ? { who } : {}) });
 
 const textOrNull = value => (typeof value === 'string' && value ? cut(value, MAX_NAME) : null);
 
@@ -231,6 +254,8 @@ export function factsOf(entries, { state = null, day = null, dayOfRev = () => nu
         happened: merged.happened.map(item => item.text),
         // What kind each line is (parallel to `happened`): its receipt type, then its thread id, "" when unknown.
         tags: merged.happened.map(item => (item.type || item.thread ? [item.type || '-', item.thread].filter(Boolean).join(' ') : '')),
+        // Who was there at each line (parallel to `happened`): the names of the entry's `who`, [] for a line without (an older day).
+        who: merged.happened.map(item => (Array.isArray(item.who) ? [...item.who] : [])),
         more: merged.more,
         places: merged.places,
         quests: questsOf(state, { dayOfRev, day }),

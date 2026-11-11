@@ -3,7 +3,7 @@
 import { slotValue } from '../../slot.js';
 import {
     ENTRY_HAPPENED, ENTRY_KEY, FOLD_AT, FULL_CEILING, KEEP_CEILING, MAX_DATE, MAX_HAPPENED,
-    MAX_ITEM, MAX_LINE, MAX_MET, MAX_NAME, MAX_NPCS, MAX_PLACES, MAX_QUESTS, MAX_WORLD,
+    MAX_ITEM, MAX_LINE, MAX_MET, MAX_NAME, MAX_NPCS, MAX_PLACES, MAX_QUESTS, MAX_WHO, MAX_WORLD,
     QUEST_LOG_TEXT, codePoints, isInt, isRecord,
 } from './shared.js';
 
@@ -15,7 +15,7 @@ const NAMEISH = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 // ---- the validator ----------------------------------------------------------------------------
 
-const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'tags', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'met', 'revs', 'made', 'src'];
+const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'tags', 'who', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'met', 'revs', 'made', 'src'];
 const KEYS_BRIEF = ['day', 'date', 'line', 'brief', 'count', 'made', 'cats'];
 const CATS_CEILING = 2400;
 const CAT_NAMES = ['met', 'relationships', 'events', 'party', 'items', 'reputation', 'news'];
@@ -46,6 +46,7 @@ function digestErrors(key, stored) {
     if (!textsOk(digest.happened, MAX_HAPPENED, MAX_ITEM)) errors.push(`${at}.happened must be at most ${MAX_HAPPENED} lines.`);
     if (!countOk(digest.more)) errors.push(`${at}.more must be a whole number.`);
     if (digest.tags !== undefined && (!Array.isArray(digest.tags) || digest.tags.length > MAX_HAPPENED || !digest.tags.every(tag => textOk(tag, TAG_MAX)))) errors.push(`${at}.tags must be at most ${MAX_HAPPENED} short texts.`);
+    if (digest.who !== undefined && (!Array.isArray(digest.who) || digest.who.length > MAX_HAPPENED || !digest.who.every(names => textsOk(names, MAX_WHO, MAX_NAME)))) errors.push(`${at}.who must be, per line, at most ${MAX_WHO} names.`);
     if (!textsOk(digest.places, MAX_PLACES, MAX_NAME)) errors.push(`${at}.places must be at most ${MAX_PLACES} names.`);
     const quests = digest.quests;
     if (!isRecord(quests) || Object.keys(quests).some(name => !['taken', 'done', 'failed', 'dropped'].includes(name))
@@ -74,9 +75,9 @@ function digestErrors(key, stored) {
 // first): the digest follows them (daysOf), so a reply of that day deleted later takes its facts out
 // of the digest and its time-skip line. They are removed by key when the day goes short or past
 // FOLLOW_MAX (its digest then stays as it was, `src` cleared), and at once for a day not written from
-// them. `chronicle.noted = [{ rev, minutes, from, settle, gap? }]` is where the
+// them. `chronicle.noted = [{ rev, minutes, from, settle, gap?, present? }]` is where the
 // notes got to: the revision and the clock after the last one, the day notes began (`from`), the
-// time part's last settle jump seen (`settle`), and, while the digest feature is off, where the day
+// time part's last settle jump seen (`settle`), who was in the scene then (`present`, the next note's start), and, while the digest feature is off, where the day
 // facts stopped (`gap: { rev, minutes }`): the first note with the feature back on reads the receipts
 // from there, so the days that ended while it was off are written too (B-c2-3).
 
@@ -93,7 +94,8 @@ function entryErrors(key, entry) {
     if (!countOk(entry.count) || !countOk(entry.more)) errors.push(`${at}.count and .more must be whole numbers.`);
     if (!Array.isArray(entry.happened) || entry.happened.length > ENTRY_HAPPENED
         || !entry.happened.every(item => isRecord(item) && textOk(item.text, MAX_ITEM) && typeof item.told === 'boolean'
-            && Object.keys(item).every(field => ['text', 'told', 'type', 'thread'].includes(field)) && ['type', 'thread'].every(field => item[field] === undefined || (typeof item[field] === 'string' && NAMEISH.test(item[field]))))) errors.push(`${at}.happened must be at most ${ENTRY_HAPPENED} { text, told, type?, thread? }.`);
+            && Object.keys(item).every(field => ['text', 'told', 'type', 'thread', 'who'].includes(field)) && ['type', 'thread'].every(field => item[field] === undefined || (typeof item[field] === 'string' && NAMEISH.test(item[field])))
+            && (item.who === undefined || textsOk(item.who, MAX_WHO, MAX_NAME)))) errors.push(`${at}.happened must be at most ${ENTRY_HAPPENED} { text, told, type?, thread?, who? }.`);
     if (!textsOk(entry.places, MAX_PLACES, MAX_NAME)) errors.push(`${at}.places must be at most ${MAX_PLACES} names.`);
     const fights = entry.fights;
     if (!isRecord(fights) || !['count', 'won', 'lost', 'fled'].every(name => countOk(fights[name]))) errors.push(`${at}.fights must be whole numbers.`);
@@ -138,8 +140,8 @@ export function validateDays(slice) {
             && (value.minutes === null || isInt(value.minutes)) && Object.keys(value).every(key => key === 'rev' || key === 'minutes'));
         if (!noted || !Array.isArray(slice.noted) || slice.noted.length !== 1 || !countOk(noted.rev)
             || !(noted.minutes === null || isInt(noted.minutes)) || !(noted.from === null || isInt(noted.from)) || !settleOk(noted.settle)
-            || !gapOk(noted.gap) || Object.keys(noted).some(key => !['rev', 'minutes', 'from', 'settle', 'gap'].includes(key))) {
-            errors.push('chronicle.noted must be null or { rev, minutes, from, settle, gap? }.');
+            || !gapOk(noted.gap) || !(noted.present === undefined || textsOk(noted.present, MAX_WHO, MAX_NAME)) || Object.keys(noted).some(key => !['rev', 'minutes', 'from', 'settle', 'gap', 'present'].includes(key))) {
+            errors.push('chronicle.noted must be null or { rev, minutes, from, settle, gap?, present? }.');
         }
     }
     if (slice.days !== undefined) {
