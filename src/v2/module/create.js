@@ -2,7 +2,8 @@
 
 import { CALENDAR_KEYS, liveCalendarSettings } from '../tracker/calendar-settings.js';
 import { packCalendarOf } from '../tracker/time.js';
-import { backlogLines } from '../chronicle/digest.js';
+import { backlogLines, digestOn } from '../chronicle/digest.js';
+import { FEATURE as WORLD_FEATURE } from '../world/known.js';
 import { rareKindsUsed } from '../rare.js';
 import { MODULE_ID, MODULE_NAME, PARTS, STORY_BLOCK_RANGE, VERSION } from './parts.js';
 import { LIVE_HOST, isObject, liveSdk, tryLive } from './shared.js';
@@ -45,7 +46,23 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         const pins = view?.state?.domains?.keypeople?.pins;
         if (isObject(view?.state?.domains)) env.keyPeople = isObject(pins) && Object.keys(pins).length > 0;
         // Whether the [Earlier days] block has lines: its one static sentence is taught only then, so a chat with no past day (and an older chat) sends the prompt it always did.
-        if (isObject(view?.state?.domains)) env.backlog = tryLive(() => backlogLines(view).length > 0, false) === true;
+        if (isObject(view?.state?.domains)) env.backlog = backlogKnown(view);
+    };
+    // Whether [Earlier days] has lines, kept for the head state it was worked out on: beforeGenerate's learn and the prompt build's learn
+    // read the same head (a write, swipe, delete, Re-read, reload or chat switch gives another state object, so it is worked out again).
+    // What else the answer reads (the digest and World features, this module's settings, the packs) is in the key and checked each time.
+    let known = null;
+    const backlogKnown = view => {
+        const work = () => tryLive(() => backlogLines(view).length > 0, false) === true;
+        let sig;
+        try {
+            const mine = typeof view.settings === 'function' ? view.settings(MODULE_ID) : view.settings;
+            sig = JSON.stringify([digestOn(view), view.feature?.(WORLD_FEATURE) ?? null, mine ?? null, view.query?.('packs.list', {}) ?? null]);
+        } catch { return work(); }
+        if (known && known.state === view.state && known.sig === sig) return known.value;
+        const value = work();
+        known = typeof sig === 'string' ? { state: view.state, sig, value } : null;
+        return value;
     };
     // The model call a part may ask for (the host's `callModel`); built each time the parts' views are, so a host that gains or loses it is followed.
     const modelOf = () => (typeof host?.callModel === 'function' && (typeof host.canCallModel !== 'function' || host.canCallModel()) ? Object.freeze({ callModel: request => host.callModel(request), chat: () => (typeof host.chat === 'function' ? host.chat() : []) }) : null);

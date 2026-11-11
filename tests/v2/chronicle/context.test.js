@@ -10,6 +10,8 @@ import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, TAIL_HEADER, chronicleTail } from '.
 import { SURFACE, TAIL_EVENTS, beforeGenerate, hashUnit, nearness, pickEvents, pickFresh, tailPick } from '../../../src/v2/chronicle/pick.js';
 import { agoText } from '../../../src/v2/chronicle/queries.js';
 import { part } from '../../../src/v2/chronicle/index.js';
+import { createModule } from '../../../src/v2/module.js';
+import { memoQueries } from '../../../src/v2/module/contexts.js';
 import { BACKLOG_BUDGET, BACKLOG_STATIC, DIGEST_TAIL_BUDGET, backlogLines } from '../../../src/v2/chronicle/digest.js';
 import { BACKLOG_CHARS, BACKLOG_LINES, BACKLOG_TAG, agoWords, backlogBlock } from '../../../src/v2/chronicle/backlog.js';
 import { clockAt, command, eventNamed, lines, makeState, replay, runCommand, sceneAt, viewOf } from './helpers/fake-ctx.js';
@@ -231,6 +233,60 @@ test('8: backlogLines reads the Journal\'s known days (never a hidden line), the
     assert.match(lines.join('\n'), /Goldwane 18 \(2 days ago\): Derk blamed Astra/);
     assert.deepEqual(backlogLines({ ...view, feature: () => false }), []);
     assert.deepEqual(backlogLines({ ...view, query: () => null }), []);
+});
+
+test('8: backlogLines is worked out once per prompt build (the memoized query), and again for the next build', () => {
+    let reads = 0;
+    const query = name => { if (name === 'director.journal') reads++; return { 'director.journal': { days: [pastDay(19)] }, 'director.time': { minutes: 20 * DAY } }[name] ?? null; };
+    const view = { state: { domains: { chronicle: {}, director: { time: { minutes: 20 * DAY } } } }, query, feature: () => true };
+    const build = memoQueries(view);
+    const first = backlogLines(build);
+    first.push('mutated');
+    assert.deepEqual(backlogLines(build), backlogLines(build));
+    assert.equal(backlogLines(build).includes('mutated'), false);
+    assert.equal(reads, 1);
+    backlogLines(memoQueries(view));
+    assert.equal(reads, 2);
+    // a view that is not a build's memo is never kept
+    backlogLines(view); backlogLines(view);
+    assert.equal(reads, 4);
+});
+
+test('8: the module learns "Earlier days" once per head and follows the feature, the settings, the packs and the head', () => {
+    let reads = 0;
+    let on = true;
+    let packs = [];
+    const journal = { days: [pastDay(19)] };
+    const view = (state, extra = {}) => ({
+        state, feature: () => on, settings: () => ({}),
+        query: name => { if (name === 'director.journal') reads++; return { 'director.journal': journal, 'director.time': { minutes: 20 * DAY }, 'packs.list': packs }[name] ?? null; },
+        ...extra,
+    });
+    const make = () => ({ domains: { chronicle: {}, director: { time: { minutes: 20 * DAY } } } });
+    const def = createModule({ parts: [['chronicle', part]] });
+    const taught = () => def.context.parts.some(entry => entry.static?.() === BACKLOG_STATIC);
+    const head = make();
+    def.hooks.beforeGenerate(view(head));
+    assert.equal(taught(), true);
+    const after = reads;
+    def.hooks.beforeGenerate(view(head));
+    assert.equal(reads, after);
+    on = false;
+    def.hooks.beforeGenerate(view(head));
+    assert.equal(taught(), false);
+    on = true;
+    def.hooks.beforeGenerate(view(head));
+    assert.equal(taught(), true);
+    packs = [{ id: 'p' }];
+    const before = reads;
+    def.hooks.beforeGenerate(view(head));
+    assert.equal(reads > before, true);
+    const again = reads;
+    def.hooks.beforeGenerate(view(make()));
+    assert.equal(reads > again, true);
+    journal.days = [];
+    def.hooks.beforeGenerate(view(make()));
+    assert.equal(taught(), false);
 });
 
 test('9: the one static sentence is taught only while the block has lines (env.backlog), under the digest feature', () => {

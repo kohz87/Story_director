@@ -2,7 +2,7 @@
 
 import { MODULE_ID } from './parts.js';
 import { partSettings, settingsFor } from './settings.js';
-import { isObject } from './shared.js';
+import { BUILD_QUERIES, isObject } from './shared.js';
 
 // The handler ctx a part sees: the host's, with settings() reading the part's own, and `fights`
 // (whether a module runs fights, see fightRunner).
@@ -42,6 +42,7 @@ export function memoQueries(view) {
         answers.set(key, value);
         return value;
     };
+    BUILD_QUERIES.add(query);
     return Object.freeze({ ...view, query });
 }
 

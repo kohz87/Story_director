@@ -33,3 +33,7 @@ export const LIVE_HOST = Object.freeze({
 });
 
 export const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+// The `query` functions made by one prompt build's memo (module/contexts.js memoQueries): what a function of one build's views may keep
+// (a WeakMap keyed by that query) and drop with it. A host's own `query` is not here, so nothing is kept past a call for it.
+export const BUILD_QUERIES = new WeakSet();

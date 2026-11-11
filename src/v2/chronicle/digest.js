@@ -15,6 +15,7 @@
 
 import { DIGEST, DIGEST_FEATURE, FOLD_AT, FOLLOW_MAX, QUEST_LOG_KEPT, QUEST_LOG_TEXT, cut, capDays, dayOf, daysOf, digestSettings, entriesByDay, factsOf, foldEntries, makeDigest, notedOf, orderedDays, rangeDays, writtenOf } from './days.js';
 import { backlogBlock } from './backlog.js';
+import { BUILD_QUERIES } from '../module/shared.js';
 import { calendarFrom, nowFrom } from './queries.js';
 import { toSlot } from '../slot.js';
 
@@ -326,6 +327,17 @@ const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeo
  * module/create.js) no sentence either: block and sentence stand or fall together.
  */
 export function backlogLines(view) {
+    // Inside one prompt build (a memoized `query`) the state, settings and answers cannot change: learn and the tail share one answer.
+    const memo = typeof view?.query === 'function' && BUILD_QUERIES.has(view.query);
+    const kept = memo ? builds.get(view.query) : null;
+    if (kept && kept.state === view.state) return [...kept.lines];
+    const lines = workOutBacklog(view);
+    if (memo) builds.set(view.query, { state: view.state, lines });
+    return [...lines];
+}
+const builds = new WeakMap();
+
+function workOutBacklog(view) {
     if (!digestOn(view) || !view?.state?.domains?.chronicle) return [];
     const query = typeof view.query === 'function' ? (name, args) => view.query(name, args) : null;
     const now = nowFrom(query, view.state);
