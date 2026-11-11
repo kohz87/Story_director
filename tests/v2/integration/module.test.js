@@ -383,7 +383,7 @@ test('names on the host: a repeated or overused name is a Problem and a pinned c
         const host = await createHost({ modules: [createModule()], settings: { features: { 'story-director.pulse': false, ...features } } });
         return host;
     };
-    const plain = await run({});
+    const plain = await run({ 'story-director.names': false });
     const on = await run({ 'story-director.names': true });
     try {
         const open = '<Changes>\n~ time June 3, 1200, 08:00 am\n~ place Harrow | kind: settlement\n';
@@ -500,4 +500,19 @@ test('pulse: the hook adds the flag to every new step', () => {
     const view = { state: { domains: { director: {} } }, chat: { length: 6 }, feature: () => true, settings: {} };
     assert.deepEqual(pulseHook(view, {}).commands[0].payload, { at: 6, age: 1 });
     assert.deepEqual(pulseHook(view, { type: 'swipe' }).commands[0].payload, { at: 5, age: 1 });
+});
+
+test('names is on by default like the pulse: a chat that never touched the switch teaches the person line and checks a new named person (LIVERUN1 item 11)', async () => {
+    assert.equal(namesPart.features[0].default, true);
+    const host = await createHost({ modules: [createModule()], settings: { features: { 'story-director.pulse': false } } });
+    try {
+        await host.send('Hello.', '<Changes>\n+ person Corst | look: scarred | flaw: greedy | voice: low | temper: calm\n</Changes>');
+        await host.send('Next.', '<Changes>\n+ person Elara | look: tall\n</Changes>');
+        const names = host.head().domains.names;
+        assert.equal(names.people.corst.profile.look, 'scarred', 'a new named person is stored with the profile');
+        assert.deepEqual(Object.keys(names.taken), ['elara'], 'an overused name is refused');
+        assert.ok(host.st.promptLog.filter(entry => entry.key === 'story_suite_static' && entry.value).at(-1).value.includes('+ person Name'), 'the static prompt teaches the line');
+    } finally {
+        host.close();
+    }
 });
