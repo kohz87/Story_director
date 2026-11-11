@@ -21,6 +21,11 @@ import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
 import { PULSE_STATIC } from '../../../src/v2/pulse/effects.js';
+import { createHost } from '../../vendor/story-block/testkit/index.js';
+import {
+    OVERUSED, applyPerson, beforeGenerate as namesBefore, bareKey, capMinor, checkName, clampCount, initialNames, parseBanned, parseProfile, pickSuggestions,
+    profileText, tail as namesTail, validateNames,
+} from '../../../src/v2/names/index.js';
 
 // What the host builds from a module's context (Story Block's registry contextOf): its static, then each context part that is on, trimmed,
 // the empty ones left out, one per line.
@@ -47,7 +52,7 @@ test('statics in part order, budgets summed, kinds dispatched to their part', ()
     assert.equal(keyPeoplePart.context.static({ keyPeople: true }), KEY_PEOPLE_STATIC);
     assert.equal(keyPeoplePart.context.static({ keyPeople: false }), '');
     assert.equal(def.context.budget, 500 + RECAP_BUDGET + ATLAS_BUDGET + TRIP_TAIL_BUDGET + CHRONICLE_BUDGET + DIGEST_TAIL_BUDGET + BACKLOG_BUDGET + KEY_PEOPLE_TOKENS + CAST_BUDGET + ARC_TAIL_BUDGET + checksPart.context.budget);
-    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'pulse', 'arc', 'checks', 'ripples', 'screens']);
+    assert.deepEqual(PARTS.map(([id]) => id), ['tracker', 'time', 'atlas', 'chronicle', 'world', 'keypeople', 'cast', 'names', 'pulse', 'arc', 'checks', 'ripples', 'screens']);
     assert.match(def.capture.kinds.hook.grammar, /a quest is a job/);
     assert.equal(def.capture.kinds.quest.grammar(), '', 'the quest rides on the hook line');
     assert.equal(def.capture.kinds.time.apply, undefined, 'the kinds table holds only grammar');
@@ -185,4 +190,106 @@ test('queries get tools.settings (the part\'s own) and tools.substitute; trip qu
     assert.deepEqual(seen.settings, { map: { era: 'pre-modern' } });
     const bare = createModule({ parts: def && [['atlas', { settings: { defaults: { map: { era: 'x' } } }, queries: { 'atlas.travel': (s, a, tools) => [tools.settings(), tools.substitute('{{user}}')] } }]], host: { settings: () => null, substitute: () => undefined } });
     assert.deepEqual(bare.queries['atlas.travel']({}, {}, {}), [{ map: { era: 'x' } }, '{{user}}']);
+});
+
+// ---- the names part (src/v2/names/index.js) ----
+const PACK_NAMES = { banned: ['Mordred'], river: { regions: ['River Confederacy'], given: ['Wenna', 'Joost', 'Maaike', 'Bregje', 'Temiwa', 'Hilde', 'Gerold', 'Sigrun'] } };
+
+test('names core: banned, overused, taken, first-name and near collisions; titles do not make a new name', () => {
+    assert.deepEqual(OVERUSED.slice(0, 4), ['Elara', 'Vane', 'Vance', 'Seraphina']);
+    const known = [{ name: 'Sister Temiwa', by: 'used' }, 'Bregje', 'Corst'];
+    assert.equal(checkName('Rik', { known }).ok, true);
+    assert.deepEqual(checkName('Elara Brightwater').reasons.map(r => r.kind), ['overused']);
+    assert.deepEqual(checkName('Mara', { banned: parseBanned('Mara\nKessa, Mara') }).reasons.map(r => r.kind), ['banned']);
+    assert.deepEqual(checkName('Temiwa', { known }).reasons, [{ kind: 'taken', by: 'used' }]);
+    assert.deepEqual(checkName('Bregje Dale', { known }).reasons.map(r => r.kind), ['first']);
+    assert.deepEqual(checkName('Bregja', { known }).reasons.map(r => r.kind), ['near']);
+    assert.equal(checkName('Bregje', { known, self: 'Bregje' }).ok, true);
+    assert.equal(bareKey('Watch-Captain Roelof'), 'roelof');
+    assert.deepEqual(parseBanned('a, b\nA\n'), ['a', 'b']);
+    assert.deepEqual([clampCount(undefined), clampCount(99), clampCount(-2), clampCount(2.9)], [3, 8, 0, 2]);
+});
+
+test('names core: suggestions are deterministic, setting-fitting and unused; the profile line is capped; minor people are capped oldest first', () => {
+    const args = { names: PACK_NAMES, region: 'River Confederacy: Bluewatch', used: ['Temiwa'], banned: ['Joost'], count: 3, seed: '12' };
+    const picked = pickSuggestions(args);
+    assert.equal(picked.length, 3);
+    assert.deepEqual(pickSuggestions({ ...args, names: { ...PACK_NAMES, river: { ...PACK_NAMES.river, given: [...PACK_NAMES.river.given].reverse() } } }), picked, 'the pack order does not matter');
+    assert.ok(!picked.includes('Temiwa') && !picked.includes('Joost'));
+    assert.deepEqual(pickSuggestions({ ...args, region: 'Elsewhere' }), []);
+    assert.deepEqual(pickSuggestions({ ...args, names: undefined }), []);
+    assert.notDeepEqual(pickSuggestions({ ...args, seed: '13' }), picked);
+    const read = parseProfile('look: a long scar over one eye and a limp | flaw: greedy | voice: low | temper: calm');
+    assert.equal(read.ok, true);
+    assert.ok(Array.from(profileText({ look: 'x'.repeat(99), flaw: 'y'.repeat(99), voice: 'z'.repeat(99), temper: 'w'.repeat(99) })).length <= 160);
+    const people = Object.fromEntries(Array.from({ length: 82 }, (_, i) => [`p${String(i).padStart(2, '0')}`, { first: 100 - i }]));
+    const capped = capMinor(people, 80);
+    assert.equal(Object.keys(capped.people).length, 80);
+    assert.deepEqual(capped.evicted, ['p81', 'p80']);
+});
+
+const namesView = (slice, { chat = 6, present = [], mes = '', settings = {}, on = true } = {}) => ({
+    state: { domains: { names: slice, scene: { place: { region: 'River Confederacy: Bluewatch' } } } }, chat: { length: chat }, feature: () => on, settings: () => settings,
+    story: { chat: () => [{ mes }] }, query: (name, args) => (name === 'packs.content' ? (args.kind === 'names' ? [{ names: PACK_NAMES }] : []) : name === 'scene.present' ? present : null),
+});
+
+test('names: the tail offers the setting count of unused names and tells a stored person back in the scene (profile, at most 4); off, nothing', () => {
+    const slice = { people: { corst: { name: 'Corst', first: 3, profile: { look: 'scarred', flaw: 'greedy', voice: 'low', temper: 'calm' }, rev: 3 }, hald: { name: 'Hald', first: 4, profile: null, rev: 4 } }, seen: {}, taken: {} };
+    const out = namesTail(namesView(slice, { present: ['Corst', 'Hald'], settings: { suggestions: 2 } }));
+    assert.deepEqual(out.lines, []);
+    assert.equal(out.optional[0], 'Corst: scarred; greedy; low; calm');
+    assert.match(out.optional[1], /^Unused names \(pick one for any new person\): \w+, \w+$/);
+    assert.equal(out.optional.length, 2, 'a person without a profile is not told');
+    assert.equal(namesTail(namesView(slice, { mes: 'Corst spits.', settings: { suggestions: 0 } })).optional.join('|'), 'Corst: scarred; greedy; low; calm');
+    assert.deepEqual(namesTail(namesView(slice, { on: false, present: ['Corst'] })), { lines: [], optional: [] });
+});
+
+test('names on the host: a repeated or overused name is a Problem and a pinned cue on the next reply; a fresh name is stored with its profile; off, the prompt is as it was', async () => {
+    const run = async features => {
+        const host = await createHost({ modules: [createModule()], settings: { features: { 'story-director.pulse': false, ...features } } });
+        return host;
+    };
+    const plain = await run({});
+    const on = await run({ 'story-director.names': true });
+    try {
+        const open = '<Changes>\n~ time June 3, 1200, 08:00 am\n~ place Harrow | kind: settlement\n';
+        await plain.send('Hello.', `${open}+ person Corst | look: scarred | flaw: greedy\n</Changes>`);
+        await on.send('Hello.', `${open}+ person Corst | look: scarred | flaw: greedy | voice: low | temper: calm\n</Changes>`);
+        assert.deepEqual(plain.head().domains.names, initialNames(), 'a chat without the feature stores nothing');
+        assert.deepEqual(on.head().domains.names.people.corst.profile, { look: 'scarred', flaw: 'greedy', voice: 'low', temper: 'calm' });
+        assert.deepEqual(validateNames(on.head().domains.names), []);
+        await on.send('Next.', '<Changes>\n+ person Elara | look: tall\n+ person Corst | look: fat\n</Changes>');
+        const names = on.head().domains.names;
+        assert.deepEqual(Object.keys(names.taken).sort(), ['corst', 'elara']);
+        assert.equal(names.people.corst.profile.look, 'scarred', 'the first profile is frozen');
+        assert.ok(on.sdk.receipts().some(entry => /not a fresh name/.test(entry.receipt?.summary ?? '')));
+        await on.send('And?', 'Quiet.');
+        const cues = on.st.promptLog.map(entry => String(entry.value ?? '')).filter(text => text.includes('[Names] "Elara"'));
+        assert.ok(cues.length >= 1, 'the rename cue reaches the next reply');
+        assert.ok(Object.values(on.head().domains.names.taken).every(entry => entry.told === true));
+        const statics = host => host.st.promptLog.filter(entry => entry.key === 'story_suite_static' && entry.value).map(entry => entry.value);
+        assert.ok(statics(on).at(-1).includes('+ person Name'));
+        assert.ok(!statics(plain).at(-1).includes('+ person Name'));
+        const before = structuredClone(on.head());
+        on.store.rebuild();
+        assert.deepEqual(on.head(), before, 'rebuild == live');
+    } finally {
+        plain.close();
+        on.close();
+    }
+});
+
+test('names: the step before a reply notes who else is in use (scene, cast, dossiers, key people) and marks a told cue once; a Continue tells it again without a step', () => {
+    const view = namesView({ people: {}, seen: {}, taken: { elara: { name: 'Elara', rev: 2, told: false } } }, { present: ['Rika'] });
+    view.state.domains.cast = { people: { 'p:a': { name: 'Brom', aliases: ['Old Brom'] } } };
+    const out = namesBefore(view, {});
+    assert.deepEqual(out.commands.map(c => c.type), ['names.seen', 'names.told']);
+    assert.deepEqual(out.commands[0].payload.who, ['Rika', 'Brom', 'Old Brom']);
+    assert.match(out.lines[0].text, /^\[Names\] "Elara" is not a fresh name/);
+    assert.equal(out.lines[0].keep, true);
+    assert.equal(out.lines[0].text.includes('Brom'), false, 'nobody known is named in the cue');
+    const again = namesBefore(view, { commit: false });
+    assert.equal(again.commands, undefined);
+    assert.equal(again.lines.length, 1);
+    assert.equal(namesBefore(namesView(initialNames(), { on: false }), {}), undefined);
 });

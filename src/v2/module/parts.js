@@ -7,6 +7,7 @@ import { part as chronicle } from '../chronicle/index.js';
 import { part as world } from '../world/index.js';
 import { part as keypeople } from '../keypeople/index.js';
 import { part as cast } from '../cast/index.js';
+import { part as names } from '../names/index.js';
 import { part as pulse } from '../pulse/effects.js';
 import { part as arc } from '../arc/index.js';
 import { part as checks } from '../checks/index.js';
@@ -23,4 +24,4 @@ export const STORY_BLOCK_WITH_HEADS = '2.25.0';
 export const STORY_BLOCK_RANGE = `>=${STORY_BLOCK_WITH_HEADS}`;
 
 /** The parts in their fixed order: [id, part]. The order is the static prompt's and the tail's order. */
-export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['pulse', pulse], ['arc', arc], ['checks', checks], ['ripples', ripples], ['screens', screens]]);
+export const PARTS = Object.freeze([['tracker', tracker], ['time', time], ['atlas', atlas], ['chronicle', chronicle], ['world', world], ['keypeople', keypeople], ['cast', cast], ['names', names], ['pulse', pulse], ['arc', arc], ['checks', checks], ['ripples', ripples], ['screens', screens]]);
