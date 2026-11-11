@@ -187,7 +187,7 @@ test('the validator takes the slot and refuses a malformed one', () => {
 
 import { PULSE, QUIET, agendaProgress, modeOf, part as pulsePart, pulseCommand, pulseHook, pulseTail, quietCommand, resultsOf, weatherFrom } from '../../../src/v2/pulse/effects.js';
 import { rumor } from '../../../src/v2/chronicle/capture/world.js';
-import { d20Of } from '../../../src/v2/pulse/tables.js';
+import { QUIET_FALLBACK, TABLES, d20Of, resolveKind, tableFor } from '../../../src/v2/pulse/tables.js';
 
 const seededPulse = seed => (ctx, payload) => pulseCommand({ ...ctx, rng: rng(seed) }, payload);
 const pulseAt = (state, seed, { at = 5, settings = {}, call = null, queries = {} } = {}) => runCommand(state, seededPulse(seed), { at }, { settings, call, queries });
@@ -360,5 +360,35 @@ test('pulse: replay: a middle delete, a swipe and a rebuild keep the world the s
         assert.equal(host.sdk.receipts().some(entry => entry.receipt.type === PULSE), true);
     } finally {
         host.close();
+    }
+});
+
+const PRESET = {
+    std: [[1, 2, 'CALM'], [3, 4, 'ENTER_CHECK'], [5, 6, 'BACKGROUND_INCIDENT'], [7, 8, 'MOOD_SWING'], [9, 10, 'GOSSIP_SURGE'], [11, 12, 'CHANCE_MEETING'], [13, 14, 'OVERHEARD_DETAIL'], [15, 16, 'TASK_SHIFT'], [17, 18, 'MUNDANE_INTERRUPTION'], [19, 20, 'CALM']],
+    duo: [[1, 2, 'CALM'], [3, 4, 'ENV_SHIFT'], [5, 6, 'MOOD_SWING'], [7, 8, 'PHYSICAL_REACTION'], [9, 10, 'MEMORY_TRIGGER'], [11, 12, 'OBJECT_DISCOVERY'], [13, 14, 'OUTSIDE_INTRUSION'], [15, 16, 'POWER_SHIFT'], [17, 18, 'MUNDANE_INTERRUPTION'], [19, 20, 'CALM']],
+};
+
+test('pulse: both tables carry exactly the preset d20 ranges, every d20 resolves to its row, and the table choice follows the counts', () => {
+    for (const id of ['std', 'duo']) {
+        assert.deepEqual(TABLES[id].rows.map(item => [item.from, item.to, item.kind]), PRESET[id]);
+        const context = { group: 'town', weather: 'rain', counts: { present: 1, offscreen: 1, known: 1, cast: 1 } };
+        for (const [from, to, kind] of PRESET[id]) for (let roll = from; roll <= to; roll += 1) assert.equal(resolveKind(id, roll, context).kind, kind, `${id} ${roll}`);
+    }
+    assert.equal(tableFor({ named: 3, offscreen: 1 }), 'std');
+    assert.equal(tableFor({ named: 2, offscreen: 5 }), 'duo');
+    assert.equal(tableFor({ named: 6, offscreen: 0 }), 'duo');
+});
+
+test('pulse: in quiet mode an effect entry reads as its flavour fallback and keeps its band', () => {
+    assert.deepEqual(Object.keys(QUIET_FALLBACK).sort(), ['CHANCE_MEETING', 'ENTER_CHECK', 'GOSSIP_SURGE', 'OVERHEARD_DETAIL', 'TASK_SHIFT']);
+    const state = clocked();
+    for (let seed = 1; seed <= 60; seed += 1) {
+        const entry = resultsOf(pulseAt(state, seed, { settings: { mode: 'quiet' } }).state.domains.director)[0];
+        assert.ok(!Object.keys(QUIET_FALLBACK).includes(entry.kind), `${seed} ${entry.kind}`);
+        assert.equal(entry.effect, undefined);
+        const band = PRESET[entry.table].find(([from, to]) => entry.d20 >= from && entry.d20 <= to)[2];
+        // (Duo's ENV_SHIFT may step down when the scene has no weather line; the effect bands' fallbacks always have lines.)
+        if (QUIET_FALLBACK[band]) assert.equal(entry.kind, QUIET_FALLBACK[band], `${seed} d20 ${entry.d20}`);
+        else if (entry.table === 'std') assert.equal(entry.kind, band, `${seed} d20 ${entry.d20}`);
     }
 });

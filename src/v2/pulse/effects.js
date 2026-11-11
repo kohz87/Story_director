@@ -31,7 +31,7 @@ import { fightOn } from '../cast/entries.js';
 import { calendarFrom } from '../keypeople/time.js';
 import { orderedThreads } from '../tracker/convert.js';
 import { ask, cutPoints, namesPerson, sceneOf } from '../tracker/scene.js';
-import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plainSlot, resolveKind, tableFor } from './tables.js';
+import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plainSlot, resolveKind, tableFor, QUIET_FALLBACK } from './tables.js';
 
 export const JUMP_MINUTES = 360;
 export const REPLY_MINUTES = 20;
@@ -266,12 +266,14 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
     const names = new Set(scene.people.map(person => person.key));
     for (const name of [...ask(query, 'npc.known', {}, []), ...Object.values(isRecord(people) ? people : {}).map(person => person?.name)]) if (lineKey(name)) names.add(lineKey(name));
     const lively = mode === 'lively';
-    const counts = { present: scene.people.length, offscreen: lively ? agendas.length + away + unmet.length : 0, known: lively ? known.length : 0, cast: lively ? unmet.length : 0 };
+    const counts = { present: scene.people.length, offscreen: lively ? agendas.length + away + unmet.length : 1, known: lively ? known.length : 1, cast: lively ? unmet.length : 1 };
     const table = tableFor({ named: names.size, offscreen: agendas.length + away + unmet.length });
     const d20 = d20Of(draw.d20);
     const blocked = new Set();
     for (let tries = 0; tries < 8; tries += 1) {
         const rolled = resolveKind(table, d20, { group, weather, counts, blocked });
+        // Quiet: an effect entry keeps its band but reads as its flavour fallback.
+        if (!lively && QUIET_FALLBACK[rolled.kind]) rolled.kind = QUIET_FALLBACK[rolled.kind];
         const base = { d20, table, kind: rolled.kind, ...(place ? { place } : {}) };
         if (!EFFECTS.has(rolled.kind)) {
             const who = scene.people.length ? scene.people[pickIndex(scene.people.length, draw.actor)]?.name : '';

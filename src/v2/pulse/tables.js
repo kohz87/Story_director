@@ -37,11 +37,11 @@ export const TABLES = Object.freeze({
             row(3, 4, 'ENTER_CHECK'),
             row(5, 6, 'BACKGROUND_INCIDENT'),
             row(7, 8, 'MOOD_SWING'),
-            row(9, 10, 'MUNDANE_INTERRUPTION'),
-            row(11, 12, 'GOSSIP_SURGE'),
+            row(9, 10, 'GOSSIP_SURGE'),
+            row(11, 12, 'CHANCE_MEETING'),
             row(13, 14, 'OVERHEARD_DETAIL'),
             row(15, 16, 'TASK_SHIFT'),
-            row(17, 18, 'CHANCE_MEETING'),
+            row(17, 18, 'MUNDANE_INTERRUPTION'),
             row(19, 20, 'CALM'),
         ]),
     }),
@@ -51,8 +51,8 @@ export const TABLES = Object.freeze({
         rows: Object.freeze([
             row(1, 2, 'CALM'),
             row(3, 4, 'ENV_SHIFT'),
-            row(5, 6, 'PHYSICAL_REACTION'),
-            row(7, 8, 'MOOD_SWING'),
+            row(5, 6, 'MOOD_SWING'),
+            row(7, 8, 'PHYSICAL_REACTION'),
             row(9, 10, 'MEMORY_TRIGGER'),
             row(11, 12, 'OBJECT_DISCOVERY'),
             row(13, 14, 'OUTSIDE_INTRUSION'),
@@ -61,6 +61,15 @@ export const TABLES = Object.freeze({
             row(19, 20, 'CALM'),
         ]),
     }),
+});
+
+/** In quiet mode an effect entry becomes this flavour kind (every one has lines for every place group). */
+export const QUIET_FALLBACK = Object.freeze({
+    ENTER_CHECK: 'BACKGROUND_INCIDENT',
+    GOSSIP_SURGE: 'MUNDANE_INTERRUPTION',
+    CHANCE_MEETING: 'MUNDANE_INTERRUPTION',
+    OVERHEARD_DETAIL: 'MUNDANE_INTERRUPTION',
+    TASK_SHIFT: 'BACKGROUND_INCIDENT',
 });
 
 /** Which actor count an entry needs to happen: 'none', 'present', 'offscreen', 'known' or 'cast'. */
