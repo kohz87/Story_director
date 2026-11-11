@@ -49,7 +49,7 @@ test('director: the arc, then Beats, the hooks being planned (with Next), Off-sc
     const state = headState({ threads: [wolves(), smuggler(), plot(), hook('th_hook0001', 'Toll Audit', 'the wagons are impounded')] });
     const { el, warnings } = draw(directorScreen, state);
     assert.deepEqual(warnings, []);
-    assert.deepEqual(kindsOf(el), ['arc', 'hook', 'agenda', 'secret', 'problem']);
+    assert.deepEqual(kindsOf(el), ['pulse', 'arc', 'hook', 'agenda', 'secret', 'problem']);
     assert.deepEqual(cardsOf(el), ['hook', 'agenda', 'secret', 'problem'], 'no beats in this state; no clocks, Quests or World');
     assert.equal(el.querySelector('header.sd-clock'), null, 'no clock line');
     assert.equal(el.querySelector('section[data-kind="quest"], section[data-kind="event"]'), null, 'no Quests list, no World list');
@@ -181,4 +181,15 @@ test('status card: its title is "Where things stand" and its own summary slot re
     const { run } = makeRunner(makeQueries());
     assert.equal(run(headState(), 'director.status').summary, `${'9:00 am'}, Bluewatch Village`);
     assert.ok(screens.some(screen => screen.id === STATUS_CARD_ID && screen.summary === STATUS_SUMMARY));
+});
+
+test('director: an Off-screen agenda draws its step bar (done, current, to come), "step 3 of 4 · since …", its place and "arriving within the hour"', { skip }, () => {
+    const fields = { now: 'at the pump', then: 'a; b; c', stepAt: '3', stepOf: '4', stepSince: String(at('June 10, 2025, 9:00 am')), where: 'Bluewatch Village', arrive: 'June 11, 2025, 9:30 am' };
+    const agenda = thread('th_bregje01', 'agenda', 'Bregje', fields, { summary: 'manage the desk alone' });
+    const { el, warnings } = draw(directorScreen, headState({ threads: [agenda, smuggler()] }));
+    assert.deepEqual(warnings, []);
+    const [bregje, vane] = el.querySelectorAll('section[data-kind="agenda"] li.sd-thread');
+    assert.deepEqual(bregje.querySelectorAll('.sd-steps i').map(node => node.className), ['d', 'd', 'c', '']);
+    assert.match(squash(bregje.textContent), /step 3 of 4 · since June 10 Bluewatch Village → arriving within the hour/);
+    assert.equal(vane.querySelector('.sd-steps'), null, 'an agenda with no step fields has no bar');
 });

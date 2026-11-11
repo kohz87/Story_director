@@ -242,3 +242,37 @@ test('9: the one static sentence is taught only while the block has lines (env.b
     assert.doesNotMatch(BACKLOG_STATIC, /\d/);
     assert.equal(part.context.static({ chronicle: false }), '', 'the world paragraph\'s own gate is untouched');
 });
+
+// ---- [Earlier days]: who was there ---------------------------------------------------------------------------------------------
+
+test('witnesses: a backlog line names who was there, three names then "+N"; a day stored without them reads as before', () => {
+    const days = [
+        pastDay(18, { eventLines: ['Astra signed the ledger with the wrong seal'], eventWho: [['Bregje', 'Torka', 'Dag', 'Eli', 'Fay']] }),
+        pastDay(19, { eventLines: ['Camped by the ford'], eventWho: [['Bregje']] }),
+        pastDay(20, { eventLines: ['Crossed the ford'] }),
+    ];
+    const named = backlogBlock({ days: [pastDay(19, { eventLines: ['Astra signed the ledger with the wrong seal'], eventWho: [['Bregje', 'Torka', 'Dag', 'Eli', 'Fay']] }), pastDay(20)], now: 21 * DAY, present: ['Astra'] });
+    assert.equal(named[2], 'Goldwane 19 (2 days ago): Astra signed the ledger with the wrong seal (Bregje, Torka, Dag +2)');
+    const old = backlogBlock({ days: [pastDay(19, { eventLines: ['Astra signed the ledger with the wrong seal'] }), pastDay(20)], now: 21 * DAY, present: ['Astra'] });
+    assert.equal(old[2], 'Goldwane 19 (2 days ago): Astra signed the ledger with the wrong seal', 'an old day has no names');
+    assert.equal(backlogBlock({ days: [pastDay(19, { eventLines: ['Astra signed'], eventWho: [['Bregje', 'Torka']] }), pastDay(20)], now: 21 * DAY, present: ['Astra'] })[2], 'Goldwane 19 (2 days ago): Astra signed (Bregje, Torka)');
+    assert.deepEqual(backlogBlock({ days, now: 21 * DAY, present: ['Astra'] }), backlogBlock({ days, now: 21 * DAY, present: ['Astra'] }), 'deterministic');
+});
+
+test('witnesses: over the budget the plain lines are fitted first, then names go back on from the top; names alone never cost a line', () => {
+    const long = 'Astra weighed the long grey ledger against the wrong seal twice and wrote it down';
+    const days = [11, 12, 13, 14, 15, 16].map(day => pastDay(day, { eventLines: [`${long} ${day}`], eventWho: [['Bregje', 'Torka', 'Dag', 'Eli']], search: `Astra ${day}` }));
+    const plainOnly = backlogBlock({ days: days.map(day => ({ ...day, eventWho: undefined })), now: 20 * DAY, present: ['Astra'] });
+    const block = backlogBlock({ days, now: 20 * DAY, present: ['Astra'] });
+    assert.ok(block.join('\n').length <= BACKLOG_CHARS);
+    assert.equal(block.length, plainOnly.length, 'names never push a line out');
+    const named = block.slice(1).map(line => line.endsWith('+1)'));
+    assert.ok(named[0], 'the top line keeps its names while there is room');
+    assert.ok(named.every((has, index) => has || named.slice(index).every(later => !later)), 'names are lost from the end of the ranking first');
+    // Plain lines that together run over the budget still leave room for names on the surviving ones.
+    const body = 'x'.repeat(90);
+    const tight = [11, 12, 13, 14, 15, 16].map(day => pastDay(day, { eventLines: [`Astra ${body} ${day}`], eventWho: [['Bregje']], search: `Astra ${day}` }));
+    const out = backlogBlock({ days: tight, now: 20 * DAY, present: ['Astra'] });
+    assert.ok(out.join('\n').length <= BACKLOG_CHARS);
+    assert.ok(out.slice(1).some(line => line.endsWith('(Bregje)')), 'not every name is stripped when there is room');
+});

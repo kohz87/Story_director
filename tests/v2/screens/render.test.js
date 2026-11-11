@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { resolveData, runtime, skipReason } from './helpers/runtime.js';
 import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
-import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, createRipplesWidget, part, planWidget, questsWidget, screens } from '../../../src/v2/screens/index.js';
+import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, createScreensPart, createRipplesWidget, part, planWidget, questsWidget, screens } from '../../../src/v2/screens/index.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
+import { toSlot } from '../../../src/v2/slot.js';
 
 // The module's own widgets on the Director screen, with a planner that is not there and a reveal choice
 // the test sets (shown unless a test hides it).
@@ -22,7 +23,7 @@ const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
 const formatters = { time: minutes => (Number.isInteger(minutes) ? calendar.format(minutes) : '') };
 const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0], queries = makeQueries() } = {}) {
+function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0], queries = makeQueries(), index = undefined } = {}) {
     const { run } = makeRunner(queries);
     const screen = byId[id];
     const doc = installFakeDom();
@@ -35,7 +36,7 @@ function draw(id, state, { command = null, changes = [], mount = byId[id].mounts
     const compiled = runtime.compileTemplate(screen.template);
     const warnings = [...compiled.warnings];
     const results = [];
-    const view = runtime.renderTemplate(el, compiled, { state, q: data.q, changes, settings: {}, mount, screenId: id, api: {} }, {
+    const view = runtime.renderTemplate(el, compiled, { state, q: data.q, changes, settings: {}, mount, screenId: id, index, api: {} }, {
         evaluate: runtime.evaluate,
         widgets: moduleWidgets(),
         formatters,
@@ -66,7 +67,7 @@ test('every screen compiles and renders without a warning, and its CSS scopes cl
 test('director: the arc then the plan cards; secrets by name; problems (visible, then behind the scenes); nothing tracked says so', { skip }, () => {
     const { el } = draw(DIRECTOR_ID, headState());
     const kinds = el.querySelectorAll('section.sd-kind').map(node => node.getAttribute('data-kind'));
-    assert.deepEqual(kinds, ['arc', 'clock', 'agenda', 'secret', 'problem'], 'a Clocks card, but no Quests or World list');
+    assert.deepEqual(kinds, ['pulse', 'arc', 'clock', 'agenda', 'secret', 'problem'], 'a Clocks card, but no Quests or World list');
     const agenda = squash(el.querySelector('section[data-kind="agenda"]').textContent);
     assert.match(agenda, /Smuggler Vane wants: moving crates at night At: the docks · Next: meet the reeve/);
     assert.equal(squash(el.querySelector('section[data-kind="secret"] .sd-thread').textContent), 'The Reeve Is Bought', 'a secret shows only its name');
@@ -354,4 +355,55 @@ test('director: the Ripples card shows each power\'s sway bar and its top reason
     assert.ok(draw(DIRECTOR_ID, headState(), { queries }).el.querySelector('section[data-kind="ripples"]'), 'drawn with Behind hidden, no Reveal needed');
     shown = true;
     assert.equal(draw(DIRECTOR_ID, headState()).el.querySelector('section[data-kind="ripples"]'), null, 'no table: no card');
+});
+
+// The World pulse card, the recent rolls and the Quiet scene switch (Director tab); the roll row under a reply's status card (setting on).
+const pulseState = (results, quiet = false) => {
+    const base = headState();
+    const director = { ...base.domains.director, pulse: toSlot({ results }), ...(quiet ? { pulseQuiet: toSlot({ on: true }) } : {}) };
+    return { ...base, domains: { ...base.domains, director } };
+};
+const rolls = [
+    { at: 4, clock: 1, kind: 'ENTER_CHECK', d20: 3, table: 'std', text: 'Joren will reach the Stray Oar soon.', effect: { type: 'director.pulse.arrive', thread: 'th_a' } },
+    { at: 6, clock: 2, kind: 'SKIP', skipped: 'fight', text: '' },
+    { at: 8, clock: 3, kind: 'OVERHEARD_DETAIL', d20: 14, table: 'std', text: 'The inspector learns Astra paid in false coin.', effect: { type: 'chronicle.rumor', at: 8 } },
+];
+test('director: the World pulse card (die, kind, line, effect pill, table pill) and Recent rows (the earlier rolls, not this roll), newest first; the Quiet scene switch sends the command', { skip }, () => {
+    const sent = [];
+    const { el, warnings } = draw(DIRECTOR_ID, pulseState(rolls), { command: (type, payload) => sent.push([type, payload]) });
+    assert.deepEqual(warnings, []);
+    const card = el.querySelector('section[data-kind="pulse"]');
+    assert.equal(card.querySelector('.sd-die').textContent, '14');
+    assert.match(squash(card.textContent), /World pulse this reply 14 Overheard detail The inspector learns Astra paid in false coin\. rumour recorded standard · \d+ away Swipe for a fresh roll\./);
+    const recent = el.querySelector('section[data-kind="pulse-recent"]');
+    assert.deepEqual(recent.querySelectorAll('.sd-li').map(row => squash(row.textContent)), [
+        '— Skipped fight under way',
+        '3 Enter check Joren will reach the Stray Oar soon. arrival set',
+    ]);
+    assert.match(squash(recent.querySelector('h4').textContent), /Recent last 2/);
+    assert.equal(el.querySelector('.sd-quiet small'), null, 'switch off: no "pulse paused"');
+    el.querySelector('button.ss-switch').click();
+    assert.deepEqual(sent, [['director.pulse.quiet', { on: true }]]);
+    const { el: quiet } = draw(DIRECTOR_ID, pulseState(rolls, true), { command: (type, payload) => sent.push([type, payload]) });
+    assert.equal(squash(quiet.querySelector('.sd-quiet small').textContent), 'pulse paused');
+    assert.equal(quiet.querySelector('button.ss-switch').getAttribute('aria-checked'), 'true');
+    quiet.querySelector('button.ss-switch').click();
+    assert.deepEqual(sent.at(-1), ['director.pulse.quiet', { on: false }]);
+    // No roll yet: the card says so and there are no Recent rows. Mode off, or the feature off: no card and no switch.
+    assert.match(squash(draw(DIRECTOR_ID, headState()).el.querySelector('section[data-kind="pulse"]').textContent), /No roll yet/);
+    assert.equal(draw(DIRECTOR_ID, headState()).el.querySelector('section[data-kind="pulse-recent"]'), null);
+    const off = { ...makeQueries(), 'pulse.view': () => null };
+    const gone = draw(DIRECTOR_ID, pulseState(rolls), { queries: off });
+    assert.equal(gone.el.querySelector('.sd-quiet, section[data-kind="pulse"], section[data-kind="pulse-recent"]'), null);
+    assert.deepEqual([...gone.warnings, ...draw(STATUS_CARD_ID, pulseState(rolls), { index: 8, queries: off }).warnings], [], 'no warning while the feature is off (the query answers null)');
+    const offMode = createScreensPart({ settings: { 'pulse.mode': 'off' } }).queries;
+    assert.equal(draw(DIRECTOR_ID, pulseState(rolls), { queries: { ...makeQueries(), ...offMode } }).el.querySelector('.sd-quiet, section[data-kind="pulse"]'), null);
+});
+
+test('status card: the roll row shows only for that reply and only with "Show the roll under replies" on', { skip }, () => {
+    const on = { ...makeQueries(), ...createScreensPart({ settings: { 'pulse.showUnderReply': true } }).queries };
+    const row = (index, queries) => draw(STATUS_CARD_ID, pulseState(rolls), { index, queries }).el.querySelector('.sd-roll-row');
+    assert.equal(squash(row(8, on).textContent), 'Roll 14 · Overheard detail — The inspector learns Astra paid in false coin.');
+    assert.equal(row(6, on), null, 'an older reply does not show the latest roll');
+    assert.equal(row(8, makeQueries()), null, 'off by default');
 });

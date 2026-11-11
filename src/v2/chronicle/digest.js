@@ -93,7 +93,8 @@ export function noteCommand(ctx) {
     // Where the day facts stopped while the digest was off (`gap`): back on, the note reads from there.
     // The quest history read again from there adds what it holds already (the same keys and texts).
     const gap = isMap(before?.gap) ? before.gap : null;
-    const after = on && gap ? { after: gap.rev, minutes: gap.minutes } : { after: before ? before.rev : null, minutes: before ? before.minutes : null };
+    // `present`: the scene the last note left (who was there for the lines of the receipts that follow).
+    const after = on && gap ? { after: gap.rev, minutes: gap.minutes, present: before?.present } : { after: before ? before.rev : null, minutes: before ? before.minutes : null, present: before?.present };
     const plan = ask(query, 'chronicle.noteFacts', after) ?? { entries: [], settle: null };
     const rev = isInt(ctx.rev) ? ctx.rev : 0;
     // The quest history: each receipt that touched a quest or thread, by its revision; the newest few
@@ -132,6 +133,7 @@ export function noteCommand(ctx) {
         // The first day a note saw the clock on (a note before the clock was set leaves it to a later one).
         from: before && isInt(before.from) ? before.from : firstDay,
         settle: plan.settle ?? before?.settle ?? null,
+        ...((Array.isArray(plan.present) ? plan.present : before?.present ?? []).length ? { present: Array.isArray(plan.present) ? plan.present : before.present } : {}),
         ...(on ? {} : { gap: gap ?? { rev: before ? before.rev : null, minutes: before ? before.minutes : null } }),
     });
     return { summary: '', narrate: false, data: { days: kept } };

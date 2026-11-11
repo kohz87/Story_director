@@ -69,6 +69,10 @@ const TEMPLATE = `
     <dt><i class="fa-solid fa-user" aria-hidden="true"></i> Condition</dt>
     <dd>{{ q.status.condition }}</dd>
   </div>
+  <div class="sd-row sd-roll-row" data-if="q.pulse.rollAt == index">
+    <dt><i class="fa-solid fa-dice-d20" aria-hidden="true"></i> Roll</dt>
+    <dd><b>{{ q.pulse.now.die }}</b> · {{ q.pulse.now.label }}<span data-if="q.pulse.now.text"> — {{ q.pulse.now.text }}</span></dd>
+  </div>
   <div class="sd-row sd-goal" data-if="q.goal" data-class="sd-new: changed(state.director.threads[q.goal.id])">
     <dt><i class="fa-solid fa-flag" aria-hidden="true"></i> Goal</dt>
     <dd><b>{{ q.goal.key }}</b><span data-if="q.goal.goal"> — {{ q.goal.goal }}</span>
@@ -128,6 +132,8 @@ export const statusCardScreen = Object.freeze({
         // The reply's trip (atlas.trip, feature story-director.trip): null with none, and the row is left out.
         trip: { query: 'atlas.trip' },
         goal: { query: 'director.goal' },
+        // This reply's roll (setting "Show the roll under replies"; null while the World pulse feature is off).
+        pulse: { query: 'pulse.view' },
     },
     template: TEMPLATE,
     css: CSS,

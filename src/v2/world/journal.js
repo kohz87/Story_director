@@ -36,7 +36,7 @@ function pending(state, tools, { calendar, now, written }) {
     const byDay = entriesByDay(chronicle);
     const fresh = new Map();
     const noted = notedOf(chronicle);
-    const plan = tryQuery(queryOf(tools), 'chronicle.noteFacts', { after: isInt(noted?.rev) ? noted.rev : null, minutes: isInt(noted?.minutes) ? noted.minutes : null }, null);
+    const plan = tryQuery(queryOf(tools), 'chronicle.noteFacts', { after: isInt(noted?.rev) ? noted.rev : null, minutes: isInt(noted?.minutes) ? noted.minutes : null, ...(Array.isArray(noted?.present) ? { present: noted.present } : {}) }, null);
     for (const item of Array.isArray(plan?.entries) ? plan.entries : []) {
         if (!isInt(item?.day) || !isRecord(item.entry) || !(item.entry.count > 0)) continue;
         if (!fresh.has(item.day)) fresh.set(item.day, []);
@@ -103,15 +103,16 @@ function itemRows(lines) {
 function eventRows(day, events, { threads, format }) {
     const groups = new Map();
     const rows = [];
-    for (const { line, thread } of events) {
+    for (const { line, thread, who } of events) {
         const known = thread ? threads.get(thread) : null;
         const title = known ? String(known.key ?? '') : '';
-        if (!title || day.hide(title)) { rows.push({ ...plain(line), order: rows.length }); continue; }
+        if (!title || day.hide(title)) { rows.push({ ...plain(line), ...whoOf(who), order: rows.length }); continue; }
         const key = title.toLowerCase();
         const group = groups.get(key) ?? { title, lines: [], thread: known, order: rows.length };
         if (!groups.has(key)) rows.push(group);
         groups.set(key, group);
         group.lines.push(line);
+        group.who = who;
     }
     const stamps = [['taken', 'began'], ['done', 'finished'], ['failed', 'failed'], ['dropped', 'gave up']];
     for (const [list, chip] of stamps) {
@@ -124,15 +125,17 @@ function eventRows(day, events, { threads, format }) {
         }
     }
     return rows.map(row => {
-        if (!row.lines) return plain(row.detail);
+        if (!row.lines) return { ...plain(row.detail), ...whoOf(row.who) };
         const ends = ['finished', 'failed', 'gave up'].includes(row.chip);
         const began = ends && isInt(row.thread?.taken?.at) && typeof format === 'function' ? format(row.thread.taken.at) : '';
         const since = began && dayOfMinutes(row.thread.taken.at) !== day.day ? `began ${began}` : '';
         const stepsLabel = row.lines.length > 1 ? `${row.lines.length} steps today` : '';
-        return { ...plain(row.lines.at(-1) ?? ''), title: row.title, chip: row.chip || 'step', note: [stepsLabel, since].filter(Boolean).join(' · '), since, stepsLabel, steps: row.lines.length > 1 ? row.lines : [] };
+        return { ...plain(row.lines.at(-1) ?? ''), title: row.title, chip: row.chip || 'step', note: [stepsLabel, since].filter(Boolean).join(' · '), since, stepsLabel, steps: row.lines.length > 1 ? row.lines : [], ...whoOf(row.who) };
     });
 }
 
+// A row's witnesses (the people there for its latest line), only when it has any, so a day without them is as it was.
+const whoOf = who => (Array.isArray(who) && who.length ? { who } : {});
 const dayOfMinutes = minutes => Math.floor(minutes / 1440);
 const textOf = row => [row.title, row.chip, row.detail, row.note, ...row.steps, ...row.tags].filter(Boolean).join(' ');
 
@@ -146,7 +149,7 @@ function foldsOf(entry, { kept, quests, hidden, threads, format }) {
     if (entry.brief) for (const cat of Object.keys(made)) made[cat] = made[cat].filter(line => !(cat === 'relationships' || cat === 'news' ? hide(line) : plainHide(line)) && !isNarratorNote(line));
     // Events keep their thread (a short day has only the lines).
     const events = entry.brief ? (made.events ?? []).map(line => ({ line, thread: '' }))
-        : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events').map(item => ({ line: item.line, thread: parseTag(item.tag).thread }));
+        : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events').map(item => ({ line: item.line, thread: parseTag(item.tag).thread, who: item.who }));
     const items = [...(made.items ?? []), ...(entry.moneyText && !entry.brief ? [`Money: ${entry.moneyText}`] : [])];
     const rows = {
         met: list(entry.met).map(name => ({ ...plain(''), title: name })),
@@ -177,8 +180,10 @@ function summaryOf(short) {
 export function knownDay(entry, hidden, { now = null, threads = new Map(), format = null } = {}) {
     const drop = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
     const lines = list(entry.happened);
-    const kept = lines.map((line, index) => ({ line, tag: entry.tags?.[index] ?? '' })).filter(item => !namesHidden(item.line, hidden.words) && !isNarratorNote(item.line));
+    // Who was there at each line (new days only), without the people {{user}} does not know.
+    const kept = lines.map((line, index) => ({ line, tag: entry.tags?.[index] ?? '', who: list(entry.who?.[index]).filter(name => !namesHidden(name, hidden.words)) })).filter(item => !namesHidden(item.line, hidden.words) && !isNarratorNote(item.line));
     const happened = kept.map(item => item.line);
+    const happenedWho = kept.map(item => item.who);
     const world = list(entry.world).filter(line => !drop(line));
     const met = list(entry.met);
     const npcs = list(entry.npcs);
@@ -204,6 +209,7 @@ export function knownDay(entry, hidden, { now = null, threads = new Map(), forma
         short,
         facts: list(entry.facts),
         happened,
+        happenedWho,
         more: isInt(entry.more) ? entry.more : 0,
         total: happened.length + (isInt(entry.more) ? entry.more : 0),
         world,
@@ -218,6 +224,8 @@ export function knownDay(entry, hidden, { now = null, threads = new Map(), forma
         summary: summaryOf(short),
         // One line per event row (the thread's latest), for the narrator's [Earlier days] block.
         eventLines: (events?.items ?? []).map(row => (row.title ? `${row.title} (${row.chip}${row.note ? `, ${row.note}` : ''}): ${row.detail}`.replace(/: $/, '') : row.detail)),
+        // Who was there for each of those lines (parallel; [] when unknown), for the same block's witnesses.
+        eventWho: (events?.items ?? []).map(row => row.who ?? []),
         hasFacts: list(entry.facts).length > 0,
         hasHappened: happened.length > 0,
         hasWorld: world.length > 0,

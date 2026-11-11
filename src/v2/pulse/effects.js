@@ -237,7 +237,7 @@ export const FEATURE = 'story-director.pulse';
 export const PULSE = 'director.pulse';
 export const QUIET = 'director.pulse.quiet';
 export const MODES = Object.freeze(['off', 'quiet', 'lively']);
-export const RESULTS_MAX = 5;
+export const RESULTS_MAX = 6;
 const EFFECTS = new Set(['GOSSIP_SURGE', 'OVERHEARD_DETAIL', 'CHANCE_MEETING', 'ENTER_CHECK', 'TASK_SHIFT']);
 const WEATHER_WORDS = [['rain', /rain|drizzle|shower|storm/i], ['snow', /snow|blizzard|sleet/i], ['fog', /fog|mist|haze/i], ['wind', /wind|gale|gust/i], ['heat', /heat|hot|scorch|swelter/i]];
 
@@ -415,8 +415,12 @@ export const part = {
     settings: {
         defaults: { mode: 'lively', showUnderReply: false },
         schema: {
-            mode: { type: 'choice', label: 'World pulse', options: [...MODES], feature: FEATURE },
-            showUnderReply: { type: 'bool', label: 'Show the pulse under the reply', feature: FEATURE },
+            mode: {
+                type: 'choice', form: 'segmented', label: 'World pulse', feature: FEATURE,
+                options: [{ value: 'off', label: 'Off' }, { value: 'quiet', label: 'Quiet' }, { value: 'lively', label: 'Lively' }],
+                help: 'Off: nothing. Quiet: small background touches only. Lively: rumours, meetings, arrivals and schedule shifts too.',
+            },
+            showUnderReply: { type: 'bool', label: 'Show the roll under replies', help: 'Off: only the Director tab shows it (spoilers).', feature: FEATURE },
         },
     },
 };

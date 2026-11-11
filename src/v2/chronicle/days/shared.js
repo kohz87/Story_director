@@ -25,6 +25,8 @@ export const MAX_LINE = 200;
 export const MAX_DATE = 80;
 export const MAX_NAME = 80;
 export const MAX_MET = 8;
+// Who was in the scene at a line (its witnesses): at most this many names are kept with it (the [Earlier days] block shows three).
+export const MAX_WHO = 6;
 
 // Receipts that set the clock (module story-director, `data.minutes`; `director.clock` is the reader's own edit of it).
 // `director.advance` called by another module's command has no receipt of its own; the time part's settle before the
@@ -42,6 +44,8 @@ export const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause 
 export const SETTLE = 'time.settle';
 // Story Block's scene receipts that name who came into the scene (`data.added`).
 export const PRESENT_TYPES = new Set(['capture.present', 'scene.present']);
+// Every Story Block receipt that carries the whole present list after it: a place move empties the scene but for who `with:` brings along.
+export const SCENE_TYPES = new Set([...PRESENT_TYPES, 'capture.place', 'scene.place']);
 // Receipts a section of the digest already tells (places, money, world), or the reader's own edits and
 // a fight's blow-by-blow: never repeated under "happened".
 export const TOLD_ELSEWHERE = new Set([

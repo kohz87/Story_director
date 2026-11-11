@@ -1,7 +1,7 @@
 // Story Director v2, chronicle part: digest lines, construction, caps and query output. Pure.
 
 import { bucketDay, trimCats } from '../backlog.js';
-import { MAX_DATE, MAX_LINE, MAX_MET, MAX_NAME, MAX_NPCS, MAX_QUESTS, MAX_WORLD, cut, flat, isInt } from './shared.js';
+import { MAX_DATE, MAX_LINE, MAX_MET, MAX_NAME, MAX_NPCS, MAX_QUESTS, MAX_WHO, MAX_WORLD, cut, flat, isInt } from './shared.js';
 
 // ---- the one line -----------------------------------------------------------------------------
 
@@ -66,6 +66,8 @@ export function makeDigest(day, facts, { date = '', currency = null, made = 0, r
         happened: [...facts.happened],
         // Each line's kind, parallel to `happened` (its receipt type, then its thread id); absent when no line has one.
         ...(Array.isArray(facts.tags) && facts.tags.some(Boolean) ? { tags: facts.tags.slice(0, facts.happened.length) } : {}),
+        // Who was there at each line, parallel to `happened` (new days only; absent when no line has anyone).
+        ...(Array.isArray(facts.who) && facts.who.some(names => names?.length) ? { who: facts.who.slice(0, facts.happened.length).map(names => (Array.isArray(names) ? names.slice(0, MAX_WHO) : [])) } : {}),
         more: facts.more,
         places: [...facts.places],
         quests: { taken: [...facts.quests.taken], done: [...facts.quests.done], failed: [...facts.quests.failed], dropped: [...facts.quests.dropped] },
@@ -117,6 +119,7 @@ export function digestOut(digest, { currency = null, substitute = value => value
         ...base,
         happened: digest.happened.map(sub),
         tags: Array.isArray(digest.tags) ? [...digest.tags] : [],
+        who: Array.isArray(digest.who) ? digest.who.map(names => [...names]) : [],
         more: digest.more,
         places: [...digest.places],
         quests: { taken: [...digest.quests.taken], done: [...digest.quests.done], failed: [...digest.quests.failed], dropped: [...digest.quests.dropped] },

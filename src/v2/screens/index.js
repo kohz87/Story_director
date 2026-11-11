@@ -14,7 +14,7 @@
 // is its namespaced key. The status card is
 // on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
-import { directorScreen } from './director.js';
+import { PULSE_FEATURE, directorScreen, pulseView } from './director.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
@@ -52,7 +52,8 @@ export function createScreensPart({ settings = hostSettings } = {}) {
     return {
         domains: {},
         commands: {},
-        queries: screenQueries({ settings }),
+        // `pulse.view`: the World pulse card and the status card's roll row (feature `story-director.pulse`).
+        queries: { ...screenQueries({ settings }), 'pulse.view': Object.assign((state, args, tools) => pulseView(state, args, tools, settings), { feature: PULSE_FEATURE }) },
         kinds: {},
         hooks: {},
         tabs: [],
