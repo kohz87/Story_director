@@ -323,6 +323,8 @@ export function applyPerson(ctx, line) {
     }
     const why = reasons.map(reasonText).join('; ');
     if (reasons.some(reason => reason.kind !== 'near')) {
+        // A key an older reply made is rewritten field by field: marked, so it is passed over when that reply was deleted.
+        if (Object.hasOwn(taken, key) && typeof ctx.ifThere === 'function') ctx.ifThere('names', `/taken/${jsonKey(key)}`);
         delete taken[key];
         taken[key] = { name, rev: revOf(ctx), told: false };
         oldest(taken, MAX_TAKEN);
