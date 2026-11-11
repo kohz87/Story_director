@@ -152,6 +152,8 @@ function choicesOf(slice, query, profiles) {
     return out.slice(0, MAX_CHOICES);
 }
 
+const agoOf = days => (days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`);
+
 /** The role NPC State Delta gives a person, from its profiles or its dossier ('' when none). */
 function roleOf(pin, profiles, query) {
     const keys = keysOfPin(pin);
@@ -163,7 +165,7 @@ function roleOf(pin, profiles, query) {
 
 /**
  * `director.keyPeople.view` → `{ on, cap, count, full, hasPeople, people: [{ key, name, here, away, due, doing, status, last,
- * back }], choices, tokens, budget, note }` for the World screen. `tokens`: what the away people cost the narrator now.
+ * newsAgo, back }], elsewhere (how many are not in the scene), choices, tokens, budget, note }` for the World screen. `tokens`: what the away people cost the narrator now.
  */
 export function keyPeopleView(state, _args, tools) {
     const slice = state?.domains?.keypeople;
@@ -190,13 +192,15 @@ export function keyPeopleView(state, _args, tools) {
             status: entry ? (entry.due ? 'Away · due back' : back ? `Away · back ${back}` : 'Away') : present ? 'Here' : 'Not here',
             doing: entry ? (entry.doing ? cutPoints(entry.doing, 160) : 'Away.') : role || (present ? 'In the scene.' : ''),
             last: step ? `Last news${lastDate ? ` ${lastDate}` : ''}: ${step}` : '',
+            // How old the newest news is, in story days ("today", "yesterday", "3 days ago"): Elsewhere's line.
+            newsAgo: isInt(now) && isInt(entry?.last?.date) && now >= entry.last.date ? agoOf(Math.floor(now / 1440) - Math.floor(entry.last.date / 1440)) : '',
             back,
         };
     });
     const told = keyTail(slice, { now, calendar, budget });
     const left = told.left > 0 ? ` ${told.left} more ${told.left === 1 ? 'is' : 'are'} away than fit, so ${told.left === 1 ? 'it is' : 'they are'} left out of a reply.` : '';
     return {
-        on: true, cap, count: people.length, full: people.length >= cap, hasPeople: people.length > 0, people,
+        on: true, cap, count: people.length, elsewhere: people.filter(person => !person.here).length, full: people.length >= cap, hasPeople: people.length > 0, people,
         // The heading's count: "3 of 10", or "2 pinned · limit 1" when the limit was lowered under the number pinned.
         countText: people.length > cap ? `${people.length} pinned · limit ${cap}` : `${people.length} of ${cap}`,
         limitText: `You can have ${cap} key ${cap === 1 ? 'person' : 'people'}; unpin someone first.`,

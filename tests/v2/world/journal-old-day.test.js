@@ -31,7 +31,6 @@ test('a story line that only mentions fights stays', () => {
 
 test('the day card class carries no nowrap rule', () => {
     assert.ok(!/\.wv-day\s*\{[^}]*nowrap/.test(worldScreen.css));
-    assert.match(worldScreen.css, /\.wv-daytime \{[^}]*nowrap/);
 });
 
 test('an old day also drops the older roll planner note', () => {

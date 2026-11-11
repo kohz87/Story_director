@@ -176,8 +176,8 @@ test('a new reply, a swipe and a delete: Here follows (the screen is drawn again
     host.close();
     const { el } = drawWorld({ world, journal }, { widgets: { [PEOPLE_WIDGET]: createPeopleWidget({ open: () => null, cast: () => null }) } });
     const place = el.querySelector('.wv-place');
-    assert.ok(place.classList.contains('wv-moved'));
-    assert.match(squash(place.textContent), /^Market settlement · Bluewatch moved here this reply$/, "kind, region (kept from the place before) and the mark");
+    assert.equal(squash(place.textContent), 'Market settlement', 'the place line and its kind chip');
+    assert.deepEqual(el.querySelectorAll('.wv-sub').map(node => squash(node.textContent)), ['Bluewatch', 'moved here this reply'], 'the region on its own line (kept from the place before), then the mark');
 });
 
 test('Here: a 200-character thought is kept whole; a 300-character one is cut to 240 with an ellipsis', () => {

@@ -12,9 +12,9 @@ import { installFakeDom } from '../../ui-fake-dom.js';
 const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 
 const world = (more = {}) => ({
-    today: 'March 4, 2026, 09:30 am',
+    today: 'March 4, 2026, 09:30 am', date: 'March 4, 2026', time: '09:30 am',
     here: {
-        place: { name: 'North Cut', kind: 'wild', region: 'Vale' }, moved: true, weather: 'fog and rain',
+        place: { name: 'North Cut', line: 'North Cut · Overlook', kind: 'wild', region: 'Vale' }, moved: true, weather: 'fog and rain',
         hasPeople: true, people: [{ name: 'Elula', key: 'elula', stance: 'Close', thought: '', dossier: false }], chatter: [], nsd: false,
     },
     clockSet: true, upcomingDays: 30, hasUpcoming: true,
@@ -49,13 +49,13 @@ const readingOrder = el => {
 
 test('World, Now: Here reads place, weather, then the People here label directly above the people', () => {
     const order = readingOrder(draw(world()));
-    assert.deepEqual(order, ['label:Here', 'wv-place', 'wv-weather', 'label:People here 1', 'widget']);
+    assert.deepEqual(order, ['label:Here', 'wv-place', 'wv-weather', 'widget', 'widget'], 'the place, the weather, then the People here fold head and the people');
 });
 
-test('World, Now: with no one here the People here label is not shown and the line says so', () => {
-    const empty = world({ here: { ...world().here, hasPeople: false, people: [], place: { name: 'North Cut' } } });
+test('World, Now: with no one here the line says so under the People here head', () => {
+    const empty = world({ here: { ...world().here, hasPeople: false, people: [], place: { name: 'North Cut', line: 'North Cut' } } });
     const order = readingOrder(draw(empty));
-    assert.deepEqual(order, ['label:Here', 'wv-place', 'wv-weather', 'sd-empty']);
+    assert.deepEqual(order, ['label:Here', 'wv-place', 'wv-weather', 'widget', 'sd-empty']);
     assert.match(squash(draw(empty).querySelector('section[data-kind="here"]').textContent), /No one else is in the scene/);
 });
 

@@ -20,7 +20,7 @@ import { lineKey } from '../../changes.js';
 import { problemList } from '../tracker/domain.js';
 import { heroDate } from '../tracker/clock-set.js';
 import { BEHIND, BEHIND_KINDS } from './reveal.js';
-import { THREADS_FEATURE } from '../threads.js';
+import { THREADS_FEATURE, threadsOn } from '../threads.js';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -289,6 +289,22 @@ export function behindView(state, args, tools) {
     return { kinds, problems: problemsList(state, { behind: true }, tools), open, total };
 }
 
+/**
+ * `director.plan` → `{ hooks, beats, agendas, secrets, problems, any }`: what the Director screen's cards show (the plan; spoilers):
+ * the open hooks with their Next, and, while the feature `story-director.threads` is on, the open beats, agendas (off-screen) and
+ * secrets (name only), then every problem (the ones about the visible threads, then those behind the scenes). Each thread is
+ * `{ id, key, summary, fields }` as `director.behind` gives it.
+ */
+export function planView(state, args, tools) {
+    const query = queryFrom(tools);
+    const hooks = threadsOf(state, query, { kind: 'hook', status: 'active' }).filter(thread => isRecord(thread) && !thread.ended).map(behindThread);
+    const behind = threadsOn(tools) ? behindView(state, args, tools) : { kinds: [], problems: [] };
+    const open = kind => behind.kinds.find(group => group.kind === kind)?.open ?? [];
+    const problems = [...problemsList(state, { behind: false }, tools), ...behind.problems];
+    const view = { hooks, beats: open('beat'), agendas: open('agenda'), secrets: open('secret'), problems };
+    return { ...view, any: Object.values(view).some(list => list.length > 0) };
+}
+
 /** The part's queries; `settings` is the module's settings (a function or an object). */
 const COORD_LIMIT = 1e7;
 const WEATHER_CHARS = 80;
@@ -364,6 +380,8 @@ export function screenQueries({ settings = null } = {}) {
         // The agendas, clocks, beats and secrets: the feature `story-director.threads`' (answers null while it is off, so the screen draws none).
         'director.behind': Object.assign((state, args, tools) => behindView(state, args, tools), { feature: THREADS_FEATURE }),
         // `{ on: true }` while the feature is on, null while it is off: the Director screen's World card and the World screen's News and Factions read it.
+        // The Director screen's cards (planView).
+        'director.plan': (state, args, tools) => planView(state, args, tools),
         'director.threads.on': Object.assign(() => ({ on: true }), { feature: THREADS_FEATURE }),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'quest.board': (state, args, tools) => questBoard(state, args, tools),

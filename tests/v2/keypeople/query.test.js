@@ -92,3 +92,23 @@ test('the story clock in the answer: minutes, as the other queries give them', a
         host.close();
     }
 });
+
+test('the view: how many pinned people are elsewhere (not in the scene), and how old each away person\'s news is', async () => {
+    const host = await keyHost();
+    try {
+        await host.send('Hello.', said('Dawn.', [...OPENING, '+ present Fenna']));
+        await pin(host, 'Ren');
+        await pin(host, 'Fenna');
+        await host.send('Go.', said('Ren leaves.', ['+ away Ren — scouting the north road | back: June 9, 1200', '! away Ren — reached Wolfmere Outpost']));
+        let view = host.sdk.query('director.keyPeople.view');
+        assert.equal(view.elsewhere, 1, 'Fenna is here; Ren is not');
+        assert.equal(view.people.find(person => person.name === 'Ren').newsAgo, 'today');
+        assert.equal(view.people.find(person => person.name === 'Fenna').newsAgo, '');
+        await host.send('Later.', said('Two days on.', ['! time +2d']));
+        view = host.sdk.query('director.keyPeople.view');
+        assert.equal(view.people.find(person => person.name === 'Ren').newsAgo, '2 days ago');
+        assert.equal(view.people.find(person => person.name === 'Ren').doing, 'scouting the north road', 'the away line: what they are doing, no goal or Next');
+    } finally {
+        host.close();
+    }
+});

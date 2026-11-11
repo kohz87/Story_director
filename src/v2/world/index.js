@@ -9,6 +9,8 @@
 //   NPC State Delta's stance and dossier when it is there; NPC State Delta asks it to know who is here) and
 //   `director.journal` (the Journal: each story day from the day digest, and today so far) and `director.journal.events`
 //   (one day's whole list of events, loaded when the reader taps "Show all N events").
+// * `director.world.leads` (the hooks the player has heard of) and the widget `story-director.fold` (every Now section folds,
+//   remembered per chat on this device): elsewhere.js.
 // * Setting `world.upcomingDays` (30): how many story days ahead Upcoming looks.
 // * The Days screen is folded into the Journal; its id `story-director/days` stays as a dialog of the
 //   Journal alone, for older layouts.
@@ -20,12 +22,14 @@ import { DEFAULT_UPCOMING_DAYS, FEATURE, MAX_UPCOMING_DAYS, hereView, worldView 
 import { journalDay, journalEvents, journalView } from './journal.js';
 import { PEOPLE_WIDGET, peopleWidget } from './people.js';
 import { EVENTS_WIDGET, eventsWidget } from './events-widget.js';
+import { FOLD_WIDGET, foldWidget, leadsOf } from './elsewhere.js';
 import { daysScreen, worldScreen } from './screen.js';
 
 export { FEATURE };
 export { WORLD_ID, DAYS_ID, worldScreen, daysScreen } from './screen.js';
 export { PEOPLE_WIDGET, createPeopleWidget, peopleWidget } from './people.js';
 export { EVENTS_WIDGET, eventsWidget } from './events-widget.js';
+export { FOLD_WIDGET, createFoldWidget, foldMemory, foldWidget, leadsOf } from './elsewhere.js';
 export { hereView, hiddenNames, knownFactions, knownNews, knownUpcoming, holidays, worldView } from './known.js';
 export { journalDay, journalEvents, journalView, knownDay } from './journal.js';
 
@@ -43,6 +47,11 @@ export const part = {
     queries: {
         'director.world': tagged((state, args, tools) => worldView(state, args, tools)),
         'director.world.here': tagged((state, args, tools) => hereView(state, args, tools)),
+        // The hooks the player has heard of: `{ rows, has, count }` (elsewhere.js).
+        'director.world.leads': tagged((state, _args, tools) => {
+            const rows = leadsOf(state, tools);
+            return { rows, has: rows.length > 0, count: rows.length };
+        }),
         'director.journal': tagged((state, args, tools) => journalView(state, args, tools)),
         'director.journal.events': tagged((state, args, tools) => journalEvents(state, args, tools)),
         // Not feature-tagged: other modules' recap works whether or not the World screen or the digest is on (contract P: journal.day).
@@ -58,5 +67,5 @@ export const part = {
     },
     tabs: [],
     screens: [worldScreen, daysScreen],
-    widgets: { [PEOPLE_WIDGET]: peopleWidget, [EVENTS_WIDGET]: eventsWidget },
+    widgets: { [PEOPLE_WIDGET]: peopleWidget, [EVENTS_WIDGET]: eventsWidget, [FOLD_WIDGET]: foldWidget },
 };

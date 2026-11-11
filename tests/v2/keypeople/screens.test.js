@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { worldScreen } from '../../../src/v2/world/index.js';
+import { FOLD_WIDGET, foldWidget, worldScreen } from '../../../src/v2/world/index.js';
 import { STATUS_SUMMARY, statusCardScreen } from '../../../src/v2/screens/status-card.js';
 import { KEY_PEOPLE_WIDGET, keyPeopleWidget } from '../../../src/v2/keypeople/widget.js';
 import { conditionEvaluator } from '../../vendor/story-block/src/v2/view/bind.js';
@@ -75,9 +75,9 @@ function drawWidget(value, command = null) {
 }
 
 const VIEW = {
-    on: true, cap: 3, count: 2, countText: '2 of 3', limitText: 'You can have 3 key people; unpin someone first.', full: false, hasPeople: true,
+    on: true, cap: 3, count: 2, elsewhere: 1, countText: '2 of 3', limitText: 'You can have 3 key people; unpin someone first.', full: false, hasPeople: true,
     people: [
-        { key: 'ren', name: 'Ren', here: false, away: true, due: false, status: 'Away · back June 9', doing: 'scouting the north road', last: 'Last news June 3: reached Wolfmere Outpost', back: 'June 9' },
+        { key: 'ren', name: 'Ren', here: false, away: true, due: false, status: 'Away · back June 9', doing: 'scouting the north road', last: 'Last news June 3: reached Wolfmere Outpost', newsAgo: '3 days ago', back: 'June 9' },
         { key: 'fenna', name: 'Fenna', here: true, away: false, due: false, status: 'Here', doing: 'ferrywoman', last: '', back: '' },
     ],
     choices: [{ name: 'Kell', aliases: [], source: 'here', nsd: false }, { name: 'Brom', aliases: ['the smith'], source: 'npc', nsd: true }],
@@ -86,14 +86,19 @@ const VIEW = {
 
 test('the widget: a star, the name, the pill, what they do, the last news and Unpin for each; + Pin opens the chooser; the note under them', () => {
     const { el, text } = drawWidget(VIEW);
+    // Elsewhere: only the pinned people who are not here (Fenna is in People here); what an away person does now and how old the news is.
     const rows = el.querySelectorAll('.wv-key-row');
-    assert.equal(rows.length, 2);
+    assert.equal(rows.length, 1);
     const pieces = row => [...row.children].map(node => squash(node.textContent));
-    assert.deepEqual(pieces(rows[0]), ['★', 'Ren Away · back June 9', 'Unpin', 'scouting the north road', 'Last news June 3: reached Wolfmere Outpost']);
-    assert.deepEqual(pieces(rows[1]), ['★', 'Fenna Here', 'Unpin', 'ferrywoman']);
+    assert.deepEqual(pieces(rows[0]), ['★', 'Ren Away · back June 9', 'Unpin', 'scouting the north road', 'News 3 days ago']);
     assert.ok(rows[0].querySelector('.wv-key-pill').classList.contains('is-away'));
-    assert.ok(rows[1].querySelector('.wv-key-pill').classList.contains('is-here'));
-    assert.ok(text().endsWith('The note.'));
+    assert.ok(!text().includes('Fenna'), 'a pinned person who is present is shown only in People here');
+    assert.ok(!text().includes('Last news'), 'the age, not the step\'s words');
+    // The token note is an ⓘ fold with the words as its tooltip.
+    const info = el.querySelector('.wv-key-info');
+    assert.equal(squash(info.querySelector('summary').textContent), 'ⓘ');
+    assert.equal(info.querySelector('summary').getAttribute('title'), 'The note.');
+    assert.equal(squash(info.querySelector('.wv-key-note').textContent), 'The note.');
     assert.equal(el.querySelector('.wv-key-choose'), null, 'the chooser is closed');
     assert.ok(!el.querySelector('.wv-key-pin').disabled);
 });
@@ -119,6 +124,7 @@ test('the widget: Unpin and a pick run the reader\'s commands; the chooser shows
 test('the widget: nobody pinned says so, a full list disables + Pin with the reason, no one to pin is said, and text is only ever text', () => {
     const empty = drawWidget({ ...VIEW, count: 0, hasPeople: false, people: [] });
     assert.match(empty.text(), /^No one is pinned yet\./);
+    assert.match(drawWidget({ ...VIEW, people: [VIEW.people[1]] }).text(), /^Everyone you pinned is here\./);
     assert.equal(empty.el.querySelectorAll('.wv-key-row').length, 0);
     const full = drawWidget({ ...VIEW, full: true });
     assert.equal(full.el.querySelector('.wv-key-pin').disabled, true);
@@ -145,18 +151,19 @@ function drawWorld(q) {
     const warnings = [...compiled.warnings];
     const world = { today: '', here: { place: null, moved: false, weather: '', hasPeople: false, people: [], chatter: [], nsd: false }, clockSet: true, upcomingDays: 30, hasUpcoming: false, upcoming: [], news: [], hasNews: false, factions: [], hasFactions: false };
     renderTemplate(el, compiled, { state: {}, q: { world, journal: { on: false, hasDays: false, days: [] }, threads: { on: true }, keys: q }, draft: { view: 'now' }, settings: {}, mount: 'tab', screenId: 'story-director/world', api: {} }, {
-        evaluate: conditionEvaluator({ compile, evaluate }), widgets: { [KEY_PEOPLE_WIDGET]: keyPeopleWidget }, onWarn: message => warnings.push(message),
+        evaluate: conditionEvaluator({ compile, evaluate }), widgets: { [KEY_PEOPLE_WIDGET]: keyPeopleWidget, [FOLD_WIDGET]: foldWidget }, onWarn: message => warnings.push(message),
     });
     return { el, warnings };
 }
 
-test('World → Now: the Key people section, "n of cap", between Here and Upcoming; gone while the feature is off (no data)', () => {
+test('World → Now: the Elsewhere section (pinned people not in the scene) between Here and Upcoming; gone while the feature is off (no data)', () => {
     const { el, warnings } = drawWorld(VIEW);
     assert.deepEqual(warnings, []);
     const section = el.querySelector('.wv-key');
     assert.ok(section);
-    assert.equal(squash(section.querySelector('h4').textContent), 'Key people 2 of 3');
-    assert.equal(section.querySelectorAll('.wv-key-row').length, 2);
+    assert.equal(squash(section.querySelector('.sd-fold-head').textContent), 'Elsewhere 1', 'the fold head: the title and how many are elsewhere');
+    assert.equal(section.getAttribute('data-fold'), 'elsewhere');
+    assert.equal(section.querySelectorAll('.wv-key-row').length, 1);
     const order = el.querySelectorAll('section').map(node => node.getAttribute('data-kind'));
     assert.deepEqual(order.slice(0, 3), ['here', 'key', 'upcoming']);
     const off = drawWorld(null);

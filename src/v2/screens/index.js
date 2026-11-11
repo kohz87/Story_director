@@ -18,17 +18,17 @@ import { directorScreen } from './director.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
-import { BEHIND_WIDGET, behindWidget } from './behind.js';
+import { BEHIND_WIDGET, PLAN_WIDGET, behindWidget, planWidget } from './behind.js';
 import { QUESTS_WIDGET, questsWidget } from './quest-cards.js';
 import { THREADS_FEATURE } from '../threads.js';
 
 export { DIRECTOR_ID, KIND_GROUPS } from './director.js';
 export { QUESTS_ID } from './quests.js';
 export { STATUS_CARD_ID } from './status-card.js';
-export { BEHIND_WIDGET, behindWidget, createBehindWidget } from './behind.js';
+export { BEHIND_WIDGET, PLAN_WIDGET, behindWidget, createBehindWidget, planWidget } from './behind.js';
 export { QUESTS_WIDGET, chipOf, createQuestsWidget, isQuestThread, questsWidget, rowsOf } from './quest-cards.js';
 export { BEHIND, BEHIND_KINDS, HIDE_SETTING, browserStore, createReveal, reveal } from './reveal.js';
-export { calendarSetting, currentGoal, nextDue, problemsList, readerWords, screenQueries } from './queries.js';
+export { calendarSetting, currentGoal, nextDue, planView, problemsList, readerWords, screenQueries } from './queries.js';
 
 export const MODULE_ID = 'story-director';
 
@@ -57,7 +57,7 @@ export function createScreensPart({ settings = hostSettings } = {}) {
         hooks: {},
         tabs: [],
         screens: [...screens],
-        widgets: { [BEHIND_WIDGET]: behindWidget, [QUESTS_WIDGET]: questsWidget },
+        widgets: { [BEHIND_WIDGET]: behindWidget, [PLAN_WIDGET]: planWidget, [QUESTS_WIDGET]: questsWidget },
         settings: {
             defaults: { hideBehind: true },
             schema: {
