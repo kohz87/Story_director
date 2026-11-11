@@ -37,7 +37,9 @@ import { problemList } from '../../../src/v2/tracker/domain.js';
 import { fakeDelta } from '../keypeople/helpers.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
-const SEEDS = [1, 2, 3];
+const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+// Seeds from EXTRAS_FROM carry the last days' lines (dayLines, the quiet switch); seeds 1-3 keep the stories the aggregate checks below were set on.
+const EXTRAS_FROM = 4;
 const REPLIES = 20;
 const DELETE_AT = [10, 16, 20];
 // The reply after which the reader adds "copper bit" and "gold" under Settings → Coins: rewards owed then count.
@@ -257,6 +259,33 @@ async function keyEdits(rk, host, n, delta) {
 const NAME_POOL = ['Corst', 'Hald', 'Wenna', 'Joost', 'Elara', 'Bregje', 'Bregja', 'Odda', 'Maaike'];
 const nameLines = (rn, n) => (rn.chance(0.6) ? [`+ person ${rn.chance(0.2) ? `Extra${n}` : rn.pick(NAME_POOL)} | look: scar ${n} | flaw: proud`] : []);
 
+// (night 12 Nov) The last days' kinds, from a stream of their own: world lines that name factions (new ones become known on a reply that carries
+// Story Block's factionTags mark; the pack's own "Fuzz Guild" is known already), places inside a town ("Town / Spot": the map's parents), a cast
+// person who arrives and leaves inside one reply (a meeting that counts as seen: cast seenKeys), and the reader's quiet scene switch
+// (director.pulse.quiet, a slot written whole). The World pulse (feature story-director.pulse, on by default) runs before every reply on its own,
+// and the pack's `ripples` section (RIPPLES, below a top-level field of the cast pack) gives the derived sway; the head's World, Journal and sway must read the same after a rebuild.
+const FACTIONS = ['Fuzz Guild', 'Red Hand', 'Salt Court', 'Grey Wardens'];
+const RIPPLES = { powers: [{ id: 'crown', name: 'The Crown', base: 50, aliases: ['Crown'], givers: ['Fenna'], factions: ['Red Hand'] }, { id: 'guild', name: 'Fuzz Guild', base: 40, givers: ['Brom'], factions: ['Salt Court'] }],
+    worldDirections: [{ event: 'Salt Riots', favours: 'crown', unless: ['bloody'] }, { event: 'Hill Rains', favours: 'guild' }] };
+let factionLines = 0;
+let quietFlips = 0;
+let passersBy = 0;
+function dayLines(rd, n) {
+    const lines = [];
+    if (rd.chance(0.4)) {
+        factionLines += 1;
+        lines.push(`+ world Faction${n} — afoot | state: ${rd.pick(STATES)} | factions: ${rd.pick(FACTIONS)}, ${rd.pick(['Faction', 'Clan'])} ${n}${rd.int(1, 2)}`);
+    }
+    if (rd.chance(0.25)) lines.push(`~ world ${rd.pick(BASE_WORLD)} | factions: ${rd.pick(FACTIONS)}`);
+    if (rd.chance(0.3)) lines.push(`~ place ${BASE_PLACES[0]} / Spot${n}`, ...(n % 2 ? [`~ place ${BASE_PLACES[0]}`] : []));
+    if (rd.chance(0.3)) {
+        passersBy += 1;
+        const who = rd.pick(['Aino', 'Borka', 'Cael', 'Dren']);
+        lines.push(`+ present ${who}`, `- present ${who}`);
+    }
+    return lines;
+}
+
 const said = (text, lines) => `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>`;
 
 // The cast (own stream): six people at the first reply's places and one elsewhere; `drawnTo` words that every reply's text holds, so the
@@ -372,6 +401,7 @@ for (const seed of SEEDS) {
         const re = prng(seed ^ 0xC10C);
         const rn = prng(seed ^ 0x4EA2);
         const ro = prng(seed ^ 0x0FFE);
+        const rd = prng(seed ^ 0xD0A5);
         const madeOffers = [...BASE_OFFERS];
         const source = { version: '1.0.0', enabled: true, entries: [] };
         source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version)];
@@ -382,8 +412,8 @@ for (const seed of SEEDS) {
         host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc, rs) }), settings: { features: { 'story-director.names': true }, modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
         // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
         const installCast = async () => {
-            const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
-            assert.equal((await host.packs.packs.install(JSON.stringify(pack), { origin: 'cast-fuzz' })).ok, true);
+            const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, ripples: RIPPLES, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
+            { const done = await host.packs.packs.install(JSON.stringify(pack), { origin: 'cast-fuzz' }); assert.equal(done.ok, true, JSON.stringify(done)); }
             await host.packs.packs.setEnabled('ersveil', source.enabled);
         };
         await installCast();
@@ -401,7 +431,7 @@ for (const seed of SEEDS) {
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
                 const near = nearLines(rn, n);
-                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers)];
+                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...(seed >= EXTRAS_FROM ? dayLines(rd, n) : [])];
                 const seeking = rs.chance(0.6) ? rs.pick(SOUGHT_ASK) : '';
                 // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
                 const names = seeking === 'cartographer' || sought === 'cartographer';
@@ -450,6 +480,11 @@ for (const seed of SEEDS) {
                     assert.ok((await host.sdk.command('director.arc.end', {})).ok);
                 }
                 await keyEdits(rk, host, n, delta);
+                // The reader's quiet scene switch now and then, on the latest reply (a delete may take it back).
+                if (seed >= EXTRAS_FROM && rd.chance(0.25)) {
+                    quietFlips += 1;
+                    assert.ok((await host.sdk.command('director.pulse.quiet', { on: rd.chance(0.5) })).ok, `seed ${seed}, reply ${n}: quiet scene switch`);
+                }
                 // The reader sets the clock by hand now and then, forward or back; the model follows (a set, exact).
                 if (re.chance(0.3)) {
                     const edit = editOf(re);
@@ -486,8 +521,10 @@ for (const seed of SEEDS) {
                 if (closedHere.length) assert.ok(skipped.length <= closedHere.length * 2 + 1, `${where}: only the payments of the deleted turn-in are skipped (${skipped.join(' / ')})`);
                 else assert.deepEqual(skipped, [], `${where}: a later block no longer applies`);
                 const live = JSON.stringify(host.head());
+                const shown = JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal'), host.sdk.query('ripples.sway'), host.sdk.query('chronicle.factions')]);
                 host.store.rebuild();
                 assert.equal(JSON.stringify(host.head()), live, `${where}: rebuild != live`);
+                assert.equal(JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal'), host.sdk.query('ripples.sway'), host.sdk.query('chronicle.factions')]), shown, `${where}: World, Journal, sway and factions after a rebuild`);
                 assert.deepEqual(validatorErrors(host), [], where);
                 assert.equal(clock(), expectedClock(host.ctx.chat, times, start), `${where}: the clock`);
             }
@@ -523,6 +560,8 @@ for (const seed of SEEDS) {
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
+            t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
+            assert.ok(!source.enabled || host.sdk.query('ripples.sway')?.length === 2, `seed ${seed}: the pack's ripples table is read`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             undatedLapsed += host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle')
