@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Trips rest like the estimate.** A `~ trip` now counts rest days the way the travel estimate does (a rest day every sixth day on foot or riding; a night's stop on a modern drive), so the party arrives when the estimate said. Applies to replies written after this update; earlier replies, and a Re-read of them, keep their timing exactly.
+
 ## 2.14.0
 
 Update Story Block, Story Director and NPC State Delta together, then re-import the Ersveil pack (2.9.5 needs Story Block 2.31.0). The new features apply to new replies; start a new chat to see them all. Replies already written replay and Re-read exactly as before.

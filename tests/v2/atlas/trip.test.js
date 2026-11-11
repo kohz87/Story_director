@@ -10,7 +10,7 @@ import { validateAtlas } from '../../../src/v2/atlas/domain.js';
 import { modeOf, positionOf, tripLines, tripOf, tripView } from '../../../src/v2/atlas/trip.js';
 import { tripsProblems } from '../../../src/v2/atlas/trip-shape.js';
 import { tripTail } from '../../../src/v2/atlas/note.js';
-import { deepFreeze, line, makeState, query, replay } from './helpers/fake-ctx.js';
+import { command, deepFreeze, line, makeState, query, replay } from './helpers/fake-ctx.js';
 
 const calendar = makeCalendar(PRESETS.gregorian);
 const DAY = 1440;
@@ -372,4 +372,58 @@ test('the query carries the trip and its movers together; the leg ids and the "Y
     assert.equal(out.row.startsWith('Bluewatch Village → '), true);
     // No clock: no answer (a trip's position needs the time).
     assert.equal(query(deepFreeze({ ...state, domains: { ...state.domains, director: { time: { minutes: null }, threads: {} } } }), 'atlas.trip', {}, { pack: PACK }), null);
+});
+
+// ---- rest days: a trip rests as the estimate does, on replies written after the mark -------------------------------
+
+const marked = () => command(makeState({ place: 'Bluewatch Village' }), 'atlas.mark', { tripRest: true }).state;
+const setOutMarked = (raw, options = {}) => {
+    const out = run(stateAt(T0, { base: marked() }), raw, options);
+    assert.ok(out.ok, out.message);
+    return out;
+};
+
+test('a trip set out after the mark counts rest days exactly as the estimate does; one set out before it keeps its travel days only', () => {
+    // 160 km on foot: 8 travelling days and one rest day (every 6th), the estimate's 9.
+    const estimate = query(stateAt(T0), 'atlas.travel', { from: 'Bluewatch Village', to: 'Wolfmere Outpost', mode: 'foot' }, { pack: PACK });
+    assert.deepEqual([estimate.activeDays, estimate.restDays, estimate.days], [8, 1, 9]);
+    const legs = goRecord(setOutMarked('~ trip Wolfmere Outpost | by: foot').state).legs;
+    assert.deepEqual(legs.map(leg => leg.days), [5, 4], 'the rest day falls in the leg whose travelling takes the total past the sixth day');
+    assert.equal(legs.at(-1).arrive - T0, estimate.days * DAY);
+    assert.equal(legs[1].start, legs[0].arrive);
+    const old = goRecord(setOut('~ trip Wolfmere Outpost | by: foot').state).legs;
+    assert.deepEqual(old.map(leg => leg.days), [5, 3], 'an unmarked reply (an old one on a Re-read) plans as it always did');
+    assert.equal(old.at(-1).arrive - T0, 8 * DAY);
+    // The trip is read back with its stored times: a later mark cannot move it.
+    const later = command(setOut('~ trip Wolfmere Outpost | by: foot').state, 'atlas.mark', { tripRest: true }).state;
+    assert.deepEqual(goRecord(later).legs, old);
+    assert.equal(tripOf(later.domains.atlas).legs.at(-1).arrive - T0, 8 * DAY);
+});
+
+test('rest days with a way by Auvoth, a mid-road start and a modern map follow the estimate too', () => {
+    const via = goRecord(setOutMarked('~ trip Wolfmere Outpost | by: foot | via: Auvoth').state).legs;
+    const estimate = query(stateAt(T0), 'atlas.travel', { from: 'Bluewatch Village', to: 'Wolfmere Outpost', mode: 'foot' }, { pack: PACK });
+    assert.ok(estimate.days > 0);
+    // 70 + 130 km = 10 travelling days, one rest (the 6th active day passed).
+    assert.equal(via.reduce((sum, leg) => sum + leg.days, 0), 11);
+    assert.equal(via.at(-1).arrive - T0, 11 * DAY);
+    const modern = goRecord(setOutMarked('~ trip Wolfmere Outpost | by: foot', { settings: { map: { era: 'modern' } } }).state).legs;
+    const plainModern = goRecord(setOut('~ trip Wolfmere Outpost | by: foot', { settings: { map: { era: 'modern' } } }).state).legs;
+    const hours = list => list.reduce((sum, leg) => sum + leg.days, 0) * 24;
+    assert.ok(hours(modern) > hours(plainModern), 'a modern walker stops for the night');
+    const travel = query(stateAt(T0), 'atlas.travel', { from: 'Bluewatch Village', to: 'Wolfmere Outpost', mode: 'foot', map: { era: 'modern' } }, { pack: PACK });
+    assert.ok(Math.abs(hours(modern) - travel.days * 24) < 1e-3, 'the whole trip is the estimate\'s');
+});
+
+test('beforeGenerate marks the atlas once, only while trips are on; the mark is a plain flag the domain checks', () => {
+    const state = makeState({ place: 'Bluewatch Village' });
+    const out = part.hooks.beforeGenerate({ state, query: () => null });
+    assert.deepEqual(out.commands.map(step => [step.type, step.payload]).filter(([type]) => type === 'atlas.mark'), [['atlas.mark', { tripRest: true }]]);
+    const done = command(state, 'atlas.mark', { tripRest: true }).state;
+    assert.equal(done.domains.atlas.tripRest, true);
+    assert.deepEqual(validateAtlas(done.domains.atlas), []);
+    assert.equal((part.hooks.beforeGenerate({ state: done, query: () => null })?.commands ?? []).some(step => step.type === 'atlas.mark'), false);
+    assert.equal((part.hooks.beforeGenerate({ state, query: () => null, feature: () => false })?.commands ?? []).some(step => step.type === 'atlas.mark'), false);
+    assert.match(validateAtlas({ ...done.domains.atlas, tripRest: false })[0], /tripRest/);
+    assert.equal(command(state, 'atlas.mark', { tripRest: 1 }).ok, false);
 });
