@@ -193,3 +193,17 @@ test('director: an Off-screen agenda draws its step bar (done, current, to come)
     assert.match(squash(bregje.textContent), /step 3 of 4 · since June 10 Bluewatch Village → arriving within the hour/);
     assert.equal(vane.querySelector('.sd-steps'), null, 'an agenda with no step fields has no bar');
 });
+
+test('status card: a spot with no point of its own shows its town\'s coordinates; a place unknown to the atlas shows none', () => {
+    const places = { 'a:town': { id: 'a:town', name: 'Auvoth', x: 59, y: 110 }, 'a:spot': { id: 'a:spot', name: 'Gatehouse', x: null, y: null } };
+    const tools = {
+        query: (name, args) => {
+            if (name === 'atlas.here') return { id: 'a:spot', name: 'Gatehouse', line: 'Auvoth · Gatehouse' };
+            if (name === 'atlas.place') return places[args.id] ?? Object.values(places).find(place => place.name === args.name) ?? null;
+            return null;
+        },
+    };
+    const state = { domains: { director: { time: { minutes: null } }, scene: { place: { name: 'Auvoth | Gatehouse' } } } };
+    assert.equal(statusExtras(state, {}, tools).coords, '59, 110');
+    assert.equal(statusExtras(state, {}, { query: () => null }).coords, '', 'nothing known: none');
+});
