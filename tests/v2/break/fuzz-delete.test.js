@@ -505,12 +505,21 @@ for (const seed of SEEDS) {
             assert.ok(castDone.length >= 1, `seed ${seed}: the cast joined the world`);
             const world = Object.values(host.head().domains.cast.people);
             t.diagnostic(`seed ${seed}: cast steps ${castDone.length} (met ${castDone.filter(text => /^Paths crossed/.test(text)).length}, moved ${castDone.filter(text => /moved on/.test(text)).length}), people ${world.length}, met ${world.filter(person => person.met).length}, dead ${world.filter(person => !person.alive).length}`);
-            // The narrator hears of the cast only in a meeting's cue (a meeting a later delete took back was still told then): no other text of any prompt names them.
-            const told = host.st.promptLog.filter(entry => entry.value).flatMap(entry => String(entry.value).split('\n')).filter(line => !line.startsWith('[Cast]'));
+            // A pulse chance meeting may name the person too, but only alongside that person's cast introduction.
+            const told = host.st.promptLog.filter(entry => entry.value).flatMap(entry => {
+                const lines = String(entry.value).split('\n');
+                return lines.filter(line => {
+                    const meeting = /^World this reply: (.+?) crosses your path in .+, by chance\.$/.exec(line);
+                    return !line.startsWith('[Cast]') && !(meeting && lines.some(other => other.startsWith(`[Cast] ${meeting[1]} comes into the scene in this reply`)));
+                });
+            });
             // A rumor describes; it never names (it is a [Cast] line too, so it is checked on its own).
             const rumors = host.st.promptLog.filter(entry => entry.value).flatMap(entry => String(entry.value).split('\n')).filter(line => line.startsWith('[Cast] People here know of'));
             for (const id of [...CAST_IDS, 'ylva']) assert.ok(!rumors.some(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line)), `seed ${seed}: ${id} is named in a rumor`);
-            for (const id of CAST_IDS) assert.ok(!told.some(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line)), `seed ${seed}: ${id} is named outside a meeting's cue`);
+            for (const id of CAST_IDS) {
+                const leaked = told.find(line => new RegExp(`\\b${id}\\d*\\b`, 'i').test(line));
+                assert.equal(leaked, undefined, `seed ${seed}: ${id} is named outside a meeting's cue: ${leaked}`);
+            }
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);

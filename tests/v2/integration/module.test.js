@@ -22,9 +22,10 @@ import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
 import { PULSE_STATIC } from '../../../src/v2/pulse/effects.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
+import { fakeDelta } from '../keypeople/helpers.js';
 import {
     OVERUSED, applyPerson, beforeGenerate as namesBefore, bareKey, capMinor, checkName, clampCount, initialNames, nameKey, parseBanned, parseProfile, pickSuggestions,
-    profileText, tail as namesTail, validateNames,
+    part as namesPart, profileText, tail as namesTail, validateNames,
 } from '../../../src/v2/names/index.js';
 
 // What the host builds from a module's context (Story Block's registry contextOf): its static, then each context part that is on, trimmed,
@@ -275,6 +276,106 @@ test('names core: accents do not hide a banned or overused name; a known person 
     assert.match(cue.lines[0].text, /by another, unused name/, 'suggestions 0 means no suggested name in the cue either');
 });
 
+test('names: a unique full, given, middle, surname, partial or titled name keeps the known person and their profile', () => {
+    const slice = { people: { 'marrit anne voss': { name: 'Marrit Anne Voss', first: 2, profile: { look: 'tall', flaw: '', voice: '', temper: '' }, rev: 2 } }, seen: { 'captain joris brand': { name: 'Captain Joris Brand', rev: 3 } }, taken: {} };
+    const before = structuredClone(slice);
+    const ctx = { rev: 7, draft: () => slice, settings: () => ({}), query: () => null };
+    for (const name of ['Marrit Anne Voss', 'Marrit', 'Anne', 'Voss', 'Marrit Voss', 'Anne Voss', 'Lady Marrit Voss', 'Joris Brand', 'Joris', 'Brand', 'Captain Brand']) {
+        const result = applyPerson(ctx, { op: '+', name, text: 'look: different' });
+        assert.equal(result.data.known, true, name);
+        assert.equal(result.problem, undefined, name);
+    }
+    assert.deepEqual(slice, before, 'no duplicate profile, overwrite or rename cue');
+    assert.equal(namesBefore(namesView(slice, { settings: { suggestions: 0 } }), {})?.lines, undefined);
+});
+
+test('names: cast, dossier and pin aliases stay linked in recorded history, including a scene alias', () => {
+    const slice = initialNames();
+    const view = namesView(slice, { present: ['Red Fox'], settings: { suggestions: 0 } });
+    view.state.domains.cast = { people: { 'pack:joris': { name: 'Captain Joris Brand', aliases: ['Red Fox', 'Joss the Swift'] } } };
+    view.state.domains.keypeople = { pins: { mara: { name: 'Mara Kess', aliases: ['Swift Quill'] }, fox: { name: 'Red Fox', aliases: ['Watch Fox'] } }, gone: {} };
+    view.query = (name, args) => name === 'scene.present' ? ['Red Fox'] : name === 'npc.known' ? ['Leonie West'] : name === 'npc.dossier' && args.name === 'Leonie West' ? { name: 'Leonie West', aliases: ['Mistress Willow'] } : name === 'npc.identity' ? { id: 'np_12345678' } : null;
+    const step = namesBefore(view, {}).commands.find(command => command.type === 'names.seen');
+    assert.equal(step.payload.identities.length, 4);
+    const ctx = { cause: 'system', rev: 4, draft: () => slice, settings: () => ({}), query: () => null, fail: (code, text) => ({ code, text }) };
+    assert.equal(namesPart.commands['names.seen'](ctx, step.payload).summary, 'Names noted.');
+    assert.deepEqual(validateNames(slice), []);
+    assert.equal(namesBefore(view, {}), undefined, 'unchanged aliases do not keep writing steps');
+    const before = structuredClone(slice);
+    for (const name of ['Joris', 'Captain Brand', 'Joss', 'Red Fox', 'Fox', 'Watch Fox', 'Leonie', 'West', 'Willow', 'Mara', 'Kess', 'Swift Quill']) {
+        const result = applyPerson(ctx, { op: '+', name, text: 'look: invented' });
+        assert.equal(result.data.known, true, name);
+        assert.equal(result.problem, undefined, name);
+    }
+    assert.deepEqual(slice, before, 'known aliases do not invent profiles or cues');
+    view.state.domains.cast.people['pack:joris'].aliases = ['The Red Captain'];
+    const update = namesBefore(view, {}).commands.find(command => command.type === 'names.seen');
+    namesPart.commands['names.seen']({ ...ctx, rev: 5 }, update.payload);
+    assert.equal(applyPerson(ctx, { op: '+', name: 'Red Captain' }).data.known, true, 'a newly learned alias is recorded');
+    assert.equal(applyPerson(ctx, { op: '+', name: 'Red Fox' }).data.known, true, 'an earlier alias remains linked');
+    assert.equal(namesBefore(view, {}), undefined, 'a changed alias is recorded only once');
+    assert.deepEqual(validateNames(slice), []);
+});
+
+test('names: ambiguous given names, surnames, aliases and identical full names remain collisions', () => {
+    const slice = initialNames();
+    const view = namesView(slice, { settings: { suggestions: 0 } });
+    view.state.domains.cast = { people: {
+        'p:a': { name: 'Joris Brand', aliases: ['Fox'] },
+        'p:b': { name: 'Joris Voss', aliases: ['Fox'] },
+        'p:c': { name: 'Mara Brand', aliases: [] },
+        'p:d': { name: 'Riva North', aliases: ['Sparrow'] },
+        'p:e': { name: 'Riva North', aliases: ['Wren'] },
+    } };
+    view.state.domains.keypeople = { pins: { fox: { name: 'Fox', aliases: ['Night Fox'] } }, gone: {} };
+    const ctx = { cause: 'system', rev: 3, draft: () => slice, settings: () => ({}), query: () => null, fail: (code, text) => ({ code, text }) };
+    namesPart.commands['names.seen'](ctx, namesBefore(view, {}).commands[0].payload);
+    for (const name of ['Joris Brand', 'Joris Voss', 'Mara Brand', 'Sparrow', 'Wren']) {
+        assert.equal(applyPerson(ctx, { op: '+', name }).data.known, true, `${name} identifies one person`);
+    }
+    for (const name of ['Joris', 'Brand', 'Fox', 'Riva North', 'Joris Dane', 'Elara']) {
+        const result = applyPerson(ctx, { op: '+', name, text: 'look: invented' });
+        assert.ok(result.problem, `${name} must be a collision`);
+        assert.ok(slice.taken[nameKey(name)], `${name} gets a rename cue`);
+        assert.equal(slice.people[nameKey(name)], undefined, `${name} gets no profile`);
+    }
+    const cues = namesBefore(view, {}).lines;
+    assert.equal(cues.length, 6);
+    assert.ok(cues.every(cue => cue.keep));
+    assert.deepEqual(validateNames(slice), []);
+});
+
+test('names on the host: partial and dossier alias declarations stay quiet through a swipe, deletion and rebuild', async () => {
+    const delta = { 'Joris Brand': { aliases: ['Red Fox'] } };
+    const host = await createHost({ modules: [fakeDelta(delta), createModule()], settings: { features: { 'story-director.names': true, 'story-director.pulse': false } } });
+    try {
+        await host.send('Hello.', '<Changes>\n+ person Marrit Anne Voss | look: tall\n</Changes>');
+        await host.send('Again.', '<Changes>\n+ person Marrit | look: short\n+ person Brand | look: made up\n+ person Red Fox | look: made up\n</Changes>');
+        const middle = host.ctx.chat.length - 1;
+        const names = () => host.head().domains.names;
+        assert.deepEqual(names().taken, {});
+        assert.equal(names().people['marrit anne voss'].profile.look, 'tall');
+        assert.deepEqual(Object.keys(names().people), ['marrit anne voss']);
+        await host.swipe('<Changes>\n+ person Voss | look: short\n+ person Fox | look: made up\n</Changes>');
+        assert.deepEqual(names().taken, {});
+        delta['Joris Brand'].aliases = ['Grey Falcon'];
+        await host.send('Then?', '<Changes>\n+ person Grey Falcon | look: made up\n</Changes>');
+        assert.deepEqual(names().taken, {});
+        delta['Joris Brand'].aliases = ['Red Fox'];
+        assert.ok(!host.st.promptLog.some(entry => String(entry.value ?? '').includes('[Names] "Marrit"')));
+        await host.st.deleteMessage(middle);
+        await host.st.deleteMessage(middle - 1);
+        assert.deepEqual(host.store.problems(), []);
+        assert.ok(!Object.values(names().seen).some(entry => entry.aliases?.includes('Grey Falcon')), 'the deleted observation leaves no alias behind');
+        const live = structuredClone(host.head());
+        host.store.rebuild();
+        assert.deepEqual(host.head(), live);
+        assert.deepEqual(validateNames(names()), []);
+    } finally {
+        host.close();
+    }
+});
+
 test('names on the host: a repeated or overused name is a Problem and a pinned cue on the next reply; a fresh name is stored with its profile; off, the prompt is as it was', async () => {
     const run = async features => {
         const host = await createHost({ modules: [createModule()], settings: { features: { 'story-director.pulse': false, ...features } } });
@@ -315,7 +416,8 @@ test('names: the step before a reply notes who else is in use (scene, cast, doss
     view.state.domains.cast = { people: { 'p:a': { name: 'Brom', aliases: ['Old Brom'] } } };
     const out = namesBefore(view, {});
     assert.deepEqual(out.commands.map(c => c.type), ['names.seen', 'names.told']);
-    assert.deepEqual(out.commands[0].payload.who, ['Rika', 'Brom', 'Old Brom']);
+    assert.deepEqual(out.commands[0].payload.who, ['Rika']);
+    assert.deepEqual(out.commands[0].payload.identities.map(person => person.name), ['Brom']);
     assert.match(out.lines[0].text, /^\[Names\] "Elara" is not a fresh name/);
     assert.equal(out.lines[0].keep, true);
     assert.equal(out.lines[0].text.includes('Brom'), false, 'nobody known is named in the cue');

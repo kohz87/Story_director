@@ -14,6 +14,7 @@
 // tests/v2/integration/module.test.js and host.test.js hold the tests; tests/v2/break/fuzz-delete.test.js sends `person` lines.
 
 import { lineKey } from '../../changes.js';
+import { personMatches } from '../../tracker-words.js';
 import { sha256 } from '../hash.js';
 
 export const DEFAULT_SUGGESTIONS = 3;
@@ -231,11 +232,11 @@ export function capMinor(people = {}, max = MAX_MINOR) {
 }
 
 // ---- the part -----------------------------------------------------------------------------------------------------------------
-
 export const FEATURE = 'story-director.names';
 const GRAMMAR = '+ person Name | look: … | flaw: … | voice: … | temper: … (once, when a named person first appears: a new name, never the player, a known or pack person)';
 const MAX_SEEN = 200;
 const MAX_TAKEN = 30;
+const MAX_ALIASES = 12;
 const MAX_TAIL_PROFILES = 4;
 const TAIL_HEADER = 'Unused names (pick one for any new person):';
 
@@ -273,6 +274,8 @@ export function packNames(query) {
 
 export const initialNames = () => ({ people: {}, seen: {}, taken: {} });
 const tables = slice => ({ people: isRecord(slice?.people) ? slice.people : {}, seen: isRecord(slice?.seen) ? slice.seen : {}, taken: isRecord(slice?.taken) ? slice.taken : {} });
+const identityKey = entry => `@${sha256(JSON.stringify([entry.source, entry.name, entry.aliases])).slice(0, 24)}`;
+const identityOk = entry => isRecord(entry) && typeof entry.source === 'string' && entry.source.length > 0 && entry.source.length <= 200 && typeof entry.name === 'string' && !!nameKey(entry.name) && Array.from(entry.name).length <= MAX_NAME && Array.isArray(entry.aliases) && entry.aliases.length <= MAX_ALIASES && entry.aliases.every(alias => typeof alias === 'string' && !!nameKey(alias) && Array.from(alias).length <= MAX_NAME);
 
 /** The validator: [] or sentences. */
 export function validateNames(slice) {
@@ -283,7 +286,7 @@ export function validateNames(slice) {
         const profile = entry?.profile;
         if (!nameOk(key, entry) || !isInt(entry.first) || (profile !== null && !(isRecord(profile) && PROFILE_FIELDS.every(field => typeof profile[field] === 'string' && Array.from(profile[field]).length <= MAX_FIELD)))) errors.push(`names.people.${key} is not { name, first, profile, rev }.`);
     }
-    for (const [key, entry] of Object.entries(slice.seen)) if (!nameOk(key, entry)) errors.push(`names.seen.${key} is not { name, rev }.`);
+    for (const [key, entry] of Object.entries(slice.seen)) if (!(entry?.source === undefined ? nameOk(key, entry) : identityOk(entry) && identityKey(entry) === key && isInt(entry.rev))) errors.push(`names.seen.${key} is not a name or identity.`);
     for (const [key, entry] of Object.entries(slice.taken)) if (!nameOk(key, entry) || typeof entry.told !== 'boolean') errors.push(`names.taken.${key} is not { name, rev, told }.`);
     if (Object.keys(slice.people).length > MAX_MINOR || Object.keys(slice.seen).length > MAX_SEEN || Object.keys(slice.taken).length > MAX_TAKEN) errors.push('names holds more entries than it may.');
     for (const key of Object.keys(slice)) if (!['people', 'seen', 'taken'].includes(key)) errors.push(`names has an unknown field "${key}".`);
@@ -305,10 +308,12 @@ export function applyPerson(ctx, line) {
     const settings = settingsOf(ctx);
     const packed = packNames(queryOf(ctx));
     const others = [...Object.values(people), ...Object.values(seen)];
-    // A person already known (declared before, a dossier, the cast, a pin, the scene) who is declared again is the same person: no check, no cue, the stored profile stays.
-    if (others.some(entry => sameName(name, entry.name))) return { summary: `Name: ${name} is known already.`, narrate: false, data: { person: key, known: true } };
-    const known = others.map(entry => ({ name: entry.name, by: 'used' }));
+    // A unique full, partial, titled or alias match is the same person. Multiple candidates are a collision.
+    const matches = personMatches(name, others, bareKey);
+    if (matches === 1) return { summary: `Name: ${name} is known already.`, narrate: false, data: { person: key, known: true } };
+    const known = others.flatMap(entry => [entry.name, ...(entry.aliases ?? [])]).map(name => ({ name, by: 'used' }));
     const { reasons } = checkName(name, { known, banned: [...settings.banned, ...(packed?.banned ?? [])] });
+    if (matches > 1 && !reasons.some(reason => reason.kind === 'taken')) reasons.push({ kind: 'taken', by: 'used' });
     const read = parseProfile([line?.text, ...Object.entries(isRecord(line?.labels) ? line.labels : {}).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join(' | '));
     if (!reasons.length) {
         people[key] = { name, first: revOf(ctx), profile: read.ok ? read.profile : null, rev: revOf(ctx) };
@@ -325,16 +330,17 @@ export function applyPerson(ctx, line) {
     return { summary: `Name: ${name} is not a fresh name (${why}).`, narrate: false, data: { person: key, taken: true }, problem: `${name}: ${why}. ${reasons.every(reason => reason.kind === 'near') ? 'Check it is not the same person under another spelling.' : 'The next reply asks the narrator for another name (or swipe).'}` };
 }
 
-/** `names.seen { who }` (system, the step before a reply): the names others use now, so the next `person` line is checked against them. */
+/** `names.seen { who, identities? }` (system): record names and the aliases belonging to each known person. */
 function seeSeen(ctx, payload = {}) {
     if (ctx.cause !== 'system') return ctx.fail('REFUSED', 'The names others use are noted by Story Director itself.');
-    if (!isRecord(payload) || !Array.isArray(payload.who) || payload.who.length > 60 || payload.who.some(name => typeof name !== 'string')) return ctx.fail('INVALID', 'names.seen takes { who: [name] }.');
+    if (!isRecord(payload) || !Array.isArray(payload.who) || payload.who.length > 60 || payload.who.some(name => typeof name !== 'string') || (payload.identities !== undefined && (!Array.isArray(payload.identities) || payload.identities.length > 60 || payload.identities.some(entry => !identityOk(entry))))) return ctx.fail('INVALID', 'names.seen takes { who: [name], identities?: [person] }.');
     const { people, seen } = tables(ctx.draft('names'));
     for (const raw of payload.who) {
         const name = cleanName(raw);
         const key = nameKey(name);
         if (key && !Object.hasOwn(people, key) && !Object.hasOwn(seen, key)) seen[key] = { name, rev: revOf(ctx) };
     }
+    for (const entry of payload.identities ?? []) if (!Object.hasOwn(seen, identityKey(entry))) seen[identityKey(entry)] = { name: entry.name, source: entry.source, aliases: entry.aliases, rev: revOf(ctx) };
     oldest(seen, MAX_SEEN);
     return { summary: 'Names noted.', narrate: false };
 }
@@ -348,23 +354,33 @@ function told(ctx, payload = {}) {
     return { summary: 'Rename cue told.', narrate: false };
 }
 
-/** Everyone else's names, from the view: the scene, the whole cast (unmet included: only their use, never who), NPC State Delta, the key people. */
+/** Names and linked aliases from the scene, cast, NPC State Delta and key people; recorded before the reply for replay. */
 function othersOf(view) {
     const query = queryOf(view);
     const cast = view?.state?.domains?.cast?.people;
     const keys = view?.state?.domains?.keypeople;
-    return [
-        ...namesOf(ask(query, 'scene.present')), ...namesOf(ask(query, 'npc.known')),
-        ...Object.values(isRecord(cast) ? cast : {}).flatMap(person => [person?.name, ...(Array.isArray(person?.aliases) ? person.aliases : [])]),
-        ...[keys?.pins, keys?.gone].flatMap(table => Object.values(isRecord(table) ? table : {}).map(entry => entry?.name)),
-    ].filter(name => typeof name === 'string' && nameKey(name));
+    const identities = [];
+    const add = (source, person, fallback = '') => {
+        const name = cleanName(person?.name || fallback), aliases = [...new Set((Array.isArray(person?.aliases) ? person.aliases : []).map(cleanName).filter(alias => nameKey(alias)))].slice(0, MAX_ALIASES);
+        if (nameKey(name)) identities.push({ source: source.slice(0, 200), name, aliases });
+    };
+    const known = namesOf(ask(query, 'npc.known')).slice(0, MAX_SEEN);
+    for (const name of known) {
+        const dossier = ask(query, 'npc.dossier', { name });
+        const id = ask(query, 'npc.identity', { name })?.id;
+        add(`npc:${typeof id === 'string' ? id : nameKey(name)}`, dossier, name);
+    }
+    for (const [key, person] of Object.entries(isRecord(cast) ? cast : {})) add(`cast:${key}`, person);
+    for (const [key, person] of Object.entries(isRecord(keys?.pins) ? keys.pins : {})) add(`pin:${key}`, person);
+    const names = [...namesOf(ask(query, 'scene.present')), ...known, ...identities.flatMap(person => [person.name, ...person.aliases]), ...Object.values(isRecord(keys?.gone) ? keys.gone : {}).map(entry => entry?.name)].filter(name => typeof name === 'string' && nameKey(name));
+    return { names, identities };
 }
 
 const suggestionsFor = (view, slice, count, seed) => {
     const { people, seen } = tables(slice);
     const names = packNames(queryOf(view));
     const settings = settingsOf(view);
-    return names ? pickSuggestions({ names, region: view?.state?.domains?.scene?.place?.region ?? '', used: [...Object.values(people), ...Object.values(seen)].map(entry => entry.name).concat(othersOf(view)), banned: settings.banned, count, seed }) : [];
+    return names ? pickSuggestions({ names, region: view?.state?.domains?.scene?.place?.region ?? '', used: [...Object.values(people), ...Object.values(seen)].flatMap(entry => [entry.name, ...(entry.aliases ?? [])]).concat(othersOf(view).names), banned: settings.banned, count, seed }) : [];
 };
 
 /** `beforeGenerate(view, info)`: one `names.seen` step for names newly in use, one `names.told` step and the pinned rename cue for refusals not told yet. */
@@ -374,8 +390,11 @@ export function beforeGenerate(view, info = {}) {
     const { people, seen, taken } = tables(slice);
     const commands = [];
     if (info?.commit !== false) {
-        const who = [...new Set(othersOf(view).map(cleanName))].filter(name => !Object.hasOwn(people, nameKey(name)) && !Object.hasOwn(seen, nameKey(name))).slice(0, 60);
-        if (who.length) commands.push({ type: 'names.seen', payload: { who } });
+        const others = othersOf(view);
+        const identities = others.identities.filter(entry => !Object.hasOwn(seen, identityKey(entry))).slice(0, 60);
+        const linked = new Set(others.identities.filter(entry => identities.includes(entry) || seen[identityKey(entry)]).flatMap(entry => [entry.name, ...entry.aliases]).map(nameKey));
+        const who = [...new Set(others.names.map(cleanName))].filter(name => !linked.has(nameKey(name)) && !Object.hasOwn(people, nameKey(name)) && !Object.hasOwn(seen, nameKey(name))).slice(0, 60);
+        if (who.length || identities.length) commands.push({ type: 'names.seen', payload: { who, ...(identities.length ? { identities } : {}) } });
     }
     const owed = Object.entries(taken).filter(([, entry]) => entry.told !== true);
     const lines = owed.map(([key, entry], at) => {
