@@ -143,11 +143,11 @@ const CSS = `
 .ch-done .ch-name { color: inherit; font-weight: normal; }
 .ch-done .ch-actions { margin: 0 0 0 auto; }
 .ch-done .ch-btn { flex: 0 0 auto; }
-@media (min-width: 600px) {
+/* Columns come from the screen's own width (a card is at most 100% wide), never from the window's. */
+.ch-events .ch-list, .ch-factions .ch-list { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+/* A mouse needs a smaller target than a finger: the switch is the pointer, not the window width. */
+@media (pointer: fine) {
   .ch-btn { flex: 0 0 auto; min-height: 36px; }
-}
-@media (min-width: 720px) {
-  .ch-events .ch-list, .ch-factions .ch-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 }
 `;
 

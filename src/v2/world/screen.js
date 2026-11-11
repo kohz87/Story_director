@@ -261,7 +261,7 @@ const CSS = `${BASE_CSS}
 /* The host keeps every button at least 44px (a touch target): pills at that height here, and on a phone Unpin is a link-like button, not a circle. */
 .wv-key-unpin { grid-column: 3; grid-row: 1 / span 3; align-self: start; margin: 0; padding: 0 16px; font: inherit; font-size: 0.8em; line-height: 1.4; cursor: pointer; color: inherit; background: none; border: 1px solid var(--sd-border); border-radius: var(--ss-radius-pill); }
 .wv-key-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-@media (max-width: 599px) { .wv-key-unpin { margin-block: -8px; padding: 0 6px; border-color: transparent; text-decoration: underline; color: var(--sd-accent-text); } }
+@media (pointer: coarse) { .wv-key-unpin { margin-block: -8px; padding: 0 6px; border-color: transparent; text-decoration: underline; color: var(--sd-accent-text); } }
 .wv-key-actions .wv-key-pin { flex: 0 0 auto; width: 7em; padding: 0 18px; border-radius: var(--ss-radius-pill); }
 /* The Pin list stays inside the card and scrolls there (a phone keeps the card within the room under the header). */
 .wv-key-choices { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: min(260px, 32vh); overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
@@ -339,10 +339,10 @@ summary.wv-head::before, summary.wv-cathead::before { box-sizing: border-box; wi
 .wv-sub { display: block; color: var(--sd-muted); }
 .wv-facts { list-style: none; padding-left: 0 !important; }
 .wv-note { margin: 0; font-size: 0.85em; color: var(--sd-muted); }
-@media (min-width: 720px) {
-  .wv-now { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
-  .wv-here { grid-column: 1 / -1; }
-}
+/* Columns from the screen's own width (not the window's): as many 320px columns as fit, one when the box is narrower (the Story panel is
+   about 300px wide in a 1000px window; a 320px minimum overflowed it by 4px). */
+.wv-now { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); align-items: start; }
+.wv-here { grid-column: 1 / -1; }
 `;
 
 const DATA = Object.freeze({

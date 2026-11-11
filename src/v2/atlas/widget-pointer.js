@@ -6,9 +6,9 @@ import { panBy, zoomAt } from './view.js';
 
 const WHEEL_RATE = 0.0015;
 const DRAG_THRESHOLD = 4;
-const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (the phone line, PHONE)
+const TAP_HALF = 22;               // half of a phone's 44px tap area on the screen (a coarse pointer, PHONE)
 // The phone line, as Story Block's (its size.css): a narrow screen or a coarse pointer gets the dots' 44px tap areas.
-const PHONE = '(max-width: 759.98px), (pointer: coarse)';
+const PHONE = '(pointer: coarse)';
 
 // Three groups: `dom` (window, document and the nodes), `view` (the state `s` and what reads the view) and `hooks` (what the widget lends it).
 export function createPointer({ dom, view, hooks }) {
