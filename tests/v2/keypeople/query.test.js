@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { keyPeopleQuery } from '../../../src/v2/keypeople/queries.js';
+import { keyPeopleQuery, keyPeopleView } from '../../../src/v2/keypeople/queries.js';
 import { FEATURE } from '../../../src/v2/keypeople/domain.js';
 import { OPENING, keyHost, pin, said, unpin } from './helpers.js';
 
@@ -111,4 +111,14 @@ test('the view: how many pinned people are elsewhere (not in the scene), and how
     } finally {
         host.close();
     }
+});
+
+test('the view: an away person\'s place (the away record\'s, else the newest step\'s) shows as the map\'s line; none keeps the status line', () => {
+    const away = (place, steps = []) => ({ domains: { keypeople: { pins: { ren: { name: 'Ren' }, mia: { name: 'Mia' } }, away: { ren: { name: 'Ren', doing: 'scouting', since: 0, back: null, steps, place }, mia: { name: 'Mia', doing: 'resting', since: 0, back: null, steps: [] } }, gone: {} } } });
+    const tools = { query: (name, args) => (name === 'atlas.line' ? `Wolfmere · ${args.name}` : null) };
+    const people = state => Object.fromEntries(keyPeopleView(state, {}, tools).people.map(person => [person.name, person]));
+    assert.equal(people(away('Outpost')).Ren.place, 'Wolfmere · Outpost');
+    assert.equal(people(away(undefined, [{ date: 0, text: 'a', place: 'Ford' }, { date: 1, text: 'b' }])).Ren.place, 'Wolfmere · Ford', 'newest step that names a place');
+    assert.equal(people(away('Outpost')).Mia.place, '');
+    assert.equal(people(away('Outpost')).Mia.status, 'Away');
 });

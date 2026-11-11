@@ -11,6 +11,7 @@
 // and which way north and east run.
 
 import { keyOf } from './domain.js';
+import { placeLine } from './parent.js';
 
 // Font Awesome icons (SillyTavern ships Font Awesome) by the words a kind is written with.
 const ICONS = Object.freeze([
@@ -102,8 +103,13 @@ export function atlasView(world, current = '', { map = {} } = {}) {
     const drawn = world.places.filter(place => !place.hidden || place.id === here?.id);
     const ids = new Set(drawn.map(place => place.id));
     const visited = new Set(drawn.filter(place => place.discovered || place.id === here?.id).map(place => place.id));
+    // A town counts as visited when a place inside it is (derived, nothing stored).
+    for (const place of drawn.filter(item => item.parent && visited.has(item.id))) if (ids.has(place.parent)) visited.add(place.parent);
     const kinds = {};
     const layers = new Map();
+    // The places inside a drawn place (parent.js): a dot round it, counted on its label.
+    const inside = new Map();
+    for (const place of drawn) if (place.parent && ids.has(place.parent)) inside.set(place.parent, (inside.get(place.parent) ?? 0) + 1);
     const places = drawn.map(place => {
         const icon = iconFor(place.kind);
         if (place.kind && !kinds[place.kind]) kinds[place.kind] = { label: label(place.kind), icon };
@@ -111,7 +117,8 @@ export function atlasView(world, current = '', { map = {} } = {}) {
         if (layer && !layers.has(layer)) layers.set(layer, { id: layer, name: place.layer || place.region, type: place.layer ? 'plane' : 'region' });
         return {
             id: place.id, name: place.name, aliases: [...(place.aliases ?? [])], region: place.region, kind: place.kind, icon,
-            plane: place.layer, layer, x: place.x, y: place.y, visited: visited.has(place.id), here: place.id === here?.id,
+            plane: place.layer, layer, x: place.x, y: place.y, line: placeLine(place, world),
+            parent: place.parent && ids.has(place.parent) ? place.parent : '', inside: inside.get(place.id) ?? 0, visited: visited.has(place.id), here: place.id === here?.id,
         };
     });
     const routes = world.routes.filter(route => ids.has(route.from) && ids.has(route.to)).map(route => {
@@ -126,6 +133,9 @@ export function atlasView(world, current = '', { map = {} } = {}) {
         layer: here ? viewLayerOf(here) : '',
         current: here && ids.has(here.id) ? here.id : '',
         kinds,
+        // "Tidy the map" is offered while a visited atlas place has no coordinates (atlas.edit { tidy: true }); the `atlas.view` query
+        // narrows this count to the places a tidy can place (queries.js).
+        tidy: drawn.filter(place => place.source === 'atlas' && place.discovered && place.x === null).length,
         orient: { north: map?.north === 'down' ? 'down' : 'up', east: map?.east === 'left' ? 'left' : 'right' },
     };
 }

@@ -56,6 +56,8 @@ function render(el, props, api) {
         const star = make('span', 'wv-key-star', '★', { 'aria-hidden': 'true' });
         item.append(star, head, unpin);
         // What they are doing now (an away person's own line; never a role, goal or Next), and how old the news is.
+        // Their place when known (an away person's record or newest step), else the away status line stays.
+        if (person.away && person.place) item.append(make('span', 'wv-key-sub wv-key-place', person.place));
         if (person.away && person.doing) item.append(make('span', 'wv-key-sub wv-key-doing', person.doing));
         if (person.newsAgo) item.append(make('span', 'wv-key-sub wv-key-ago', `News ${person.newsAgo}`));
         return item;

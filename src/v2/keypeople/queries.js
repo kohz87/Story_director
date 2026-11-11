@@ -11,7 +11,7 @@
 //
 // Nothing is stored for these: every answer is worked out from the state and the other queries.
 
-import { DEFAULT_CAP, FEATURE, MAX_CAP, cutPoints, findPin, flat, isInt, isRecord, keyOf, keysOfPin, tables } from './domain.js';
+import { DEFAULT_CAP, FEATURE, MAX_CAP, awayOf, cutPoints, findPin, flat, isInt, isRecord, keyOf, keysOfPin, tables } from './domain.js';
 import { awayEntries, keyTail, tokensOf } from './note.js';
 import { suiteApi } from './nsd.js';
 import { calendarFrom, dateText } from './time.js';
@@ -152,6 +152,16 @@ function choicesOf(slice, query, profiles) {
     return out.slice(0, MAX_CHOICES);
 }
 
+// Where an away person is: their away record's own `place`, else the newest step that names one; shown as the map's place line when it knows the place.
+function placeOf(slice, entry, query) {
+    if (!entry) return '';
+    const named = [awayOf(slice, entry.key)?.place, ...[...entry.steps].reverse().map(step => step.place)].find(value => typeof value === 'string' && value.trim());
+    if (!named) return '';
+    let line = '';
+    try { line = query?.('atlas.line', { name: named }); } catch { /* no map: the name stands */ }
+    return cutPoints(typeof line === 'string' && line.trim() ? line : named, 80);
+}
+
 const agoOf = days => (days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`);
 
 /** The role NPC State Delta gives a person, from its profiles or its dossier ('' when none). */
@@ -165,7 +175,7 @@ function roleOf(pin, profiles, query) {
 
 /**
  * `director.keyPeople.view` → `{ on, cap, count, full, hasPeople, people: [{ key, name, here, away, due, doing, status, last,
- * newsAgo, back }], elsewhere (how many are not in the scene), choices, tokens, budget, note }` for the World screen. `tokens`: what the away people cost the narrator now.
+ * newsAgo, place, back }], elsewhere (how many are not in the scene), choices, tokens, budget, note }` for the World screen. `tokens`: what the away people cost the narrator now.
  */
 export function keyPeopleView(state, _args, tools) {
     const slice = state?.domains?.keypeople;
@@ -194,6 +204,8 @@ export function keyPeopleView(state, _args, tools) {
             last: step ? `Last news${lastDate ? ` ${lastDate}` : ''}: ${step}` : '',
             // How old the newest news is, in story days ("today", "yesterday", "3 days ago"): Elsewhere's line.
             newsAgo: isInt(now) && isInt(entry?.last?.date) && now >= entry.last.date ? agoOf(Math.floor(now / 1440) - Math.floor(entry.last.date / 1440)) : '',
+            // Elsewhere's place line for an away person ('' when no place is known: the status line stands).
+            place: placeOf(slice, entry, query),
             back,
         };
     });

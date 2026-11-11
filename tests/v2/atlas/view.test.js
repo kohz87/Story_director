@@ -184,6 +184,9 @@ test('labels for a dense cluster and a big world: none overlap, high priority al
 test('shorten and label sizes', () => {
     assert.equal(shorten('Inspection Quay'), 'Inspection…');
     assert.equal(shorten('Ox'), 'Ox');
+    // A town's count stays when its name is cut.
+    assert.equal(shorten('Bluewatch Village · 6 places inside'), 'Bluewatch V… · 6 inside');
+    assert.equal(shorten('Auvoth · 1 place inside'), 'Auvoth · 1 inside');
     assert.equal(shorten('Rimeglassdelvehold'), 'Rimeglassd…');
     assert.equal(shorten('Ox Ford Crossing'), 'Ox Ford Cr…');
     assert.ok(labelSize('Bluewatch Village').w > labelSize('Ox').w);

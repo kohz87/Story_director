@@ -80,11 +80,12 @@ test('status card: time, place, goal and step, progress, with what this reply ch
     const changes = ['/domains/director/time/minutes', '/domains/director/threads/th_wolves01/rev'];
     const { el } = draw(STATUS_CARD_ID, headState(), { changes });
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
-    assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Goal']);
+    assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Region', 'Goal']);
     assert.deepEqual(rows[0], ['Time', 'June 11, 2025, 9:00 am']);
-    assert.deepEqual(rows[1], ['Place', 'Bluewatch Village · Eastmarch']);
+    assert.deepEqual(rows[1], ['Place', 'Bluewatch Village']);
+    assert.deepEqual(rows[2], ['Region', 'Eastmarch']);
     // The goal row holds the progress bar (its text is the bar's own label, not part of the goal line).
-    assert.ok(rows[2][1].startsWith('East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'), rows[2][1]);
+    assert.ok(rows[3][1].startsWith('East Bluff Wolves — Clear at least 3 wolves from East Bluff Now: Hunt along the ridge'), rows[3][1]);
     // What comes next is the Director screen's, behind Reveal: a spoiler under the reply (user, beta).
     assert.equal(el.querySelector('.sd-next'), null);
     assert.equal(byId[STATUS_CARD_ID].data.next, undefined);
@@ -112,12 +113,18 @@ test('status card: the place\'s map coordinates when the atlas knows it, and Sto
     assert.deepEqual(warnings, []);
     const rows = el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
     // Time, Weather, Place, Coordinates (its own row; the place does not carry the coordinates any more).
-    assert.deepEqual(rows.slice(0, 4), [
+    assert.deepEqual(rows.slice(0, 5), [
         ['Time', 'June 11, 2025, 9:00 am'],
         ['Weather', 'Light rain over the sluices'],
-        ['Place', 'Bluewatch Village · Eastmarch'],
-        ['Coordinates', '59, 110'],
+        ['Place', 'Bluewatch Village'],
+        ['Region', 'Eastmarch'],
+        ['Coordinates', '59.4, 110'],
     ]);
+    // The place line "Town · Spot" comes from the atlas (`line`); the region has its own row.
+    const parted = { ...queries, 'atlas.here': () => ({ id: 'pl_guild001', name: 'Bluewatch Village / Guild Office', line: 'Bluewatch Village · Guild Office', region: 'River' }) };
+    const { el: partedEl } = draw(STATUS_CARD_ID, headState(), { queries: parted });
+    assert.equal(squash(partedEl.querySelector('.sd-place dd').textContent), 'Bluewatch Village · Guild Office');
+    assert.equal(squash(partedEl.querySelector('.sd-region dd').textContent), 'River');
     // Unknown to the atlas, no position, no weather (null): nothing of either, and no error.
     for (const more of [
         { 'atlas.here': () => null, 'scene.weather': () => null },
@@ -127,7 +134,8 @@ test('status card: the place\'s map coordinates when the atlas knows it, and Sto
         const { el: plain } = draw(STATUS_CARD_ID, headState(), { queries: { ...makeQueries(), ...more } });
         assert.equal(plain.querySelector('.sd-coords'), null);
         assert.equal(plain.querySelector('.sd-weather'), null);
-        assert.equal(squash(plain.querySelector('.sd-place dd').textContent), 'Bluewatch Village · Eastmarch');
+        assert.equal(squash(plain.querySelector('.sd-place dd').textContent), 'Bluewatch Village');
+        assert.equal(squash(plain.querySelector('.sd-region dd').textContent), 'Eastmarch');
     }
 });
 
@@ -150,8 +158,8 @@ test('status card: a Travel row (icon fa-route) after Coordinates while a trip i
     const { el, warnings } = draw(STATUS_CARD_ID, withTrip(now + 2 * 1440), { queries });
     assert.deepEqual(warnings, []);
     const rows = rowsOf(el);
-    assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Coordinates', 'Travel', 'Goal']);
-    assert.deepEqual(rows[3], ['Travel', "Bluewatch Village → Hollin's Reach → Wolfmere Outpost · on foot, 20 km/day · leg 1 of 2 · arrive Wolfmere Outpost June 19"]);
+    assert.deepEqual(rows.map(([label]) => label), ['Time', 'Place', 'Region', 'Coordinates', 'Travel', 'Goal']);
+    assert.deepEqual(rows[4], ['Travel', "Bluewatch Village → Hollin's Reach → Wolfmere Outpost · on foot, 20 km/day · leg 1 of 2 · arrive Wolfmere Outpost June 19"]);
     assert.ok(el.querySelector('.sd-travel i').classList.contains('fa-route'));
     // Arrived: the row says so; the place has moved on elsewhere: no row.
     assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withTrip(now + 9 * 1440), { queries }).el).find(([label]) => label === 'Travel'), ['Travel', 'Arrived at Wolfmere Outpost, June 19']);
@@ -167,7 +175,7 @@ test('status card: a Travel row (icon fa-route) after Coordinates while a trip i
     const looking = { ...queries, 'scene.weather': () => ({ text: 'Light rain' }), 'scene.you': () => ({ rank: 'F-rank', rankLabel: 'Guild rank', wearing: 'oilskin coat, boots', condition: 'tired and cold' }) };
     const both = draw(STATUS_CARD_ID, withTrip(now + 2 * 1440), { queries: looking });
     assert.deepEqual(both.warnings, []);
-    assert.deepEqual(rowsOf(both.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Travel', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
+    assert.deepEqual(rowsOf(both.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Travel', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
 });
 
 test('status card: Rank, Wearing and Condition (Story Block 2.10.0\'s scene.you) come after Coordinates, one row per value, each reply\'s own', { skip }, () => {
@@ -187,16 +195,16 @@ test('status card: Rank, Wearing and Condition (Story Block 2.10.0\'s scene.you)
     const rowsOf = el => el.querySelectorAll('.sd-row').map(row => [row.querySelector('dt').textContent.trim(), squash(row.querySelector('dd').textContent)]);
     const full = draw(STATUS_CARD_ID, withYou({ rank: 'F-rank, Adventurer Guild', rankLabel: 'Guild rank', wearing: 'oilskin coat, boots', condition: 'tired and cold' }), { queries });
     assert.deepEqual(full.warnings, []);
-    assert.deepEqual(rowsOf(full.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
-    assert.deepEqual(rowsOf(full.el).slice(4, 7), [['Guild rank', 'F-rank, Adventurer Guild'], ['Wearing', 'oilskin coat, boots'], ['Condition', 'tired and cold']]);
+    assert.deepEqual(rowsOf(full.el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Guild rank', 'Wearing', 'Condition', 'Goal']);
+    assert.deepEqual(rowsOf(full.el).slice(5, 8), [['Guild rank', 'F-rank, Adventurer Guild'], ['Wearing', 'oilskin coat, boots'], ['Condition', 'tired and cold']]);
     assert.ok(full.el.querySelector('.sd-rank dt i.fa-user'), 'the user icon');
     assert.ok(full.el.querySelector('.sd-wearing dt i.fa-user'), 'the user icon');
     assert.ok(full.el.querySelector('.sd-condition dt i.fa-user'));
     // A row with no value is left out; a record with neither, no query (an older Story Block), a throwing query and the feature off (null): nothing new.
-    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: '', rankLabel: 'Guild rank', wearing: '', condition: 'tired' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Condition', 'Goal']);
-    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: 'novice', rankLabel: 'Standing', wearing: 'a grey coat', condition: '  ' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Standing', 'Wearing', 'Goal']);
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: '', rankLabel: 'Guild rank', wearing: '', condition: 'tired' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Condition', 'Goal']);
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: 'novice', rankLabel: 'Standing', wearing: 'a grey coat', condition: '  ' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Standing', 'Wearing', 'Goal']);
     // A rank with no label (a game with no pack that gives one) is not a row, whatever the answer holds.
-    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: 'F-rank', wearing: 'a coat', condition: '' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Wearing', 'Goal']);
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, withYou({ rank: 'F-rank', wearing: 'a coat', condition: '' }), { queries }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Wearing', 'Goal']);
     for (const more of [
         { 'scene.you': () => ({ rank: '', rankLabel: 'Guild rank', wearing: '', condition: '' }) },
         { 'scene.you': () => null },
@@ -205,11 +213,11 @@ test('status card: Rank, Wearing and Condition (Story Block 2.10.0\'s scene.you)
     ]) {
         const { el, warnings } = draw(STATUS_CARD_ID, headState(), { queries: { ...queries, ...more } });
         assert.deepEqual(warnings, []);
-        assert.deepEqual(rowsOf(el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Goal']);
+        assert.deepEqual(rowsOf(el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Goal']);
     }
     const noQuery = { ...queries };
     delete noQuery['scene.you'];
-    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, headState(), { queries: noQuery }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Coordinates', 'Goal'], 'no such query: nothing new');
+    assert.deepEqual(rowsOf(draw(STATUS_CARD_ID, headState(), { queries: noQuery }).el).map(([label]) => label), ['Time', 'Weather', 'Place', 'Region', 'Coordinates', 'Goal'], 'no such query: nothing new');
     // Long words are cut at the card's cap (120), text only (no markup).
     const long = draw(STATUS_CARD_ID, withYou({ wearing: `<b>${'w'.repeat(200)}</b>`, condition: 'ok' }), { queries });
     assert.equal(long.el.querySelectorAll('.sd-wearing b').length, 0);
@@ -266,7 +274,7 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     const merged = messages[1].querySelector(`[data-ss-section="${STATUS_CARD_ID}"]`) !== null;
 
     assert.match(text(1), /June 10, 2025, 6:30 pm/);
-    assert.match(text(1), /Mill Road · Eastmarch/);
+    assert.match(text(1), /Place Mill Road Region Eastmarch/);
     assert.match(text(1), /Tanner Pelts — Bring 5 wolf pelts/);
     assert.doesNotMatch(text(1), /Bluewatch|Wolves 8\/3|Bandit Raid/);
     assert.ok(body(1).querySelector('.sd-place').classList.contains('sd-new'), 'reply 1 moved the place');
@@ -307,7 +315,7 @@ test('status card rows: a row with no value is left out; no box of its own (the 
     assert.deepEqual(timeOnly.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Time']);
     // The full card: the five fields in order, with the goal's progress inside its row.
     const { el } = draw(STATUS_CARD_ID, headState());
-    assert.deepEqual(el.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Time', 'Place', 'Goal']);
+    assert.deepEqual(el.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Time', 'Place', 'Region', 'Goal']);
     // No box: the list is not a glass or bordered panel; the labels are muted small caps; the values are body text.
     const dl = el.querySelector('dl.sd-status');
     assert.ok(dl, 'the card is a definition list');
@@ -322,5 +330,5 @@ test('status card rows: a row with no value is left out; no box of its own (the 
     assert.match(css, /\.sd-new > dd \{ color: var\(--sd-accent-text\); \}/);
     // An unset clock: no Time row, the place and goal still shown.
     const { el: noClock } = draw(STATUS_CARD_ID, headState({ minutes: null }));
-    assert.deepEqual(noClock.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place', 'Goal']);
+    assert.deepEqual(noClock.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place', 'Region', 'Goal']);
 });

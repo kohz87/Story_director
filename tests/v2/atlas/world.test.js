@@ -102,7 +102,7 @@ test('item 5: a label left out keeps the kind (scene moves, landmark lines); onl
     assert.equal(placeNamed(state, 'reedmere').kind, 'town');
     // atlas.here: the scene's place with the atlas's kind and the pack's region when the scene has none.
     const moved = at(story(), 'Inspection Quay', { kind: '', region: 'River Confederacy' });
-    assert.deepEqual(query(moved, 'atlas.here', {}, { pack: PACK }), { id: placeNamed(moved, 'inspection quay').id, name: 'Inspection Quay', kind: 'quay', placeKind: 'quay', region: 'Bluewatch Village' });
+    assert.deepEqual(query(moved, 'atlas.here', {}, { pack: PACK }), { id: placeNamed(moved, 'inspection quay').id, name: 'Inspection Quay', line: 'Inspection Quay', kind: 'quay', placeKind: 'quay', region: 'Bluewatch Village' });
     assert.equal(query(at(story(), 'Nowhere Known'), 'atlas.here', {}, { pack: PACK }), null);
     assert.equal(query(at(story(), ''), 'atlas.here', {}, { pack: PACK }), null);
 });
@@ -156,7 +156,7 @@ test('atlas.view: map settings turn the map; odd and empty worlds give empty, va
     const broken = { query: tools.query, settings: () => { throw new Error('no settings'); } };
     assert.deepEqual(part.queries['atlas.view'](state, {}, broken).orient, { north: 'up', east: 'right' });
     // Nothing known, no packs.
-    assert.deepEqual(query(makeState(), 'atlas.view'), { places: [], routes: [], layers: [], layer: '', current: '', kinds: {}, orient: { north: 'up', east: 'right' } });
+    assert.deepEqual(query(makeState(), 'atlas.view'), { places: [], routes: [], layers: [], layer: '', current: '', kinds: {}, tidy: 0, orient: { north: 'up', east: 'right' } });
     // An empty pack, a pack of junk.
     assert.deepEqual(query(makeState(), 'atlas.view', {}, { pack: { places: [], routes: [] } }).places, []);
     assert.deepEqual(query(makeState(), 'atlas.view', {}, { pack: { places: [1, 'x', null, { name: 7 }], routes: [{}] } }).places, []);

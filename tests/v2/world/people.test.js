@@ -246,3 +246,15 @@ test('busy with no cards keeps the last cards and the label; done redraws withou
     assert.equal(page.el.querySelector('.wv-updating').hidden, true);
     assert.equal(page.el.querySelectorAll('.wv-chip').length, 3);
 });
+
+test('Here: the place line is the atlas\'s "Town · Spot" (atlas.here, else atlas.line on the scene name, else the scene name split)', () => {
+    const here = line => ({ id: 'pl_a', name: 'Auvoth', ...line, region: 'Gate Coast', kind: 'gate' });
+    const ask = (atlasHere, atlasLine, scene) => (name, args) => ({
+        'atlas.here': atlasHere, 'atlas.line': atlasLine && args?.name === scene ? atlasLine : '', 'scene.place': { name: scene },
+    })[name] ?? null;
+    const viaHere = hereView({}, {}, ask(here({ line: 'Auvoth · Southern Gatehouse' }), '', 'Auvoth | Southern Gatehouse')).place;
+    assert.deepEqual([viaHere.name, viaHere.line], ['Auvoth', 'Auvoth · Southern Gatehouse']);
+    assert.equal(hereView({}, {}, ask(null, 'Auvoth · Gatehouse', 'Auvoth | Gatehouse')).place.line, 'Auvoth · Gatehouse', 'atlas.line on the scene name');
+    assert.equal(hereView({}, {}, ask(null, '', 'Auvoth | Gatehouse')).place.line, 'Auvoth · Gatehouse', 'fallback: the scene name split');
+    assert.equal(hereView({}, {}, ask(null, '', 'Auvoth')).place.line, 'Auvoth');
+});

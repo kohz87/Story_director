@@ -185,10 +185,14 @@ export function hereView(state, _args, tools) {
     const atlas = tryQuery(query, 'atlas.here', {}, null);
     const scenePlace = tryQuery(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
     const name = text(atlas?.name) || text(scenePlace?.name);
-    // `line`: "Town · Spot" (the scene's own "Town | Spot" split on the map's separator; no atlas line exists yet).
-    const where = parseLocation(text(scenePlace?.name));
-    const spot = where.name && where.name.toLowerCase() === name.toLowerCase() ? where.spot : '';
-    const place = name ? { name: cut(name, 80), line: cut(spot ? `${name} · ${spot}` : name, 120), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
+    // `line`: "Town · Spot", the map's own place line (`atlas.here`, else `atlas.line` on the scene's name); with no atlas, the scene's "Town | Spot" split.
+    const sceneName = text(scenePlace?.name);
+    let line = text(atlas?.line) || (sceneName ? text(tryQuery(query, 'atlas.line', { name: sceneName }, '')) : '');
+    if (!line) {
+        const where = parseLocation(sceneName);
+        line = where.name && where.spot ? `${where.name} · ${where.spot}` : name;
+    }
+    const place = name ? { name: cut(name, 80), line: cut(line, 120), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
     const moved = Boolean(place) && tryQuery(query, 'scene.moved', {}, false) === true;
     // Story Block's Scene tab shows the weather and World replaces that tab, so Here must too (MODULES §F119/§F122).
     const weather = cut(text(tryQuery(query, 'scene.weather', {}, null)?.text), 80);
