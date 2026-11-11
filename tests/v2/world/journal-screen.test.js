@@ -258,3 +258,22 @@ test('render 4/8: today\'s card is open and the others folded; an event\'s detai
     assert.equal(squash(person.querySelector('.wv-t').textContent), 'Torka', 'the name on its own line');
     assert.equal(person.querySelectorAll('.wv-tags .wv-tag').length, 2, 'its meters wrap under it');
 });
+
+test('N1: a person with an agenda keeps their Met, events and fight lines on a short day (Journal, search, backlog), as on a whole day', () => {
+    const agenda = { words: new Set(), behind: new Set(['bregje']) };
+    const cats = {
+        met: ['Bregje'], events: ['Bregje asked for the ledger.', 'Fight won: Astra +60 XP, Bregje +60 XP.'],
+        party: ['Bregje joins the party.'], items: ['Bregje gives the party Rope.'], reputation: ['Bregje: deed.'],
+        relationships: ['Bregje: trust 1 -> 2'], news: ['World: Bregje left town.'],
+    };
+    const day = knownDay(shortDay(cats), agenda, { now: NOW });
+    assert.deepEqual(kindOf(day, 'met').items.map(row => row.title), ['Bregje']);
+    assert.equal(kindOf(day, 'events').items.length, 2);
+    assert.equal(kindOf(day, 'party').items.length, 1);
+    assert.equal(kindOf(day, 'items').items.length, 1);
+    assert.equal(kindOf(day, 'reputation').items.length, 1);
+    assert.equal(kindOf(day, 'relationships'), undefined, 'relationships and news still hide agenda keys, as on a whole day');
+    assert.equal(kindOf(day, 'news'), undefined);
+    assert.match(day.search, /Fight won: Astra \+60 XP, Bregje/);
+    assert.match(backlogBlock({ days: [{ ...day, day: 20 }], now: 22 * 1440, present: ['Bregje'] }).join('\n'), /Bregje/);
+});

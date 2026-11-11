@@ -141,7 +141,9 @@ function foldsOf(entry, { kept, quests, hidden, threads, format }) {
     const hide = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
     const made = bucketDay({ ...entry, happened: kept.map(item => item.line), tags: kept.map(item => item.tag) });
     // A short day's own lists were made when it was written, before anything was hidden: they pass the same filter as a whole day's lines, at read time (a later Reveal shows them again).
-    if (entry.brief) for (const cat of Object.keys(made)) made[cat] = made[cat].filter(line => !hide(line) && !isNarratorNote(line));
+    // Only relationships and news also hide agenda keys (as a whole day does); people with an agenda stay in the other kinds.
+    const plainHide = line => namesHidden(line, hidden.words);
+    if (entry.brief) for (const cat of Object.keys(made)) made[cat] = made[cat].filter(line => !(cat === 'relationships' || cat === 'news' ? hide(line) : plainHide(line)) && !isNarratorNote(line));
     // Events keep their thread (a short day has only the lines).
     const events = entry.brief ? (made.events ?? []).map(line => ({ line, thread: '' }))
         : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events').map(item => ({ line: item.line, thread: parseTag(item.tag).thread }));
