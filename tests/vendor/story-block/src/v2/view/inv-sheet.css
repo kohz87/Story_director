@@ -26,3 +26,7 @@
 .inv-sheet .sheet-actions .ss-button, .inv-sheet .sheet-close { min-height: calc(36px / var(--ss-zoomed, 1)); }   /* 36px on the screen inside a zoomed root */
 .inv-sheet .sheet-close { justify-self: end; }
 .inv-sheet .ss-button:focus-visible { outline: 2px solid var(--ss-accent); outline-offset: 2px; }
+/* Not see-through under Solid / Follow SillyTavern with a translucent tint: the surface at full alpha as the floor (Glass sets --ss-sheet-floor itself), like the game window. */
+@supports (color: rgb(from red r g b)) {
+    .ss-dialog.inv-sheet { background-color: var(--ss-sheet-floor, rgb(from var(--ss-surface) r g b / 1)); }
+}

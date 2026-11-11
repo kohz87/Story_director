@@ -9,6 +9,7 @@
 // road factor). Unknown otherwise.
 
 import { DEFAULT_MAP, DEFAULT_PACES, MODERN_PACES, estimateTrip, mapSettings } from '../../places.js';
+import { parentOf } from './parent.js';
 import { DEFAULT_RULES, MODERN_RULES, durationText, legDays, restDaysFor } from '../../routes.js';
 
 const tidy = value => Math.round(value * 1e9) / 1e9;
@@ -17,11 +18,14 @@ const tidy = value => Math.round(value * 1e9) / 1e9;
 export const TOWN_HOP_HOURS = 0.5;
 export const TOWN_HOP_DAYS = TOWN_HOP_HOURS / 24;
 
-/** The town a place with no road of its own stands in (its saved `parent`), or null: its trips go through the town's roads. */
+/**
+ * The town a place with no road of its own stands in (its saved `parent`, else the town its "X / Y" or "X (Y)" name says: a pack's
+ * start place "Bluewatch Village / Guild Office" has no saved parent), or null: its trips go through the town's roads.
+ */
 export function townOf(world, place) {
-    const up = place?.parent ? world.find(place.parent) : null;
-    if (!up || up.id === place.id || world.routes.some(route => route.from === place.id || route.to === place.id)) return null;
-    return up;
+    if (!place || world.routes.some(route => route.from === place.id || route.to === place.id)) return null;
+    const up = place.parent ? world.find(place.parent) : parentOf(place.name, world)?.parent ?? null;
+    return !up || up.id === place.id ? null : up;
 }
 
 // The mode a route of this kind is travelled by, whatever the trip's own.

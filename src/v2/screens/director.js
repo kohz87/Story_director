@@ -7,8 +7,8 @@
 // `director.plan`): Beats, "Hooks the story is planning" (with Next), Off-screen (agendas: wants, At, Next), Secrets and
 // Problems (those about the visible threads, then those behind the scenes); Off-screen agendas show their step bar, place and
 // "arriving within the hour" (queries.js agendaSteps). The World pulse card (feature `story-director.pulse`, query `pulse.view`) and the
-// Quiet scene switch (command `director.pulse.quiet`; Story Block's game-view header has no place for a module's switch, so it sits at the top
-// here) lead the screen. No clock line (the hero header has it), no Quests
+// Quiet scene switch (command `director.pulse.quiet`) lead the screen. The switch is a pill in Story Block's game-view header (the part's
+// `headerControls`, query `pulse.quiet`); it sits at the top of this screen only where the host has no such slot (`localSwitch`). No clock line (the hero header has it), no Quests
 // (the Quests tab) and no World list (World's News). The beats, off-screen and secrets belong to the feature
 // `story-director.threads` (src/v2/threads.js). Read-only but for the arc's own tools.
 
@@ -17,6 +17,7 @@ import { BEHIND } from './reveal.js';
 import { PLAN_WIDGET, RIPPLES_WIDGET } from './behind.js';
 import { ARC_WIDGET } from '../arc/widget.js';
 import { slotValue } from '../slot.js';
+import { hostHasHeaderSlot } from '../module/shared.js';
 import { FEATURE as PULSE_FEATURE, modeOf, resultsOf } from '../pulse/effects.js';
 
 export const DIRECTOR_ID = 'story-director/director';
@@ -48,7 +49,8 @@ function pulseRow(entry) {
 }
 
 /**
- * `pulse.view` → the Director screen's World pulse card (feature `story-director.pulse`; null while it is off): `{ mode, quiet, card, show, now, rollAt, table, recent, count }`.
+ * `pulse.view` → the Director screen's World pulse card (feature `story-director.pulse`; null while it is off): `{ mode, quiet, card, localSwitch, show, now, rollAt, table, recent, count }`.
+ * `localSwitch`: the Quiet scene switch is drawn here (the card is on and the host's header has no slot for it).
  * `mode`: the setting (off hides the card and the switch); `quiet`: the chat's quiet-scene flag; `show`: the setting "Show the roll under replies" (the
  * status card's row, for the reply at `now.at`); `now`: the latest result as a row (null before any); `rollAt`: that reply's place when `show` (the status card draws its row only under it), else -1; `table`: "standard · 3 away"; `recent`: the
  * the earlier stored results (at most 5; the newest is `now`), newest first. Read on the state it is given, so an older reply's card shows its own.
@@ -65,7 +67,7 @@ export function pulseView(state, _args, _tools, settings = null) {
     const card = mode !== 'off';
     const show = card && (values['pulse.showUnderReply'] ?? values.showUnderReply) === true;
     return {
-        mode, quiet: slotValue(director?.pulseQuiet)?.on === true, card, show,
+        mode, quiet: slotValue(director?.pulseQuiet)?.on === true, card, localSwitch: card && !hostHasHeaderSlot(), show,
         now: rows[0] ?? null, rollAt: show && rows.length ? rows[0].at : -1, recent: card ? rows.slice(1) : [], count: card ? Math.max(0, rows.length - 1) : 0,
         table: last?.table ? `${last.table === 'duo' ? 'duo' : 'standard'} · ${away} away` : '',
     };
@@ -77,7 +79,7 @@ const TEMPLATE = `
     <h3 class="sd-dir-title">Director</h3>
     <span class="ss-pill sd-spoil">shows spoilers</span>
   </header>
-  <div class="sd-quiet sd-wide ss-glass" data-if="q.pulse.card">
+  <div class="sd-quiet sd-wide ss-glass" data-if="q.pulse.localSwitch">
     <span aria-hidden="true">🌙</span><b>Quiet scene</b><small data-if="q.pulse.quiet">pulse paused</small>
     <button type="button" class="ss-switch" role="switch" aria-checked="false" aria-label="Quiet scene" data-if="!q.pulse.quiet" data-command="director.pulse.quiet" data-payload='{"on":true}'><span class="ss-switch-knob"></span></button>
     <button type="button" class="ss-switch ss-switch-on" role="switch" aria-checked="true" aria-label="Quiet scene" data-if="q.pulse.quiet" data-command="director.pulse.quiet" data-payload='{"on":false}'><span class="ss-switch-knob"></span></button>
@@ -204,3 +206,9 @@ export const directorScreen = Object.freeze({
     template: TEMPLATE,
     css: CSS,
 });
+
+/** `pulse.quiet` → the header toggle's state (feature `story-director.pulse`): `{ on }` for the chat's quiet-scene flag, null while the World pulse is off (no pill). */
+export function pulseQuiet(state, args, tools, settings = null) {
+    const view = pulseView(state, args, tools, settings);
+    return view.card ? { on: view.quiet } : null;
+}

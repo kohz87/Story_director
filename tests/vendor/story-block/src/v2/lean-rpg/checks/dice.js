@@ -47,7 +47,7 @@ export function diceOf(value) {
         dc: Object.fromEntries(Object.keys(LIMITS.dc).map(key => [key, dc[key]])), perUse: value.perUse };
 }
 
-const tableOf = value => (Array.isArray(value) ? value.slice(0, 8).filter(row => isObject(row) && typeof row.who === 'string' && row.who && Array.isArray(row.stats) && row.stats.length === STATS.length
+export const tableOf = value => (Array.isArray(value) ? value.slice(0, 8).filter(row => isObject(row) && typeof row.who === 'string' && row.who && Array.isArray(row.stats) && row.stats.length === STATS.length
     && row.stats.every(Number.isSafeInteger) && Array.isArray(row.skills)).map(row => ({ who: [...row.who].slice(0, 40).join(''), stats: [...row.stats],
     skills: row.skills.slice(0, 11).filter(entry => Array.isArray(entry) && typeof entry[0] === 'string' && Number.isSafeInteger(entry[1])).map(entry => [[...entry[0]].slice(0, 40).join(''), entry[1]]) })) : []);
 

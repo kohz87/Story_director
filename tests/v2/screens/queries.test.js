@@ -152,3 +152,29 @@ test('pulse.view: this reply\'s roll as a row, the earlier rows newest first (no
     const empty = createScreensPart({ settings: {} }).queries['pulse.view'](base, {}, {});
     assert.deepEqual([empty.mode, empty.quiet, empty.show, empty.now, empty.rollAt, empty.table], ['lively', false, false, null, -1, '']);
 });
+
+test('pulse.quiet: the header switch\'s state ({ on }) under the pulse feature, null while the pulse is off; the part declares the one header control; localSwitch is the stand-alone path', () => {
+    const part = createScreensPart({ settings: { 'pulse.mode': 'lively' } });
+    assert.equal(part.queries['pulse.quiet'].feature, 'story-director.pulse');
+    assert.deepEqual(part.headerControls, [{ id: 'quiet', label: 'Quiet scene', icon: '🌙', query: 'pulse.quiet', command: 'director.pulse.quiet', feature: 'story-director.pulse' }]);
+    const base = makeState({});
+    const on = { ...base, domains: { ...base.domains, director: { ...base.domains.director, pulseQuiet: toSlot({ on: true }) } } };
+    assert.deepEqual(part.queries['pulse.quiet'](on, {}, {}), { on: true });
+    assert.deepEqual(part.queries['pulse.quiet'](base, {}, {}), { on: false });
+    assert.equal(createScreensPart({ settings: { mode: 'off' } }).queries['pulse.quiet'](on, {}, {}), null, 'mode Off: no pill');
+    // No host to ask: the Director tab keeps its own switch. A host whose modules carry a headerControls list takes it over; an older host's do not.
+    assert.equal(part.queries['pulse.view'](base, {}, {}).localSwitch, true);
+    const before = globalThis.StoryBlock;
+    try {
+        globalThis.StoryBlock = { sdk: { modules: () => [{ id: 'story-block', headerControls: [] }] } };
+        assert.equal(part.queries['pulse.view'](base, {}, {}).localSwitch, false);
+        globalThis.StoryBlock = { sdk: { modules: () => [{ id: 'story-block' }] } };
+        assert.equal(part.queries['pulse.view'](base, {}, {}).localSwitch, true);
+        globalThis.StoryBlock = { sdk: { modules: () => { throw new Error('not yet'); } } };
+        assert.equal(part.queries['pulse.view'](base, {}, {}).localSwitch, true, 'a host that cannot be asked: the switch stays');
+        globalThis.StoryBlock = { sdk: { modules: () => [{ id: 'story-block', headerControls: [] }] } };
+        assert.equal(createScreensPart({ settings: { mode: 'off' } }).queries['pulse.view'](base, {}, {}).localSwitch, false, 'mode Off: no switch anywhere');
+    } finally {
+        if (before === undefined) delete globalThis.StoryBlock; else globalThis.StoryBlock = before;
+    }
+});

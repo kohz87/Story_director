@@ -5,7 +5,7 @@
 //   people: { [key]: person },          // key = `<pack>:<id>` (the pack's id and the entry's id)
 //   notes:  { [id]: note },             // what a reply told its card (met someone, the cast moved on, the pack was updated); `at`: the message the card is under
 //   day:     null | [{ at, rev }],      // a slot: the story minute the cast was last moved to (the planner's last batch)
-//   meeting: null | [{ at, keys, rev }],// a slot: who comes into the scene in the reply being written (`at`: the chat's length)
+//   meeting: null | [{ at, keys, rev, seen? }],// a slot: who comes into the scene in the reply being written (`at`: the chat's length)
 // }
 // person = { pack, eid (the entry's id; a field called `id` must be an ID like it_k3f9a2qz), name, aliases?, ver, joined, where, doing, since, alive, met, heard, rumored?, rev }
 //   ver:    the pack version of the entry as last seen (a string; '' when the pack gives none)

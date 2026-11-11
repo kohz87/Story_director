@@ -152,6 +152,7 @@ export const INVENTORY_VIEW_WIDGET = 'story-block.inventory-view';
 export const INVENTORY_GRID_WIDGET = 'story-block.inventory-grid';
 const GEAR_ORDER = Object.freeze(['equipment', 'consumable', 'goods', 'quest', 'material', 'money']);
 const VIEWS = Object.freeze(['grid', 'list']);
+const CARRY_MS = 5000;   // how long a focus waits for the screen's next draw
 
 /**
  * The List | Grid switch. Props: `view` ('grid', 'list', or '' not chosen yet this visit). The choice is kept per device (localStorage, never game state; a storage
@@ -206,6 +207,9 @@ const shown = (item, filter) => (!filter.rarity || filter.rarity === item.rarity
  */
 export function createInventoryGridWidget({ chatKey = () => '', storage = undefined } = {}) {
     const stores = new Map();
+    // The tab and game-view mounts build this widget again on every redraw (view/mounts/common.js, keep=false), so the focus cannot ride on the old instance: where it was
+    // (a tile's stack and the stacks in order, or none; only for the same chat) waits here for the next instance's first draw, a few seconds at most.
+    let carry = null;
     const foldsFor = () => {
         const prefix = `story-block.inventoryFold|${chatKey()}|`;
         if (!stores.has(prefix)) stores.set(prefix, foldStore({ prefix, storage }));
@@ -254,12 +258,28 @@ export function createInventoryGridWidget({ chatKey = () => '', storage = undefi
                     editing = editable.render(sheet.slot, form, api);
                 };
                 const closeSheet = () => { sheet?.close(); };
+                const noteFocus = stack => {
+                    const order = Array.from(content.querySelectorAll?.('[data-stack]') ?? []).map(node => node.getAttribute('data-stack'));
+                    carry = { stack, order, at: Date.now(), chat: chatKey() };
+                };
+                // First draw of a new instance: the tile of the carried stack, else the next one after it, else the one before, else the first tile. Only while nothing else has the focus.
+                const takeCarry = () => {
+                    const was = carry;
+                    carry = null;
+                    const active = doc.activeElement;
+                    if (!was || was.chat !== chatKey() || Date.now() - was.at > CARRY_MS || (active && active !== doc.body)) return;
+                    const from = was.order.indexOf(was.stack);
+                    const later = from < 0 ? [] : was.order.slice(from + 1);
+                    const earlier = from < 0 ? [] : was.order.slice(0, from).reverse();
+                    const tile = [was.stack, ...later, ...earlier].map(stack => content.querySelector?.(`[data-stack="${stack}"]`)).find(Boolean) ?? content.querySelector?.('.tile');
+                    tile?.focus?.({ preventScroll: true });
+                };
                 const open = (item, tile) => {
                     closeSheet();
                     const row = props.rows?.[item.stack] ?? null;
                     // The sheet is a layer of the host's modal stack on the body (itemSheet), not a child of this screen. On close the focus goes to this stack's tile as drawn then.
                     const back = () => content.querySelector?.(`[data-stack="${item.stack}"]`) ?? tile;
-                    const made = itemSheet(doc, { item, row, wearer: row?.by ?? '', actions: actionsOf(item, row), returnTo: back, onClose: () => { editing?.destroy?.(); editing = null; if (sheet === made) sheet = null; } });
+                    const made = itemSheet(doc, { item, row, wearer: row?.by ?? '', actions: actionsOf(item, row), returnTo: back, onClose: () => { noteFocus(item.stack); editing?.destroy?.(); editing = null; if (sheet === made) sheet = null; } });
                     sheet = made;
                     made.show();
                 };
@@ -289,8 +309,14 @@ export function createInventoryGridWidget({ chatKey = () => '', storage = undefi
                     else if (kept) (content.querySelector?.(kept.stack ? `[data-stack="${kept.stack}"]` : `[data-fold="${kept.fold}"]`) ?? content.querySelector?.('.tile') ?? content.querySelector?.('.fold-head'))?.focus?.({ preventScroll: true });
                 }
                 draw();
-                cleanup(() => { closeSheet(); });
-                return { update(next) { props = next ?? {}; draw(); }, destroy() { closeSheet(); } };
+                takeCarry();
+                const leave = () => {
+                    closeSheet();
+                    const active = doc.activeElement;
+                    if (active && content.contains?.(active) && active.getAttribute?.('data-stack')) noteFocus(active.getAttribute('data-stack'));
+                };
+                cleanup(leave);
+                return { update(next) { props = next ?? {}; draw(); }, destroy: leave };
             });
         },
     });

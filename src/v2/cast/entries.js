@@ -161,6 +161,25 @@ export function presentKeys(query, state) {
     return out;
 }
 
+/**
+ * Everyone the reply's own scene lines (`+ present` lines and its own safety-net `capture.present` receipts; a place line's `with:` is not read) had in the scene at any point, as keys:
+ * the added names and the list after each line. A previous reply's late lines (`assist: 'late'`) are not this reply's.
+ */
+export function seenKeys(receipts) {
+    const out = new Set();
+    for (const receipt of Array.isArray(receipts) ? receipts : []) {
+        if (!receipt || receipt.type !== 'capture.present' || receipt.assist === 'late') continue;
+        const data = receipt.data ?? {};
+        for (const list of [data.added, data.present]) {
+            for (const name of Array.isArray(list) ? list : []) {
+                const key = keyOf(name);
+                if (key) out.add(key);
+            }
+        }
+    }
+    return out;
+}
+
 // ---- the routine ----------------------------------------------------------------------------------------------------------
 
 // The hours (from, to; a range may wrap midnight) each word of the day stands for. A routine that names none holds at any hour.

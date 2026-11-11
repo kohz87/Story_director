@@ -56,7 +56,10 @@ export async function start({ root = globalThis, doc = globalThis.document, wait
     const sdk = await host.ready;
     if (sdk.modules?.().some(entry => entry.id === MODULE_ID)) return { registered: true, sdk };
     try {
-        await sdk.registerModule(module);
+        // A host without the header slot does not know the field (it would log it as ignored): the module goes without it, and the Director tab keeps the switch.
+        const slot = sdk.modules?.().some(entry => Array.isArray(entry?.headerControls));
+        const { headerControls, ...bare } = module;
+        await sdk.registerModule(slot || !headerControls ? module : bare);
     } catch (error) {
         console.error(`[${MODULE_NAME}] could not register with Story Block:`, error);
         return { registered: false, reason: error?.message ?? String(error) };

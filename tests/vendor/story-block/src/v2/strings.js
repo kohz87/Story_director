@@ -44,7 +44,7 @@ export const STRINGS = deepFreeze({
         staticLimit: 'The purpose and story lines together must fit 2000 characters.',
         showOptions: 'Choose where the block shows (its own tab, a card on Home, both or neither), a short tab name and an app icon.',
         // How a block's records, numbers and fields are drawn (screens/block-layouts.js).
-        view: { active: 'Active ({n})', finished: 'Finished ({n})', more: 'More', less: 'Less', unknown: 'Not known yet ({n})', known: '{n} of {total} known',
+        view: { active: 'Active ({n})', finished: 'Finished ({n})', more: 'More', less: 'Less', unknown: 'Not known yet ({n})', moreKnown: '{n} more known', known: '{n} of {total} known',
             nothing: 'Nothing here yet.', editQuest: 'Edit {name}', edited: 'Edit' },
         listOnlyText: 'A list must be a text field.', listLimit: 'A list can have at most 12 entries.',
         labelLimit: 'Use a name of 1 to 60 characters.', choiceLimit: 'A choice needs 2 to 32 different options.',

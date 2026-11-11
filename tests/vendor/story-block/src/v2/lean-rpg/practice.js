@@ -24,7 +24,7 @@ import { CHECK_STEP, DICE, LEAN_RPG_FEATURE, PRACTICE, PRACTICE_STEP, RESOLVE, p
 import { skillFieldSlots } from '../skill-slots.js';
 import { fold, readSheet, sameWho } from './read.js';
 import { actorIdOf } from './roster.js';
-import { diceOf } from './checks/dice.js';
+import { diceOf, tableOf } from './checks/dice.js';
 import { workChecks } from './checks/result.js';
 
 /** The replies whose rolls are practised (the same as the fight's: not a Continue's, nor the extractor's late lines). */
@@ -239,17 +239,23 @@ export function checksHook(view, info) {
     const receipts = Array.isArray(info?.receipts) ? info.receipts : [];
     const lines = receipts.filter(receipt => receipt?.type === 'capture.roll' && typeof receipt.data?.check?.raw === 'string').map(receipt => receipt.data.check.raw).slice(0, CHECK_LINES);
     if (!lines.length) return undefined;
-    const dice = diceOf(receipts.findLast(receipt => receipt?.type === DICE)?.data?.v2?.dice);
-    return { commands: [{ type: CHECK_STEP, payload: { lines, dice, practice: true } }] };
+    const kept = receipts.findLast(receipt => receipt?.type === DICE)?.data?.v2?.dice;
+    const dice = diceOf(kept);
+    // The note's table is the contract: the step works each check at the bonuses the table showed (recorded in `table`). A Re-read keeps what the reply was worked with:
+    // a reply whose earlier check step has no `table` stays on the sheet's bonuses, as it was.
+    const old = info?.type === 'reread' ? (info.previous ?? []).filter(receipt => receipt?.type === CHECK_STEP).map(receipt => receipt.replan?.payload).find(isObject) : undefined;
+    const table = dice && Array.isArray(kept?.table) && (!old || Array.isArray(old.table)) ? tableOf(kept.table) : null;
+    return { commands: [{ type: CHECK_STEP, payload: { lines, dice, practice: true, ...(table ? { table } : {}) } }] };
 }
 
 // One recorded result, checked: the same plain record workChecks makes, or null.
 function resultFrom(entry) {
     if (!isObject(entry) || !['who', 'what', 'stat', 'rankName', 'difficulty'].every(key => keptText(entry[key])) || !OUTCOMES.includes(entry.outcome)) return null;
     if (!['rank', 'dc', 'die', 'bonus', 'total'].every(key => keptNumber(entry[key]))) return null;
+    const unlisted = entry.unlisted === 'member' || entry.unlisted === 'skill' ? { unlisted: entry.unlisted } : {};
     const practice = isObject(entry.practice) && keptText(entry.practice.skill) && entry.practice.n === 1 && keptNumber(entry.practiceGained) ? { practice: { skill: entry.practice.skill, n: 1 }, practiceGained: entry.practiceGained } : {};
     return { who: entry.who, what: entry.what, stat: entry.stat, utility: entry.utility === true, rank: entry.rank, rankName: entry.rankName, difficulty: entry.difficulty, dc: entry.dc, die: entry.die,
-        bonus: entry.bonus, total: entry.total, outcome: entry.outcome, decisive: entry.decisive === true, ...practice };
+        bonus: entry.bonus, total: entry.total, outcome: entry.outcome, decisive: entry.decisive === true, ...unlisted, ...practice };
 }
 
 // The step's input as recorded: { lines, dice } (the narrator's lines and the dice, rules and practice recorded with the reply; dice null: none was offered), or null.
@@ -257,7 +263,9 @@ function inputOf(payload) {
     const lines = payload?.lines;
     if (!Array.isArray(lines) || lines.length > CHECK_LINES || !lines.every(line => typeof line === 'string' && line.length > 0 && line.length <= 200)) return null;
     const dice = payload.dice === null ? null : diceOf(payload.dice);
-    return payload.dice !== null && !dice ? null : { lines: [...lines], dice, ...(payload.practice === true ? { practice: true } : {}) };
+    if (payload.dice !== null && !dice) return null;
+    if (payload.table !== undefined && (!Array.isArray(payload.table) || !dice)) return null;
+    return { lines: [...lines], dice, ...(payload.practice === true ? { practice: true } : {}), ...(payload.table ? { table: tableOf(payload.table) } : {}) };
 }
 
 // What the results were worked from: every member of the party as the sheet now holds them (stats, level or class, every skill's stat, rank and type), so a line the step
@@ -281,7 +289,7 @@ export function checkStep(ctx, payload = {}) {
     if (!input) ctx.fail('INVALID', 'The check step needs the reply\'s roll lines and its recorded dice.');
     const domain = ctx.read('dataModules'), sheet = readSheet({ domains: { dataModules: domain } });
     const checked = input.practice ? sheetBeforePractice(sheet, domain, ctx.source) : sheet;
-    const { results, notes, uses } = workChecks(membersOf({ query: (name, args) => ctx.query(name, args) }, checked), input.lines, input.dice);
+    const { results, notes, uses } = workChecks(membersOf({ query: (name, args) => ctx.query(name, args) }, checked), input.lines, input.dice, input.table ?? null);
     const predicate = { kind: CHECK_STEP, input: ctx.hash(input), ...(input.practice ? { uses } : {}) };
     const witness = input.practice ? { members: membersWitness(sheet), practice: witnessOf(domain, ctx.source, uses) } : membersWitness(sheet);
     ctx.replayGuard({ owner: ctx.module, version: 2, epoch: ctx.epoch, rulesHash: null, predicate, inputHash: ctx.hash({ source: ctx.source, predicate, witness }) }, input);
