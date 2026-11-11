@@ -49,6 +49,10 @@ export const OPEN_STATES = Object.freeze(['looming', 'ongoing']);
 
 /** Caps: events kept, resolved events kept (oldest pruned first), factions kept. */
 export const MAX_EVENTS = 60;
+// The World pulse's rumours (`rumour`: the name of the event they are about; `heard`: the story's own world line named one): at most this many
+// are open, and one closes after this many story days or when its event ends.
+export const RUMOUR_OPEN_MAX = 3;
+export const RUMOUR_DAYS = 3;
 export const MAX_RESOLVED = 30;
 export const MAX_FACTIONS = 40;
 export const MAX_NAME = 80;
@@ -195,13 +199,15 @@ function eventErrors(id, event) {
     if (!namesOk(event.aka, MAX_AKA)) errors.push(`${at}.aka must be a list of at most ${MAX_AKA} names.`);
     if (!isInt(event.rev) || event.rev < 0) errors.push(`${at}.rev must be a whole number.`);
     if (event.by !== undefined && !(typeof event.by === 'string' && LASTING_BY.test(event.by))) errors.push(`${at}.by must be the event that wrote it ("event:<id>").`);
+    if (event.rumour !== undefined && !textOk(event.rumour, MAX_NAME)) errors.push(`${at}.rumour must be the name of the event it is about.`);
+    if (event.heard !== undefined && event.heard !== true) errors.push(`${at}.heard must be true when it is there.`);
     if (event.keep !== undefined && event.keep !== true) errors.push(`${at}.keep must be true when it is there.`);
     if (event.fire !== undefined && !(isRecord(event.fire) && Object.keys(event.fire).length === 2 && isInt(event.fire.rev) && event.fire.rev >= 0
         && typeof event.fire.by === 'string' && LASTING_BY.test(event.fire.by))) {
         errors.push(`${at}.fire must be { rev, by }: the pack event that last changed it.`);
     }
     for (const key of Object.keys(event)) {
-        if (!['id', 'name', 'summary', 'state', 'since', 'updated', 'place', 'factions', 'aka', 'rev', 'by', 'keep', 'fire'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
+        if (!['id', 'name', 'summary', 'state', 'since', 'updated', 'place', 'factions', 'aka', 'rev', 'by', 'keep', 'fire', 'rumour', 'heard'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
     }
     return errors;
 }

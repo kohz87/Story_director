@@ -11,7 +11,9 @@ import {
     clockAt, command, eventNamed, factionNamed, line, lines, makeState, replay, runCommand,
 } from './helpers/fake-ctx.js';
 import { part } from '../../../src/v2/chronicle/index.js';
-import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
+import { RUMOUR_DAYS, RUMOUR_OPEN_MAX, seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
+import { eventOut } from '../../../src/v2/chronicle/queries.js';
+import { knownNews } from '../../../src/v2/world/known.js';
 
 const DAY = 1440;
 
@@ -256,4 +258,34 @@ test('a draft of another part\'s domain is refused: the chronicle writes only it
     const state = makeState();
     const run = runCommand(state, ctx => { ctx.draft('director'); return {}; }, {});
     assert.deepEqual([run.ok, run.code], [false, 'NOT_OWNER']);
+});
+
+test('pulse rumours: at most RUMOUR_OPEN_MAX open, closed after RUMOUR_DAYS or when their event ends, never chained, unknown until the story names them', () => {
+    const rumour = (state, n, extra = {}) => command(state, 'chronicle.rumor', { at: n, event: { name: `Rumour of Fact ${n}`, summary: `fact ${n}`, rumour: `Fact ${n}`, ...extra } }, { cause: 'system' });
+    let state = makeState({ minutes: 2 * DAY });
+    for (let n = 1; n <= 5; n += 1) state = line(state, `+ world Fact ${n} — wolves | state: ongoing`).state;
+    for (let n = 1; n <= 5; n += 1) {
+        const run = rumour(state, n);
+        assert.equal(run.ok, true, run.message);
+        state = run.state;
+        assert.deepEqual(validateChronicle(state.domains.chronicle), []);
+    }
+    const open = () => Object.values(state.domains.chronicle.events).filter(event => event.rumour !== undefined && event.state !== 'resolved');
+    assert.equal(open().length, RUMOUR_OPEN_MAX, 'the oldest closed as new ones came');
+    const openAt = minutes => Object.values(expire(minutes).state.domains.chronicle.events).filter(event => event.rumour !== undefined && event.state !== 'resolved').length;
+    const expire = minutes => command(clockAt(state, minutes), 'chronicle.rumor', { at: 9, expire: true }, { cause: 'system' });
+    assert.equal(openAt(2 * DAY + RUMOUR_DAYS * DAY - 1), RUMOUR_OPEN_MAX);
+    assert.equal(openAt(2 * DAY + RUMOUR_DAYS * DAY), 0, 'old rumours close');
+    // Its event ends: the rumour closes at the next step.
+    const ended = line(state, '~ world Fact 1 | state: resolved').state;
+    const closed = command(ended, 'chronicle.rumor', { at: 9, expire: true }, { cause: 'system' }).state;
+    assert.equal(Object.values(closed.domains.chronicle.events).filter(event => event.rumour === 'Fact 1' && event.state !== 'resolved').length, 0);
+    assert.equal(command(state, 'chronicle.rumor', { at: 9 }, { cause: 'system' }).code, 'INVALID');
+    // Unknown until heard: a rumour is off the World screen's news until a world line of the story names it.
+    const calendar = { format: () => '' };
+    const news = current => knownNews(current, (name) => name === 'chronicle.events' ? Object.values(current.domains.chronicle.events).map(event => eventOut(event, { chronicle: current.domains.chronicle, calendar, now: 2 * DAY })) : []).map(item => item.name);
+    assert.ok(news(state).includes('Fact 1') && !news(state).includes('Rumour of Fact 5'));
+    const heard = line(state, '~ world Rumour of Fact 5 — the story tells it').state;
+    assert.ok(news(heard).includes('Rumour of Fact 5'));
+    assert.equal(eventNamed(heard, 'Rumour of Fact 5').rumour, 'Fact 5', 'still a rumour (it expires)');
 });

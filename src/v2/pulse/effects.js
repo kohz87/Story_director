@@ -1,10 +1,12 @@
 // Story Director v2, part **pulse** (feature `story-director.pulse`): the World pulse. Before each reply, code rolls a d20 from the
 // step's seed (`director.pulse { at }`, a system step from beforeGenerate: the same bytes of state + seed give the same roll; a swipe
 // is a new step with a new seed, so it rolls again), picks an entry from tables.js, applies its effect and records the result in the
-// slot `director.pulse = [{ results: [last 5] }]`. The tail gets one optional line "World this reply: …" (none on CALM or a skip).
+// slot `director.pulse = [{ results: [last 5] }]`. The step is a host prelude: it is previewed for the prompt and stored on the generated reply
+// itself (same seed), so a swipe, a regenerate or a delete of the reply takes its roll and effects back. Its receipt's summary is the one
+// "World this reply: …" cue (none on CALM or a skip; at most 40 tokens), told in the leading note, not an optional tail line.
 // A reply is skipped, and the skip recorded, during a fight, after an explicit rest, after a jump of 6+ story hours, while the
 // reader's quiet-scene flag is set (`director.pulse.quiet { on }`, slot `director.pulseQuiet`) and while the clock is unset.
-// The builders below are pure (no state, no ctx, no model call); the part (the command, hook, tail, settings) is at the end.
+// The builders below are pure (no state, no ctx, no model call); the part (the command, hook, settings) is at the end.
 //
 // Each builder takes the candidates the caller has already filtered (what could be used here) and the roll's draw units
 // (tables.js drawsFrom): `actor` picks the candidate, `line` decides the rest. It returns `{ kind, type, payload, tail, receipt }`:
@@ -28,6 +30,7 @@ import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { slotValue, toSlot } from '../slot.js';
 import { fightOn } from '../cast/entries.js';
+import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
 import { orderedThreads } from '../tracker/convert.js';
 import { ask, cutPoints, namesPerson, sceneOf } from '../tracker/scene.js';
@@ -35,7 +38,9 @@ import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plain
 
 export const JUMP_MINUTES = 360;
 export const REPLY_MINUTES = 20;
-export const TAIL_CHARS = 160;
+// The note line is at most 40 tokens (4 characters each): the label and TAIL_CHARS of text stay under 150 characters.
+export const TAIL_CHARS = 128;
+export const RUMOUR_ROOM = 54;
 export const SKIP_REASONS = Object.freeze(['fight', 'rest', 'jump', 'quiet', 'clock']);
 const NAME_MAX = 80;
 const TOPIC_MAX = 120;
@@ -60,9 +65,18 @@ export function skipReason({ fight = false, rested = false, jumpMinutes = null, 
     return '';
 }
 
-/** The tail line for an effect's text: "World this reply: …", plain and at most TAIL_CHARS; '' when there is no text. */
+/** `text` plain and cut at a word to at most `max` characters (no cut when it fits). */
+export function cutWord(text, max = TAIL_CHARS) {
+    const flat = plainSlot(text, 400);
+    if (flat.length <= max) return flat;
+    const cut = flat.slice(0, max);
+    const space = cut.lastIndexOf(' ');
+    return (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:.\-–—]+$/, '');
+}
+
+/** The tail line for an effect's text: "World this reply: …", plain and cut at a word to TAIL_CHARS; '' when there is no text. */
 export function worldLine(text) {
-    const body = plainSlot(text, TAIL_CHARS);
+    const body = cutWord(text, TAIL_CHARS);
     return body ? `World this reply: ${body}` : '';
 }
 
@@ -73,7 +87,7 @@ export function worldLine(text) {
 export function rumourEntry(kind, { known = [], behind = new Set(), at = null, place = '', draw = {} } = {}) {
     if (!isInt(at)) return null;
     const facts = (Array.isArray(known) ? known : [])
-        .filter(fact => isRecord(fact) && plainSlot(fact.name, NAME_MAX) && !behind.has(lineKey(fact.name)))
+        .filter(fact => isRecord(fact) && !fact.rumour && plainSlot(fact.name, NAME_MAX) && !/^rumou?rs? of /i.test(plainSlot(fact.name, NAME_MAX)) && !behind.has(lineKey(fact.name)))
         .map(fact => ({ ...fact, id: plainSlot(fact.id ?? fact.name, NAME_MAX) }))
         .sort(byId);
     const fact = facts[pickIndex(facts.length, unit(draw.actor))];
@@ -89,7 +103,7 @@ export function rumourEntry(kind, { known = [], behind = new Set(), at = null, p
     return {
         kind,
         type: 'chronicle.rumor',
-        payload: { at, event: { id, name: `Rumour of ${name}`, summary, state: 'looming', place: where, factions } },
+        payload: { at, event: { id, name: `Rumour of ${name}`, summary, state: 'looming', place: where, factions, rumour: name } },
         tail,
         receipt: { event: id },
     };
@@ -144,9 +158,10 @@ export function arrivalEntry({ agendas = [], now = null, at = null, format = nul
  * TASK_SHIFT: an off-screen agenda's step `on` moves early or late by 1 to 4 hours. `agendas`: [{ id, name, named, text, abs }] where
  * `text` is the stored date and `abs` its story minutes (the caller parses it); `format(minutes)` gives the new date's text.
  * Direction is the `line` draw below one half (early); the hours come from its fractional part, so they do not depend on it.
+ * An early shift is clamped to `now` (story minutes) + REPLY_MINUTES: `on` never moves into the past.
  */
-export function shiftEntry({ agendas = [], at = null, format = null, draw = {} } = {}) {
-    if (!isInt(at) || typeof format !== 'function') return null;
+export function shiftEntry({ agendas = [], at = null, now = null, format = null, draw = {} } = {}) {
+    if (!isInt(at) || !isInt(now) || typeof format !== 'function') return null;
     const open = (Array.isArray(agendas) ? agendas : [])
         .filter(item => isRecord(item) && plainSlot(item.id, NAME_MAX) && typeof item.text === 'string' && item.text.trim() && Number.isFinite(item.abs))
         .map(item => ({ ...item, id: plainSlot(item.id, NAME_MAX) }))
@@ -156,8 +171,11 @@ export function shiftEntry({ agendas = [], at = null, format = null, draw = {} }
     const line = unit(draw.line);
     const early = line < 0.5;
     const hours = 1 + Math.floor(frac(line * 2) * 4);
-    const shift = (early ? -1 : 1) * hours * 60;
-    const to = plainSlot(format(pick.abs + shift), NAME_MAX);
+    // Never into the past: an early shift stops REPLY_MINUTES after `now`, and one that would not move the date earlier cannot happen.
+    const target = early ? Math.max(pick.abs - hours * 60, now + REPLY_MINUTES) : pick.abs + hours * 60;
+    if (early && target >= pick.abs) return null;
+    const shift = target - pick.abs;
+    const to = plainSlot(format(target), NAME_MAX);
     if (!to) return null;
     const who = pick.named ? plainSlot(pick.name, NAME_MAX) : '';
     const tail = early
@@ -189,21 +207,21 @@ export function effectFor(kind, ctx = {}) {
 const segments = text => String(text ?? '').split(/\s*(?:;|→|->)\s*/).filter(Boolean).length;
 
 /**
- * The extra fields an agenda line leaves: `step` (which step it is on, from 1), `steps` (how many, from the agenda's own `then` list
- * "a; b; c" or kept once set, at most) and `since` (the story minute the step began), when `now` or `then` moved; `where` (the atlas
- * place `now` names, given by the caller). A `step` the line itself wrote is left alone. `before` is the thread's fields (null: new).
- * Returns the fields to merge (all text), or null for no change.
+ * The extra fields an agenda line leaves: `stepAt` (which step it is on, from 1), `stepOf` (how many, from the agenda's own `then` list
+ * "a; b; c" or kept once set) and `stepSince` (the story minute the step began), when `now` or `then` moved; `where` (the atlas place
+ * `now` names, given by the caller). The names never meet the narrator's own `step` field. `before` is the thread's fields (null: new).
+ * Returns the fields to merge (all text), or null for no change. Old agendas without them stay valid.
  */
 export function agendaProgress(before, after, { minutes = null, where = '' } = {}) {
     const moved = !before || before.now !== after.now || before.then !== after.then;
     const patch = {};
     if (moved && (after.now || after.then)) {
-        const steps = Number(after.steps) > 0 ? Number(after.steps) : (segments(after.then) ? segments(after.then) + 1 : 0);
-        const base = Number(after.step) > 0 && after.step !== before?.step ? Number(after.step) : (before ? (Number(before.step) || 1) + 1 : 1);
-        const step = steps ? Math.min(steps, base) : base;
-        if (String(step) !== after.step) patch.step = String(step);
-        if (steps && String(steps) !== after.steps) patch.steps = String(steps);
-        if (isInt(minutes) && String(minutes) !== after.since) patch.since = String(minutes);
+        const of = Number(after.stepOf) > 0 ? Number(after.stepOf) : (segments(after.then) ? segments(after.then) + 1 : 0);
+        const base = before ? (Number(before.stepAt) || 1) + 1 : 1;
+        const at = of ? Math.min(of, base) : base;
+        if (String(at) !== after.stepAt) patch.stepAt = String(at);
+        if (of && String(of) !== after.stepOf) patch.stepOf = String(of);
+        if (isInt(minutes) && String(minutes) !== after.stepSince) patch.stepSince = String(minutes);
     }
     if (plainSlot(where, NAME_MAX) && where !== after.where) patch.where = plainSlot(where, NAME_MAX);
     return Object.keys(patch).length ? patch : null;
@@ -228,6 +246,8 @@ export const PULSE_STATIC = 'World pulse: "World this reply" in the note is a sm
 const settingsOf = source => { const value = typeof source === 'function' ? source() : source; return isRecord(value) ? value : {}; };
 /** Whether the feature is on (`ctx.feature` / `view.feature` when the host has them, F100), else on. */
 export const pulseOn = source => (typeof source?.feature === 'function' ? source.feature(FEATURE) !== false : true);
+/** Whether the pulse is on and not set to off: the agenda progress is written only then. */
+export const pulseActive = source => pulseOn(source) && modeOf(settingsOf(source?.settings)) !== 'off';
 /** The `mode` setting: off, quiet (flavour only) or lively (the default). */
 export const modeOf = settings => (MODES.includes(settings?.mode) ? settings.mode : 'lively');
 /** The recorded results, oldest first. */
@@ -239,7 +259,8 @@ export const weatherFrom = text => WEATHER_WORDS.find(([, pattern]) => pattern.t
 function restedSince(state, from, now) {
     const instances = state?.domains?.dataModules?.instances;
     if (!isInt(from) || !isInt(now) || !isRecord(instances)) return false;
-    return Object.values(instances).some(item => { const at = item?.chat?.fields?.['rested-at']; return isInt(at) && at > from && at <= now + 1; });
+    const marks = item => [item?.chat, ...Object.values(isRecord(item?.characters) ? item.characters : {})].map(part => part?.fields?.['rested-at']);
+    return Object.values(instances).some(item => marks(item).some(at => isInt(at) && at > from && at <= now + 1));
 }
 
 // Open agendas the scene does not reach (not tied to its place, not naming anyone present), by id.
@@ -261,7 +282,18 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
     const unmet = Object.values(isRecord(people) ? people : {}).filter(person => isRecord(person) && person.alive !== false && !person.met);
-    const known = ask(query, 'chronicle.events', { open: true }, []);
+    const open = ask(query, 'chronicle.events', { open: true }, []);
+    // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
+    if (open.some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the roll goes on */ } }
+    const room = open.length < RUMOUR_ROOM;
+    const known = room ? open.filter(event => !event?.rumour) : [];
+    const behind = hiddenNames(state).behind;
+    const converge = thread => {
+        const fields = thread.fields ?? {};
+        if (fields.leg || fields.arrive) return true;
+        const there = ask(query, 'atlas.place', { name: plainSlot(fields.where || fields.place, NAME_MAX) }, null)?.region;
+        return Boolean(lineKey(here?.region) && lineKey(there) === lineKey(here?.region));
+    };
     const away = Object.keys(state.domains.keypeople?.away ?? {}).length;
     const names = new Set(scene.people.map(person => person.key));
     for (const name of [...ask(query, 'npc.known', {}, []), ...Object.values(isRecord(people) ? people : {}).map(person => person?.name)]) if (lineKey(name)) names.add(lineKey(name));
@@ -278,27 +310,28 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
         if (!EFFECTS.has(rolled.kind)) {
             const who = scene.people.length ? scene.people[pickIndex(scene.people.length, draw.actor)]?.name : '';
             const text = rolled.kind === 'CALM' ? '' : fillSlots(flavourFor(rolled.kind, draw.line, { group, weather }), { name: who, place });
-            return { ...base, ...(who && text.includes(who) ? { who } : {}), text: plainSlot(text, TAIL_CHARS) };
+            return { ...base, ...(who && text.includes(who) ? { who } : {}), text: cutWord(text, TAIL_CHARS) };
         }
         const made = effectFor(rolled.kind, {
-            known, behind: new Set(), at, place, draw, cast: state.domains.cast, now: clock, format: minutes => calendar.format(minutes),
-            agendas: agendas.map(thread => ({ id: thread.id, name: thread.key, named: false, arrive: thread.fields?.arrive, text: thread.fields?.on, abs: dateOf(thread, 'on', { calendar, reference: clock })?.abs })),
+            known, behind, at, place, draw, cast: state.domains.cast, now: clock, format: minutes => calendar.format(minutes),
+            agendas: agendas.filter(rolled.kind === 'ENTER_CHECK' ? converge : () => true).map(thread => ({ id: thread.id, name: thread.key, named: false, arrive: thread.fields?.arrive, text: thread.fields?.on, abs: dateOf(thread, 'on', { calendar, reference: clock })?.abs })),
         });
-        if (made && applyEffect(ctx, director, made, place)) return { ...base, text: plainSlot(made.tail, TAIL_CHARS), effect: { type: made.type, ...made.receipt } };
+        if (made && applyEffect(ctx, director, made)) return { ...base, text: cutWord(made.tail, TAIL_CHARS), effect: { type: made.type, ...made.receipt } };
         blocked.add(rolled.kind);
     }
     return { d20, table, kind: 'CALM', text: '' };
 }
 
 // The effect's step: another part's command (the same receipt), or the agenda's own date on the thread (marked ctx.ifThere).
-function applyEffect(ctx, director, made, place) {
+function applyEffect(ctx, director, made) {
     if (made.type === 'chronicle.rumor' || made.type === 'cast.meet') {
         try { ctx.call(made.type, made.payload); return true; } catch { return false; }
     }
     const thread = director.threads?.[made.payload.thread];
     if (!thread || thread.status !== 'active') return false;
     if (typeof ctx.ifThere === 'function') ctx.ifThere('director', `/threads/${thread.id}`);
-    thread.fields = { ...thread.fields, [made.payload.field]: made.payload.to, ...(made.payload.field === 'arrive' && place ? { where: place } : {}) };
+    // Only the date moves: nobody is placed anywhere (no `where`), so no one is teleported.
+    thread.fields = { ...thread.fields, [made.payload.field]: made.payload.to };
     if (isInt(ctx.rev)) thread.rev = ctx.rev;
     return true;
 }
@@ -312,7 +345,7 @@ export function pulseCommand(ctx, payload = {}) {
     if (mode === 'off') return { summary: '', narrate: false, data: { skipped: 'off' } };
     const director = ctx.draft('director');
     const read = name => { try { return typeof ctx.read === 'function' ? ctx.read(name) : null; } catch { return null; } };
-    const state = { domains: { director, scene: read('scene'), cast: read('cast'), keypeople: read('keypeople'), dataModules: read('dataModules') } };
+    const state = { domains: { director, scene: read('scene'), arc: read('arc'), cast: read('cast'), keypeople: read('keypeople'), dataModules: read('dataModules') } };
     const query = typeof ctx.query === 'function' ? (name, args) => ctx.query(name, args) : null;
     // The draws come first and always: a skip or a step-down never shifts them.
     const draw = drawsFrom(ctx.rng);
@@ -326,7 +359,10 @@ export function pulseCommand(ctx, payload = {}) {
     });
     const entry = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry }].slice(-RESULTS_MAX) });
-    return { summary: '', narrate: false, data: { kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
+    // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
+    // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
+    const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text);
+    return { summary: line, narrate: Boolean(line), data: { kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
 }
 
 /** `director.pulse.quiet { on }` (the reader's): the quiet-scene flag, a slot written whole; while it is on every reply is skipped. */
@@ -346,26 +382,18 @@ export function pulseHook(view, info = {}) {
     return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)) } }] };
 }
 
-/** `context.tail(view)`: the latest result's line while it is this reply's (the chat's length is its `at` or one more), as an optional line. */
-export function pulseTail(view) {
-    const last = resultsOf(view?.state?.domains?.director).at(-1);
-    const length = view?.chat?.length;
-    if (!last || !pulseOn(view) || modeOf(settingsOf(view.settings)) === 'off' || !isInt(last.at) || !isInt(length) || length < last.at || length >= last.at + 2) return { lines: [], optional: [] };
-    const line = last.skipped || last.kind === 'CALM' ? '' : worldLine(last.text);
-    return { lines: [], optional: line ? [line] : [] };
-}
-
-const tagged = fn => Object.assign(fn, { feature: FEATURE });
+// A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.
+const tagged = (fn, extra = {}) => Object.assign(fn, { feature: FEATURE, ...extra });
 
 export const part = {
     features: [{
         id: FEATURE,
         label: 'World pulse',
-        describe: 'Before each reply a d20 decides if something small happens around you: an incident, news, a chance meeting, an arrival. The note carries one line. Skipped after a rest or a long time jump, and in a quiet scene.',
+        describe: 'Before each reply a d20 decides if something small happens around you: an incident, news, a chance meeting, an arrival. One line goes with the reply. Skipped after a rest or a long jump, and in a quiet scene.',
         default: true,
     }],
-    commands: { [PULSE]: tagged((ctx, payload) => pulseCommand(ctx, payload)), [QUIET]: tagged((ctx, payload) => quietCommand(ctx, payload)) },
-    context: { tail: pulseTail, parts: [{ feature: FEATURE, static: () => PULSE_STATIC }] },
+    commands: { [PULSE]: tagged((ctx, payload) => pulseCommand(ctx, payload), { prelude: true }), [QUIET]: tagged((ctx, payload) => quietCommand(ctx, payload)) },
+    context: { parts: [{ feature: FEATURE, static: () => PULSE_STATIC }] },
     hooks: { beforeGenerate: pulseHook },
     settings: {
         defaults: { mode: 'lively', showUnderReply: false },

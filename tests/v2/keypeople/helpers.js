@@ -70,7 +70,7 @@ export function fakeDelta(people = {}, archived = {}) {
 export async function keyHost({ delta = null, archived = {}, settings = {}, features = {}, extra = [] } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [...(delta ? [fakeDelta(delta, archived)] : []), module, ...extra], settings: { modules: { 'story-director': settings }, features } });
+    host = await createHost({ modules: [...(delta ? [fakeDelta(delta, archived)] : []), module, ...extra], settings: { modules: { 'story-director': settings }, features: { 'story-director.pulse': false, ...features } } });
     return host;
 }
 

@@ -31,8 +31,8 @@ test('+ makes threads: kind, key, summary, fields as written, ids, keys and revs
     assert.match(geva.id, /^th_[0-9a-z]{8}$/);
     assert.deepEqual({ ...geva, id: 'x' }, {
         id: 'x', kind: 'agenda', key: 'Senior Listener Geva', summary: '',
-        // `step` and `steps` are the World pulse's progress fields on an agenda (pulse/effects.js agendaProgress): the first of two (now, then).
-        fields: { now: 'District Bailiff Court', then: 'argues with magistrates', on: 'Haywane 12, 05:45 pm', people: 'Kade, Al', step: '1', steps: '2' },
+        // `stepAt` and `stepOf` are the World pulse's progress fields on an agenda (pulse/effects.js agendaProgress): the first of two (now, then).
+        fields: { now: 'District Bailiff Court', then: 'argues with magistrates', on: 'Haywane 12, 05:45 pm', people: 'Kade, Al', stepAt: '1', stepOf: '2' },
         status: 'active', offer: false, taken: null, ended: null, target: null, reward: null, rev: 1,
     });
     assert.equal(thread(state, 'River stranger').summary, 'who pulled Ren from the sump');
@@ -55,7 +55,7 @@ test('- closes with its reason; replaced and merged supersede', () => {
 
 test('~ changes only what it names; text after the dash reads its labels as v1 does', () => {
     let state = story([{ lines: START }, { lines: '~ agenda Senior Listener Geva | then: files the warrant | mood: sour' }]);
-    assert.deepEqual(thread(state, 'Senior Listener Geva').fields, { now: 'District Bailiff Court', then: 'files the warrant', on: 'Haywane 12, 05:45 pm', people: 'Kade, Al', mood: 'sour', step: '2', steps: '2' });
+    assert.deepEqual(thread(state, 'Senior Listener Geva').fields, { now: 'District Bailiff Court', then: 'files the warrant', on: 'Haywane 12, 05:45 pm', people: 'Kade, Al', mood: 'sour', stepAt: '2', stepOf: '2' });
     state = reply(state, '~ agenda Senior Listener Geva — now: the river gate').state;
     assert.equal(thread(state, 'Senior Listener Geva').fields.now, 'the river gate');
     // An empty label clears the field.

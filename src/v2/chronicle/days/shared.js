@@ -30,7 +30,7 @@ export const MAX_MET = 8;
 // next reply sets the clock right again.
 const CLOCK_TYPES = new Set(['capture.time', 'director.seed', 'director.clock', 'time.settle', 'director.advance']);
 // Receipts that are bookkeeping only: never a fact of the day.
-const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed']);
+const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'director.seed', 'director.pulse']);
 // The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's
 // name and counts are never a fact of the day (the Journal shows only what {{user}} knows).
 export const PLANNED_TYPES = new Set(['director.arc.accept', 'director.arc.update', 'director.arc.end']);
@@ -48,10 +48,10 @@ export const TOLD_ELSEWHERE = new Set([
 ]);
 // Receipts that are the code's own bookkeeping, never an event of the day (neither picked nor counted under "happened"): Story Block's
 // fight board result (`rpg.resolve`, whose summary is the narrator's instruction), its no-roll step, field edits, timer ticks and
-// reply-end settles (`dm.set`, `dm.tick`, `dm.settle`), the Director's own initiative pick, the story-time settle and the cast's
+// reply-end settles (`dm.set`, `dm.tick`, `dm.settle`), the Director's own initiative pick and world pulse, the story-time settle and the cast's
 // "nothing changed". Practice lines and add-xp are the reader's progress and stay.
 export const BOOKKEEPING_TYPES = new Set([
-    'rpg.resolve', 'rpg.noroll', 'dm.set', 'dm.tick', 'dm.settle', 'director.initiative', 'time.settle', 'cast.advance',
+    'rpg.resolve', 'rpg.noroll', 'dm.set', 'dm.tick', 'dm.settle', 'director.initiative', 'director.pulse', 'time.settle', 'cast.advance',
 ]);
 // A block's template result (`capture.dm` / `dm.act`, `data.v2.result.kind`) that is a plain meter set (set-health, set-mana,
 // set-stamina, set-slot-N) or a foe slot clear (clear-N) is bookkeeping; every other kind (register, deed, add-xp ...) is a story event.

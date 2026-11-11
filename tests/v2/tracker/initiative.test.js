@@ -185,7 +185,7 @@ test('the validator takes the slot and refuses a malformed one', () => {
 
 // ---- World pulse (pulse/effects.js): the same shape as the initiative: a seeded step before the reply, a slot, one tail line ----
 
-import { PULSE, QUIET, agendaProgress, modeOf, part as pulsePart, pulseCommand, pulseHook, pulseTail, quietCommand, resultsOf, weatherFrom } from '../../../src/v2/pulse/effects.js';
+import { PULSE, QUIET, agendaProgress, modeOf, part as pulsePart, pulseCommand, pulseHook, quietCommand, resultsOf, shiftEntry, weatherFrom, worldLine } from '../../../src/v2/pulse/effects.js';
 import { rumor } from '../../../src/v2/chronicle/capture/world.js';
 import { QUIET_FALLBACK, TABLES, d20Of, resolveKind, tableFor } from '../../../src/v2/pulse/tables.js';
 
@@ -241,6 +241,8 @@ test('pulse: skipped (and the reason recorded) in a fight, in a quiet scene, wit
     const rested = later(1);
     rested.domains.dataModules = { instances: { a: { chat: { fields: { 'rested-at': rested.domains.director.time.minutes } } } } };
     assert.equal(reason(pulseAt(rested, 3, { at: 7 })), 'rest');
+    rested.domains.dataModules = { instances: { a: { chat: { fields: {} }, characters: { ann: { fields: { 'rested-at': rested.domains.director.time.minutes } } } } } };
+    assert.equal(reason(pulseAt(rested, 3, { at: 7 })), 'rest', 'a character module\'s rest counts too');
     const off = pulseAt(state, 3, { settings: { mode: 'off' } });
     assert.equal(off.state.domains.director.pulse, null);
     assert.equal(modeOf({ mode: 'x' }), 'lively');
@@ -260,36 +262,30 @@ test('pulse: the hook asks for one step per reply written; a swipe is one below 
     assert.ok(pulseHook({ ...view({ chat: { length: 6 } }), state: rolled }, { type: 'swipe' }));
     assert.equal(pulsePart.hooks.beforeGenerate, pulseHook);
     assert.equal(pulsePart.commands[PULSE].feature, 'story-director.pulse');
+    assert.equal(pulsePart.commands[PULSE].prelude, true, 'a prelude: stored on the reply, so the reply takes it back');
+    assert.equal(pulsePart.context.tail, undefined);
     assert.equal(pulsePart.commands[QUIET].feature, 'story-director.pulse');
 });
 
-test('pulse: the tail line is optional, this reply\'s only, and none on CALM or a skip', () => {
+test('pulse: the line is the step\'s cue (narrated only when there is a line), plain, under 40 tokens, cut at a word; none on CALM or a skip', () => {
     const state = clocked();
-    const quiet = settings => ({ mode: 'lively', ...settings });
     let shown = 0;
     for (let seed = 1; seed <= 40; seed += 1) {
-        const rolled = pulseAt(state, seed).state;
-        const [entry] = resultsOf(rolled.domains.director);
-        const out = pulseTail({ state: rolled, settings: quiet(), chat: { length: 5 } });
-        assert.deepEqual(out.lines, []);
-        if (entry.kind === 'CALM' || !entry.text) assert.deepEqual(out.optional, []);
+        const result = pulseAt(state, seed);
+        const [entry] = resultsOf(result.state.domains.director);
+        if (entry.kind === 'CALM' || !entry.text) assert.deepEqual([result.result.narrate, result.result.summary], [false, '']);
         else {
             shown += 1;
-            assert.match(out.optional[0], /^World this reply: /);
-            assert.ok(out.optional[0].length <= 'World this reply: '.length + 160);
-            assert.doesNotMatch(out.optional[0], /[{}<>]/);
+            assert.equal(result.result.narrate, true);
+            assert.match(result.result.summary, /^World this reply: /);
+            assert.ok(Math.ceil(result.result.summary.length / 4) <= 40);
+            assert.doesNotMatch(result.result.summary, /[{}<>]/);
         }
-        // A swipe (the chat holds the reply: length 6) still shows it; the next reply (7) does not; off shows none.
-        assert.deepEqual(pulseTail({ state: rolled, settings: quiet(), chat: { length: 6 } }), out);
-        assert.deepEqual(pulseTail({ state: rolled, settings: quiet(), chat: { length: 7 } }).optional, []);
-        assert.deepEqual(pulseTail({ state: rolled, settings: { mode: 'off' }, chat: { length: 5 } }).optional, []);
     }
     assert.ok(shown > 5);
-    const skipped = runCommand(runCommand(state, quietCommand, { on: true }).state, pulseCommand, { at: 5 }).state;
-    assert.deepEqual(pulseTail({ state: skipped, settings: {}, chat: { length: 5 } }).optional, []);
-    // The module's tail carries it too, after the Director lines.
-    const withLine = [...Array(40).keys()].map(seed => pulseAt(state, seed + 1).state).find(next => pulseTail({ state: next, settings: {}, chat: { length: 5 } }).optional.length);
-    assert.ok(part.context.tail({ state: withLine, settings: {}, chat: { length: 5, lastUser: '' } }).optional.length === 0, 'the tracker part itself adds none');
+    assert.equal(pulseAt(runCommand(state, quietCommand, { on: true }).state, 5).result.narrate, false);
+    const long = worldLine(`Snatches of talk ${'in the lower town about the grain tax '.repeat(6)}`);
+    assert.ok(Math.ceil(long.length / 4) <= 40 && !/\s$/.test(long) && /\w$/.test(long) && long.endsWith("grain"), long);
 });
 
 test('pulse: quiet mode makes flavour only; lively with real people and news can write a rumour, a meeting or an agenda change', () => {
@@ -333,34 +329,48 @@ test('pulse: chronicle.rumor writes a looming event once, refused from a click, 
     assert.equal(run({ time: () => null, query: () => null }).code, 'NOT_YET');
 });
 
-test('pulse: agenda progress: step, steps and since follow now/then; where is the atlas place; old agendas without them are valid', () => {
-    assert.deepEqual(agendaProgress(null, { now: 'the docks', then: 'sells; hides; leaves' }, { minutes: 90 }), { step: '1', steps: '4', since: '90' });
-    assert.deepEqual(agendaProgress({ now: 'the docks', then: 'a', step: '1', steps: '2' }, { now: 'the market', then: 'b', step: '1', steps: '2' }, { minutes: 200, where: 'Market' }), { step: '2', since: '200', where: 'Market' });
+test('pulse: agenda progress: stepAt, stepOf and stepSince follow now/then and never touch the narrator\'s `step`; where is the atlas place; old agendas are valid', () => {
+    assert.deepEqual(agendaProgress(null, { now: 'the docks', then: 'sells; hides; leaves' }, { minutes: 90 }), { stepAt: '1', stepOf: '4', stepSince: '90' });
+    assert.deepEqual(agendaProgress({ now: 'the docks', then: 'a', stepAt: '1', stepOf: '2' }, { now: 'the market', then: 'b', stepAt: '1', stepOf: '2' }, { minutes: 200, where: 'Market' }), { stepAt: '2', stepSince: '200', where: 'Market' });
     assert.equal(agendaProgress({ now: 'a', then: 'b' }, { now: 'a', then: 'b' }, { minutes: 5 }), null);
-    assert.equal(agendaProgress({ now: 'a', then: 'b', step: '2', steps: '2' }, { now: 'c', then: 'b', step: '2', steps: '2' }, {})?.step, undefined);
+    const text = agendaProgress({ now: 'a', then: 'b', step: 'sneaks in' }, { now: 'c', then: 'b', step: 'sneaks in' }, {});
+    assert.equal(text?.step, undefined, 'a text `step` is left alone');
     assert.equal(weatherFrom('soft rain, mild'), 'rain');
     assert.equal(weatherFrom('clear'), null);
 });
 
-test('pulse: replay: a middle delete, a swipe and a rebuild keep the world the same (the real host)', async () => {
-    const { createHost } = await import('../../vendor/story-block/testkit/index.js');
-    const { createModule } = await import('../../../src/v2/module.js');
-    let host = null;
-    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), feature: id => host?.sdk.feature(id) } });
-    host = await createHost({ modules: [module] });
-    try {
-        const lines = text => `${text}\n<Changes>\n~ time June 3, 1200, 08:00 am\n</Changes>`;
-        for (const n of [1, 2, 3, 4]) await host.send(`Go ${n}.`, lines(`Reply ${n}.`));
-        const results = () => resultsOf(host.head().domains.director);
-        assert.ok(results().length >= 1 && results().length <= 5);
-        const before = results().length;
-        await host.swipe();
-        assert.equal(results().length, before, 'a swipe replaces the roll, it does not stack another');
-        assert.deepEqual(part.domains.director.validate(host.head().domains.director), []);
-        assert.equal(host.sdk.receipts().some(entry => entry.receipt.type === PULSE), true);
-    } finally {
-        host.close();
+test('pulse: TASK_SHIFT never moves `on` into the past; ENTER_CHECK only takes agendas that can converge and sets no place', () => {
+    const format = minutes => `m${minutes}`;
+    const agendas = [{ id: 'a', name: 'Courier', named: false, text: 'x', abs: 1000 }];
+    for (let line = 0; line < 1; line += 0.05) {
+        const made = shiftEntry({ agendas, at: 5, now: 990, format, draw: { actor: 0, line } });
+        if (made) assert.ok(made.receipt.to >= 990 + 20, `${line} -> ${made.receipt.to}`);
     }
+    assert.equal(shiftEntry({ agendas, at: 5, now: 2000, format, draw: { actor: 0, line: 0.1 } }), null, 'already overdue: no earlier date');
+    assert.equal(shiftEntry({ agendas, at: 5, now: 2000, format, draw: { actor: 0, line: 0.9 } }).receipt.to, 1000 + 60 * (1 + Math.floor(((0.9 * 2) % 1) * 4)));
+    const state = withScene(story([{ lines: [WORLD[0].lines, '+ agenda Courier — rides in | now: far north | then: reaches the gate'].join('\n') }], makeState()), { present: ['Elula', 'Bram', 'Orsa'] });
+    const queries = { 'atlas.here': () => ({ name: 'Harrow', placeKind: 'town', region: 'Vale' }), 'atlas.place': ({ name }) => ({ name, region: 'Coast' }) };
+    for (let seed = 1; seed <= 150; seed += 1) {
+        const threads = Object.values(pulseAt(state, seed, { queries, call: () => ({}) }).state.domains.director.threads);
+        assert.ok(threads.every(thread => !thread.fields.arrive && !thread.fields.where), 'a far agenda is not picked, and nobody gets a place');
+    }
+});
+
+test('pulse: rumours never use pulse rumours or hidden names as facts, and leave room: a near-full chronicle gets none', () => {
+    const state = withScene(story([{ lines: [WORLD[0].lines, '+ agenda Courier — rides in | now: far north'].join('\n') }], makeState()), { present: ['Elula', 'Bram', 'Orsa'] });
+    const event = (id, name, extra = {}) => ({ id, name, summary: `${name} news`, state: 'ongoing', place: 'Harrow', factions: [], ...extra });
+    const run = (events, seed) => {
+        const types = [];
+        pulseAt(state, seed, { queries: { 'chronicle.events': () => events, 'atlas.here': () => ({ name: 'Harrow', placeKind: 'town' }) }, call: (type, payload) => { types.push([type, payload]); return {}; } });
+        return types.filter(([type, payload]) => type === 'chronicle.rumor' && payload.event);
+    };
+    const used = new Set();
+    for (let seed = 1; seed <= 200; seed += 1) {
+        for (const [, payload] of run([event('ev_1', 'Courier'), event('ev_2', 'Rumour of Wolves', { rumour: 'Wolves' }), event('ev_3', 'Wolf Plague')], seed)) if (payload.event) used.add(payload.event.name);
+        const full = Array.from({ length: 54 }, (_, n) => event(`ev_${n}`, `Fact ${n}`));
+        assert.deepEqual(run(full, seed), [], 'a near-full chronicle: the pulse writes no rumour');
+    }
+    assert.deepEqual([...used], ['Rumour of Wolf Plague'], 'not about a hidden agenda name, nor a rumour');
 });
 
 const PRESET = {

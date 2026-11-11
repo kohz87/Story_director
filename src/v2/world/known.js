@@ -233,7 +233,8 @@ export function knownNews(state, tools, { hidden = hiddenNames(state), calendar 
     const out = [];
     const events = tryQuery(query, 'chronicle.events', {}, null);
     for (const event of Array.isArray(events) ? events : []) {
-        if (!isRecord(event) || hidden.behind.has(lineKey(text(event.name)))) continue;
+        // A pulse rumour is unknown to {{user}} until the story's own world line named it (`heard`).
+        if (!isRecord(event) || hidden.behind.has(lineKey(text(event.name))) || (event.rumour !== undefined && event.heard !== true)) continue;
         out.push({
             id: text(event.id), kind: 'world', name: cut(event.name, 80), summary: cut(event.summary, SUMMARY_POINTS),
             state: text(event.state), open: event.open === true, when: text(event.updatedText), ago: text(event.updatedAgo),
