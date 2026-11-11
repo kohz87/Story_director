@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.14.0
+
+Update Story Block, Story Director and NPC State Delta together, then re-import the Ersveil pack (2.9.5 needs Story Block 2.31.0). The new features apply to new replies; start a new chat to see them all. Replies already written replay and Re-read exactly as before.
+
 - **World pulse on the Director tab.** A World pulse card shows this reply's roll (die, kind, the line, and what it changed: rumour recorded, agenda step moved, arrival set), the table used and how many people are away, then the five earlier rolls. A Quiet scene switch at the top of the tab holds the pulse for a calm scene. Off-screen agendas show a step bar ("step 3 of 4 · since June 9"), the place in bold and "arriving within the hour" when someone is close. Settings: Off / Quiet / Lively (Lively by default) and "Show the roll under replies" (off by default), which adds a Roll row to that reply's status card.
 - **World pulse.** Before each reply code rolls a d20 (a fresh roll on every swipe) on the preset's two tables, using only real people, places and agendas: small background touches by place and weather, rumours between NPCs (capped, they expire, never revealed to the player until the story tells them), chance meetings, arrivals and schedule shifts for off-screen agendas. The narrator gets one line (at most 40 tokens). Skipped in fights, rests (an explicit rest or a 6-hour jump) and while "quiet scene" is on. Agendas gain a place and step progress. On by default; a chat's fixed prompt gains one sentence. The Director card and settings come in the next step.
 - **Journal by kind.** Each day folds (today open) into Met, Relationships, Events, Party & gear, Items & money, Reputation and News, each with its count; the day's summary appears once; "X is here / not here" and "Key people: noted" lines are gone; nothing is listed twice; a thread shows one line a day (began, a step, finished) with its steps folded; board fights are listed; search covers every kind of every day and shows how long ago.
