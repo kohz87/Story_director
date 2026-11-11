@@ -212,12 +212,12 @@ test('pulse: the roll is a system step drawn with its seed: same seed same resul
     assert.equal(d20Of(0.999999), 20);
 });
 
-test('pulse: only the last 5 results are kept; a result for the same reply (a redo) replaces its own', () => {
+test('pulse: only the last 6 results are kept; a result for the same reply (a redo) replaces its own', () => {
     let state = clocked();
     for (let at = 1; at <= 8; at += 1) state = pulseAt(state, at, { at }).state;
-    assert.deepEqual(resultsOf(state.domains.director).map(entry => entry.at), [4, 5, 6, 7, 8]);
+    assert.deepEqual(resultsOf(state.domains.director).map(entry => entry.at), [3, 4, 5, 6, 7, 8]);
     state = pulseAt(state, 99, { at: 8 }).state;
-    assert.deepEqual(resultsOf(state.domains.director).map(entry => entry.at), [4, 5, 6, 7, 8]);
+    assert.deepEqual(resultsOf(state.domains.director).map(entry => entry.at), [3, 4, 5, 6, 7, 8]);
     assert.equal(part.domains.director.validate({ ...state.domains.director, pulse: [{ results: [...resultsOf(state.domains.director), ...resultsOf(state.domains.director)] }] }).length, 1);
     assert.equal(part.domains.director.validate({ ...state.domains.director, pulse: [{ results: [{ at: 'x' }] }] }).length, 1);
     assert.equal(part.domains.director.validate({ ...state.domains.director, pulse: null }).length, 0);
