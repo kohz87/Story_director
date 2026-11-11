@@ -345,7 +345,8 @@ export function statusExtras(state, _args, tools, { settings = null } = {}) {
     const here = ask(query, 'atlas.here', {}, null);
     const place = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
     const [x, y] = [coordText(place?.x), coordText(place?.y)];
-    const line = text(here?.line) || placeName;
+    // The atlas does not have a place the story has just named until the next send: its line is worked out from the name (atlas.line).
+    const line = text(here?.line) || (placeName ? text(ask(query, 'atlas.line', { name: placeName }, '')) : '') || placeName;
     const weather = ask(query, 'scene.weather', {}, null);
     const you = ask(query, 'scene.you', {}, null);
     return {

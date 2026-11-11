@@ -61,7 +61,9 @@ const CSS = `
 .sd-map .sd-map-place { position: absolute; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; margin: 0; padding: 0; transform: translate(-50%, -50%); border: 2px solid var(--sd-map-border); border-radius: 50%; background: var(--sd-map-strong); color: var(--sd-map-fg); font-size: 11px; line-height: 1; pointer-events: auto; }
 .sd-map .sd-map-place[data-visited="false"] { width: 18px; height: 18px; font-size: 9px; border-style: dashed; opacity: 0.7; color: var(--sd-map-muted); }
 .sd-map .sd-map-place.sd-map-far { width: 8px; height: 8px; border-width: 1px; border-style: solid; background: var(--sd-map-muted); }
-.sd-map .sd-map-place[data-child] { width: 9px; height: 9px; border-width: 1px; border-style: solid; opacity: 1; background: var(--sd-map-strong); }
+.sd-map .sd-map-place[data-child] { width: 10px; height: 10px; border-width: 1px; border-style: solid; border-color: var(--sd-map-bg, #171a22); opacity: 1; background: #e0a94b; }
+.sd-map .sd-map-inside { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; }
+.sd-map .sd-map-inside li { margin: 0; padding: 0; }
 .sd-map .sd-map-place[data-child] i { display: none; }
 .sd-map .sd-map-place.sd-map-far i { display: none; }
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }

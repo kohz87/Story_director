@@ -858,7 +858,7 @@ test('places inside a town: small dots round it, "N places inside" on its label,
     assert.ok(kids.every(kid => Number.isFinite(kid.x) && Math.hypot(kid.x - 64, kid.y - 110) < 1), 'saved coordinates beside the parent');
     assert.equal($$('.sd-map-place').filter(node => node.getAttribute('data-child') === 'true').length, kids.length);
     // The town's label counts its places (a crowded map may shorten it to its first word, as every label).
-    assert.ok(shownLabels().some(text => new RegExp(`^Bluewatch(…| Village · ${town.inside} places? inside)$`).test(text)), shownLabels().join('|'));
+    assert.ok(shownLabels().some(text => new RegExp(`^Bluewatch( V…| Village) · ${town.inside} (places? )?inside$`).test(text)), shownLabels().join('|'));
     assert.ok(!shownLabels().some(text => /River Quay/.test(text)), 'a child has no label until it is picked');
     // Tapping the town lists its places; a tap on one goes to it.
     const again = draw({ state });
@@ -881,4 +881,31 @@ test('"Tidy the map" shows while a visited place has no coordinates and sends on
     tidy.dispatch('click', {});
     assert.deepEqual(sent, [['atlas.edit', { tidy: true }]]);
     assert.equal(tidy.hidden, true);
+});
+
+test('a town\'s details list the first eight places by their own part, then "+N more"; its label keeps the count; child dots are amber', () => {
+    let state = story();
+    for (let n = 1; n <= 10; n += 1) state = command(state, 'atlas.visit', { name: `Bluewatch Village / Spot ${String(n).padStart(2, '0')}`, parents: true }, { pack: PACK }).state;
+    const { $, $$, shownLabels } = draw({ state });
+    $('.sd-map-me').click();
+    const items = $$('.sd-map-inside-item');
+    assert.deepEqual(items.map(item => item.textContent), Array.from({ length: 8 }, (_, n) => `Spot 0${n + 1}`));
+    assert.match($('.sd-map-details').textContent, /10 places inside/);
+    assert.match($('.sd-map-details').textContent, /\+2 more/);
+    assert.ok(shownLabels().some(text => /^Bluewatch( V…| Village) · 10 (places )?inside$/.test(text)), shownLabels().join('|'));
+    assert.match(MAP_CSS, /\[data-child\][^}]*#e0a94b/);
+});
+
+test('the map opens on the town of the current place at a zoom that sets its places apart; Fit shows everything; a town named only as a parent has its label from the start', () => {
+    let state = story();
+    for (const name of ['Bluewatch Village / Guild Office', 'Bluewatch Village / River Quay', 'Reedmere (Old Dock)']) state = command(state, 'atlas.visit', { name, parents: true }, { pack: PACK }).state;
+    state = at(state, 'Bluewatch Village / Guild Office');
+    const { $, handle } = draw({ state });
+    const opened = handle.state.view;
+    assert.equal(opened.cx, 64);
+    assert.equal(opened.cy, -110);
+    $('.sd-map-fit').click();
+    assert.ok(opened.k > handle.state.view.k, 'Fit is wider than the opening view');
+    const wide = draw({ state: at(state, 'Reedmere (Old Dock)') });
+    assert.ok(wide.shownLabels().some(text => /^Reedmere/.test(text)), wide.shownLabels().join('|'));
 });

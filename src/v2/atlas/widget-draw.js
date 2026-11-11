@@ -215,7 +215,7 @@ export function createDraw(s, dom) {
         const visible = new Set(markers.map(marker => marker.id));
         const rank = place => (place.id === s.hovered ? 0 : place.id === s.picked ? 1 : place.id === s.data.current ? 2 : place.visited ? 3 : 4);
         const items = s.shown
-            .filter(place => visible.has(place.id) && (place.parent ? [s.hovered, s.picked, s.data.current].includes(place.id) : place.visited || zoom >= KNOWN_LABEL_ZOOM || place.id === s.hovered || place.id === s.picked))
+            .filter(place => visible.has(place.id) && (place.inside > 0 || (place.parent ? [s.hovered, s.picked, s.data.current].includes(place.id) : place.visited || zoom >= KNOWN_LABEL_ZOOM || place.id === s.hovered || place.id === s.picked)))
             .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
             .map(place => ({ id: place.id, x: at.get(place.id).x, y: at.get(place.id).y, r: markers.find(marker => marker.id === place.id).r, text: place.inside ? `${place.name} · ${place.inside} ${place.inside === 1 ? 'place' : 'places'} inside` : place.parent ? place.line : place.name }));
         const placed = new Map(placeLabels(items, markers, width, height).map(entry => [entry.id, entry]));

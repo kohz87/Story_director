@@ -311,3 +311,92 @@ test('"Tidy the map" gives saved coordinates to visited places without any, as o
     assert.equal(query(old2.state, 'atlas.view', {}, { pack: TOWNS }).tidy, 2);
     assert.equal(query(run.state, 'atlas.view', {}, { pack: TOWNS }).tidy, 0);
 });
+
+// ---- review fixes: parent direction, pack wins over auto coordinates, Tidy, place line (the owner's own names) -----------------------------
+const visitAll = (state, names, pack = TOWNS) => names.reduce((now, name) => command(now, 'atlas.visit', { name, parents: true }, { pack }).state, state);
+const findAtlas = (state, key) => placeNamed(state, key.toLowerCase());
+
+test('parent direction: the part that resolves is the parent, a bracket of kind or region words names none, and a made parent only when neither resolves', () => {
+    // "Lime-Shed (Salt-and-Ash Yard)" with the Yard known: the Yard is the parent, no "Lime-Shed" place is made.
+    let state = visitAll(makeState(), ['Salt-and-Ash Yard', 'Lime-Shed (Salt-and-Ash Yard)']);
+    const yard = findAtlas(state, 'Salt-and-Ash Yard');
+    const shed = findAtlas(state, 'Lime-Shed (Salt-and-Ash Yard)');
+    assert.equal(shed.parent, yard.id);
+    assert.equal(placeNamed(state, 'lime-shed'), null);
+    assert.equal(query(at(state, 'Lime-Shed (Salt-and-Ash Yard)'), 'atlas.here', {}, { pack: TOWNS }).line, 'Salt-and-Ash Yard · Lime-Shed');
+    // "(settlement, Bluewatch)" describes the place: the prefix rule gives Bluewatch Village, and the line drops the bracket.
+    state = visitAll(makeState(), ['Bluewatch Storehouse Three (settlement, Bluewatch)']);
+    const storehouse = findAtlas(state, 'Bluewatch Storehouse Three (settlement, Bluewatch)');
+    assert.equal(storehouse.parent, findAtlas(state, 'Bluewatch Village').id);
+    assert.equal(placeNamed(state, 'bluewatch storehouse three'), null);
+    assert.equal(query(at(state, storehouse.name), 'atlas.here', {}, { pack: TOWNS }).line, 'Bluewatch Village · Storehouse Three');
+    // "Guild Office / Bluewatch Village": the second part resolves, the first does not.
+    state = visitAll(makeState(), ['Guild Office / Bluewatch Village']);
+    assert.equal(findAtlas(state, 'Guild Office / Bluewatch Village').parent, findAtlas(state, 'Bluewatch Village').id);
+    assert.equal(placeNamed(state, 'guild office'), null);
+    assert.equal(query(at(state, 'Guild Office / Bluewatch Village'), 'atlas.here', {}, { pack: TOWNS }).line, 'Bluewatch Village · Guild Office');
+    // Neither part known: the first is made (the story-made parent).
+    state = visitAll(makeState(), ['Frontier Road (Halfway Brook)']);
+    assert.equal(findAtlas(state, 'Frontier Road (Halfway Brook)').parent, findAtlas(state, 'Frontier Road').id);
+    assert.deepEqual(part.domains.atlas.validate(state.domains.atlas), []);
+});
+
+test('a pack update after a story-made parent: the pack\'s coordinates win and the child follows; a reader\'s edit keeps its own', () => {
+    const early = { places: [{ name: 'Bluewatch Village', region: 'River', kind: 'village', x: 64, y: 110 }] };
+    let state = visitAll(makeState(), ['Bluewatch Village', 'Auvoth (Gate)'], early);
+    const auvoth = findAtlas(state, 'Auvoth');
+    assert.equal(auvoth.auto, true);
+    assert.ok(near(auvoth, { x: 64, y: 110 }) <= 0.51, 'made beside the previous place');
+    const gate = findAtlas(state, 'Auvoth (Gate)');
+    assert.equal(gate.parent, auvoth.id);
+    assert.deepEqual(part.domains.atlas.validate(state.domains.atlas), []);
+    // The pack gains Auvoth at 59, 110: it wins, and the child is drawn by the live parent.
+    const seen = id => query(state, 'atlas.place', { id }, { pack: TOWNS });
+    assert.deepEqual([seen(auvoth.id).x, seen(auvoth.id).y], [59, 110]);
+    assert.ok(near(seen(gate.id), { x: 59, y: 110 }) <= 0.51);
+    const view = query(state, 'atlas.view', {}, { pack: TOWNS }).places.find(place => place.id === gate.id);
+    assert.ok(near(view, { x: 59, y: 110 }) <= 0.51);
+    // The reader sets Auvoth's point: the mark goes, and the pack no longer wins; the child follows.
+    state = command(state, 'atlas.edit', { place: auvoth.id, x: 70, y: 70 }, { pack: TOWNS }).state;
+    assert.equal(findAtlas(state, 'Auvoth').auto, undefined);
+    assert.deepEqual([seen(auvoth.id).x, seen(auvoth.id).y], [70, 70]);
+    assert.ok(near(seen(gate.id), { x: 70, y: 70 }) <= 0.51);
+});
+
+test('Tidy counts only what it can place; a child under a coordinate-less parent is placed after Tidy, parent first', () => {
+    // Nothing placeable (no pack, no coordinates, no region): no button and a true sentence.
+    const old = command(makeState(), 'atlas.visit', { name: 'Nowhere Special' });
+    assert.equal(query(old.state, 'atlas.view', {}, { pack: { places: [] } }).tidy, 0);
+    const refused = command(old.state, 'atlas.edit', { tidy: true });
+    assert.equal(refused.ok, false);
+    assert.match(refused.message, /None of the places without coordinates can be placed yet/);
+    // "Zeth" was visited with no point; "Zeth Gatehouse" learns its parent but cannot be placed yet.
+    let state = command(makeState(), 'atlas.visit', { name: 'Zeth' }).state;
+    state = visitAll(state, ['Zeth Gatehouse', 'Bluewatch Village']);
+    const gatehouse = () => findAtlas(state, 'Zeth Gatehouse');
+    assert.equal(gatehouse().parent, findAtlas(state, 'Zeth').id);
+    assert.equal(gatehouse().x, undefined);
+    assert.equal(query(state, 'atlas.view', {}, { pack: TOWNS }).tidy, 2);
+    const run = command(state, 'atlas.edit', { tidy: true }, { pack: TOWNS });
+    assert.ok(run.ok, run.message);
+    assert.match(run.result.summary, /^2 places placed/);
+    state = run.state;
+    assert.ok(Number.isFinite(gatehouse().x));
+    assert.ok(near(gatehouse(), findAtlas(state, 'Zeth')) <= 0.51);
+    assert.equal(query(state, 'atlas.view', {}, { pack: TOWNS }).tidy, 0);
+});
+
+test('the place line keeps the spot of "Bluewatch — Guild Office", works before the atlas has the place, uses the saved parent, and a town counts as visited through a child', () => {
+    const state = visitAll(makeState(), ['Auvoth (Southern Gatehouse)']);
+    assert.equal(query(at(makeState(), 'Bluewatch — Guild Office'), 'atlas.here', {}, { pack: TOWNS }).line, 'Bluewatch Village · Guild Office');
+    assert.equal(query(makeState(), 'atlas.line', { name: 'Bluewatch Village / Guild Office' }, { pack: TOWNS }), 'Bluewatch Village · Guild Office');
+    assert.equal(query(makeState(), 'atlas.line', { name: '' }, { pack: TOWNS }), '');
+    // The reader renames the child: the line still names its saved parent.
+    const gate = findAtlas(state, 'Auvoth (Southern Gatehouse)');
+    const renamed = command(state, 'atlas.edit', { place: gate.id, name: 'Southern Gatehouse' }, { pack: TOWNS }).state;
+    assert.equal(query(at(renamed, 'Southern Gatehouse'), 'atlas.here', {}, { pack: TOWNS }).line, 'Auvoth · Southern Gatehouse');
+    // Auvoth was only named as a parent (not discovered), yet the map shows it visited with its count.
+    const places = query(state, 'atlas.view', {}, { pack: TOWNS }).places;
+    assert.equal(findAtlas(state, 'Auvoth').discovered, false);
+    assert.deepEqual([places.find(place => place.name === 'Auvoth').visited, places.find(place => place.name === 'Auvoth').inside], [true, 1]);
+});

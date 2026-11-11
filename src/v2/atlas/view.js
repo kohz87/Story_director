@@ -196,6 +196,9 @@ const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h
 
 /** A shorter label: the first word when that says enough, else the first 10 characters and "…". */
 export function shorten(text) {
+    // A town's "N places inside" stays whole: the name is cut, the count is not ("Bluewatch V… · 6 inside").
+    const count = String(text).match(/^(.+) · (\d+) places? inside$/);
+    if (count) return `${count[1].length > 12 ? `${count[1].slice(0, 11).trimEnd()}…` : count[1]} · ${count[2]} inside`;
     const words = String(text).split(/\s+/).filter(Boolean);
     if (words.length > 1 && words[0].length >= 4) return `${words[0]}…`;
     return text.length > 11 ? `${text.slice(0, 10).trimEnd()}…` : text;

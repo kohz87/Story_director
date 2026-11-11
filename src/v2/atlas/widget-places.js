@@ -5,6 +5,8 @@
 import { centreOn, searchPlaces } from './view.js';
 import { button, h, humanize, layerFor, onLayer, text } from './widget-view.js';
 
+const MAX_INSIDE = 8;
+
 // Three groups: `dom` (doc and the nodes), `view` (the state `s` and what reads the view) and `hooks` (what the widget lends it).
 export function createPlaces({ dom, view, hooks }) {
     const { doc, details, input, results } = dom;
@@ -28,13 +30,16 @@ export function createPlaces({ dom, view, hooks }) {
         // A town lists the places inside it ("Tap a town: the places inside it"); a tap on one goes to it.
         const kids = s.data.places.filter(other => other.parent === place.id).sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
         const list = h(doc, 'ul', 'sd-map-inside');
-        for (const kid of kids) {
+        // Each by its own part ("Guild Office", not "Bluewatch Village / Guild Office"); the first eight, then "+N more".
+        for (const kid of kids.slice(0, MAX_INSIDE)) {
             const item = h(doc, 'li');
-            const go = button(doc, 'sd-map-result sd-map-inside-item', kid.name);
+            const own = kid.line.startsWith(`${place.name} · `) ? kid.line.slice(place.name.length + 3) : kid.line;
+            const go = button(doc, 'sd-map-result sd-map-inside-item', own);
             go.setAttribute('data-id', kid.id);
             item.append(go);
             list.append(item);
         }
+        if (kids.length > MAX_INSIDE) list.append(h(doc, 'li', 'sd-map-none', `+${kids.length - MAX_INSIDE} more`));
         const inside = kids.length ? [h(doc, 'p', 'sd-map-about', `${kids.length} ${kids.length === 1 ? 'place' : 'places'} inside`), list] : [];
         details.replaceChildren(h(doc, 'h3', 'sd-map-name', place.line), ...(about ? [h(doc, 'p', 'sd-map-about', about)] : []), h(doc, 'p', 'sd-map-status', status), ...inside, trip, close);
         details.setAttribute('data-id', place.id);

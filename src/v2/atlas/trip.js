@@ -18,7 +18,7 @@
 import { DEFAULT_PACES, MODERN_PACES, parseLocation } from '../../places.js';
 import { DEFAULT_RULES, MODERN_RULES, legDays } from '../../routes.js';
 import { PRESETS, makeCalendar } from '../../calendar.js';
-import { hopMode } from './travel.js';
+import { TOWN_HOP_DAYS, hopMode, townOf } from './travel.js';
 import { cleanName, cleanWord, isRecord, keyOf } from './domain.js';
 import { KEY, MAX_DELAYS, MAX_DELAY_DAYS, MAX_LEGS } from './trip-shape.js';
 
@@ -147,9 +147,12 @@ export function planTrip(world, { from, via = [], to, mode, pace = null, modern 
         const hops = [];
         let here = start;
         for (const stop of stops) {
-            const way = shortestKm(world, here, stop, mode, options);
+            // A place with no road of its own goes by its town's roads, with a short fixed hop each side (travel.js townOf).
+            const [out, into] = [townOf(world, world.find(here)), townOf(world, world.find(stop))];
+            const way = shortestKm(world, out?.id ?? here, into?.id ?? stop, mode, options);
             if (!way) return { error: `No known route from ${name(here)} to ${name(stop)}.` };
-            hops.push(...way);
+            const town = (from, to) => ({ from, to, route: { kind: '' }, edge: { km: 1, days: TOWN_HOP_DAYS } });
+            hops.push(...(out ? [town(here, out.id)] : []), ...way, ...(into ? [town(into.id, stop)] : []));
             here = stop;
         }
         return { hops };

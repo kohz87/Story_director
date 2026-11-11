@@ -308,7 +308,6 @@ export function visit(ctx, payload = {}) {
     // `parents`: the visit is from a reader that saves a place's parent and coordinates (beforeGenerate sends it); a visit recorded
     // before that has none, so a Re-read keeps the atlas it made.
     const settled = payload.parents === true && settlePlace(atlas, ctx, pack, place, { ensure: ensurePlace, canMake: Object.keys(atlas.places).length < MAX_PLACES });
-    if (settled) place.rev = revOf(ctx);
     return { summary: changed || settled ? `${place.name} is on the map.` : '', narrate: false, data: { place: place.id, created } };
 }
 
@@ -317,7 +316,7 @@ const EDIT_FIELDS = ['place', 'name', 'x', 'y', 'layer', 'region', 'kind', 'tidy
 // `atlas.edit { tidy: true }` ("Tidy the map"): saved coordinates for the visited places that have none, as one reader action.
 function tidy(ctx, atlas) {
     const count = tidyPlaces(atlas, ctx, packWorld(queryOf(ctx)), { ensure: ensurePlace, canMake: Object.keys(atlas.places).length < MAX_PLACES });
-    if (!count) return ctx.fail('INVALID', 'Nothing to tidy: every visited place already has its coordinates.');
+    if (!count) return ctx.fail('INVALID', 'None of the places without coordinates can be placed yet.');
     return { summary: `${count} ${count === 1 ? 'place' : 'places'} placed on the map.`, narrate: false, data: { tidied: count } };
 }
 
@@ -375,11 +374,13 @@ export function edit(ctx, payload = {}) {
             if (place.x !== undefined) changes.push('no coordinates');
             delete place.x;
             delete place.y;
+            delete place.auto;
         } else {
             const x = Math.round(payload.x);
             const y = Math.round(payload.y);
             if (place.x !== x || place.y !== y) changes.push(`at ${x}, ${y}`);
             Object.assign(place, { x, y });
+            delete place.auto;   // the reader's point: a pack's no longer wins over it
         }
     }
     place.rev = revOf(ctx);

@@ -27,7 +27,7 @@
 // the DOM is built in widget-dom.js; place details, search and moves are in widget-places.js; pointer input is in widget-pointer.js.
 
 import {
-    NEAR_PX, between, boundsOf, clampView, fitView, mapPoint, nearestGap, panBy, placeUnplaced, zoomAt, zoomLevel,
+    NEAR_PX, between, boundsOf, centreOn, clampView, fitView, mapPoint, nearestGap, panBy, placeUnplaced, zoomAt, zoomLevel,
     zoomLimits,
 } from './view.js';
 import { ensureStyle } from './widget-css.js';
@@ -199,6 +199,19 @@ function render(el, props, api) {
         paint();
     }
 
+    // The first view opens on the town {{user}} stands in (the current place's parent, or the place itself when it has places inside), at a
+    // zoom where its places are apart; Fit still shows everything. A view the reader left on this layer is kept.
+    function openOnTown() {
+        const here = byId(s.data.current);
+        const town = byId(here?.parent || (here?.inside ? here.id : ''));
+        const at = town && onLayer(town, s.layer) ? s.points.get(town.id) : null;
+        if (!at || views.has(`${viewKey}|${s.layer}`)) return;
+        measure();
+        s.view = centreOn(s.view, at, box, limits, closeEnough(town.id));
+        remember();
+        paint();
+    }
+
     // The view fitted to the trip's stops that are on this layer (two or more), inside the zoom limits.
     function fitTrip() {
         const stops = new Set(s.trip.legs.flatMap(leg => [leg.fromId, leg.toId]));
@@ -331,6 +344,7 @@ function render(el, props, api) {
             setLayer(s.data.layer);
             // The first time the map is drawn with a trip on, it shows the trip: the view fitted to the stops the trip runs through.
             if (s.trip?.on && !views.has(`${viewKey}|${s.layer}`)) fitTrip();
+            else if (first) openOnTown();
         }
         drawRoad();
         if (s.picked && !byId(s.picked)) showDetails('');

@@ -5,9 +5,10 @@
 // (Story Block's query `packs.content`, optional: without it the atlas is the story's alone).
 // A pack place the atlas lacks is known but undiscovered; once the story goes there it is the
 // atlas's, with the pack's data filling what the story left out. Coordinates: the atlas's own
-// (a reader's correction, or the story's for a place no pack knows) win, then the pack's.
+// (a reader's correction, or the story's for a place no pack knows) win, then the pack's; coordinates the map placed itself (`auto`,
+// parent.js) give way to the pack's, and a child's follow its live parent (the parent's point plus the child's fixed offset).
 
-import { PACK_NODE, cleanName, cleanWord, isRecord, keyOf, orderedPlaces, orderedRoutes } from './domain.js';
+import { PACK_NODE, childOffset, cleanName, cleanWord, isRecord, keyOf, orderedPlaces, orderedRoutes, round3 } from './domain.js';
 
 const finite = value => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 // Names once each by key, without `own` (the place's own name key).
@@ -111,7 +112,8 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
         const key = keyOf(own.name);
         const from = packByKey.get(key) ?? Object.entries(atlas.keys ?? {}).filter(([, id]) => id === own.id).map(([alias]) => packByKey.get(alias)).find(Boolean) ?? null;
         if (from) usedPack.add(from.key);
-        const hasOwn = own.x !== undefined && own.y !== undefined;
+        // Placed by the map (`auto`) and the pack has a point: the pack's wins.
+        const hasOwn = own.x !== undefined && own.y !== undefined && !(own.auto && from?.x !== null && from?.x !== undefined);
         const place = {
             id: own.id,
             key,
@@ -131,6 +133,17 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
         places.push(place);
         byId.set(place.id, place);
     }
+    // An auto-placed child sits by its live parent (the parent's point may be a pack's): parents first, a chain of three at most.
+    const follow = (place, depth = 0) => {
+        const own = atlas.places[place.id];
+        const up = own?.auto && own.parent ? byId.get(own.parent) : null;
+        if (!up || up.id === place.id || depth > 3) return;
+        follow(up, depth + 1);
+        if (up.x === null || up.y === null) return;
+        const { dx, dy } = childOffset(place.key);
+        Object.assign(place, { x: round3(up.x + dx), y: round3(up.y + dy) });
+    };
+    for (const place of places) follow(place);
     for (const [alias, id] of Object.entries(atlas?.keys ?? {})) if (byId.has(id)) byKey.set(alias, byId.get(id));
     // The pack's other names find the atlas's place too ("the quay" for Inspection Quay).
     for (const place of places) for (const alias of place.aliases) if (!byKey.has(keyOf(alias))) byKey.set(keyOf(alias), place);

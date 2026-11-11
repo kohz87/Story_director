@@ -103,6 +103,8 @@ export function atlasView(world, current = '', { map = {} } = {}) {
     const drawn = world.places.filter(place => !place.hidden || place.id === here?.id);
     const ids = new Set(drawn.map(place => place.id));
     const visited = new Set(drawn.filter(place => place.discovered || place.id === here?.id).map(place => place.id));
+    // A town counts as visited when a place inside it is (derived, nothing stored).
+    for (const place of drawn.filter(item => item.parent && visited.has(item.id))) if (ids.has(place.parent)) visited.add(place.parent);
     const kinds = {};
     const layers = new Map();
     // The places inside a drawn place (parent.js): a dot round it, counted on its label.
@@ -131,8 +133,9 @@ export function atlasView(world, current = '', { map = {} } = {}) {
         layer: here ? viewLayerOf(here) : '',
         current: here && ids.has(here.id) ? here.id : '',
         kinds,
-        // "Tidy the map" is offered while a visited atlas place has no coordinates of its own (atlas.edit { tidy: true }).
-        tidy: drawn.filter(place => place.source === 'atlas' && visited.has(place.id) && place.x === null && !place.parent).length,
+        // "Tidy the map" is offered while a visited atlas place has no coordinates (atlas.edit { tidy: true }); the `atlas.view` query
+        // narrows this count to the places a tidy can place (queries.js).
+        tidy: drawn.filter(place => place.source === 'atlas' && place.discovered && place.x === null).length,
         orient: { north: map?.north === 'down' ? 'down' : 'up', east: map?.east === 'left' ? 'left' : 'right' },
     };
 }

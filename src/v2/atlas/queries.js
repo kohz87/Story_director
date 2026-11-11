@@ -7,9 +7,10 @@
 
 import { mapSettings, parseLocation } from '../../places.js';
 import { findPlace, keyOf } from './domain.js';
+import { ensurePlace } from './capture.js';
 import { atlasView, mapProps } from './map.js';
 import { scenePlace } from './note.js';
-import { placeLine } from './parent.js';
+import { placeLine, tidyPlaces } from './parent.js';
 import { travelTime } from './travel.js';
 import { packPlace, packWorld, worldOf } from './world.js';
 
@@ -23,6 +24,22 @@ function mapOf(tools) {
     } catch {
         return mapSettings({});
     }
+}
+
+// The place line of a scene's place name ("Bluewatch — Guild Office"): the town, then the spot; works before the atlas has the place.
+function lineOf(world, sceneName) {
+    const { name, spot } = parseLocation(sceneName);
+    const base = placeLine(world.find(name.trim()) ?? { name }, world);
+    return spot ? `${base} · ${spot}` : base;
+}
+
+// How many places "Tidy the map" can place: the tidy run on a copy (a made-up id source, nothing kept).
+function tidyCount(state, tools) {
+    const atlas = state?.domains?.atlas;
+    if (!atlas) return 0;
+    let turn = 0;
+    const ctx = { rev: 0, rng: () => ((turn += 1) * 0.6180339887) % 1 };
+    return tidyPlaces(structuredClone(atlas), ctx, packWorld(toolsQuery(tools)), { ensure: ensurePlace });
 }
 
 const placeOut = place => ({
@@ -82,7 +99,12 @@ export const queries = {
      * The atlas Map widget's data (map.js `atlasView`): every place the reader may know of, visited
      * or not, the routes, the layers with places, and the reader's map orientation.
      */
-    'atlas.view': (state, _args, tools) => atlasView(worldFrom(state, tools), hereOf(state, tools), { map: mapOf(tools) }),
+    'atlas.view': (state, _args, tools) => {
+        const view = atlasView(worldFrom(state, tools), hereOf(state, tools), { map: mapOf(tools) });
+        return view.tidy ? { ...view, tidy: tidyCount(state, tools) } : view;
+    },
+    /** The place line ("Town · Spot") of a scene's place name, whether or not the atlas has the place yet; '' for no name. */
+    'atlas.line': (state, { name = '' } = {}, tools) => (keyOf(parseLocation(name).name) ? lineOf(worldFrom(state, tools), name) : ''),
     /**
      * One place with its routes, by `id` (or node id) or `name`; null when unknown. Also `aliases`,
      * `here` (it is the scene's place) and `trip`: from the scene's place by known routes
@@ -102,7 +124,7 @@ export const queries = {
         const place = scene.name ? world.find(parseLocation(scene.name).name.trim()) : null;
         if (!place) return null;
         // `placeKind`: the map's own kind for the place, whatever the scene says now.
-        return { id: place.id, name: place.name, line: placeLine(place, world), kind: scene.kind || place.kind, placeKind: place.kind, region: place.region || scene.region };
+        return { id: place.id, name: place.name, line: lineOf(world, scene.name), kind: scene.kind || place.kind, placeKind: place.kind, region: place.region || scene.region };
     },
     /** The place picked on the map (`atlas.focus`) with its routes, or null. */
     'atlas.selected': (state, _args, tools) => {

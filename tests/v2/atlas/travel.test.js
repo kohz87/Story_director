@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import { DEFAULT_PACES, MODERN_PACES, estimateTrip } from '../../../src/places.js';
 import { DEFAULT_RULES, MODERN_RULES, durationText, legDays, loadWorldPack, planRoute, restDaysFor } from '../../../src/routes.js';
-import { travelTime } from '../../../src/v2/atlas/travel.js';
+import { TOWN_HOP_DAYS, travelTime } from '../../../src/v2/atlas/travel.js';
+import { planTrip } from '../../../src/v2/atlas/trip.js';
 import { packWorld, worldOf } from '../../../src/v2/atlas/world.js';
 import { command, lines, makeState, placeNamed, query } from './helpers/fake-ctx.js';
 
@@ -117,4 +118,28 @@ test('the story\'s route times; a pack\'s road of the same kind wins over them; 
     assert.deepEqual(routes.map(route => [route.otherName, route.kind, route.source, route.text]), [
         ['Varnhold Watch', 'road', 'pack', '7.5 days'], ['Auvoth', 'road', 'pack', '17 days'],
     ]);
+});
+
+test('a trip from or to a place inside a town goes by the town\'s road plus a short fixed hop; two places in one town: the hop alone', () => {
+    const content = { places: PLACES, routes: ROADS };
+    let state = makeState();
+    for (const name of ['Auvoth (Gatehouse)', 'Auvoth / Pale Alley']) state = command(state, 'atlas.visit', { name, parents: true }, { pack: content }).state;
+    const world = worldFor(content, state.domains.atlas);
+    const gate = placeNamed(state, 'auvoth (gatehouse)');
+    const alley = placeNamed(state, 'auvoth / pale alley');
+    assert.equal(gate.parent, placeNamed(state, 'auvoth').id);
+    const road = travelTime(world, 'Auvoth', 'Shorn');
+    const out = travelTime(world, gate.id, 'Shorn');
+    assert.equal(out.source, 'routes');
+    assert.deepEqual(out.hops, road.hops, 'the town\'s road');
+    assert.ok(Math.abs(out.activeDays - (road.activeDays + TOWN_HOP_DAYS)) < 1e-6);
+    assert.equal(travelTime(world, 'Shorn', gate.id).hops.length, road.hops.length);
+    // Child to its town, and two children of one town: the fixed hops (half an hour each side), not the map offset's round-up.
+    assert.equal(travelTime(world, gate.id, 'Auvoth').text, '30 min');
+    assert.equal(travelTime(world, gate.id, alley.id).text, '1 h');
+    // The trip planner starts with the hop, then the town's road.
+    const plan = planTrip(world, { from: { node: gate.id }, to: world.find('Shorn').id, mode: 'foot', at: 0 });
+    assert.equal(plan.error, undefined);
+    assert.deepEqual([plan.legs[0].from, plan.legs[0].to, plan.legs[0].km], ['Auvoth (Gatehouse)', 'Auvoth', 1]);
+    assert.equal(plan.legs.at(-1).to, 'Shorn');
 });
