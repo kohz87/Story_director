@@ -35,8 +35,9 @@ const QUIET_TYPES = new Set([DIGEST, 'chronicle.note', 'chronicle.surface', 'dir
 // The arc planner's commands (arc/commands.js): what was planned stays behind the scenes, so an arc's
 // name and counts are never a fact of the day (the Journal shows only what {{user}} knows).
 export const PLANNED_TYPES = new Set(['director.arc.accept', 'director.arc.update', 'director.arc.end']);
-// The reader's progress is told although the code makes it (cause system): practice lines.
-const SYSTEM_BUT_TOLD = new Set(['rpg.practice']);
+// The reader's progress is told although the code makes it (cause system): practice lines, and the fight board's result ("Fight won: …",
+// Story Block writes it as a system receipt that is not narrated), which is a fight of the day.
+const SYSTEM_BUT_TOLD = new Set(['rpg.practice', 'rpg.fight']);
 export const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause === 'system' && receipt.narrate !== true && !SYSTEM_BUT_TOLD.has(receipt.type));
 export const SETTLE = 'time.settle';
 // Story Block's scene receipts that name who came into the scene (`data.added`).

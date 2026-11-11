@@ -71,7 +71,7 @@ export const isNarratorNote = line => NARRATOR_NOTE.test(String(line ?? '').trim
 const KINDS = [['met', 'Met'], ['relationships', 'Relationships'], ['events', 'Events'], ['party', 'Party & gear'], ['items', 'Items & money'], ['reputation', 'Reputation'], ['news', 'News']];
 const ARROW = /^(\S+) (.+?) (?:->|→) (.+)$/;
 const LOST = /^Lost (.+?)(?: x(\d+))? \((\d+) left\)\.?$/;
-const plain = detail => ({ title: '', chip: '', detail, note: '', tags: [] });
+const plain = detail => ({ title: '', chip: '', detail, note: '', since: '', stepsLabel: '', steps: [], tags: [] });
 
 // "Torka: affection 9 -> 10, desire 7 -> 8 (held at 7)" → one row per person, its meter changes as tags (a meter moved twice: first from, last to).
 function relationRows(lines) {
@@ -82,19 +82,21 @@ function relationRows(lines) {
         const name = at > 0 ? line.slice(0, at) : '';
         const moves = (at > 0 ? line.slice(at + 2) : line).replace(/\([^)]*\)/g, '').split(',').map(part => ARROW.exec(part.trim())).filter(Boolean);
         if (!name || !moves.length) { loose.push(plain(line)); continue; }
-        const row = rows.get(name.toLowerCase()) ?? { title: name, chip: '', detail: '', note: '', tags: [], meters: new Map() };
+        const row = rows.get(name.toLowerCase()) ?? { ...plain(''), title: name, meters: new Map() };
         rows.set(name.toLowerCase(), row);
         for (const [, meter, from, to] of moves) row.meters.set(meter, { from: row.meters.get(meter)?.from ?? from, to: to.replace(/[\s.]+$/, '') });
     }
     return [...rows.values()].map(({ meters, ...row }) => ({ ...row, tags: [...meters].map(([meter, move]) => `${meter} ${move.from} → ${move.to}`) })).concat(loose);
 }
 
-// A day's repeated "Lost X xN (n left)" lines are one: "Lost: A x36, B x12" (a lone one stays as it was).
+// A day's repeated "Lost X xN (n left)" lines are one: "Lost: A x36, B x12" (the counts of one item add up; a lone one stays as it was).
 function itemRows(lines) {
     const lost = lines.map(line => LOST.exec(line)).filter(Boolean);
     if (lost.length < 2) return lines.map(plain);
-    const merged = new Map(lost.map(([, name, count]) => [name, count ? `${name} x${count}` : name]));
-    return [...lines.filter(line => !LOST.test(line)).map(plain), plain(`Lost: ${[...merged.values()].join(', ')}`)];
+    const total = new Map();
+    for (const [, name, count] of lost) total.set(name, (total.get(name) ?? 0) + (count ? Number(count) : 1));
+    const merged = [...total].map(([name, count]) => (count > 1 ? `${name} x${count}` : name));
+    return [...lines.filter(line => !LOST.test(line)).map(plain), plain(`Lost: ${merged.join(', ')}`)];
 }
 
 // Events: one row per thread (a quest or thread the lines or the stamps name): its latest line, "N steps today", and "began <date>" on the day it ends.
@@ -122,21 +124,24 @@ function eventRows(day, events, { threads, format }) {
         }
     }
     return rows.map(row => {
-        if (!row.lines) return { title: '', chip: '', detail: row.detail, note: '', tags: [] };
+        if (!row.lines) return plain(row.detail);
         const ends = ['finished', 'failed', 'gave up'].includes(row.chip);
         const began = ends && isInt(row.thread?.taken?.at) && typeof format === 'function' ? format(row.thread.taken.at) : '';
-        const note = [row.lines.length > 1 ? `${row.lines.length} steps today` : '', began && dayOfMinutes(row.thread.taken.at) !== day.day ? `began ${began}` : ''].filter(Boolean).join(' · ');
-        return { title: row.title, chip: row.chip || 'step', detail: row.lines.at(-1) ?? '', note, tags: [] };
+        const since = began && dayOfMinutes(row.thread.taken.at) !== day.day ? `began ${began}` : '';
+        const stepsLabel = row.lines.length > 1 ? `${row.lines.length} steps today` : '';
+        return { ...plain(row.lines.at(-1) ?? ''), title: row.title, chip: row.chip || 'step', note: [stepsLabel, since].filter(Boolean).join(' · '), since, stepsLabel, steps: row.lines.length > 1 ? row.lines : [] };
     });
 }
 
 const dayOfMinutes = minutes => Math.floor(minutes / 1440);
-const textOf = row => [row.title, row.chip, row.detail, row.note, ...row.tags].filter(Boolean).join(' ');
+const textOf = row => [row.title, row.chip, row.detail, row.note, ...row.steps, ...row.tags].filter(Boolean).join(' ');
 
 /** The Journal's folds of one known day: `[{ id, label, count, items: [{ title, chip, detail, note, tags }], search }]`, only kinds with something. */
 function foldsOf(entry, { kept, quests, hidden, threads, format }) {
     const hide = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
     const made = bucketDay({ ...entry, happened: kept.map(item => item.line), tags: kept.map(item => item.tag) });
+    // A short day's own lists were made when it was written, before anything was hidden: they pass the same filter as a whole day's lines, at read time (a later Reveal shows them again).
+    if (entry.brief) for (const cat of Object.keys(made)) made[cat] = made[cat].filter(line => !hide(line) && !isNarratorNote(line));
     // Events keep their thread (a short day has only the lines).
     const events = entry.brief ? (made.events ?? []).map(line => ({ line, thread: '' }))
         : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events').map(item => ({ line: item.line, thread: parseTag(item.tag).thread }));
@@ -148,10 +153,18 @@ function foldsOf(entry, { kept, quests, hidden, threads, format }) {
         party: (made.party ?? []).map(plain),
         items: itemRows(items),
         reputation: (made.reputation ?? []).map(plain),
-        news: list(entry.world).filter(line => !hide(line)).map(plain),
+        news: (entry.brief ? made.news ?? [] : list(entry.world).filter(line => !hide(line))).map(plain),
     };
     if (entry.brief) rows.met = (made.met ?? []).map(name => ({ ...plain(''), title: name }));
     return KINDS.filter(([id]) => rows[id].length).map(([id, label]) => ({ id, label, count: rows[id].length, items: rows[id], search: rows[id].map(textOf).join(' • ') }));
+}
+
+// The stored one-liner ("to A, B; took on C; finished D; 1100 copper in, 2 out") read as a sentence: "Went to A, B, took on C, finished D, 1100 copper in, 2 out."
+function summaryOf(short) {
+    const parts = String(short ?? '').replace(/[.\s]+$/, '').split('; ').filter(Boolean);
+    if (!parts.length) return '';
+    parts[0] = parts[0].startsWith('to ') ? `Went ${parts[0]}` : parts[0][0].toUpperCase() + parts[0].slice(1);
+    return `${parts.join(', ')}.`;
 }
 
 /**
@@ -198,7 +211,9 @@ export function knownDay(entry, hidden, { now = null, threads = new Map(), forma
         hasCats: cats.length > 0,
         ago,
         eventCount: events?.count ?? 0,
-        meta: [ago, events ? `${events.count} ${events.count === 1 ? 'event' : 'events'}` : ''].filter(Boolean).join(' · '),
+        // The "today" pill stands for today's own ago; every day tells its events ("quiet day" with none).
+        meta: [entry.today === true ? '' : ago, events ? `${events.count} ${events.count === 1 ? 'event' : 'events'}` : 'quiet day'].filter(Boolean).join(' · '),
+        summary: summaryOf(short),
         // One line per event row (the thread's latest), for the narrator's [Earlier days] block.
         eventLines: (events?.items ?? []).map(row => (row.title ? `${row.title} (${row.chip}${row.note ? `, ${row.note}` : ''}): ${row.detail}`.replace(/: $/, '') : row.detail)),
         hasFacts: list(entry.facts).length > 0,
@@ -252,7 +267,7 @@ const oneLine = value => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0
 function linesOf(entry) {
     const out = [];
     if (entry.short) out.push(entry.short);
-    out.push(...list(entry.facts), ...list(entry.happened), ...list(entry.world));
+    out.push(...list(entry.facts), ...list(entry.happened).slice(0, 8), ...list(entry.world));
     if (list(entry.met).length) out.push(`Met: ${list(entry.met).join(', ')}`);
     out.push(...list(entry.npcs));
     return [...new Set(out.map(oneLine).filter(Boolean))].slice(0, LINES);

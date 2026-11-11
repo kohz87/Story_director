@@ -281,3 +281,32 @@ test('7: a full day keeps up to 40 lines with their tags (valid); a short day ke
     assert.deepEqual(validateDays({ dayFacts: { [entryKey]: okEntry } }), []);
     assert.match(validateDays({ dayFacts: { [entryKey]: { ...okEntry, happened: [{ text: 'a', told: false, type: 'has space' }] } } }).join(' '), /happened/);
 });
+
+test('F2: the fight board\'s real receipt (a system receipt, not narrated) is counted, listed as an event and kept in the digest', () => {
+    const fight = (summary, fields = {}) => r('rpg.fight', { module: 'story-block', cause: 'system', narrate: false, summary, ...fields });
+    const entry = entryOf([clock(D * DAY + 60), fight('Fight won: Astra +60 XP.'), r('rpg.resolve', { module: 'story-block', cause: 'system', narrate: false, summary: 'Tell the settled fight results in order; do not reroll them.' })], D);
+    assert.deepEqual(entry.fights, { count: 1, won: 1, lost: 0, fled: 0 });
+    assert.deepEqual(entry.happened.map(item => [item.text, item.type]), [['Fight won: Astra +60 XP.', 'rpg.fight']]);
+    assert.equal(classify({ type: 'rpg.fight', text: 'Fight won: Astra +60 XP.' }), 'events');
+    const facts = factsOf([clock(D * DAY + 60), fight('Fight won: Astra +60 XP.')]);
+    assert.match(makeDigest(D, facts, { date: 'Day' }).line, /1 fight \(1 won\)/);
+    assert.deepEqual(bucketDay({ happened: facts.happened, tags: facts.tags }), { events: ['Fight won: Astra +60 XP.'] });
+});
+
+test('F4: real receipt types land in their kind (inventory and gear, money set, the look and the weather are not events)', () => {
+    const kind = (type, text) => classify({ type, text });
+    assert.equal(kind('inventory.add', 'You added Cane Sword.'), 'items');
+    assert.equal(kind('inventory.edit', 'You changed Cane Sword.'), 'items');
+    assert.equal(kind('inventory.carry', 'You carry Cane Sword.'), 'items');
+    assert.equal(kind('wallet.set', 'Wallet set.'), 'items');
+    assert.equal(kind('item.equip', 'The party equips Cane Sword (weapon).'), 'party');
+    assert.equal(kind('capture.mount', 'Mount: a grey mare.'), 'party');
+    assert.equal(kind('capture.you', 'Your look: tall.'), 'bookkeeping');
+    assert.equal(kind('capture.weather', 'Weather: rain.'), 'bookkeeping');
+});
+
+test('F10: a short day keeps at most 40 lines of a kind', () => {
+    const cats = trimCats({ events: Array.from({ length: 60 }, (_, i) => `e${i}`) });
+    assert.equal(cats.events.length, 40);
+    assert.deepEqual(validateDays({ days: { [D]: [{ day: D, date: 'D', line: 'D: x.', brief: true, count: 60, made: 1, cats }] } }), []);
+});

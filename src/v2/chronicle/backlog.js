@@ -24,8 +24,10 @@ export const DEFAULT_CATEGORY = 'events';
 const BY_TYPE = new Map([
     ['capture.present', 'met'], ['scene.present', 'met'], ['npc.present', 'met'],
     ['capture.npc', 'relationships'], ['npc.meters', 'relationships'], ['npc.set', 'relationships'], ['npc.adjust', 'relationships'],
-    ['capture.party', 'party'],
-    ['capture.item', 'items'], ['capture.coin', 'items'], ['wallet.receive', 'items'], ['wallet.pay', 'items'],
+    ['capture.party', 'party'], ['item.equip', 'party'], ['capture.mount', 'party'],
+    ['capture.item', 'items'], ['capture.coin', 'items'], ['wallet.receive', 'items'], ['wallet.pay', 'items'], ['wallet.set', 'items'],
+    ['inventory.add', 'items'], ['inventory.edit', 'items'], ['inventory.carry', 'items'],
+    ['rpg.fight', 'events'], ['capture.you', 'bookkeeping'], ['capture.weather', 'bookkeeping'],
     ['capture.dm', 'reputation'], ['dm.act', 'reputation'],
     ['capture.world', 'news'], ['capture.faction', 'news'], ['chronicle.world', 'news'],
     ['capture.place', 'places'], ['place', 'places'],
@@ -93,12 +95,13 @@ export function bucketDay(day) {
 
 const CATS_CHARS = 900;
 const CATS_LINE = 80;
+const CATS_PER_KIND = 40;
 /** `cats` cut to about a kilobyte for a short day: each line to CATS_LINE characters, lines dropped from the end past CATS_CHARS in all. */
 export function trimCats(cats) {
     const out = {};
     let used = 0;
     for (const cat of CATEGORIES) {
-        for (const line of cats?.[cat] ?? []) {
+        for (const line of (cats?.[cat] ?? []).slice(0, CATS_PER_KIND)) {
             const text = cut(line, CATS_LINE);
             if (used + text.length > CATS_CHARS) return out;
             (out[cat] ??= []).push(text);

@@ -8,6 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DAYS_ID, WORLD_ID, daysScreen, knownDay, part, worldScreen } from '../../../src/v2/world/index.js';
+import { backlogBlock } from '../../../src/v2/chronicle/backlog.js';
 import { DIGEST_FEATURE } from '../../../src/v2/chronicle/days.js';
 import { part as chronicle } from '../../../src/v2/chronicle/index.js';
 import { validateScreen } from '../../vendor/story-block/src/v2/view/screens.js';
@@ -82,15 +83,15 @@ test('drawn: newest day first, each folded to its line; an older day keeps its l
     const days = el.querySelectorAll('.wv-day');
     assert.deepEqual(days.map(node => node.querySelector('.wv-date').textContent), ['June 5, 1200', 'June 4, 1200', 'June 3, 1200']);
     // The date once: beside the line, which leaves its own off (B-c1-3).
-    assert.equal(squash(days[0].querySelector('.wv-line').textContent), 'to Ridge Fort; 5 gold out.');
+    assert.equal(squash(days[0].querySelector('.wv-line').textContent), 'Went to Ridge Fort, 5 gold out.');
     assert.equal(days[0].querySelector('details').hasAttribute('open'), false, 'folded');
     // Inside: the summary once, then the kinds with their counts (no separate Went to / Money block).
-    assert.match(squash(days[0].textContent), /^June 5, 1200 yesterday to Ridge Fort; 5 gold out\. Items & money 1 Money: 5 gold out$/);
-    assert.doesNotMatch(squash(days[0].textContent), /Went to|Finished:/);
+    assert.match(squash(days[0].textContent), /^June 5, 1200 yesterday · quiet day Went to Ridge Fort, 5 gold out\. Items & money 1 Money: 5 gold out$/);
+    assert.doesNotMatch(squash(days[0].textContent), /Went to:|Finished:/);
     assert.match(squash(days[1].textContent), /News 1 ?World: Red Plague is now ongoing — coughing in the docks/);
     // June 3 is past the two whole days: its line only.
     assert.equal(days[2].getAttribute('data-brief'), 'true');
-    assert.match(squash(days[2].textContent), /^June 3, 1200 3 days ago to Harrow; 40 gold in\. Items & money 1 The party gains Rope\.$/);
+    assert.match(squash(days[2].textContent), /^June 3, 1200 3 days ago · quiet day Went to Harrow, 40 gold in\. Items & money 1 The party gains Rope\.$/);
     assert.equal(days[2].querySelectorAll('.wv-cat').length, 1, 'its kept list by kind: the one thing it held');
 });
 
@@ -164,7 +165,7 @@ test('3: noise is out of the kinds (presence, "Key people: noted"); a day\'s "Lo
 test('5: Events: one row per thread, its latest line; "N steps today"; "began <date>" on the finishing day; a board fight is an event row', () => {
     const day = knownDay(stored(), HIDDEN, { now: NOW, threads, format });
     const rows = kindOf(day, 'events').items;
-    assert.deepEqual(rows[0], { title: 'Perimeter Sweep', chip: 'finished', detail: 'Sweep: the basilisk bled out.', note: '2 steps today · began Goldwane 16', tags: [] });
+    assert.deepEqual(rows[0], { title: 'Perimeter Sweep', chip: 'finished', detail: 'Sweep: the basilisk bled out.', note: '2 steps today · began Goldwane 16', since: 'began Goldwane 16', stepsLabel: '2 steps today', steps: ['Sweep: the deadfall held.', 'Sweep: the basilisk bled out.'], tags: [] });
     assert.ok(rows.some(row => row.detail === 'Fight won: Astra +60 XP.'));
     assert.equal(rows.length, 2, 'the two steps are one row, the fight another');
     // A quest taken today with one line: began, no steps note.
@@ -200,4 +201,60 @@ test('7: search looks through every kind of every day, shows the day and "N days
     find('torka');
     assert.deepEqual(el.querySelectorAll('.wv-day .wv-hit').map(node => node.getAttribute('data-kind')), ['relationships', 'party'], 'only the kinds that hold it, open');
     assert.equal(el.querySelectorAll('.wv-day details').length, 0, 'a search shows the hits open, not folds');
+});
+
+// ---- fix round 1: hidden lines on short days, real receipts, layout ------------------------------------------------------------
+
+const SECRET = { words: new Set(['duke betrayal']), behind: [] };
+const shortDay = (cats, extra = {}) => ({ day: 14, date: 'Goldwane 14', brief: true, count: 6, short: 'to Harrow; 5 copper out.', happened: [], more: 0, quests: undefined, cats, ...extra });
+
+test('F1/F9: a short day\'s own lists pass the same hidden filter as a whole day (every kind, the search, the backlog), and keep NPC moves and News', () => {
+    const cats = {
+        events: ['Astra learned of the Duke Betrayal from Mira.', 'New arc: The Salt War (3 beats).', 'Tell the settled fight results in order; do not reroll them.', 'The ledger was signed.'],
+        party: ['Duke Betrayal gear bound.'], items: ['The party gains the Duke Betrayal letter.', 'The party gains Rope.'], reputation: ['Duke Betrayal: deed.'],
+        met: ['Mira'], relationships: ['Mira: trust 2 -> 3', 'Duke Betrayal: trust 1 -> 2'], news: ['World: Red Plague is now ongoing.', 'World: the Duke Betrayal spreads.'],
+    };
+    const day = knownDay(shortDay(cats), SECRET, { now: NOW });
+    const text = JSON.stringify(day.cats) + day.search;
+    assert.doesNotMatch(text, /Duke Betrayal|Salt War|reroll/);
+    assert.deepEqual(kindOf(day, 'events').items.map(row => row.detail), ['The ledger was signed.']);
+    assert.deepEqual(kindOf(day, 'items').items.map(row => row.detail), ['The party gains Rope.']);
+    assert.deepEqual(kindOf(day, 'news').items.map(row => row.detail), ['World: Red Plague is now ongoing.'], 'News of a short day stays');
+    assert.deepEqual(kindOf(day, 'relationships').items.map(row => row.title), ['Mira']);
+    assert.equal(kindOf(day, 'party'), undefined);
+    // The narrator's [Earlier days] block reads the same filtered lines.
+    const block = backlogBlock({ days: [{ ...day, day: 20 }], now: 22 * 1440 }).join('\n');
+    assert.doesNotMatch(block, /Duke Betrayal|Salt War/);
+    // Nothing is rewritten: with the word no longer hidden (a Reveal), the lines are back.
+    assert.match(JSON.stringify(knownDay(shortDay(cats), HIDDEN, { now: NOW }).cats), /Duke Betrayal/);
+});
+
+test('F8: the collapsed Lost line sums the counts of one item', () => {
+    const day = knownDay(stored({ happened: ['Lost Hide x12 (3 left).', 'Lost Hide x2 (1 left).', 'Lost Flint (0 left).', 'Lost Flint (0 left).'], tags: ['capture.item', 'capture.item', 'capture.item', 'capture.item'], moneyText: '' }), HIDDEN);
+    assert.deepEqual(kindOf(day, 'items').items.map(row => row.detail), ['Lost: Hide x14, Flint x2']);
+});
+
+test('F3/render 2/7: one "today" tag (the pill), every other day tells its events ("quiet day" with none), the summary reads as a sentence', () => {
+    assert.equal(knownDay(stored({ today: true }), HIDDEN, { now: 20 * 1440, threads, format }).meta, '2 events', 'the pill says today');
+    assert.equal(knownDay(stored({ happened: [], tags: [], quests: { taken: [], done: [], failed: [], dropped: [] } }), HIDDEN, { now: NOW }).meta, '3 days ago · quiet day');
+    const day = knownDay(stored({ short: 'to Bluewatch Village, Old Weir; finished Perimeter Sweep; 1100 copper in, 2 out; 1 world event.' }), HIDDEN, { now: NOW });
+    assert.equal(day.summary, 'Went to Bluewatch Village, Old Weir, finished Perimeter Sweep, 1100 copper in, 2 out, 1 world event.');
+    assert.equal(day.short, 'to Bluewatch Village, Old Weir; finished Perimeter Sweep; 1100 copper in, 2 out; 1 world event.', 'the stored line is as it was (the recap and the narrator read it)');
+});
+
+test('render 4/8: today\'s card is open and the others folded; an event\'s detail is its own line, its steps fold open', () => {
+    const today = knownDay(stored({ today: true }), HIDDEN, { now: NOW, threads, format });
+    const { el, warnings } = draw({ on: true, days: [today, knownDay(stored({ day: 19, date: 'Goldwane 19' }), HIDDEN, { now: NOW, threads, format })], hasDays: true, count: 2, today: '' });
+    assert.deepEqual(warnings, []);
+    const cards = el.querySelectorAll('.wv-day');
+    assert.equal(cards[0].querySelector('details').hasAttribute('open'), true, 'today open');
+    assert.equal(cards[1].querySelector('details').hasAttribute('open'), false);
+    const row = cards[0].querySelector('details.wv-cat[data-kind="events"] .wv-item');
+    assert.equal(squash(row.querySelector('.wv-t').textContent), 'Perimeter Sweep finished', 'the pill on the title line');
+    assert.equal(squash(row.querySelector('.wv-d').textContent), 'Sweep: the basilisk bled out.', 'the detail on its own line');
+    assert.equal(squash(row.querySelector('.wv-steps summary').textContent), '2 steps today');
+    assert.deepEqual(row.querySelectorAll('.wv-steps li').map(node => squash(node.textContent)), ['Sweep: the deadfall held.', 'Sweep: the basilisk bled out.']);
+    const person = cards[0].querySelector('details.wv-cat[data-kind="relationships"] .wv-item');
+    assert.equal(squash(person.querySelector('.wv-t').textContent), 'Torka', 'the name on its own line');
+    assert.equal(person.querySelectorAll('.wv-tags .wv-tag').length, 2, 'its meters wrap under it');
 });

@@ -319,7 +319,9 @@ const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeo
 /**
  * The [Earlier days] lines for the next reply: `[]` or `[tag, ...day lines]` (backlog.js). The days are the Journal's known days
  * (`director.journal`, so secrets and planner text never go in), the scene is who is present now, the current place and the open
- * quests and threads. Nothing while the digest is off, on a first day, or when the Journal cannot be read.
+ * quests and threads. Nothing while the digest is off, on a first day, or when the Journal cannot be read. The Journal is the World view's
+ * query (`director.journal`), so with the World view feature off there is no block, and (the same lines gate the one static sentence,
+ * module/create.js) no sentence either: block and sentence stand or fall together.
  */
 export function backlogLines(view) {
     if (!digestOn(view) || !view?.state?.domains?.chronicle) return [];
