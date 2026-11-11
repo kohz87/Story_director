@@ -18,7 +18,7 @@ const NAMEISH = /^[A-Za-z0-9_.:-]{1,64}$/;
 const KEYS_FULL = ['day', 'date', 'line', 'brief', 'count', 'happened', 'tags', 'who', 'more', 'places', 'quests', 'fights', 'money', 'npcs', 'world', 'met', 'revs', 'made', 'src'];
 const KEYS_BRIEF = ['day', 'date', 'line', 'brief', 'count', 'made', 'cats'];
 const CATS_CEILING = 2400;
-const CAT_NAMES = ['met', 'relationships', 'events', 'party', 'items', 'reputation', 'news'];
+const CAT_NAMES = ['met', 'relationships', 'events', 'party', 'items', 'standing', 'fame', 'guild', 'reputation', 'news'];
 const textOk = (value, max) => typeof value === 'string' && codePoints(value) <= max;
 const textsOk = (list, max, each) => Array.isArray(list) && list.length <= max && list.every(item => textOk(item, each));
 const countOk = value => isInt(value) && value >= 0;

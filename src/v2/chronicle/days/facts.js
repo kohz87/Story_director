@@ -3,7 +3,7 @@
 import {
     ECHO, ENTRY_HAPPENED, MAX_ITEM, MAX_MET, MAX_NAME, MAX_NPCS, MAX_PLACES, MAX_QUESTS,
     MAX_WHO, MAX_WORLD, PLANNED_TYPES, PRESENT_TYPES, SCENE_TYPES, TOLD_ELSEWHERE, clockSet, cut, dayOf, flat,
-    isBookkeeping, isInt, isRecord, quiet, text,
+    DM_TYPES, isBookkeeping, isInt, isRecord, quiet, text,
 } from './shared.js';
 
 // ---- facts out of one day's receipts ----------------------------------------------------------
@@ -106,7 +106,7 @@ export function entryOf(receipts, day = null, { lasting = null, present = null }
             seenHappened.add(happened);
             // The receipt's type (what kind of line it is) and the thread it touched stay with the line, for the Journal's kinds.
             const thread = typeof data.thread === 'string' ? data.thread : typeof data.quest === 'string' ? data.quest : '';
-            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length, ...tagOf(receipt.type, thread), ...(scene?.length ? { who: scene } : {}) });
+            candidates.push({ text: happened, told: receipt.narrate === true, at: candidates.length, ...tagOf(typeOf(receipt), thread), ...(scene?.length ? { who: scene } : {}) });
         }
         if (receipt.type === 'capture.place' && data.moved === true) pushUnique(places, data.name, MAX_PLACES, seenPlaces);
         // Story Block's scene: who came into the scene (`+ present`, the reader's scene.present).
@@ -185,6 +185,11 @@ export function eventsOf(receipts, limit = 500) {
 
 // A line's kind: its receipt's type and thread id, kept only when they are short plain names (a stored entry's `type` / `thread`).
 const NAMEISH = /^[A-Za-z0-9_.:-]{1,64}$/;
+// A block's result line (`capture.dm` / `dm.act`) is told apart by its result kind: "capture.dm:fame-kind" (the Journal splits Fame, Standing and Guild by it).
+const typeOf = receipt => {
+    const kind = receipt.data?.v2?.result?.kind;
+    return DM_TYPES.has(receipt.type) && typeof kind === 'string' && NAMEISH.test(kind) ? `${receipt.type}:${kind}` : receipt.type;
+};
 const tagOf = (type, thread) => ({ ...(NAMEISH.test(type) ? { type } : {}), ...(NAMEISH.test(thread) ? { thread } : {}) });
 const itemOf = ({ text: said, told, type, thread, who }) => ({ text: said, told, ...(type ? { type } : {}), ...(thread ? { thread } : {}), ...(Array.isArray(who) && who.length ? { who } : {}) });
 

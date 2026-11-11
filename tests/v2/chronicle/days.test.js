@@ -241,6 +241,17 @@ test('2: a happened line keeps its receipt type and thread; classify sorts by ty
     assert.equal(classify({ type: 'capture.party', text: 'Anything at all.' }), 'party');
 });
 
+test('a block result line keeps its kind and the Journal splits Standing, Fame and Guild by it; no kind stays Reputation', () => {
+    const dm = (type, kind, summary) => r(type, { module: 'story-block', summary, ...(kind ? { data: { v2: { result: { kind } } } } : {}) });
+    const entry = entryOf([
+        dm('capture.dm', 'deed', 'Astra: deed.'), dm('dm.act', 'gain', 'Astra: gain.'), dm('capture.dm', 'promote', 'Astra: promote.'),
+        dm('capture.dm', 'back', 'Astra: back.'), dm('capture.dm', 'add-xp', 'Astra: add-xp.'), dm('capture.dm', '', 'Astra: other.'),
+    ], D);
+    assert.deepEqual(entry.happened.map(item => item.type), ['capture.dm:deed', 'dm.act:gain', 'capture.dm:promote', 'capture.dm:back', 'capture.dm:add-xp', 'capture.dm']);
+    assert.deepEqual(entry.happened.map(item => classify(item)), ['fame', 'standing', 'guild', 'standing', 'events', 'reputation']);
+    assert.equal(classify({ type: 'capture.dm', text: 'Fame by region: deed.' }), 'reputation');
+});
+
 test('3: "is here / not here" and "Key people: noted" are bookkeeping: not a happened line; a day of only those has no events', () => {
     const entry = entryOf([
         present('Marrit is not here.'), present('Sister Temiwa is here.', ['Sister Temiwa']),

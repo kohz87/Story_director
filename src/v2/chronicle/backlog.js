@@ -16,12 +16,14 @@
 
 import { BOOKKEEPING_TYPES, PRESENCE_TEXT, agoText, cut, dayOf, flat } from './days/shared.js';
 
-export const CATEGORIES = Object.freeze(['met', 'relationships', 'events', 'party', 'items', 'reputation', 'news', 'places', 'bookkeeping']);
+export const CATEGORIES = Object.freeze(['met', 'relationships', 'events', 'party', 'items', 'standing', 'fame', 'guild', 'reputation', 'news', 'places', 'bookkeeping']);
 export const DEFAULT_CATEGORY = 'events';
 
 // Receipt types by category. Story Block's presence, party, item, money and place receipts; Story Director's
 // chronicle and atlas receipts; NPC State Delta's meter and presence receipts (`npc.meters`, `npc.set`, `npc.adjust`,
-// `npc.present`); the Block's data-module results (`capture.dm`, `dm.act`) that are not a meter set.
+// `npc.present`); the Block's data-module results (`capture.dm`, `dm.act`) that are not a meter set: a stored type reads
+// "capture.dm:<kind>" (the result's kind, see typeOf in days/facts.js) and the kind says what it is (DM_KINDS below); a line stored
+// with no kind (older days) stays Reputation.
 const BY_TYPE = new Map([
     ['capture.present', 'met'], ['scene.present', 'met'], ['npc.present', 'met'],
     ['capture.npc', 'relationships'], ['npc.meters', 'relationships'], ['npc.set', 'relationships'], ['npc.adjust', 'relationships'],
@@ -33,6 +35,13 @@ const BY_TYPE = new Map([
     ['capture.world', 'news'], ['capture.faction', 'news'], ['chronicle.world', 'news'],
     ['capture.place', 'places'], ['place', 'places'],
     ['atlas.visit', 'bookkeeping'], ['atlas.edit', 'bookkeeping'], ['atlas.focus', 'bookkeeping'], ['npc.tick', 'bookkeeping'],
+]);
+// The kinds of the Ersveil reputation blocks (Story Block's world pack): Standing (gain, loss) and Court favour (back, undermine), Fame
+// (deed, spread), the Adventurer Guild (register, dues, contract, promote, yearend). Any other kind is an event of the day.
+const DM_KINDS = new Map([
+    ['gain', 'standing'], ['loss', 'standing'], ['back', 'standing'], ['undermine', 'standing'],
+    ['deed', 'fame'], ['spread', 'fame'],
+    ['register', 'guild'], ['dues', 'guild'], ['contract', 'guild'], ['promote', 'guild'], ['yearend', 'guild'],
 ]);
 const PRESENT_TYPES = new Set(['capture.present', 'scene.present', 'npc.present']);
 
@@ -62,6 +71,8 @@ export function classify(entry) {
     if (PRESENT_TYPES.has(type) && PRESENCE_TEXT.test(body)) return 'bookkeeping';
     if (type === 'npc.tick' && !/^Key people: /.test(body)) return 'bookkeeping';
     if (type && BY_TYPE.has(type)) return BY_TYPE.get(type);
+    const [base, kind] = type.split(':');
+    if (kind && BY_TYPE.get(base) === 'reputation') return DM_KINDS.get(kind) ?? DEFAULT_CATEGORY;
     return classifyText(body);
 }
 
@@ -72,7 +83,7 @@ export function parseTag(tag) {
 }
 
 /**
- * A day's lines by category (only those with lines, bookkeeping left out): `{ met, relationships, events, party, items, reputation, news }`.
+ * A day's lines by category (only those with lines, bookkeeping left out): `{ met, relationships, events, party, items, standing, fame, guild, reputation, news }`.
  * Takes a digest-like `{ happened, tags, met, npcs, world, cats }`: a short day's (`brief`) own `cats` are returned as they are; else the happened
  * lines are sorted by their tag's receipt type (an older day has no tags: by the shape of the text), the met names, the NPC stage lines
  * (relationships) and the world lines (news) go to theirs.
