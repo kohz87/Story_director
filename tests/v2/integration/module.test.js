@@ -20,7 +20,9 @@ import { DEFAULT_TOKENS as KEY_PEOPLE_TOKENS } from '../../../src/v2/keypeople/d
 import { STATIC_TEXT as KEY_PEOPLE_STATIC } from '../../../src/v2/keypeople/note.js';
 import { ARC_TAIL_BUDGET } from '../../../src/v2/arc/domain.js';
 import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
-import { PULSE_STATIC } from '../../../src/v2/pulse/effects.js';
+import { PULSE_STATIC, STALE_REPLIES, pulseCommand, pulseHook } from '../../../src/v2/pulse/effects.js';
+import { foesSignature, leanFight } from '../../../src/v2/cast/entries.js';
+import { slotValue } from '../../../src/v2/slot.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { fakeDelta } from '../keypeople/helpers.js';
 import {
@@ -445,4 +447,57 @@ test('one tail build asks each query once for the same arguments, and the next b
     const def2 = createModule({ parts: [['a', throwing]] });
     assert.deepEqual(def2.context.tail({ state: {}, settings: () => ({}), query: name => { if (name === 'x.bad') tries++; throw new Error('x'); } }).lines, ['threw', 'threw']);
     assert.equal(tries, 2);
+});
+
+// ---- the World pulse and a Foes slot nobody cleared (LIVERUN1 item 2) --------------------------------------------------------------
+
+const foesState = (fields = { foe1: 'Ridge cutpurses', count1: 2, hurt1: 3 }) => ({ domains: { dataModules: {
+    active: { f: { hash: 'h' } }, pins: { h: { definition: { role: 'foes' } } }, instances: { f: { chat: { fields } } },
+} } });
+
+// One pulse step on a fake ctx: the director slice is carried from step to step (what the store's draft does), the Foes block is `foes`.
+function pulseStep(director, foes, payload) {
+    const ctx = {
+        cause: 'system', fail: (code, message) => { throw new Error(`${code}: ${message}`); }, draft: () => director, rng: () => 0.5, settings: {},
+        read: name => (name === 'dataModules' ? foes.domains.dataModules : null), query: () => undefined, call() {},
+    };
+    pulseCommand(ctx, payload);
+    return slotValue(director.pulse).results.at(-1);
+}
+
+test('pulse: a Foes slot read the same on STALE_REPLIES replies running is a leftover, not a fight: the pulse rolls again', () => {
+    const director = { time: { minutes: 600 } };
+    const foes = foesState();
+    assert.equal(leanFight(foes), true);
+    assert.equal(foesSignature(foes), '1:Ridge cutpurses:2:3');
+    assert.equal(foesSignature({}), '');
+    const kinds = [];
+    for (let at = 2; at <= 10; at += 2) {
+        director.time.minutes += 30;
+        kinds.push(pulseStep(director, foes, { at, age: 1 }));
+    }
+    assert.deepEqual(kinds.slice(0, STALE_REPLIES).map(entry => entry.skipped), ['fight', 'fight'], 'while it is new, a fight');
+    assert.ok(kinds.slice(STALE_REPLIES).every(entry => entry.skipped !== 'fight'), 'unchanged for two replies running: rolled again');
+    assert.ok(kinds.every(entry => entry.foes === '1:Ridge cutpurses:2:3'), 'each roll records what the Foes read');
+    // The slot moves (a hit lands): a fight again, for two replies.
+    foes.domains.dataModules.instances.f.chat.fields.hurt1 = 2;
+    director.time.minutes += 30;
+    assert.equal(pulseStep(director, foes, { at: 12, age: 1 }).skipped, 'fight');
+});
+
+test('pulse: a step without the `age` flag (a reply written before the rule, re-read) keeps the old rule and records nothing new', () => {
+    const director = { time: { minutes: 600 } };
+    const foes = foesState();
+    for (let at = 2; at <= 12; at += 2) {
+        director.time.minutes += 30;
+        const entry = pulseStep(director, foes, { at });
+        assert.equal(entry.skipped, 'fight', `reply ${at}: still a fight, as it was`);
+        assert.equal(entry.foes, undefined);
+    }
+});
+
+test('pulse: the hook adds the flag to every new step', () => {
+    const view = { state: { domains: { director: {} } }, chat: { length: 6 }, feature: () => true, settings: {} };
+    assert.deepEqual(pulseHook(view, {}).commands[0].payload, { at: 6, age: 1 });
+    assert.deepEqual(pulseHook(view, { type: 'swipe' }).commands[0].payload, { at: 5, age: 1 });
 });

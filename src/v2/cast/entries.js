@@ -225,18 +225,27 @@ const ENDED = /^(?:ended|over|done|finished|won|lost|fled|resolved|closed|victor
  * The narrator never empties a slot, it only sets health, so the filled slot of a won fight stays.
  */
 export function leanFight(state) {
+    return foesSignature(state) !== '';
+}
+
+/**
+ * The live Foes slots as one text (`1:Ridge cutpurses:2:3|...`), '' for none: what `leanFight` reads, kept so a caller can tell a fight that moves
+ * (a slot set, a count or its health changed) from a leftover (the same text reply after reply: the narrator never empties a won fight's slot).
+ */
+export function foesSignature(state) {
     const domain = state?.domains?.dataModules;
-    if (!isRecord(domain) || !isRecord(domain.active)) return false;
+    if (!isRecord(domain) || !isRecord(domain.active)) return '';
+    const live = [];
     for (const id of Object.keys(domain.active)) {
         const definition = domain.pins?.[domain.active[id]?.hash]?.definition;
         const fields = domain.instances?.[id]?.chat?.fields;
         if (!isRecord(definition) || definition.role !== 'foes' || !isRecord(fields)) continue;
         for (let slot = 1; slot <= 4; slot += 1) {
             if (typeof fields[`foe${slot}`] === 'string' && fields[`foe${slot}`].trim() && Number.isSafeInteger(fields[`count${slot}`]) && fields[`count${slot}`] > 0
-                && Number.isSafeInteger(fields[`hurt${slot}`]) && fields[`hurt${slot}`] > 0) return true;
+                && Number.isSafeInteger(fields[`hurt${slot}`]) && fields[`hurt${slot}`] > 0) live.push(`${slot}:${fields[`foe${slot}`].trim()}:${fields[`count${slot}`]}:${fields[`hurt${slot}`]}`);
         }
     }
-    return false;
+    return live.join('|');
 }
 
 /**
