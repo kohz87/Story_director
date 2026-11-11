@@ -317,37 +317,34 @@ export function createCastHooks({ plans }) {
     }
 
     /**
-     * `afterCapture(view, info)` (once the reply's change lines have run, and again on a Re-read): two things on the reply, as steps stored on it.
-     * 1. A person the meeting brought into this reply who the reply does not show (their name or an alias in its words, or listed present at any
-     *    point of it, even if they left again by its end) has their meeting taken back, as one `cast.withdraw`.
-     * 2. An unmet pack person the reply's scene shows (`+ present`, at any point) is met on THIS reply (`cast.meet`, why `story`, no cue, no
-     *    pace). Both run before NPC State Delta's `npc.tick` (it follows the reply's `turn` event, after the capture), so its tick reads
-     *    `director.cast` with them already met and makes their entry and portrait for this reply. The order is withdraw, then meet.
+     * `afterCapture(view, info)` (once the reply's change lines have run, and again on a Re-read): a person the meeting brought into this reply
+     * who the reply does not show (their name or an alias in its words, or a `+ present` line) has their meeting taken back, as one
+     * `cast.withdraw` on the reply. A reply captured now (normal, swipe, regenerate) also counts a person its OWN receipts listed present at any
+     * point (`seenIn`, even if they left again) as shown, and the step records that (`kept`), so a Re-read of that reply decides the same way;
+     * a Re-read of a reply without that record (made before) decides as it always did. It runs before NPC State Delta's step after the reply.
      */
     function afterCapture(view, info = {}) {
         if (!castOn(view)) return undefined;
         const slice = view?.state?.domains?.cast;
-        if (!slice || !isInt(info?.index)) return undefined;
+        if (!slice?.meeting || !isInt(info?.index)) return undefined;
         const chat = typeof view?.story?.chat === 'function' ? view.story.chat() : null;
         const message = Array.isArray(chat) ? chat[info.index] : null;
         if (!message || typeof message.mes !== 'string') return undefined;
-        const query = queryOf(view);
-        const present = presentKeys(query, view?.state);
+        const base = { index: info.index, text: shownText(message.mes), present: presentKeys(queryOf(view), view?.state) };
+        const keys = unshown(slice, base);
         let seen = new Set();
-        try { seen = seenIn(info.receipts); } catch { seen = new Set(); }
-        const commands = [];
-        const keys = slice.meeting ? unshown(slice, { index: info.index, text: shownText(message.mes), present, seen }) : [];
-        if (keys.length) commands.push({ type: 'cast.withdraw', payload: { at: info.index, keys } });
-        const cast = castOf(query);
-        if (cast.listed && cast.entries.length) {
-            const world = copyOf(slice);
-            const who = metInTheStory(world, cast, { present: new Set([...present, ...seen]), party: partyPlace(query, view?.state) });
-            if (who.length) {
-                const names = Object.fromEntries(Object.keys(cast.packs).slice(0, 8).map(pack => [pack, cutPoints(packName(cast, pack), 80)]));
-                commands.push({ type: 'cast.meet', payload: { at: info.index, who, names } });
-            }
+        if (keys.length && (REPLY_TYPES.has(normalizeType(info.type)) || keptBefore(message))) {
+            try { seen = seenIn(info.receipts); } catch { seen = new Set(); }
         }
-        return commands.length ? { commands } : undefined;
+        const left = seen.size ? unshown(slice, { ...base, seen }) : keys;
+        const kept = keys.filter(key => !left.includes(key));
+        return left.length || kept.length ? { commands: [{ type: 'cast.withdraw', payload: { at: info.index, keys: left, ...(kept.length ? { kept } : {}) } }] } : undefined;
+    }
+
+    /** True when the reply's stored receipts hold a `cast.withdraw` that kept someone (`data.kept`): it was captured under the present-at-any-point rule. */
+    function keptBefore(message) {
+        const receipts = message?.extra?.storySuite?.receipts;
+        return Array.isArray(receipts) && receipts.some(item => item?.type === 'cast.withdraw' && Number(item?.data?.kept) > 0);
     }
 
     return { afterReceive, afterCapture, beforeGenerate };

@@ -209,7 +209,7 @@ test('present then leaves: a reply that had `+ present` for her keeps the meetin
     quiet(t);
     const host = await toMeeting('Smoke rises over the yard.', { lines: [...LINE, '+ present Sister Temiwa', '- present Sister Temiwa'] });
     try {
-        assert.equal(receipts(host, 'cast.withdraw').length, 0);
+        assert.equal(receipts(host, 'cast.withdraw').every(item => item.receipt.data.withdrawn === 0), true);
         assert.equal(people(host)['ersveil:temiwa'].met.why, 'place');
         assert.equal(host.sdk.query('director.cast').length, 1);
     } finally {
@@ -217,20 +217,25 @@ test('present then leaves: a reply that had `+ present` for her keeps the meetin
     }
 });
 
-test('first present in a reply is met on that reply, before the step after it reads director.cast; unmet people stay hidden until then', async t => {
+test('a reply captured under the rule keeps the meeting on a Re-read; an old reply (no record of it) still withdraws; nothing new is met', async t => {
     quiet(t);
     const far = entry('rika', { name: 'Rika', start: { place: 'Gwenmar', goal: 'find work', routine: '' } });
-    const host = await castHost({ source: castSource([far]) });
+    const host = await toMeeting('Smoke rises over the yard.', { more: [far], lines: [...LINE, '+ present Sister Temiwa', '- present Sister Temiwa', '+ present Rika', '- present Rika'] });
     try {
-        await host.send('Hello.', said('Dawn.', OPENING));
-        assert.deepEqual(host.sdk.query('director.cast'), []);
-        await host.send('Look.', said('A girl stands by the well.', [...LINE, '+ present Rika', '- present Rika']));
-        const [meet] = receipts(host, 'cast.meet');
-        assert.ok(meet, 'met on that reply, not the next');
-        assert.equal(meet.index, host.ctx.chat.length - 1);
-        assert.equal(people(host)['ersveil:rika'].met.why, 'story');
-        assert.equal(host.sdk.query('director.cast').length, 1);
-        assert.equal(receipts(host, 'cast.withdraw').length, 0);
+        const [withdraw] = receipts(host, 'cast.withdraw');
+        assert.equal(withdraw.receipt.data.kept, 1, 'the decision is recorded with the step');
+        assert.equal(people(host)['ersveil:rika'].met, null, 'someone the reply showed but no meeting brought is not met by it');
+        assert.equal(receipts(host, 'cast.meet').filter(item => item.receipt?.afterCapture).length, 0);
+        const index = host.ctx.chat.length - 1;
+        assert.equal((await host.sdk.reread(index)).ok, true);
+        assert.equal(people(host)['ersveil:temiwa'].met.why, 'place', 'a marked reply keeps the meeting on a Re-read');
+        // an older reply: its stored step has no such record, so a Re-read decides as before
+        const records = host.ctx.chat[index].extra.storySuite.receipts.filter(item => item.type === 'cast.withdraw');
+        assert.ok(records.length);
+        for (const item of records) item.data.kept = 0;
+        assert.equal((await host.sdk.reread(index)).ok, true);
+        assert.equal(people(host)['ersveil:temiwa'].met, null, 'an unmarked reply withdraws as before');
+        assert.equal(people(host)['ersveil:rika'].met, null);
         assert.deepEqual(validatorErrors(host), []);
     } finally {
         host.close();

@@ -5,7 +5,7 @@
 // - `cast.advance { from, to, moves?, died? }`: the planner's batch after a day change or a time skip.
 // - `cast.meet { at, who: [{ key, why, reason }] }`: the party meets someone for the first time (no dice).
 // - `cast.rumor { at, who: [{ key, where, text }] }`: the reader sought a kind of person who is elsewhere: the narrator is told of them without the name.
-// - `cast.withdraw { at, keys }`: the reply did not show a person it was told to bring in, so their meeting is taken back (after the reply).
+// - `cast.withdraw { at, keys, kept? }`: the reply did not show a person it was told to bring in, so their meeting is taken back (after the reply); `kept` names those its own scene receipts listed present (the decision a Re-read goes by).
 //
 // Replay: a person is added whole under its key; a change inside a person is marked `ctx.ifThere` (passed over when the reply that
 // made the person was deleted); a note is a new key each time, never changed after, the oldest replies' dropped. A step's summary
@@ -173,11 +173,13 @@ export function rumor(ctx, payload = {}) {
  */
 export function withdraw(ctx, payload = {}) {
     only(ctx, 'Whose meeting the reply did not show');
-    if (!isRecord(payload) || Object.keys(payload).some(field => !['at', 'keys'].includes(field)) || !isInt(payload.at) || payload.at < 0
-        || !Array.isArray(payload.keys) || !payload.keys.length || payload.keys.length > 4 || !payload.keys.every(keyOk)) {
-        return ctx.fail('INVALID', 'cast.withdraw takes { at, keys: [key] }.');
+    if (!isRecord(payload) || Object.keys(payload).some(field => !['at', 'keys', 'kept'].includes(field)) || !isInt(payload.at) || payload.at < 0
+        || !Array.isArray(payload.keys) || payload.keys.length > 4 || !payload.keys.every(keyOk)
+        || (payload.kept !== undefined && !(Array.isArray(payload.kept) && payload.kept.length <= 4 && payload.kept.every(keyOk)))
+        || !(payload.keys.length || payload.kept?.length)) {
+        return ctx.fail('INVALID', 'cast.withdraw takes { at, keys: [key], kept?: [key] }.');
     }
     const cast = ctx.draft('cast');
     const out = applyWithdraw(cast, payload, envOf(ctx, cast, {}, payload.at));
-    return { summary: out.length ? 'The reply did not show the people it was to bring in; their meeting is taken back.' : 'No meeting to take back.', narrate: false, data: { withdrawn: out.length } };
+    return { summary: out.length ? 'The reply did not show the people it was to bring in; their meeting is taken back.' : 'No meeting to take back.', narrate: false, data: { withdrawn: out.length, kept: payload.kept?.length ?? 0 } };
 }
