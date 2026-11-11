@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fix: replies after a deleted middle reply keep applying.** A refused name, a key person's death record or a place line that rewrites a record an older reply made is passed over when that reply was deleted, instead of skipping the whole block; a day digest left by a rewind or a deleted cap drop is no longer listed in the Journal or [Earlier days]. Replies already written replay and Re-read exactly as before.
 - **Trips rest like the estimate.** A `~ trip` now counts rest days the way the travel estimate does (a rest day every sixth day on foot or riding; a night's stop on a modern drive), so the party arrives when the estimate said. Applies to replies written after this update; earlier replies, and a Re-read of them, keep their timing exactly.
 
 ## 2.14.0
