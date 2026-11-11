@@ -21,6 +21,7 @@ export const ARC_WIDGET = 'story-director.arc';
 
 // What the reader typed into a waiting plan survives the panel drawing itself again (this page only).
 const edits = new Map();
+const isOpen = value => value === true || value === 'true';
 
 function render(el, props, api, controller) {
     const doc = el.ownerDocument ?? globalThis.document;
@@ -28,9 +29,12 @@ function render(el, props, api, controller) {
     const root = make('section', 'sd-kind sd-arc ss-listcard ss-glass', undefined, { 'data-kind': 'arc', 'aria-label': 'Arc' });
     el.replaceChildren(root);
     let value = props?.value ?? null;
+    // `open` (the Director screen sets it): the panel shows everything, whatever the Reveal choice, which has no step there.
+    let open = isOpen(props?.open);
 
     function draw() {
-        const status = controller.status();
+        const status = { ...controller.status() };
+        if (open) status.hidden = false;
         const arc = value && typeof value === 'object' ? value : status.arc ?? {};
         const current = arc?.current ?? null;
         const parts = [make('h4', 'ss-section-label', 'Arc')];
@@ -118,6 +122,7 @@ function render(el, props, api, controller) {
     return {
         update(next) {
             value = next?.value ?? null;
+            open = isOpen(next?.open);
             draw();
         },
         destroy() {
@@ -130,7 +135,7 @@ function render(el, props, api, controller) {
 /** The widget definition; `controller` (tests): the planner it drives (the page's by default). */
 export function createArcWidget({ controller = null } = {}) {
     return Object.freeze({
-        props: Object.freeze({ value: Object.freeze({ type: 'object', default: null }) }),
+        props: Object.freeze({ value: Object.freeze({ type: 'object', default: null }), open: Object.freeze({ type: 'string', default: '' }) }),
         primary: 'value',
         feature: FEATURE,
         validate: props => (props?.value !== undefined && props.value !== null && typeof props.value !== 'object' ? ['value must be the director.arc data.'] : []),

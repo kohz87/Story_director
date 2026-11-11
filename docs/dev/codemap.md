@@ -17,6 +17,7 @@ Generated 2026-11-07.
 ## src/v2/atlas/
 - `src/v2/atlas/canonical.js`: Resolves pack and atlas places to stable canonical IDs, holding ambiguous or unbound identities for binding.
 - `src/v2/atlas/map.js`: Builds `ss.map` and atlas widget props: icons, places, routes, layers, current place and discovery status.
+- `src/v2/atlas/parent.js`: A story place's parent from its name ("X / Y", "X (Y)", "Y in X", a known-name prefix), child offsets on a ring, region anchors and the "Town · Spot" place line.
 - `src/v2/atlas/policy.js`: Region, place-binding and danger policies plus canonical/candidate queries and policy hashes.
 
 ## src/v2/cast/
@@ -32,7 +33,7 @@ Generated 2026-11-07.
 - `src/v2/chronicle/backlog.js`: Pure Journal helpers: `classify` / `bucketDay` / `trimCats` (a day's lines by kind, by receipt type with a text fallback; a short day's compact kept list) and `backlogBlock` (the `[Earlier days]` tail: up to six relevant past-day lines, last two days always, code-counted "N days ago").
 
 ## src/v2/screens/
-- `src/v2/screens/behind.js`: Behind-the-scenes Director widget showing agendas, beats, clocks and name-only secrets after Reveal.
+- `src/v2/screens/behind.js`: the Director screen's plan cards (widget `story-director.plan`: Beats, hooks with Next, Off-screen, Secrets, Problems, "+N more") and the older Reveal-locked Behind widget.
 - `src/v2/screens/dom.js`: Shared text-only DOM helpers for Director widgets: elements, buttons, plurals and spacing.
 - `src/v2/screens/quest-cards.js`: Read-only Quests widget drawing active, offered and finished threads as expandable cards.
 - `src/v2/screens/status-card.js`: Inline reply card showing time, place, weather, travel, hero state and current goal from that reply's state.
@@ -57,3 +58,4 @@ Generated 2026-11-07.
 - `src/v2/chronicle/capture.js` → `src/v2/chronicle/capture/`: `text.js`, `world.js`, `faction.js`, `commands.js`: chronicle change lines and reader commands.
 - `src/v2/chronicle/days.js` → `src/v2/chronicle/days/`: `shared.js` constants and text; `state.js` state, settings and receipts; `facts.js` day facts; `summary.js` summary lines and output; `validate.js` validation.
 - `src/v2/world/events-widget.js`: The Journal's "Show all N events" button (widget `story-director.journal-events`): loads one day's whole event list on tap, folds on the next.
+- `src/v2/world/elsewhere.js`: the World screen's Leads data (heard hooks) and the shared section fold (widget `story-director.fold`: chevron, count, open state remembered per chat on this device).

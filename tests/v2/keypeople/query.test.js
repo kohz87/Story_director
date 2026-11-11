@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { keyPeopleQuery } from '../../../src/v2/keypeople/queries.js';
+import { keyPeopleQuery, keyPeopleView } from '../../../src/v2/keypeople/queries.js';
 import { FEATURE } from '../../../src/v2/keypeople/domain.js';
 import { OPENING, keyHost, pin, said, unpin } from './helpers.js';
 
@@ -91,4 +91,34 @@ test('the story clock in the answer: minutes, as the other queries give them', a
     } finally {
         host.close();
     }
+});
+
+test('the view: how many pinned people are elsewhere (not in the scene), and how old each away person\'s news is', async () => {
+    const host = await keyHost();
+    try {
+        await host.send('Hello.', said('Dawn.', [...OPENING, '+ present Fenna']));
+        await pin(host, 'Ren');
+        await pin(host, 'Fenna');
+        await host.send('Go.', said('Ren leaves.', ['+ away Ren — scouting the north road | back: June 9, 1200', '! away Ren — reached Wolfmere Outpost']));
+        let view = host.sdk.query('director.keyPeople.view');
+        assert.equal(view.elsewhere, 1, 'Fenna is here; Ren is not');
+        assert.equal(view.people.find(person => person.name === 'Ren').newsAgo, 'today');
+        assert.equal(view.people.find(person => person.name === 'Fenna').newsAgo, '');
+        await host.send('Later.', said('Two days on.', ['! time +2d']));
+        view = host.sdk.query('director.keyPeople.view');
+        assert.equal(view.people.find(person => person.name === 'Ren').newsAgo, '2 days ago');
+        assert.equal(view.people.find(person => person.name === 'Ren').doing, 'scouting the north road', 'the away line: what they are doing, no goal or Next');
+    } finally {
+        host.close();
+    }
+});
+
+test('the view: an away person\'s place (the away record\'s, else the newest step\'s) shows as the map\'s line; none keeps the status line', () => {
+    const away = (place, steps = []) => ({ domains: { keypeople: { pins: { ren: { name: 'Ren' }, mia: { name: 'Mia' } }, away: { ren: { name: 'Ren', doing: 'scouting', since: 0, back: null, steps, place }, mia: { name: 'Mia', doing: 'resting', since: 0, back: null, steps: [] } }, gone: {} } } });
+    const tools = { query: (name, args) => (name === 'atlas.line' ? `Wolfmere · ${args.name}` : null) };
+    const people = state => Object.fromEntries(keyPeopleView(state, {}, tools).people.map(person => [person.name, person]));
+    assert.equal(people(away('Outpost')).Ren.place, 'Wolfmere · Outpost');
+    assert.equal(people(away(undefined, [{ date: 0, text: 'a', place: 'Ford' }, { date: 1, text: 'b' }])).Ren.place, 'Wolfmere · Ford', 'newest step that names a place');
+    assert.equal(people(away('Outpost')).Mia.place, '');
+    assert.equal(people(away('Outpost')).Mia.status, 'Away');
 });
