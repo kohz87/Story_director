@@ -89,8 +89,23 @@ function wordCount(text) {
     return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
+// lineKey answers per string (the same key is looked at many times per reply); bounded, cleared whole when full.
+const LINE_KEYS = new Map();
+const LINE_KEYS_MAX = 4096;
+
 /** Identity of a key: lowercase, markdown and punctuation squashed, single spaces. */
 export function lineKey(key) {
+    if (typeof key !== 'string') return lineKeyOf(key);
+    let out = LINE_KEYS.get(key);
+    if (out === undefined) {
+        out = lineKeyOf(key);
+        if (LINE_KEYS.size >= LINE_KEYS_MAX) LINE_KEYS.clear();
+        LINE_KEYS.set(key, out);
+    }
+    return out;
+}
+
+function lineKeyOf(key) {
     return stripMarkdown(key)
         .normalize('NFKC')
         .toLowerCase()

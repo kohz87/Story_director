@@ -171,3 +171,15 @@ test('the static part is byte-identical whatever the scene, the threads or the p
     assert.equal(part.context.parts[0].static(), part.context.parts[0].static());
     assert.doesNotMatch(part.context.parts[0].static(), /Elula|Harrow|\d/);
 });
+
+test('wholeWord keeps its answers when a name is asked again and past the pattern memo bound', async () => {
+    const { wholeWord } = await import('../../../src/v2/tracker/scene.js');
+    for (let i = 0; i < 3; i++) {
+        assert.equal(wholeWord("Vorn's Return", 'Vorn'), true);
+        assert.equal(wholeWord('Annual Fair', 'Ann'), false);
+        assert.equal(wholeWord('Élodie  spoke', 'élodie'), true);
+    }
+    for (let i = 0; i < 2500; i++) assert.equal(wholeWord(`meet Name${i} now`, `Name${i}`), true);
+    assert.equal(wholeWord("Vorn's Return", 'Vorn'), true);
+    assert.equal(wholeWord('ab', 'ab'), false);
+});

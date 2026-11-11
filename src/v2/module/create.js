@@ -8,7 +8,7 @@ import { MODULE_ID, MODULE_NAME, PARTS, STORY_BLOCK_RANGE, VERSION } from './par
 import { LIVE_HOST, isObject, liveSdk, tryLive } from './shared.js';
 import { fightRunner } from './host.js';
 import { namespaced, readsOf, settingsFor } from './settings.js';
-import { partCtx, partTools, partView, withSettingArgs } from './contexts.js';
+import { memoQueries, partCtx, partTools, partView, withSettingArgs } from './contexts.js';
 import { linesOf, mergeHook, own, sectionOf, withFeature } from './merge.js';
 
 // Story Block's RPG feature: while it is on, its planner asks for the checks.
@@ -186,7 +186,9 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         context: {
             // The same bytes every reply: each part's static is fixed text. What a feature owns is a context part of its own.
             static: staticOf(grouped[0] && !grouped[0].feature ? grouped[0].items : []),
-            tail(view) {
+            tail(hostView) {
+                // One memo for this build: learn and every part's tail ask the same queries of the same state.
+                const view = memoQueries(hostView);
                 learn(view);
                 const lines = [];
                 const optional = [];

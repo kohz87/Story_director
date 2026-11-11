@@ -109,3 +109,29 @@ test('queries: time, threads by kind, status and offer, one thread by key, alias
     assert.deepEqual(part.queries['director.time'](makeState()), { minutes: null, text: '', parts: null });
     assert.deepEqual(part.queries['director.threads'](makeState(), { kind: 'hook' }), []);
 });
+
+test('the validator memoises a thread frozen all the way down by object and id, never one that is not', () => {
+    const good = structuredClone(SAMPLE.domains.director);
+    const [wolf] = Object.keys(good.threads);
+    const frozen = structuredClone(good);
+    const deep = value => { if (value && typeof value === 'object') { Object.values(value).forEach(deep); Object.freeze(value); } return value; };
+    deep(frozen);
+    assert.deepEqual(validate(frozen), []);
+    assert.deepEqual(validate(frozen), []);
+    // The same thread object under another id gives that id's errors, not the remembered ones.
+    const moved = { ...frozen, threads: { th_other000: frozen.threads[wolf] }, keys: { ...frozen.keys } };
+    assert.ok(validate(moved).some(error => /bad id/.test(error)));
+    // A thread that is not frozen is checked every time: a change to it is seen.
+    const loose = structuredClone(good);
+    assert.deepEqual(validate(loose), []);
+    loose.threads[wolf].status = 'superseded';
+    assert.ok(validate(loose).some(error => /status/.test(error)));
+    loose.threads[wolf].status = 'active';
+    assert.deepEqual(validate(loose), []);
+    // A thread frozen on the outside only (its fields still open) is not trusted.
+    const shallow = structuredClone(good);
+    Object.freeze(shallow.threads[wolf]);
+    assert.deepEqual(validate(shallow), []);
+    shallow.threads[wolf].fields.giver = 4;
+    assert.ok(validate(shallow).some(error => /fields must hold text/.test(error)));
+});
