@@ -17,6 +17,7 @@ Generated 2026-11-07.
 ## src/v2/atlas/
 - `src/v2/atlas/canonical.js`: Resolves pack and atlas places to stable canonical IDs, holding ambiguous or unbound identities for binding.
 - `src/v2/atlas/map.js`: Builds `ss.map` and atlas widget props: icons, places, routes, layers, current place and discovery status.
+- `src/v2/atlas/parent.js`: A story place's parent from its name ("X / Y", "X (Y)", "Y in X", a known-name prefix), child offsets on a ring, region anchors and the "Town · Spot" place line.
 - `src/v2/atlas/policy.js`: Region, place-binding and danger policies plus canonical/candidate queries and policy hashes.
 
 ## src/v2/cast/

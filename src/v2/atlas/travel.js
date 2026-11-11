@@ -13,6 +13,17 @@ import { DEFAULT_RULES, MODERN_RULES, durationText, legDays, restDaysFor } from 
 
 const tidy = value => Math.round(value * 1e9) / 1e9;
 
+/** What a hop between a place and the town it stands in takes: half an hour (a fixed short walk, whatever the offset on the map). */
+export const TOWN_HOP_HOURS = 0.5;
+export const TOWN_HOP_DAYS = TOWN_HOP_HOURS / 24;
+
+/** The town a place with no road of its own stands in (its saved `parent`), or null: its trips go through the town's roads. */
+export function townOf(world, place) {
+    const up = place?.parent ? world.find(place.parent) : null;
+    if (!up || up.id === place.id || world.routes.some(route => route.from === place.id || route.to === place.id)) return null;
+    return up;
+}
+
 // The mode a route of this kind is travelled by, whatever the trip's own.
 const WATER = /\b(?:river|canal|stream|lake|ferry|boat|barge|water)\b/;
 const SEA = /\b(?:sea|ocean|lane|ship|voyage)\b/;
@@ -95,14 +106,21 @@ export function travelTime(world, from, to, { map = DEFAULT_MAP, mode = null } =
     const modern = settings.era === 'modern';
     const trip = mode ?? defaultMode(settings);
     const rules = modern ? MODERN_RULES : DEFAULT_RULES;
-    const hops = shortest(world, a.id, b.id, trip, modern);
+    // A place with no road of its own goes by its town's, plus a short fixed hop each side; two places in one town: the hop alone.
+    const [up, down] = [townOf(world, a), townOf(world, b)];
+    const [start, goal] = [up ?? a, down ?? b];
+    const extra = tidy((up ? TOWN_HOP_DAYS : 0) + (down ? TOWN_HOP_DAYS : 0));
+    const hops = start.id === goal.id ? (extra ? [] : null) : shortest(world, start.id, goal.id, trip, modern);
     if (hops) {
-        const activeDays = tidy(hops.reduce((sum, hop) => sum + hop.days, 0));
+        const timed = hops.every(hop => hop.route.hours !== null && hop.route.hours !== undefined);
+        const sum = add => tidy(hops.reduce((total, hop) => total + hop.days, add));
+        const unitOf = total => (modern || (timed && total < 1) ? 'hour' : 'day');
+        // A trip told in days leaves the half-hour hops out (they add no rest day and no fraction of a day); one told in hours keeps them.
+        const unit = unitOf(tidy(sum(extra) + restDaysFor(trip, sum(extra), rules)));
+        const activeDays = sum(unit === 'day' ? 0 : extra);
         const restDays = restDaysFor(trip, activeDays, rules);
         const days = tidy(activeDays + restDays);
-        const timed = hops.every(hop => hop.route.hours !== null && hop.route.hours !== undefined);
-        const unit = modern || (timed && days < 1) ? 'hour' : 'day';
-        const km = hops.every(hop => hop.route.km > 0) ? tidy(hops.reduce((sum, hop) => sum + hop.route.km, 0)) : null;
+        const km = hops.length && hops.every(hop => hop.route.km > 0) ? tidy(hops.reduce((sum, hop) => sum + hop.route.km, 0)) : null;
         return {
             from: a.id, to: b.id, days, activeDays, restDays, unit, mode: trip, source: 'routes',
             hops: hops.map(hop => hop.route.id), km, text: durationText(days, unit),

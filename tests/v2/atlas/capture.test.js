@@ -142,7 +142,7 @@ test('the domain validator refuses broken atlases', () => {
     const good = structuredClone(state.domains.atlas);
     const [a] = Object.keys(good.places);
     const broken = [
-        atlas => { atlas.places[a].x = 1.5; atlas.places[a].y = 2; },
+        atlas => { atlas.places[a].x = Infinity; atlas.places[a].y = 2; },
         atlas => { atlas.places[a].x = 1; },
         atlas => { atlas.places[a].discovered = 'yes'; },
         atlas => { delete atlas.keys['a town']; },

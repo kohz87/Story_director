@@ -29,7 +29,10 @@ export function createDom(el, doc) {
     fitAll.append(icon(doc, 'fa-expand'));
     const centreMe = button(doc, 'sd-map-btn sd-map-me', '', 'Centre on where you are');
     centreMe.append(icon(doc, 'fa-location-crosshairs'));
-    tools.append(zoomIn, zoomOut, fitAll, centreMe);
+    // "Tidy the map": a one-time reader action (atlas.edit { tidy: true }), offered while a visited place has no coordinates.
+    const tidyBtn = button(doc, 'sd-map-btn sd-map-tidy', 'Tidy the map', 'Tidy the map: give the visited places without coordinates a spot');
+    tidyBtn.hidden = true;
+    tools.append(zoomIn, zoomOut, fitAll, centreMe, tidyBtn);
     // The layers as a Region list between the search box and the zoom buttons (All first; the shown one selected).
     const regionBox = h(doc, 'label', 'sd-map-region');
     const regions = h(doc, 'select', 'sd-map-regions');
@@ -79,5 +82,5 @@ export function createDom(el, doc) {
     root.append(bar, frame, empty, details, legendCard);
     el.appendChild(root);
 
-    return { root, searchBox, input, results, zoomIn, zoomOut, fitAll, centreMe, regionBox, regions, stage, worldGroup, placesLayer, labelsLayer, hereRing, markLayer, road, empty, details, legend, legendCard };
+    return { root, searchBox, input, results, zoomIn, zoomOut, fitAll, centreMe, tidyBtn, regionBox, regions, stage, worldGroup, placesLayer, labelsLayer, hereRing, markLayer, road, empty, details, legend, legendCard };
 }

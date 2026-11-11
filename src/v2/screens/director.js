@@ -93,7 +93,7 @@ const TEMPLATE = `
 <div class="sd-director">
   <header class="sd-clock sd-scene-line" data-if="q.time.text" role="status" aria-label="Story time">
     <i class="fa-solid fa-clock" aria-hidden="true"></i> <span class="sd-when">{{ q.time.text }}</span>
-    <span class="sd-where" data-if="state.scene.place.name">· {{ state.scene.place.name }}</span>
+    <span class="sd-where" data-if="q.status.place">· {{ q.status.place }}</span>
   </header>
   <ss-widget class="sd-wide" name="${ARC_WIDGET}" data-props='{"bind":"q.arc"}'></ss-widget>
   <p class="sd-empty" data-if="!len(q.all)">Nothing tracked yet.</p>
@@ -167,6 +167,7 @@ const CSS = `${BASE_CSS}
 
 const data = {
     time: { query: 'director.time' },
+    status: { query: 'director.status' },
     all: { query: 'director.threads' },
     // The problems about what the reader may see; those behind the scenes are in `behind`.
     problems: { query: 'director.problems', args: { behind: false } },

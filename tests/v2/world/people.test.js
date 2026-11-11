@@ -246,3 +246,9 @@ test('busy with no cards keeps the last cards and the label; done redraws withou
     assert.equal(page.el.querySelector('.wv-updating').hidden, true);
     assert.equal(page.el.querySelectorAll('.wv-chip').length, 3);
 });
+
+test('Here: the place is the atlas\'s place line "Town · Spot" (the name when the atlas gives none)', () => {
+    const ask = line => name => ({ 'atlas.here': { id: 'pl_a', name: 'Auvoth (Southern Gatehouse)', ...line, region: 'Gate Coast', kind: 'gate' } })[name] ?? null;
+    assert.equal(hereView({}, {}, ask({ line: 'Auvoth · Southern Gatehouse' })).place.name, 'Auvoth · Southern Gatehouse');
+    assert.equal(hereView({}, {}, ask({})).place.name, 'Auvoth (Southern Gatehouse)');
+});
