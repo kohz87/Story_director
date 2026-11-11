@@ -22,7 +22,7 @@
 
 import { BASE_CSS } from './style.js';
 import { BEHIND } from './reveal.js';
-import { BEHIND_WIDGET } from './behind.js';
+import { BEHIND_WIDGET, RIPPLES_WIDGET } from './behind.js';
 import { ARC_WIDGET } from '../arc/widget.js';
 import { ownedKind } from '../threads.js';
 
@@ -99,6 +99,7 @@ const TEMPLATE = `
   <p class="sd-empty" data-if="!len(q.all)">Nothing tracked yet.</p>
 ${OPEN_KIND_GROUPS.map(([kind, title]) => section(kind, title)).join('\n')}
   <ss-widget class="sd-wide" name="${BEHIND_WIDGET}" data-props='{"bind":"q.behind"}' data-if="q.behind.total"></ss-widget>
+  <ss-widget class="sd-wide" name="${RIPPLES_WIDGET}" data-props='{"bind":"q.ripples"}' data-if="len(q.ripples)"></ss-widget>
   <section class="sd-kind ss-listcard ss-glass sd-problems-box" data-kind="problems" data-if="len(q.problems)">
     <h4 class="ss-label ss-listcard-head sd-h">Problems <small>{{ len(q.problems) }}</small></h4>
     <ol class="ss-listcard-rows sd-problems">
@@ -163,6 +164,10 @@ const CSS = `${BASE_CSS}
 .sd-unlocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.9em; color: var(--sd-muted); }
 .sd-unlocked .sd-btn { flex: 0 0 auto; }
 .sd-unlocked, .sd-lock, .sd-behind .sd-problems-box { grid-column: 1 / -1; }
+.sd-ripples { display: grid; min-width: 0; }
+.sd-ripple { display: grid; gap: 2px; padding: 4px 0; }
+.sd-ripple-bar { display: block; height: 6px; border-radius: 3px; background: var(--sd-border); overflow: hidden; }
+.sd-ripple-fill { display: block; height: 100%; background: var(--sd-accent); }
 `;
 
 const data = {
@@ -175,6 +180,8 @@ const data = {
     // The agendas, clocks, beats and secrets (and the World card): null while the feature `story-director.threads` is off.
     behind: { query: 'director.behind' },
     threads: { query: 'director.threads.on' },
+    // Each pack power's hidden sway (the Ripples card; empty without a pack table), shown only once revealed.
+    ripples: { query: 'ripples.sway' },
 };
 for (const [kind] of OPEN_KIND_GROUPS) {
     data[kind] = { query: 'director.threads', args: { kind } };

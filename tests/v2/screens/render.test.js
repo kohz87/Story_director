@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { resolveData, runtime, skipReason } from './helpers/runtime.js';
 import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
-import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, part, questsWidget, screens } from '../../../src/v2/screens/index.js';
+import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, createRipplesWidget, part, questsWidget, screens } from '../../../src/v2/screens/index.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
 
 // The module's own widgets on the Director screen, with a planner that is not there and a reveal choice
@@ -15,7 +15,7 @@ import { createArcWidget } from '../../../src/v2/arc/widget.js';
 let shown = true;
 const stillReveal = { guard: () => true, revealed: () => shown, set: on => { shown = on; }, hidden: () => !shown, subscribe: () => () => {} };
 const noPlanner = { status: () => ({ available: true, busy: false, draft: null, error: '', hidden: !shown, arc: null }), subscribe: () => () => {}, plan() {}, end() {} };
-const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget });
+const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.ripples': createRipplesWidget({ reveal: stillReveal }) });
 
 const skip = runtime ? false : skipReason;
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
@@ -374,4 +374,28 @@ test('Director clock line: the place is the place line ("Town · Spot") from dir
     const queries = { ...makeQueries(), 'atlas.here': () => ({ id: 'pl_a', name: 'Auvoth (Southern Gatehouse)', line: 'Auvoth · Southern Gatehouse', region: 'Gate Coast' }) };
     const { el } = draw(DIRECTOR_ID, headState(), { queries });
     assert.equal(squash(el.querySelector('.sd-where').textContent), '· Auvoth · Southern Gatehouse');
+});
+
+// The Ripples card (spoilers): each power's sway bar and top reasons, "+N more"; behind Reveal; nothing without a table.
+test('director: the Ripples card shows each power\'s sway bar and its top reasons, +N more; hidden until Reveal; none without a table', { skip }, () => {
+    const reason = (delta, text) => ({ kind: 'quest', delta, text, when: null });
+    const rows = [
+        { id: 'wendhild', name: 'Princess Wendhild', sway: 52, reasons: [reason(8, 'finished the grain levy for Sir Lothar'), reason(4, 'finished a b'), reason(-3, 'failed c'), reason(-1, 'gave up on d')] },
+        { id: 'corvin', name: 'Prince Corvin', sway: 35, reasons: [] },
+    ];
+    const queries = { ...makeQueries(), 'ripples.sway': () => rows };
+    shown = true;
+    const { el } = draw(DIRECTOR_ID, headState(), { queries });
+    const card = el.querySelector('section[data-kind="ripples"]');
+    assert.ok(card, 'the card is drawn once revealed');
+    const first = card.querySelector('[data-power="wendhild"]');
+    assert.equal(first.querySelector('[role="meter"]').getAttribute('aria-valuenow'), '52');
+    assert.equal(first.querySelector('.sd-ripple-fill').style.width, '52%');
+    assert.deepEqual(first.querySelectorAll('.sd-reason').map(node => squash(node.textContent)), ['+8 · finished the grain levy for Sir Lothar', '+4 · finished a b', '-3 · failed c']);
+    assert.equal(squash(first.querySelector('.sd-more').textContent), '+1 more');
+    assert.equal(card.querySelector('[data-power="corvin"]').querySelectorAll('.sd-reason').length, 0);
+    shown = false;
+    assert.equal(draw(DIRECTOR_ID, headState(), { queries }).el.querySelector('section[data-kind="ripples"]'), null, 'hidden until Reveal');
+    shown = true;
+    assert.equal(draw(DIRECTOR_ID, headState()).el.querySelector('section[data-kind="ripples"]'), null, 'no table: no card');
 });

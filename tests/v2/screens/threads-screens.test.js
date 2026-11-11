@@ -105,8 +105,8 @@ test('the Director\'s card grid sizes itself to its own width at every width: no
     assert.match(directorScreen.css, /\.sd-director > ss-widget \{ display: block; \}/);
     assert.match(directorScreen.css, /\.sd-empty, \.sd-clock, \.sd-wide \{ grid-column: 1 \/ -1; \}/);
     assert.match(directorScreen.css, /\.sd-unlocked, \.sd-lock, \.sd-behind \.sd-problems-box \{ grid-column: 1 \/ -1; \}/);
-    // Both wide widgets span the whole row, so a card is never beside the Behind panel's own grid.
-    assert.equal((directorScreen.template.match(/class="sd-wide"/g) ?? []).length, 2);
+    // The wide widgets (arc, Behind, Ripples) span the whole row, so a card is never beside the Behind panel's own grid.
+    assert.equal((directorScreen.template.match(/class="sd-wide"/g) ?? []).length, 3);
 });
 
 test('status card: its title is "Where things stand" and its own summary slot reads "<clock time>, <place>"', () => {
