@@ -16,11 +16,9 @@ import { rpgLib } from '../rpg-lazy.js';
 import { readRecord } from '../persist.js';
 import { hashText } from '../assist/common.js';
 import { boardFailure, boardStartState } from './held-board.js';
-import { TIMED_OUT, defuseMacros, firstLine, mapContent, stripBattleMarker, substituteNames, within } from './text.js';
+import { KEPT_CHARS_MAX, KEPT_LINES_MAX, TIMED_OUT, defuseMacros, keptGiven, firstLine, mapContent, stripBattleMarker, substituteNames, within } from './text.js';
 
-// The most a module's hook may keep whole in the tail (`{ text, keep: true }` lines): two meeting cues and a rumor fit; more is droppable.
-export const KEPT_LINES_MAX = 4;
-export const KEPT_CHARS_MAX = 4000;
+export { KEPT_LINES_MAX, KEPT_CHARS_MAX };
 // A prelude cue a module marks kept (receipt `data.keep === true`) is pinned too, up to this many tokens in all per reply; the rest are plain cues.
 export const KEPT_PRELUDE_TOKENS = KEPT_TAIL_TOKENS;
 
@@ -89,20 +87,8 @@ export function createPromptBuild(s, deps) {
             // A merged hook (domains/index.js mergeParts) keeps the answers of the parts that did answer and reports the others.
             for (const entry of Array.isArray(out?.problems) ? out.problems : []) problem({ module: moduleId, code: entry.code, message: entry.message });
             const lines = Array.isArray(out) ? out : Array.isArray(out?.lines) ? out.lines : [];
-            // The RPG's rolls and its "no rolls" line outrank ordinary tail notes when the tail is trimmed (prompt.js).
-            // A hook may give a line as `{ text, keep: true }`: kept whole whatever the budget says (prompt.js `pinned`), like the no-rolls line.
-            // A module keeps at most KEPT_LINES_MAX lines and KEPT_CHARS_MAX characters this way (code points); a kept line over that
-            // is passed as an ordinary line, which the budget may drop, so one module can never spend the whole tail.
-            let keptLines = 0, keptChars = 0;
-            const given = lines.map(line => {
-                if (typeof line === 'string') return line === NO_ROLLS_LINE ? { text: line, keep: true } : line;
-                if (!(line && typeof line === 'object' && typeof line.text === 'string' && line.text.trim())) return null;
-                if (line.keep !== true) return line.text;
-                const size = [...line.text].length;
-                if (keptLines >= KEPT_LINES_MAX || keptChars + size > KEPT_CHARS_MAX) return line.text;
-                keptLines += 1; keptChars += size;
-                return { text: line.text, keep: true };
-            }).filter(line => line !== null);
+            // The RPG's rolls and its "no rolls" line outrank ordinary tail notes when the tail is trimmed (prompt.js); keptGiven (text.js) pins `{ text, keep: true }` lines.
+            const given = keptGiven(lines, NO_ROLLS_LINE);
             if (given.length) cues[moduleId] = given;
             for (const command of commit && Array.isArray(out?.commands) ? out.commands : []) {
                 // A prelude (Assist's roll, the RPG's rolls) is previewed for the prompt, without writing on the
