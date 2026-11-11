@@ -87,34 +87,34 @@ test('set out from Bluewatch Village: the legs are planned and kept, the narrato
         await host.send('Hello.', reply('Bluewatch.', ['~ time Goldwane 12, 8:00 am']));
         await host.send('We set out.', reply('The gate.', SET_OUT));
         const record = goRecord(host);
-        assert.deepEqual(record.legs.map(leg => [leg.from, leg.to, leg.km, leg.days]), [['Bluewatch Village', "Hollin's Reach", 100, 5], ['Hollin\'s Reach', 'Wolfmere Outpost', 60, 3]]);
-        assert.equal(host.sdk.query('atlas.trip').row, "Bluewatch Village → Hollin's Reach → Wolfmere Outpost · on foot, 20 km/day · leg 1 of 2 · arrive Wolfmere Outpost Goldwane 20");
+        assert.deepEqual(record.legs.map(leg => [leg.from, leg.to, leg.km, leg.days]), [['Bluewatch Village', "Hollin's Reach", 100, 5], ['Hollin\'s Reach', 'Wolfmere Outpost', 60, 4]]);
+        assert.equal(host.sdk.query('atlas.trip').row, "Bluewatch Village → Hollin's Reach → Wolfmere Outpost · on foot, 20 km/day · leg 1 of 2 · arrive Wolfmere Outpost Goldwane 21");
         await host.send('On.', reply('Two days.', ['! time +2 days']));
-        assert.deepEqual(tripLine(host), ["On the road: Bluewatch Village → Hollin's Reach, 0 of 100 km, arrive Goldwane 17; then Wolfmere Outpost, Goldwane 20."], 'the tail is built before the reply: the clock had not moved yet');
+        assert.deepEqual(tripLine(host), ["On the road: Bluewatch Village → Hollin's Reach, 0 of 100 km, arrive Goldwane 17; then Wolfmere Outpost, Goldwane 21."], 'the tail is built before the reply: the clock had not moved yet');
         await host.send('On.', reply('Two more days.', ['! time +2 days']));
-        assert.deepEqual(tripLine(host), ["On the road: Bluewatch Village → Hollin's Reach, 40 of 100 km, arrive Goldwane 17; then Wolfmere Outpost, Goldwane 20."]);
+        assert.deepEqual(tripLine(host), ["On the road: Bluewatch Village → Hollin's Reach, 40 of 100 km, arrive Goldwane 17; then Wolfmere Outpost, Goldwane 21."]);
         // Past the first arrival (day 5) with the story still at Bluewatch: the cue, and the next stage (day 7: 40 of 60 km).
         await host.send('On.', reply('Three days.', ['! time +3 days']));
-        assert.deepEqual(tripLine(host), ["On the road: Bluewatch Village → Hollin's Reach, 80 of 100 km, arrive Goldwane 17; then Wolfmere Outpost, Goldwane 20."]);
+        assert.deepEqual(tripLine(host), ["On the road: Bluewatch Village → Hollin's Reach, 80 of 100 km, arrive Goldwane 17; then Wolfmere Outpost, Goldwane 21."]);
         await host.send('Quiet.', reply('Hollin\'s Reach at dusk.'));
         assert.deepEqual(tripLine(host), [
             "You has reached Hollin's Reach (Goldwane 17): write ~ place Hollin's Reach.",
-            "On the road: Hollin's Reach → Wolfmere Outpost, 40 of 60 km, arrive Goldwane 20.",
+            "On the road: Hollin's Reach → Wolfmere Outpost, 30 of 60 km, arrive Goldwane 21.",
         ]);
         // The story writes the place: the next prompt has no cue, only the road.
         await host.send('We rest.', reply('An inn.', ["~ place Hollin's Reach"]));
         await host.send('Rest.', reply('A night.'));
-        assert.deepEqual(tripLine(host), ["On the road: Hollin's Reach → Wolfmere Outpost, 40 of 60 km, arrive Goldwane 20."]);
+        assert.deepEqual(tripLine(host), ["On the road: Hollin's Reach → Wolfmere Outpost, 30 of 60 km, arrive Goldwane 21."]);
         assert.match(host.sdk.query('atlas.trip').row, /leg 2 of 2/);
         // Past the last arrival: the cue for Wolfmere Outpost, "Arrived" on the status.
         await host.send('Two more.', reply('Arrival.', ['! time +3 days']));
         await host.send('Wolfmere.', reply('The gate of Wolfmere Outpost.'));
-        assert.deepEqual(tripLine(host), ['You has reached Wolfmere Outpost (Goldwane 20): write ~ place Wolfmere Outpost.']);
-        assert.equal(host.sdk.query('atlas.trip').row, 'Arrived at Wolfmere Outpost, Goldwane 20');
+        assert.deepEqual(tripLine(host), ['You has reached Wolfmere Outpost (Goldwane 21): write ~ place Wolfmere Outpost.']);
+        assert.equal(host.sdk.query('atlas.trip').row, 'Arrived at Wolfmere Outpost, Goldwane 21');
         await host.send('In.', reply('Inside.', ['~ place Wolfmere Outpost']));
         await host.send('Rest.', reply('Quiet.'));
         assert.deepEqual(tripLine(host), []);
-        assert.equal(host.sdk.query('atlas.trip').row, 'Arrived at Wolfmere Outpost, Goldwane 20', 'the status keeps the arrival while the place is where the trip ended');
+        assert.equal(host.sdk.query('atlas.trip').row, 'Arrived at Wolfmere Outpost, Goldwane 21', 'the status keeps the arrival while the place is where the trip ended');
         await host.send('Away.', reply('Elsewhere.', ['~ place Auvoth']));
         assert.equal(host.sdk.query('atlas.trip'), null, 'the place changed: the trip is over');
         // The head, a rebuild and a reload of the chat are the same.
@@ -134,13 +134,13 @@ test('a ride goes at the mount pace Story Block answers (its mounts.pace, from t
         await host.send('Hello.', reply('Bluewatch.', ['~ place Bluewatch Village', '~ time Goldwane 12, 8:00 am', '+ mount Grey Mare | kind: horse | pace: 35', '+ mount Burr | kind: mule | pace: 25']));
         assert.deepEqual(host.sdk.query('mounts.pace'), { pace: 25, mounts: 2, riders: 1, short: 0, slowest: 'Burr' });
         await host.send('We set out.', reply('Riding.', ['~ trip Wolfmere Outpost | by: riding']));
-        assert.deepEqual(goRecord(host).legs.map(leg => leg.days), [4, 2.5]);
+        assert.deepEqual(goRecord(host).legs.map(leg => leg.days), [4, 3.5]);
         assert.equal(host.sdk.query('atlas.trip').pace, 'riding, 25 km/day (Burr sets the pace)');
         await host.send('A day.', reply('Dusk.', ['! time +2 days']));
         await host.send('The horse.', reply('Burr limps.', ['~ trip delay: 1 day | because: lame horse']));
         const view = host.sdk.query('atlas.trip');
         assert.equal(view.legs[0].arrive, 'Goldwane 17');
-        assert.equal(view.arrive, 'Goldwane 19');
+        assert.equal(view.arrive, 'Goldwane 20');
         assert.deepEqual(view.delays, [{ text: '1 day: lame horse' }]);
         await host.send('Stop.', reply('We camp.', ['~ trip stop']));
         assert.equal(host.sdk.query('atlas.trip'), null);
