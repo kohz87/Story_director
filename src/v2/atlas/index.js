@@ -13,7 +13,7 @@ import { beforeGenerate, queries as atlasQueries } from './queries.js';
 import { commands as policyCommands, queries as policyQueries } from './policy.js';
 import { mapScreen } from './screen.js';
 import { TRIP_FEATURE } from './trip.js';
-import { applyTripLine } from './trip-capture.js';
+import { applyTripLine, markTrips } from './trip-capture.js';
 import { tripQuery } from './trip-query.js';
 import { MAP_WIDGET, atlasMapWidget } from './widget.js';
 import { DEFAULT_MAP } from '../../places.js';
@@ -38,6 +38,7 @@ export const part = {
     },
     commands: {
         'atlas.visit': visit,
+        'atlas.mark': markTrips,
         'atlas.edit': edit,
         'atlas.focus': focus,
         ...policyCommands,

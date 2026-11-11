@@ -10,6 +10,7 @@
 //   placeRefs:    { [pl_ id]: canonical place id },                 // pl_ -> the pack's content id, or itself for a place no pack has (canonical.js)
 //   danger:       { world: AreaPolicy|null, regions: {rg_: AreaPolicy}, places: {canonical id: AreaPolicy} }
 //   writes:       { [write id]: { fingerprint, result } }           // the retry ledger of the new writers (../writes.js)
+//   tripRest?:    true                                              // set by the first reply generated on a build whose trips rest (atlas.mark); a trip line reads it
 //   trips?:       { [<rev>.<n>]: trip record }                      // the trip (feature story-director.trip): absent until one is made (trip.js, trip-shape.js)
 // }
 // The last five arrived with contract P24; an older save has none of them and reads them as empty.
@@ -232,6 +233,7 @@ function policyErrors(slice, places) {
     }
     if (slice.writes !== undefined) errors.push(...ledgerProblems(slice.writes, 'atlas.writes'));
     if (slice.trips !== undefined) errors.push(...tripsProblems(slice.trips));
+    if (slice.tripRest !== undefined && slice.tripRest !== true) errors.push('atlas.tripRest is true when present.');
     return errors;
 }
 
@@ -259,7 +261,7 @@ export function validateAtlas(slice) {
     if (focus !== null && !packFocus && !(typeof focus === 'string' && places && Object.hasOwn(places, focus))) errors.push('atlas.focus must be null or a place on the map.');
     errors.push(...policyErrors(slice, places));
     for (const key of Object.keys(slice)) {
-        if (!['places', 'routes', 'keys', 'focus', 'regions', 'placeRegions', 'placeRefs', 'danger', 'writes', 'trips'].includes(key)) errors.push(`atlas has an unknown field "${key}".`);
+        if (!['places', 'routes', 'keys', 'focus', 'regions', 'placeRegions', 'placeRefs', 'danger', 'writes', 'trips', 'tripRest'].includes(key)) errors.push(`atlas has an unknown field "${key}".`);
     }
     return errors;
 }

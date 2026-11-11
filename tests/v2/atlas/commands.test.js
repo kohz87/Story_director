@@ -165,7 +165,8 @@ test('atlas.focus marks a place on the map, null clears it, anything else change
 
 test('beforeGenerate sends the scene\'s place when it is new, and nothing once it is on the map', () => {
     const hook = part.hooks.beforeGenerate;
-    const view = state => ({ state, query: name => (name === 'scene.place' ? { ...state.domains.scene.place } : undefined) });
+    // Trips off, so the rest-days mark (trip.test.js) is not in the way.
+    const view = state => ({ state, feature: id => id !== 'story-director.trip', query: name => (name === 'scene.place' ? { ...state.domains.scene.place } : undefined) });
     assert.equal(hook(view(makeState())), undefined);
     let state = makeState({ place: 'Bluewatch Village', kind: 'settlement', region: 'Lakeshore' });
     const out = hook(view(state));
@@ -183,7 +184,7 @@ test('beforeGenerate sends the scene\'s place when it is new, and nothing once i
     const heard = lines(state, '+ route Bluewatch Village — Old Weir').state;
     assert.equal(hook(view(at(heard, 'Old Weir'))).commands[0].type, 'atlas.visit');
     // The scene from the state when the view has no query.
-    assert.equal(hook({ state: at(state, 'Thunder Ruins') }).commands[0].payload.name, 'Thunder Ruins');
+    assert.equal(hook({ state: at(state, 'Thunder Ruins'), feature: view(state).feature }).commands[0].payload.name, 'Thunder Ruins');
     // A v1 location with a spot visits the place.
     assert.equal(hook(view(at(state, 'Bluewatch Village | Market'))), undefined);
     assert.deepEqual(replay(makeState({ place: 'Bluewatch Village', kind: 'settlement', region: 'Lakeshore' }), runs), state);
