@@ -163,7 +163,9 @@ test('pulse: a chance meeting reaches the narrator with the cast cue, names the 
     const host = await castHost({ source: castSource([entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother', routine: '' } })]), features: { 'story-director.pulse': true } });
     try {
         await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Elula', '+ present Bram', '+ present Orsa', '+ agenda Courier — rides in | now: far north | on: June 3, 1200, 06:00 pm', '+ world Plague — coughing in the fold | state: ongoing']));
-        await host.send('Go.', said('Reply.', ['~ time June 3, 1200, 08:10 am']));
+        // This reply rolls too: if its own roll meets her (about one in ten), it must show her as well, or the cast withdraws the meeting
+        // (an unshown person is unmet again) and the check below sees no meeting.
+        await host.send('Go.', said('Sera steps out of the crowd.', ['~ time June 3, 1200, 08:10 am']));
         const last = () => host.head().domains.director.pulse[0].results.at(-1);
         // Every swipe's reply shows Sera (the reply is written before the roll is known), so a roll that meets her must keep the meeting.
         let tries = 0;
