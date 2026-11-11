@@ -12,15 +12,16 @@
 //     `chooseRumor`, one line that describes them and never names them, told once until they move).
 //   Goal meetings come first (they carry a reason the story gave), then sought, then place meetings in the order people joined the world.
 // * A meeting counts only if the reply shows the person (`unshown`, after the reply: `cast.withdraw`): the narration (not its hidden
-//   comments) names them (name or alias, whole word) or a `+ present` line does; else they stay unmet, the pace is not used up and
-//   they may come again later. Someone met in the story is no planned meeting and is never withdrawn.
+//   comments) names them (name or alias, whole word) or the scene listed them at any point in the reply (`seenIn`: a `+ present` line,
+//   even if a later line has them leave); else they stay unmet, the pace is not used up and they may come again later. Someone met in
+//   the story is no planned meeting and is never withdrawn. The same people are met on that reply (`afterCapture`, hooks.js).
 // * People the narrator already has in the scene (present), people the reader pinned as Key people, the dead and people whose pack
 //   is not enabled now are left alone.
 
 import { sha256 } from '../hash.js';
 import { atParty, routineHolds, samePlace } from './entries.js';
 import { kindTouches, rumorText } from './sought.js';
-import { DAY, FACES, DEFAULT_FACES, dayAt, dayOf, isAlive, isInt, isMet, isRecord, keysOfPerson, peopleOf, slotOf, tables } from './domain.js';
+import { DAY, FACES, DEFAULT_FACES, dayAt, dayOf, isAlive, isInt, isMet, isRecord, keyOf, keysOfPerson, peopleOf, slotOf, tables } from './domain.js';
 
 /** A stretch of time that moves the cast even inside one day: six story hours. */
 export const SKIP_MINUTES = 360;
@@ -164,6 +165,24 @@ export function seekable(slice, cast, { present = new Set(), pinned = new Set(),
 const bare = key => key.replace(/^(?:the|a|an)\s+/, '');
 
 /**
+ * The keys of everyone the scene listed at any point of a reply, from its receipts (`info.receipts`): who `+ present` (or a place's `with`)
+ * added and who stood in the list when a line ran, so someone who left again by the reply's end was still shown by it.
+ */
+export function seenIn(receipts) {
+    const out = new Set();
+    for (const receipt of Array.isArray(receipts) ? receipts : []) {
+        if (!/^(?:capture|scene)\./.test(String(receipt?.type ?? ''))) continue;
+        for (const list of [receipt?.data?.added, receipt?.data?.present]) {
+            for (const name of Array.isArray(list) ? list : []) {
+                const key = keyOf(name);
+                if (key) out.add(key);
+            }
+        }
+    }
+    return out;
+}
+
+/**
  * The unmet people of the packs' cast the story already has in the scene under their name or an alias (`present`: keys): they are met at
  * that moment, "met in the story", as `{ key, why: 'story', reason: '', place }` (no cue: the narrator has them already).
  */
@@ -191,9 +210,9 @@ export function namedIn(person, text) {
 /**
  * The people the meeting recorded for reply `index` brought in who the reply did not show, as keys: `slice.meeting` is for that reply, the
  * person was met by it (their `rev` is the meeting's) for place or goal (someone met in the story is never withdrawn), and neither the
- * shown `text` names them nor `present` (keys of the scene's present list, `+ present` lines) does.
+ * shown `text` names them nor `present` (the scene's list at the reply's end) nor `seen` (`seenIn`: listed at any point of it) does.
  */
-export function unshown(slice, { index = null, text = '', present = new Set() } = {}) {
+export function unshown(slice, { index = null, text = '', present = new Set(), seen = new Set() } = {}) {
     const meeting = slotOf(slice?.meeting);
     if (!meeting || !isInt(index) || meeting.at !== index) return [];
     const { people } = tables(slice);
@@ -201,7 +220,7 @@ export function unshown(slice, { index = null, text = '', present = new Set() } 
     for (const key of meeting.keys) {
         const person = isRecord(people[key]) ? people[key] : null;
         if (!person || !isMet(person) || person.met.why === 'story' || person.met.rev !== meeting.rev) continue;
-        if (namedIn(person, text) || keysOfPerson(person).some(name => present.has(name) || present.has(bare(name)))) continue;
+        if (namedIn(person, text) || keysOfPerson(person).some(name => present.has(name) || present.has(bare(name)) || seen.has(name) || seen.has(bare(name)))) continue;
         out.push(key);
     }
     return out;

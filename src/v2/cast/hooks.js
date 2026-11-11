@@ -20,7 +20,7 @@ import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entri
 import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { kindWords } from './sought.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
-import { askedAbout, batchKey, chooseMeetings, chooseRumor, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf, seekable, unshown } from './world.js';
+import { askedAbout, batchKey, chooseMeetings, chooseRumor, dueMove, fingerprint, judgeKey, metInTheStory, movable, paceOf, refsOf, seekable, seenIn, unshown } from './world.js';
 
 const REPLY_TYPES = new Set(['normal', 'regenerate', 'swipe']);
 const normalizeType = type => String(type ?? 'normal').toLowerCase();
@@ -317,19 +317,37 @@ export function createCastHooks({ plans }) {
     }
 
     /**
-     * `afterCapture(view, info)` (once the reply's change lines have run, and again on a Re-read): a person the meeting brought into this reply
-     * who the reply does not show (their name or an alias in its words, or a `+ present` line) has their meeting taken back, as one
-     * `cast.withdraw` step on the reply. It runs before NPC State Delta's step after the reply, so no dossier is made for them.
+     * `afterCapture(view, info)` (once the reply's change lines have run, and again on a Re-read): two things on the reply, as steps stored on it.
+     * 1. A person the meeting brought into this reply who the reply does not show (their name or an alias in its words, or listed present at any
+     *    point of it, even if they left again by its end) has their meeting taken back, as one `cast.withdraw`.
+     * 2. An unmet pack person the reply's scene shows (`+ present`, at any point) is met on THIS reply (`cast.meet`, why `story`, no cue, no
+     *    pace). Both run before NPC State Delta's `npc.tick` (it follows the reply's `turn` event, after the capture), so its tick reads
+     *    `director.cast` with them already met and makes their entry and portrait for this reply. The order is withdraw, then meet.
      */
     function afterCapture(view, info = {}) {
         if (!castOn(view)) return undefined;
         const slice = view?.state?.domains?.cast;
-        if (!slice?.meeting || !isInt(info?.index)) return undefined;
+        if (!slice || !isInt(info?.index)) return undefined;
         const chat = typeof view?.story?.chat === 'function' ? view.story.chat() : null;
         const message = Array.isArray(chat) ? chat[info.index] : null;
         if (!message || typeof message.mes !== 'string') return undefined;
-        const keys = unshown(slice, { index: info.index, text: shownText(message.mes), present: presentKeys(queryOf(view), view?.state) });
-        return keys.length ? { commands: [{ type: 'cast.withdraw', payload: { at: info.index, keys } }] } : undefined;
+        const query = queryOf(view);
+        const present = presentKeys(query, view?.state);
+        let seen = new Set();
+        try { seen = seenIn(info.receipts); } catch { seen = new Set(); }
+        const commands = [];
+        const keys = slice.meeting ? unshown(slice, { index: info.index, text: shownText(message.mes), present, seen }) : [];
+        if (keys.length) commands.push({ type: 'cast.withdraw', payload: { at: info.index, keys } });
+        const cast = castOf(query);
+        if (cast.listed && cast.entries.length) {
+            const world = copyOf(slice);
+            const who = metInTheStory(world, cast, { present: new Set([...present, ...seen]), party: partyPlace(query, view?.state) });
+            if (who.length) {
+                const names = Object.fromEntries(Object.keys(cast.packs).slice(0, 8).map(pack => [pack, cutPoints(packName(cast, pack), 80)]));
+                commands.push({ type: 'cast.meet', payload: { at: info.index, who, names } });
+            }
+        }
+        return commands.length ? { commands } : undefined;
     }
 
     return { afterReceive, afterCapture, beforeGenerate };

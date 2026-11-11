@@ -204,3 +204,49 @@ test('a reply with no change lines at all is judged too: not showing her withdra
         host.close();
     }
 });
+
+test('present then leaves: a reply that had `+ present` for her keeps the meeting even though `- present` ends it', async t => {
+    quiet(t);
+    const host = await toMeeting('Smoke rises over the yard.', { lines: [...LINE, '+ present Sister Temiwa', '- present Sister Temiwa'] });
+    try {
+        assert.equal(receipts(host, 'cast.withdraw').length, 0);
+        assert.equal(people(host)['ersveil:temiwa'].met.why, 'place');
+        assert.equal(host.sdk.query('director.cast').length, 1);
+    } finally {
+        host.close();
+    }
+});
+
+test('first present in a reply is met on that reply, before the step after it reads director.cast; unmet people stay hidden until then', async t => {
+    quiet(t);
+    const far = entry('rika', { name: 'Rika', start: { place: 'Gwenmar', goal: 'find work', routine: '' } });
+    const host = await castHost({ source: castSource([far]) });
+    try {
+        await host.send('Hello.', said('Dawn.', OPENING));
+        assert.deepEqual(host.sdk.query('director.cast'), []);
+        await host.send('Look.', said('A girl stands by the well.', [...LINE, '+ present Rika', '- present Rika']));
+        const [meet] = receipts(host, 'cast.meet');
+        assert.ok(meet, 'met on that reply, not the next');
+        assert.equal(meet.index, host.ctx.chat.length - 1);
+        assert.equal(people(host)['ersveil:rika'].met.why, 'story');
+        assert.equal(host.sdk.query('director.cast').length, 1);
+        assert.equal(receipts(host, 'cast.withdraw').length, 0);
+        assert.deepEqual(validatorErrors(host), []);
+    } finally {
+        host.close();
+    }
+});
+
+test('a chat recorded before this rule replays the same: a recorded withdraw stays after a rebuild', async t => {
+    quiet(t);
+    const host = await toMeeting('Smoke rises. A sister hurries past.');
+    try {
+        assert.equal(receipts(host, 'cast.withdraw').length, 1);
+        const live = JSON.stringify(host.head());
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), live);
+        assert.equal(people(host)['ersveil:temiwa'].met, null);
+    } finally {
+        host.close();
+    }
+});
