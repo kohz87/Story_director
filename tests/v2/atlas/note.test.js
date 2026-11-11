@@ -78,3 +78,20 @@ test('the tail line keeps within its budget (characters / 4)', () => {
     assert.match(line, /^Routes from Crossroads: Hamlet Number 1 With A Long Name by road, 1 h · /);
     assert.match(line, /\.$/);
 });
+
+test('the tail skips street legs inside the scene\'s own city, keeps the ways out', () => {
+    let state = makeState({ place: 'Highmark Capital' });
+    state = lines(state, [
+        '+ route Highmark Capital — Highmark Capital / Crown Keep | hours: 12 | kind: road',
+        '+ route Highmark Capital — Highmark Capital / Civic Ward | hours: 6 | kind: road',
+        '+ route Highmark Capital — Iron Guard Fortress | days: 4.5 | kind: road',
+        '+ route Highmark Capital / Crown Keep — Highmark Capital / Civic Ward | hours: 1 | kind: road',
+        '+ route Highmark Capital / Crown Keep — Iron Guard Fortress | days: 4.5 | kind: road',
+    ].join('\n')).state;
+    const city = part.context.tail(view(state)).optional[0];
+    assert.match(city, /^Routes from Highmark Capital: Iron Guard Fortress by road, 4\.5 days\.$/);
+    // A district scene still shows the way out, not the streets to its neighbours or its city.
+    const district = part.context.tail(view(at(state, 'Highmark Capital / Crown Keep'))).optional[0];
+    assert.match(district, /Iron Guard Fortress by road/);
+    assert.equal(district, 'Routes from Highmark Capital / Crown Keep: Iron Guard Fortress by road, 4.5 days.');
+});
