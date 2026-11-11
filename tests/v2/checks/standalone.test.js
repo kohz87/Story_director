@@ -13,9 +13,9 @@ const CHECK = '? check Stealth — sneak past the guard | dc: hard';
 const ok = out => assert.equal(out.ok, true, JSON.stringify(out));
 const log = host => Object.values(host.head().domains.checks.log);
 
-// A domain Story Director added after this chat was saved (the key people, the cast) is filled in with its empty initial state when a chat is
+// A domain Story Director added after this chat was saved (the key people, the cast, the names) is filled in with its empty initial state when a chat is
 // loaded, and not in a state a delete made from the old first record: the comparison leaves it out while it is still empty.
-const EMPTY = { keypeople: { pins: {}, away: {}, gone: {}, notes: {} }, cast: { people: {}, notes: {}, day: null, meeting: null } };
+const EMPTY = { keypeople: { pins: {}, away: {}, gone: {}, notes: {} }, cast: { people: {}, notes: {}, day: null, meeting: null }, names: { people: {}, seen: {}, taken: {} } };
 const settled = domains => Object.fromEntries(Object.entries(domains).filter(([name, slice]) => !(Object.hasOwn(EMPTY, name) && JSON.stringify(slice) === JSON.stringify(EMPTY[name]))));
 
 /** The head after a full rebuild and in a host that loads the saved chat are the live head. */

@@ -91,8 +91,8 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
     const mine = host.sdk.modules().find(entry => entry.id === MODULE_ID);
     assert.equal(mine.version, '2.13.0');
     assert.deepEqual(mine.tabs, [], 'the hand-built tabs are gone: the screens show quests, threads and the map');
-    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'away', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'key', 'landmark', 'quest', 'route', 'secret', 'time', 'trip', 'world']);
-    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'cast.advance', 'cast.meet', 'cast.rumor', 'cast.sync', 'cast.withdraw', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.lasting', 'chronicle.note', 'chronicle.remove', 'chronicle.rumor', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.clock', 'director.initiative', 'director.pulse', 'director.pulse.quiet', 'director.seed', 'keypeople.pin', 'keypeople.sync', 'keypeople.tell', 'keypeople.unpin', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);
+    assert.deepEqual([...mine.kinds].sort(), ['agenda', 'away', 'beat', 'check', 'clock', 'event', 'faction', 'hook', 'key', 'landmark', 'person', 'quest', 'route', 'secret', 'time', 'trip', 'world']);
+    assert.deepEqual([...mine.commands].sort(), ['atlas.dangerSet', 'atlas.edit', 'atlas.focus', 'atlas.placeBind', 'atlas.placeRegion', 'atlas.region', 'atlas.visit', 'cast.advance', 'cast.meet', 'cast.rumor', 'cast.sync', 'cast.withdraw', 'checks.actor', 'checks.roll', 'chronicle.digest', 'chronicle.edit', 'chronicle.lasting', 'chronicle.note', 'chronicle.remove', 'chronicle.rumor', 'chronicle.surface', 'chronicle.threadOutcome', 'director.advance', 'director.arc.accept', 'director.arc.end', 'director.arc.update', 'director.clock', 'director.initiative', 'director.pulse', 'director.pulse.quiet', 'director.seed', 'keypeople.pin', 'keypeople.sync', 'keypeople.tell', 'keypeople.unpin', 'names.seen', 'names.told', 'threads.accept', 'threads.intent', 'threads.offer', 'time.settle']);
     assert.deepEqual(host.sdk.query('director.time'), { minutes: null, text: '', parts: null });
     assert.deepEqual(host.registry.screens().filter(screen => screen.moduleId === MODULE_ID).map(screen => screen.id), [
         'story-director/map', 'story-director/chronicle', 'story-director/world', 'story-director/days', 'story-director/quests', 'story-director/director', 'story-director/status-card',
@@ -103,7 +103,7 @@ test('the module registers whole: screens instead of tabs, settings fields, capt
         'atlas.map.east', 'atlas.map.era', 'atlas.map.kmPerUnit', 'atlas.map.north', 'atlas.map.roadFactor',
         'cast.faces', 'cast.on', 'cast.profile', 'cast.unmetDie',
         'checks.costMargin', 'checks.defaultDc', 'checks.social',
-        'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail', 'keypeople.cap', 'keypeople.tokens', 'pulse.mode', 'pulse.showUnderReply',
+        'chronicle.digestDays', 'chronicle.digestKeep', 'chronicle.digestTail', 'keypeople.cap', 'keypeople.tokens', 'names.banned', 'names.suggestions', 'pulse.mode', 'pulse.showUnderReply',
         'screens.hideBehind', 'time.lapses', 'time.recapHours',
         'tracker.calendar.era', 'tracker.calendar.leapYears', 'tracker.calendar.months', 'tracker.calendar.preset', 'tracker.calendar.week',
         'tracker.dormantDays', 'tracker.dormantReplies', 'tracker.dueSoonDays', 'tracker.elsewhere', 'tracker.initiativeCooldown', 'tracker.maxJump',

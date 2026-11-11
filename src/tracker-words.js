@@ -1,6 +1,7 @@
 // Story Director: the word helpers the tracker matches keys by (pure): a key's words, near
 // matches among the active records, and the looser name comparisons. Moved out of tracker.js;
-// tracker.js re-exports `keyWords` and `nearMatches`.
+// tracker.js re-exports `keyWords` and `nearMatches`. The names part also uses the person-name
+// resolver here to count distinct identities without treating a partial name as a second person.
 
 import { lineKey } from './changes.js';
 
@@ -114,4 +115,72 @@ function looseWords(left, right) {
     if (left.length < 2 || right.length < 2) return false;
     const [small, large] = left.length <= right.length ? [left, right] : [right, left];
     return small.every(word => large.some(other => sameWord(word, other)));
+}
+
+// The declared words must occur in order in a known name: "Marrit Voss" can stand for
+// "Marrit Anne Voss", but "Marrit Dale" cannot. Callers supply their own title/accent folding.
+function namePart(part, whole, key) {
+    const wanted = key(part).split(' ').filter(Boolean);
+    const words = key(whole).split(' ').filter(Boolean);
+    if (!wanted.length || wanted.length > words.length) return false;
+    let at = 0;
+    for (const word of words) if (word === wanted[at]) at++;
+    return at === wanted.length;
+}
+
+/** Count the known people a declaration can mean. `source` identifies a cast, dossier or pin;
+ * aliases in one entry belong to that person, while distinct IDs from the same source are distinct
+ * people. Plain name observations are folded into a unique longer name or alias when possible.
+ * Equal canonical names from different sources are one person unless a source knows several. */
+export function personMatches(name, entries, key) {
+    const buckets = new Map();
+    const sources = new Map();
+    const plain = [];
+    for (const entry of entries) {
+        if (!key(entry?.name)) continue;
+        if (!entry.source) { plain.push(entry); continue; }
+        const person = sources.get(entry.source) ?? { name: entry.name, forms: [] };
+        person.name = entry.name;
+        person.forms.push(entry.name, ...(entry.aliases ?? []));
+        sources.set(entry.source, person);
+    }
+    for (const [source, person] of sources) {
+        const canonical = key(person.name), kind = source.split(':', 1)[0];
+        if (!buckets.has(canonical)) buckets.set(canonical, new Map());
+        const kinds = buckets.get(canonical);
+        if (!kinds.has(kind)) kinds.set(kind, []);
+        kinds.get(kind).push(person.forms);
+    }
+    const candidates = [];
+    for (const [canonical, kinds] of buckets) {
+        const groups = [...kinds.entries()].sort((a, b) => b[1].length - a[1].length);
+        const base = groups[0][1].map(forms => ({ canonical, forms: [...forms], kinds: new Set([groups[0][0]]) }));
+        // A secondary source naming the same person may add aliases. If several people have
+        // that canonical name, its aliases could belong to any of them and remain ambiguous.
+        for (const [kind, group] of groups.slice(1)) for (const forms of group) for (const person of base) { person.forms.push(...forms); person.kinds.add(kind); }
+        candidates.push(...base);
+    }
+    // A source may use another source's explicit alias as its primary name. Join them only
+    // when each has exactly one possible counterpart and neither source claims two people.
+    const linked = (a, b) => ![...a.kinds].some(kind => b.kinds.has(kind))
+        && (a.forms.some(form => key(form) === b.canonical) || b.forms.some(form => key(form) === a.canonical));
+    for (;;) {
+        const pairs = candidates.map(person => candidates.filter(other => other !== person && linked(person, other)));
+        const at = pairs.findIndex((matches, i) => matches.length === 1 && pairs[candidates.indexOf(matches[0])].length === 1);
+        if (at < 0) break;
+        const person = candidates[at], other = pairs[at][0];
+        person.forms.push(...other.forms);
+        for (const kind of other.kinds) person.kinds.add(kind);
+        candidates.splice(candidates.indexOf(other), 1);
+    }
+    // Longer observations first, so a scene's "Joris" joins a unique "Joris Brand" rather than
+    // becoming another candidate. An observation matching several people cannot resolve the tie.
+    plain.sort((a, b) => key(b.name).split(' ').length - key(a.name).split(' ').length);
+    for (const entry of plain) {
+        const forms = [entry.name, ...(entry.aliases ?? [])];
+        const matches = candidates.filter(person => person.forms.some(form => namePart(entry.name, form, key)));
+        if (matches.length === 1) matches[0].forms.push(...forms);
+        else if (!matches.length) candidates.push({ forms });
+    }
+    return candidates.filter(person => person.forms.some(form => namePart(name, form, key))).length;
 }
