@@ -11,7 +11,7 @@
 //   each), and 2-3 unused suggestions from the pack's names (query `packs.content { kind: 'names' }`; none without it).
 // * Query `names.profile { name }` gives a stored profile (NPC State Delta seeds a dossier from it). Settings: banned names,
 //   how many suggestions (3). Stored people: the newest 80. Nothing from prose; replay-safe (everything added whole under its key).
-// tests/v2/integration/alone.test.js holds the tests.
+// tests/v2/integration/module.test.js and host.test.js hold the tests; tests/v2/break/fuzz-delete.test.js sends `person` lines.
 
 import { lineKey } from '../../changes.js';
 import { sha256 } from '../hash.js';
@@ -49,8 +49,8 @@ export function cutPoints(value, max) {
 /** A name as it is kept: flat, cut to MAX_NAME code points. */
 export const cleanName = value => cutPoints(value, MAX_NAME);
 
-/** The identity of a name: `lineKey` (lower case, punctuation squashed). '' for a name with no letters or digits. */
-export const nameKey = value => lineKey(flat(value));
+/** The identity of a name: `lineKey` (lower case, punctuation squashed) after accents are taken off ("Élara" is "elara"). '' for a name with no letters or digits. */
+export const nameKey = value => lineKey(flat(value).normalize('NFD').replace(/\p{M}/gu, ''));
 
 /** The key without its leading titles ("Sister Temiwa" → "temiwa"); a name that is only titles keeps them. */
 export function bareKey(value) {
@@ -304,21 +304,25 @@ export function applyPerson(ctx, line) {
     const { people, seen, taken } = tables(slice);
     const settings = settingsOf(ctx);
     const packed = packNames(queryOf(ctx));
-    const known = [...Object.values(people), ...Object.values(seen)].map(entry => ({ name: entry.name, by: 'used' }));
+    const others = [...Object.values(people), ...Object.values(seen)];
+    // A person already known (declared before, a dossier, the cast, a pin, the scene) who is declared again is the same person: no check, no cue, the stored profile stays.
+    if (others.some(entry => sameName(name, entry.name))) return { summary: `Name: ${name} is known already.`, narrate: false, data: { person: key, known: true } };
+    const known = others.map(entry => ({ name: entry.name, by: 'used' }));
     const { reasons } = checkName(name, { known, banned: [...settings.banned, ...(packed?.banned ?? [])] });
-    const labels = isRecord(line?.labels) ? line.labels : {};
-    const read = parseProfile([line?.text, ...Object.entries(labels).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join(' | '));
-    if (!Object.hasOwn(people, key)) {
+    const read = parseProfile([line?.text, ...Object.entries(isRecord(line?.labels) ? line.labels : {}).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join(' | '));
+    if (!reasons.length) {
         people[key] = { name, first: revOf(ctx), profile: read.ok ? read.profile : null, rev: revOf(ctx) };
         for (const evicted of capMinor(people).evicted) delete people[evicted];
         delete seen[key];
+        return { summary: `Name: ${name} is new${read.ok ? `; ${read.text}` : ''}.`, narrate: false, data: { person: key } };
     }
-    if (!reasons.length) return { summary: `Name: ${name} is new${read.ok ? `; ${read.text}` : ''}.`, narrate: false, data: { person: key } };
     const why = reasons.map(reasonText).join('; ');
-    delete taken[key];
-    taken[key] = { name, rev: revOf(ctx), told: false };
-    oldest(taken, MAX_TAKEN);
-    return { summary: `Name: ${name} is not a fresh name (${why}).`, narrate: false, data: { person: key, taken: true }, problem: `${name}: ${why}. The next reply asks the narrator for another name (or swipe).` };
+    if (reasons.some(reason => reason.kind !== 'near')) {
+        delete taken[key];
+        taken[key] = { name, rev: revOf(ctx), told: false };
+        oldest(taken, MAX_TAKEN);
+    }
+    return { summary: `Name: ${name} is not a fresh name (${why}).`, narrate: false, data: { person: key, taken: true }, problem: `${name}: ${why}. ${reasons.every(reason => reason.kind === 'near') ? 'Check it is not the same person under another spelling.' : 'The next reply asks the narrator for another name (or swipe).'}` };
 }
 
 /** `names.seen { who }` (system, the step before a reply): the names others use now, so the next `person` line is checked against them. */
@@ -375,7 +379,7 @@ export function beforeGenerate(view, info = {}) {
     }
     const owed = Object.entries(taken).filter(([, entry]) => entry.told !== true);
     const lines = owed.map(([key, entry], at) => {
-        const [fresh] = suggestionsFor(view, slice, 1, `${key}|${view?.chat?.length ?? 0}|${at}`);
+        const [fresh] = settingsOf(view).count ? suggestionsFor(view, slice, 1, `${key}|${view?.chat?.length ?? 0}|${at}`) : [];
         return { text: `[Names] "${entry.name}" is not a fresh name (already used or not allowed). Call that person ${fresh ? `"${fresh}"` : 'by another, unused name'} from now on.`, keep: true };
     });
     if (owed.length && info?.commit !== false) commands.push({ type: 'names.told', payload: { who: owed.map(([key]) => key) } });
@@ -395,9 +399,11 @@ export function tail(view) {
     const slice = view?.state?.domains?.names;
     const settings = settingsOf(view);
     const present = namesOf(ask(queryOf(view), 'scene.present'));
-    const last = String(view?.story?.chat?.()?.at?.(-1)?.mes ?? '').toLowerCase();
+    const chat = view?.story?.chat?.();
+    const last = String((Array.isArray(chat) ? chat.findLast(message => message && !message.is_user) : null)?.mes ?? '');
+    const named = name => new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu').test(last);
     const optional = Object.values(tables(slice).people)
-        .filter(entry => entry.profile && (present.some(name => sameName(name, entry.name)) || (last && last.includes(entry.name.toLowerCase()))))
+        .filter(entry => entry.profile && (present.some(name => sameName(name, entry.name)) || (last && named(entry.name))))
         .slice(0, MAX_TAIL_PROFILES).map(entry => cutPoints(`${entry.name}: ${PROFILE_FIELDS.map(field => entry.profile[field]).filter(Boolean).join('; ')}`, MAX_PROFILE));
     const picks = suggestionsFor(view, slice, settings.count, `${view?.chat?.length ?? 0}`);
     if (picks.length) optional.push(`${TAIL_HEADER} ${picks.join(', ')}`);

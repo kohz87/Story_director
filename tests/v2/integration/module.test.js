@@ -23,7 +23,7 @@ import { TAIL_BUDGET as CAST_BUDGET } from '../../../src/v2/cast/settings.js';
 import { PULSE_STATIC } from '../../../src/v2/pulse/effects.js';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import {
-    OVERUSED, applyPerson, beforeGenerate as namesBefore, bareKey, capMinor, checkName, clampCount, initialNames, parseBanned, parseProfile, pickSuggestions,
+    OVERUSED, applyPerson, beforeGenerate as namesBefore, bareKey, capMinor, checkName, clampCount, initialNames, nameKey, parseBanned, parseProfile, pickSuggestions,
     profileText, tail as namesTail, validateNames,
 } from '../../../src/v2/names/index.js';
 
@@ -228,9 +228,9 @@ test('names core: suggestions are deterministic, setting-fitting and unused; the
     assert.deepEqual(capped.evicted, ['p81', 'p80']);
 });
 
-const namesView = (slice, { chat = 6, present = [], mes = '', settings = {}, on = true } = {}) => ({
+const namesView = (slice, { chat = 6, present = [], mes = '', log = null, settings = {}, on = true } = {}) => ({
     state: { domains: { names: slice, scene: { place: { region: 'River Confederacy: Bluewatch' } } } }, chat: { length: chat }, feature: () => on, settings: () => settings,
-    story: { chat: () => [{ mes }] }, query: (name, args) => (name === 'packs.content' ? (args.kind === 'names' ? [{ names: PACK_NAMES }] : []) : name === 'scene.present' ? present : null),
+    story: { chat: () => log ?? [{ mes }] }, query: (name, args) => (name === 'packs.content' ? (args.kind === 'names' ? [{ names: PACK_NAMES }] : []) : name === 'scene.present' ? present : null),
 });
 
 test('names: the tail offers the setting count of unused names and tells a stored person back in the scene (profile, at most 4); off, nothing', () => {
@@ -242,6 +242,37 @@ test('names: the tail offers the setting count of unused names and tells a store
     assert.equal(out.optional.length, 2, 'a person without a profile is not told');
     assert.equal(namesTail(namesView(slice, { mes: 'Corst spits.', settings: { suggestions: 0 } })).optional.join('|'), 'Corst: scarred; greedy; low; calm');
     assert.deepEqual(namesTail(namesView(slice, { on: false, present: ['Corst'] })), { lines: [], optional: [] });
+    // The trigger is the narrator's last reply (not the reader's message after it), and a name is a whole word.
+    const told = log => namesTail(namesView(slice, { log, settings: { suggestions: 0 } })).optional;
+    assert.deepEqual(told([{ mes: 'Corst spits.', is_user: false }, { mes: 'I wait.', is_user: true }]), ['Corst: scarred; greedy; low; calm']);
+    assert.deepEqual(told([{ mes: 'Quiet.', is_user: false }, { mes: 'Where is Corst?', is_user: true }]), []);
+    const ket = { people: { ket: { name: 'Ket', first: 1, profile: { look: 'squat', flaw: '', voice: '', temper: '' }, rev: 1 } }, seen: {}, taken: {} };
+    assert.deepEqual(namesTail(namesView(ket, { mes: 'A bucket and Ketil.', settings: { suggestions: 0 } })).optional, []);
+    assert.deepEqual(namesTail(namesView(ket, { mes: 'Then Ket, grinning.', settings: { suggestions: 0 } })).optional, ['Ket: squat']);
+});
+
+test('names core: accents do not hide a banned or overused name; a known person declared again is not a collision and writes nothing; a near miss is a Problem without a cue', () => {
+    assert.deepEqual(checkName('Élara').reasons.map(r => r.kind), ['overused']);
+    assert.deepEqual(checkName('Maré', { banned: ['Mare'] }).reasons.map(r => r.kind), ['banned']);
+    assert.equal(nameKey('Seraphína'), nameKey('Seraphina'));
+    const ctx = slice => ({ rev: 7, draft: () => slice, settings: () => ({}), query: () => null, fail: (code, text) => ({ code, text }) });
+    const line = (name, look) => ({ op: '+', name, text: `look: ${look}` });
+    const slice = { people: { marrit: { name: 'Marrit', first: 2, profile: { look: 'tall', flaw: '', voice: '', temper: '' }, rev: 2 } }, seen: { bregje: { name: 'Bregje', rev: 3 } }, taken: {} };
+    for (const name of ['Marrit', 'marrit', 'Bregje']) {
+        const out = applyPerson(ctx(slice), line(name, 'one-eyed brute'));
+        assert.equal(out.problem, undefined, `${name} is the same person`);
+        assert.equal(out.data.known, true);
+    }
+    assert.deepEqual(slice.taken, {}, 'no rename cue');
+    assert.equal(slice.people.marrit.profile.look, 'tall', 'the frozen profile stays');
+    assert.equal(slice.people.bregje, undefined, 'a dossier person gets no profile from the line');
+    assert.ok(slice.seen.bregje);
+    const refused = applyPerson(ctx(slice), line('Elara', 'tall'));
+    assert.ok(refused.problem && slice.taken.elara && slice.people.elara === undefined, 'a refused name keeps no profile');
+    const near = applyPerson(ctx(slice), line('Bregja', 'thin'));
+    assert.ok(near.problem && slice.taken.bregja === undefined && slice.people.bregja === undefined, 'a near miss is told to the reader only');
+    const cue = namesBefore({ ...namesView({ people: {}, seen: {}, taken: { elara: { name: 'Elara', rev: 2, told: false } } }, { settings: { suggestions: 0 } }) }, {});
+    assert.match(cue.lines[0].text, /by another, unused name/, 'suggestions 0 means no suggested name in the cue either');
 });
 
 test('names on the host: a repeated or overused name is a Problem and a pinned cue on the next reply; a fresh name is stored with its profile; off, the prompt is as it was', async () => {
@@ -260,7 +291,7 @@ test('names on the host: a repeated or overused name is a Problem and a pinned c
         assert.deepEqual(validateNames(on.head().domains.names), []);
         await on.send('Next.', '<Changes>\n+ person Elara | look: tall\n+ person Corst | look: fat\n</Changes>');
         const names = on.head().domains.names;
-        assert.deepEqual(Object.keys(names.taken).sort(), ['corst', 'elara']);
+        assert.deepEqual(Object.keys(names.taken), ['elara'], 'Corst declared again is the same person, not a collision');
         assert.equal(names.people.corst.profile.look, 'scarred', 'the first profile is frozen');
         assert.ok(on.sdk.receipts().some(entry => /not a fresh name/.test(entry.receipt?.summary ?? '')));
         await on.send('And?', 'Quiet.');
