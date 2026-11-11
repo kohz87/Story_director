@@ -93,6 +93,25 @@ export function orderedPlaces(atlas) {
     return Object.values(atlas?.places ?? {}).sort((a, b) => keyOf(a.name).localeCompare(keyOf(b.name)) || (a.id < b.id ? -1 : 1));
 }
 
+// A rounded number: coordinates stay the same across engines and reads.
+export const round3 = value => Math.round(value * 1000) / 1000;
+
+/**
+ * The offset `{ dx, dy }` of a child from its parent's point, for the child's key (`keyOf` of its name). Deterministic: FNV-1a of the
+ * key picks the angle and the ring (0.3, 0.4 or 0.5 units; the pack's districts sit a few tenths apart). Same key, same offset, on every
+ * read and replay.
+ */
+export function childOffset(key) {
+    let hash = 0x811c9dc5;
+    for (const char of String(key ?? '')) {
+        hash ^= char.codePointAt(0);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    const angle = (hash / 4294967296) * 2 * Math.PI;
+    const radius = 0.3 + ((hash >>> 8) % 3) * 0.1;
+    return { dx: round3(Math.cos(angle) * radius), dy: round3(Math.sin(angle) * radius) };
+}
+
 /** Routes in a fixed order: by the places' order, then kind, then id. */
 export function orderedRoutes(atlas) {
     const rank = new Map(orderedPlaces(atlas).map((place, index) => [place.id, index]));
@@ -122,12 +141,16 @@ function placeErrors(id, place) {
     const hasX = place.x !== undefined;
     const hasY = place.y !== undefined;
     if (hasX !== hasY) errors.push(`${at} needs both x and y, or neither.`);
-    else if (hasX && !(isInt(place.x) && isInt(place.y))) errors.push(`${at}: x and y must be whole map units.`);
+    else if (hasX && !(Number.isFinite(place.x) && Number.isFinite(place.y))) errors.push(`${at}: x and y must be numbers (map units).`);
+    // `parent`: the atlas place this one sits in (saved with its coordinates at its first visit, parent.js).
+    if (place.parent !== undefined && !(typeof place.parent === 'string' && PLACE_ID.test(place.parent) && place.parent !== id)) errors.push(`${at}.parent must be the id of another place.`);
+    // `auto`: the coordinates were placed by the map (parent.js), not set by the reader; a pack's coordinates win over them.
+    if (place.auto !== undefined && place.auto !== true) errors.push(`${at}.auto must be true when present.`);
     if (typeof place.discovered !== 'boolean') errors.push(`${at}.discovered must be true or false.`);
     if (!isInt(place.rev) || place.rev < 0) errors.push(`${at}.rev must be a whole number.`);
     if (place.made !== undefined && !(typeof place.made === 'string' && place.made && place.made.length <= MAX_NAME)) errors.push(`${at}.made must name a reply.`);
     for (const key of Object.keys(place)) {
-        if (!['id', 'name', 'region', 'kind', 'layer', 'x', 'y', 'discovered', 'rev', 'made'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
+        if (!['id', 'name', 'region', 'kind', 'layer', 'x', 'y', 'discovered', 'rev', 'made', 'parent', 'auto'].includes(key)) errors.push(`${at} has an unknown field "${key}".`);
     }
     return errors;
 }
