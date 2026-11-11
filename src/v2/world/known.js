@@ -20,6 +20,7 @@
 
 import { lineKey } from '../../changes.js';
 import { PRESETS, makeCalendar } from '../../calendar.js';
+import { parseLocation } from '../../places.js';
 import { BEHIND } from '../screens/reveal.js';
 import { threadsOn } from '../threads.js';
 
@@ -84,6 +85,12 @@ export function nowFrom(query, state) {
 const dateText = (calendar, minutes, options) => {
     if (!isInt(minutes)) return '';
     try { return text(calendar.format(minutes, options)); } catch { return ''; }
+};
+
+// The time of day in `format`'s own words ("06:20 pm"): what follows the date in the full text.
+const clockText = (calendar, minutes) => {
+    const day = dateText(calendar, minutes, { time: false });
+    return day ? dateText(calendar, minutes).slice(day.length).replace(/^[\s,]+/, '') : '';
 };
 
 /** "today", "tomorrow", "in 3 days", "yesterday", "3 days ago". */
@@ -161,7 +168,7 @@ function stanceOf(entry) {
 }
 
 /**
- * `director.world.here` → `{ place: { name, region, kind } | null, moved, weather, present: [name], people: [{ name,
+ * `director.world.here` → `{ place: { name, line, region, kind } | null, moved, weather, present: [name], people: [{ name,
  * stance, dossier, key, thought }], chatter: [{ key, name, text }], nsd, hasPeople }`. `present` is Story
  * Block's scene list (NPC State Delta reads it to know who is here); `people` adds, when NPC State Delta
  * answers (`npc.known`), each one's stance and whether they have a dossier. Without it the names stand
@@ -178,7 +185,14 @@ export function hereView(state, _args, tools) {
     const atlas = tryQuery(query, 'atlas.here', {}, null);
     const scenePlace = tryQuery(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
     const name = text(atlas?.name) || text(scenePlace?.name);
-    const place = name ? { name: cut(text(atlas?.line) || name, 80), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
+    // `line`: "Town · Spot", the map's own place line (`atlas.here`, else `atlas.line` on the scene's name); with no atlas, the scene's "Town | Spot" split.
+    const sceneName = text(scenePlace?.name);
+    let line = text(atlas?.line) || (sceneName ? text(tryQuery(query, 'atlas.line', { name: sceneName }, '')) : '');
+    if (!line) {
+        const where = parseLocation(sceneName);
+        line = where.name && where.spot ? `${where.name} · ${where.spot}` : name;
+    }
+    const place = name ? { name: cut(name, 80), line: cut(line, 120), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
     const moved = Boolean(place) && tryQuery(query, 'scene.moved', {}, false) === true;
     // Story Block's Scene tab shows the weather and World replaces that tab, so Here must too (MODULES §F119/§F122).
     const weather = cut(text(tryQuery(query, 'scene.weather', {}, null)?.text), 80);
@@ -387,6 +401,9 @@ export function worldView(state, args, tools) {
         upcoming: upcoming.slice(0, UPCOMING_SHOWN),
         upcomingDays: days,
         today: dateText(calendar, now),
+        // The story time and date apart, for Here's "◷ time · date" ('' while the clock is not set).
+        date: dateText(calendar, now, { time: false }),
+        time: clockText(calendar, now),
         clockSet: isInt(now),
         hasNews: news.length > 0,
         hasFactions: factions.length > 0,

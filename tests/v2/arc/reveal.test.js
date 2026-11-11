@@ -43,6 +43,14 @@ function drawWidget(widget, value) {
     return { el, instance };
 }
 
+// Like drawWidget, with all the props given.
+function document0(widget, props) {
+    const doc = installFakeDom();
+    const el = doc.createElement('div');
+    doc.body.appendChild(el);
+    return { el, instance: widget.render(el, props, {}) };
+}
+
 test('behind the scenes: a count and Reveal, nothing of it in the page; revealed per chat and remembered; Hide', async t => {
     t.mock.method(console, 'warn', () => {});
     const { host, reveal, store, chat } = await setUp();
@@ -125,6 +133,13 @@ test('the arc panel: Plan arc; a waiting plan hidden (Accept without reading, Re
     reveal.set(false);
     assert.match(squash(el.textContent), /An arc is in progress \(0 of 2 beats played\)\./);
     assert.doesNotMatch(squash(el.textContent), /Drowned/);
+    // The Director screen opens the panel (`open`): the arc by name and its buttons whatever the Reveal choice (no Reveal step there).
+    const opened = document0(widget, { value: value(), open: 'true' });
+    assert.match(squash(opened.el.textContent), /The Drowned Bell · 0 of 2 beats played the old bell rings/);
+    assert.doesNotMatch(squash(opened.el.textContent), /An arc is in progress/);
+    opened.instance.update({ value: value(), open: '' });
+    assert.match(squash(opened.el.textContent), /An arc is in progress/, 'without `open` the lock holds again');
+    opened.instance.destroy();
     // Accept without reading takes the plan as it came.
     await arc.plan();
     click(el, 'Accept without reading');
