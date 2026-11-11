@@ -1,13 +1,34 @@
-# Story Director: module contract (v0.1)
+# Story Director: architecture and rule contracts
 
-The binding interfaces between modules. The why is in [DESIGN.md](DESIGN.md).
+Story Director 2 is a **module** of Story Suite v2 (module id `story-director`): Story Block (the host) keeps the
+state, reads the replies' `<Changes>` lines and builds the prompt, and this repo registers one module definition
+through its sdk. The why is in [DESIGN.md](DESIGN.md); the directory map, the non-negotiables and the area notes
+are in `CLAUDE.md` and [docs/dev/](dev/codemap.md).
 
-Plain ES modules, no dependencies, Node 24 (`npm test`, `npm run check`). Every module under
-`src/` except `src/ui/*` is **pure**: no DOM, no SillyTavern globals, deterministic. Story
-time is a number, **abs** = absolute minutes from the calendar's epoch.
+Plain ES modules, no dependencies, Node 24 (`npm test`, `npm run check`). Everything under `src/*.js` and `src/routes/`,
+`src/planner/` is **pure**: no DOM, no SillyTavern globals, deterministic (no `Math.random`, no `Date.now()` in state).
+Those are v1's rules, kept and reused by v2; the sections below are their contracts. v1's glue, tabs and settings
+screens are no longer on `main` (they live on the `v1` branch). Story time is a number, **abs** = absolute minutes from
+the calendar's epoch.
 
-Style: careful human-written code, short "why" comments, 4-space indent, single quotes, a
-top-of-file comment per module; `textContent` only in the UI (never `innerHTML` with data).
+## How the parts fit (v2)
+
+- `src/v2/module.js` merges the parts (tracker, quests, time, atlas, chronicle, world, arc, keypeople, cast, pulse,
+  ripples, checks, screens); settings are namespaced per part; every optional mechanic is a Feature.
+- State lives in Story Block's domains (`director`, `atlas`, `cast`, `keypeople`, ...), written per reply keyed by the
+  reply's carrier `sid` / id, so a swipe, a middle delete, a rewind or a reload replays to the same world.
+- Change lines (`<Changes>`: the grammar in `src/changes.js` below) are read by the host and routed to this module's
+  kinds; code sets numbers (the clock moves at most `tracker.maxJump` days a reply) and the story proposes.
+- The static prompt is byte-identical from reply to reply; what changes goes in the tail (`src/v2/tracker/note.js`,
+  within `TAIL_BUDGET`). The v1 note below (`src/note.js`) is still the source of the While away recap and the
+  note's wording.
+- Parts never import each other: they talk through commands and queries (`ctx.call`, `ctx.query`). Story Director works
+  without NPC State Delta.
+- Story Block's `docs/v2/SPEC.md` (§2.2 storage and replay, §4.4 change lines, §5 prompt, §6 Features) and
+  `docs/v2/MODULES.md` (§C Story Director, §F decisions) are the binding host contract.
+
+Style: careful human-written code, short "why" comments, 4-space indent, single quotes, a top-of-file comment per
+file, files under 450 lines; `textContent` and templates only (never markup built from data).
 
 ---
 
@@ -132,6 +153,8 @@ Grammar, one op per line (blank lines ignored; bullets `*`/`-`/`•` *followed b
 
 ## `src/tracker.js`
 
+The file is a facade: `tracker-records.js` (shapes), `tracker-apply.js` (`applyOps`), `tracker-replay.js` (`replay`, `markSeen`), `tracker-queries.js`, `tracker-words.js` (`keyWords`, `nearMatches`) and `tracker-said.js` (the "said" helpers) hold the code, and `tracker.js` re-exports every name below.
+
 ```js
 export function emptyTracker() → Tracker
 export function applyOps(tracker, ops, { message, time = null }) → { tracker, problems: [Finding] }
@@ -173,9 +196,7 @@ All return new objects; inputs are never mutated.
   problems of a `~` or `!` (with `message`, only replay problems from that message):
   `"Key" is not tracked: add it with "+ kind Key — …" before changing it.`, or with
   candidates `"Key" is not tracked: use its exact key ("A" or "B") or add it with "+ kind Key —
-  …".` index.js passes the newest assistant reply at or before the note's `upTo` and appends
-  the lines after the travel corrections (not while capture is on *always*), so a reply is
-  corrected once, in the next note.
+  …".` the v1 glue passed the newest assistant reply to the note; in v2 the host's problem list carries the same corrections.
 - Every applied op updates `changed`, `seen` and `history` (`text` = op.raw).
 - `markSeen`: records whose key or any `people` name (comma separated, each ≥ 3 chars) appears
   in `text` (case-insensitive, word boundaries) get `seen = { message, time }`.
@@ -188,32 +209,6 @@ All return new objects; inputs are never mutated.
   `giver` trimmed, `difficulty` through `questDifficulty`). A quest closed in an earlier reply
   keeps that reply's message, so it is not listed again; reopened and closed later, it is
   listed at the later one.
-
-## `src/seed.js`
-
-```js
-export function seedFromWorldState(text) → { ops: [Op], counts: { agenda, event, hook, clock } }
-```
-
-Reads the list sections of a World_State block: `Off-Screen` / `Elsewhere` → agenda;
-`World` / `World events` → event; `Hooks` / `Unresolved Threads` / `Threads` / `Planted Seeds`
-→ hook; `Clocks` / `Consequence Timers` / `Timers` → clock. Headings like `**📡 Off-Screen:**`
-(emoji, bold optional; inline text after the colon is one item). Items are bullet lines in the
-ledger format (`* **Geva — now:** Court | then: … | on: …`, `* Key — desc | then: …`,
-`* Key: desc`); each becomes a `+` op of that kind (reuse `parseChanges`). Other sections (PC,
-NPCs Present, Arc/Scene Phase) are ignored. `None`/`none` items are skipped.
-
-## `src/mirror.js`
-
-```js
-export function mirrorOffscreen(worldStateText, agendas, { heading = '**📡 Off-Screen:**' } = {}) → string
-```
-
-Replaces the block's Off-Screen section (its heading line up to the next heading, `---` or the
-end) with `heading` and one line per active agenda:
-`* Key — now: X | then: Y | on: Z[ | leg: … | arrive: …]` (empty parts left out), or `* None`.
-With no Off-Screen section, inserts it before the first of World/Hooks/Clocks/Arc Phase/Scene
-Phase headings, else appends it. Text outside the section is untouched.
 
 ## `src/relevance.js`
 
@@ -261,16 +256,15 @@ export function lapseLines({ slipped, lapsed }) → [string]                    
 export function lapsesIn(tracker, message) → { slipped: [{ key, on, giver }], lapsed: [{ key, on, giver }] }
 ```
 
-A date without a time counts to the end of its day. Nothing is closed here: index.js
-(`closeLapsed`, after `closeAbandoned` in onReply, latest reply only) writes the lines into
-that reply's Director block, and the next note reads them back with `lapsesIn` (by reason, on
+A date without a time counts to the end of its day. Nothing is closed here: `src/v2/time/settle.js`
+writes the lapses into the reply's change lines, and the next note reads them back with `lapsesIn` (by reason, on
 `resolved.message`) for its Slipped and Lapsed parts. Neither reason matches `FAILED`,
 `SUPERSEDED` or `CHOSEN_END`, and neither record is a quest, so `questsDoneIn` never lists them.
 
 ## `src/note.js`
 
 ```js
-export const CHANGE_INSTRUCTION;  // ≈140 tokens: how to write <Director> change lines
+export const CHANGE_INSTRUCTION;  // ≈140 tokens: how to write <Changes> change lines
 export const PACING, PACING_NO_CHANGES;  // the Pacing line, when something is scheduled
 export const ENCOUNTER_CUE;       // v0.8: appended to Pacing while a due/arriving record has an encounter
 export const NPC_PLANS_ONLY;      // v0.8: 'NPC State Delta keeps who each NPC is: agenda lines give only what they plan and when.'
@@ -289,19 +283,18 @@ many with `…`; a cut that leaves a `(` or `[` open goes back to before that wo
 left, and trailing `,;:` and dashes are dropped. Keys are never cut; a `leg` is read whole (only
 its destination is shown). The records are not changed, so the tabs, `encountersAt`,
 `questsDoneAt`, `summarizeTracker` (planner and capture) keep the full text, and `noteParts` /
-`noteTokens` (`api.manage.tokens()`) count the trimmed note.
+`noteTokens` count the trimmed note.
 
 (v0.8.2) `buildNote` is `noteParts` joined (each part's `join`, `'\n'` or `' '` for the
 Encounter cue on the Pacing line, goes before its text). Labels, in order: Header, Arc,
 While away (v0.9.19), Due now, Arriving, Off-screen, World, Hooks, Quests, Clocks, Beats, Do not reveal, Corrections,
 Pacing, Encounter cue, Change instruction, NPC plans only. `noteTokens`: each non-empty part's
 `estimateTokens` (≈ 4 characters a token) as its `input`; the Change instruction part also
-carries `output` = `DIRECTOR_OUTPUT_TOKENS`, a rough allowance for the `<Director>` block it
+carries `output` = `DIRECTOR_OUTPUT_TOKENS`, a rough allowance for the `<Changes>` block it
 asks the model to write (two tags and about two change lines of 20–25 tokens); `input` and
 `output` are the sums.
 
-(v0.9.19) `previousTime` (index.js: the tracker's time before the newest assistant reply at
-or before `upTo`) and `relevance.js` `awayIn(selection, { calendar, from, to = selection.now,
+(v0.9.19) `previousTime` (the tracker's time before the newest assistant reply) and `relevance.js` `awayIn(selection, { calendar, from, to = selection.now,
 minMinutes = AWAY_GAP_MINUTES (720) })`: when the story time moved forward by 12 hours or more,
 the due and arriving records not yet due or arriving at `from` (a quest only once its deadline,
 counted to the end of its day, is past `to`; never a secret) go on one While away part,
@@ -336,19 +329,6 @@ blow, since the fight is resolved outside the story.
 Fits `budgetTokens` by dropping the lowest-priority relevant records first; the header, Due
 now, Arriving, Do not reveal and the instruction are never dropped. Returns the instruction
 alone when there are no records (the model still needs to know how to add them).
-
-## `src/checks.js`
-
-```js
-export function checkReply({ before, after, ops, applyProblems = [], parseErrors = [], calendar, now, hadBlock }) → [Finding]
-```
-
-Kinds: `unknown-key`, `duplicate-add`, `reopened` (passed through from `applyProblems`);
-`parse` (one per parse error, warn); `unfired` (info: due in `before`, still due in `after`
-and not touched by `ops`); `missed` (warn: due more than 1 day before `now` and untouched);
-`date-in-text` (info: a calendar date inside `now`/`then`/`desc` of a record changed by `ops`);
-`no-block` (info: `hadBlock` false while something was due). (`long-part` is gone in v0.8.4:
-the note trims long parts itself.)
 
 ## `src/routes.js` (v0.3): world packs and travel maths
 
@@ -430,22 +410,6 @@ the boat, upstream and downstream ranges (the data does not say which way a hop 
 Every error/warn finding with a fixable leg carries `correction`: the corrected leg in the line
 grammar, e.g. `Shorn → Varnhold Watch 35 B, courier 70/day → 0.5 | arrive: Haywane 13, morning`.
 
-## `src/travel.js` (v0.3)
-
-```js
-export function travelFindings(tracker, { pack, calendar, previous = null, onlyChanged = false }) → [Finding & { correction?, id }]
-export function nearbyPlaces(pack, place) → [name]   // the scene place and its one-hop neighbours
-```
-
-For every active record with a `leg` (only those whose leg changed since `previous` when
-`onlyChanged`): parse it, take `from` from the record's previous leg end or the place named in
-`now`/`place`, `depart` from `record.legSince.time`, `arrive` from `fields.arrive`, and run
-`validateLeg`. Findings carry the record's key and id. The note lists each `correction` as
-`Key — leg …`.
-
-The tracker records `legSince = { message, time }` whenever an op sets a new non-empty `leg`
-(cleared with the leg).
-
 ## `src/planner.js` (v0.4): arc planning
 
 ```js
@@ -518,30 +482,6 @@ stores it in `record.arc` (not in `extra`). Relevance: the current arc is the ne
 `arc` record; priority 2 = beats with `record.arc === currentArc.arc`; `Selection.arc` = the
 current arc record or null.
 
-## `src/capture.js` (v0.5)
-
-```js
-export const DEFAULT_CAPTURE_PROMPT;   // macros {{tracker}}, {{now}}, {{place}}, {{exchange}}, {{user}}, {{char}}
-export function buildCaptureMessages({ template, trackerSummary, nowText, place, userText, replyText, npcPlansOnly = false }) → [{ role, content }]   // npcPlansOnly: as the planner's
-export function parseCapture(text, tracker) → { ops, lines, dropped: [{ raw, reason }], errors }
-```
-
-The answer's `<Director>` block (else the whole text, minus thinking and fences) is parsed as
-change lines; `~`/`-`/`!` of an untracked key (unless `nearMatches` finds exactly one record:
-the tracker then reads it as that one; v0.8.3) and `+ arc` are dropped. `lines` is the kept ops
-through `formatOp`, written into the reply's `<Director>` block. Settings `capture: { mode:
-'off' | 'fallback' | 'always', model, maxTokens }`; `always` also drops the note's instruction.
-
-## `src/wsa.js` (v0.5)
-
-```js
-export function importWorldStateAlpha(input) → { ops, counts: { facts, developments, skipped }, errors }
-```
-
-A `world_state_alpha_bundle`: each active record → `+ event` with key = the summary's first
-clause (≤ 7 words, made unique), `desc` = the summary (unless it is the key), `people` = anchors,
-`extra.trend` for developments, `extra.settled: yes` for facts, `extra.since` = timeAnchor.
-
 ## `src/places.js` (v0.6): the place book and map coordinates
 
 ```js
@@ -561,171 +501,3 @@ formatTrip(trip, { map }) → "Shorn → Auvoth ≈ 219 km SE (≈ 175 km straig
 
 Land trips take the straight line × `roadFactor`; boats, ships and flight go straight. Days use
 `routes.js`'s `legDays` (half-day round-up) and `restDaysFor`. Pure.
-
-## `src/suite.js` (v0.8): the Story Suite handshake
-
-Shared byte for byte with Story Block and NPC State Delta; the contract is
-[STORY_SUITE.md](STORY_SUITE.md). Never edited here alone.
-
-```js
-export const SUITE_VERSION = 1;
-export const AREAS;   // { scene, npc, calendar, timeline, stats, items, rolls }: owner ids, in order
-export function storySuite() → Registry          // globalThis.StorySuite, created or upgraded on first use
-export function isSourceOfTruth(myId, area, choice = 'auto', suite = storySuite()) → boolean
-// Registry: announce({ id, name, version, owns, enabled?, api? }), withdraw(id), providers(),
-//           has(id), api(id), owner(area), offering(area), onChange(listener) → unsubscribe
-```
-
-`isSourceOfTruth`: `'mine'` → true; `'theirs'` → true only when no other extension offers the
-area; `'auto'` → the suite's owner is `myId`, or nobody owns it. Alone, every choice is true.
-
-## `src/manage.js` (v0.8.1): Story Suite's overlay
-
-What Story Director announces, and the handle Story Block's overlay uses to manage it
-([STORY_SUITE.md](STORY_SUITE.md#one-place-to-manage-them-all)). Pure: index.js passes in how
-to read, save and show the settings.
-
-```js
-export const SOURCE_CHOICES;                       // ['auto', 'mine', 'theirs']
-export function sourceChoices(saved, areas) → { [area]: choice }   // unknown or missing → 'auto'
-export function suiteAnnouncement({ id, name, version, areas, settings, storyBlock, api, panel })
-  → { key, provider | null }
-export function makeManage({ areas, read, save, panel = () => null, tokens = () => null })
-  → { areas, sources(), setSource(area, choice) → boolean, enabled(), setEnabled(on), tokens() }
-export function suiteOpener(suite) → (tab) => void | null
-```
-
-`suiteAnnouncement`: no Story Block → `{ key: '', provider: null }` (withdraw); tracking on →
-`key 'on:<owns>'`, `owns` = `areas` less any whose choice is `'theirs'`; tracking off →
-`key 'off'`, `enabled: false`, `owns: []`. Every provider carries `settings: panel` (the
-panel's selector) and `api`. `makeManage`: `setSource` rejects an unknown area or choice
-(false, nothing changed), otherwise tells `panel().setSource` and saves the settings with that
-choice; `setEnabled` tells `panel().setEnabled` and saves `enabled`. (v0.8.2) `tokens()`
-returns a clean copy of `tokens()`'s report (`{ input, output, parts: [{ label, input, output
-}] }`, whole numbers ≥ 0), or `{ input: 0, output: 0, parts: [] }` when it has none or throws.
-`suiteOpener` is non-null
-while two or more providers are announced (on or off) and `suite.api('story-block').openSuite`
-is a function.
-
-## `src/ui/settings.js`
-
-```js
-export function renderSettings(container, { settings, blocks = [], onChange, onSeed, status = '', others = [], suiteLink = false, onOpenSuite = null, … })
-  → { root, update(settings), setOthers(names), setSource(area, choice), setEnabled(on), setSuiteLink(shown) }
-```
-
-```js
-Settings = {
-  enabled: true, sceneTag: 'World_State', depth: 1,
-  budgetTokens: 1000, dormantReplies: 15, dormantDays: 30, dueSoonDays: 3,
-  mirrorOffscreen: true,
-  calendar: { preset: 'custom', era: '', months: [{ name, days }], daysPerMonth: 30 },
-  sourceOfTruth: { calendar: 'auto', timeline: 'auto', npc: 'auto' },   // v0.8: 'auto' | 'mine' | 'theirs'
-}
-```
-
-Inside SillyTavern's `inline-drawer` markup (header "Story Director"), a status element
-`#story_director_status`, sections **Tracking** (on/off switch; scene block select from
-`blocks` = `[{ tag, name }]`, free text when empty; depth; budget), **Dormant** (replies, story
-days, due-soon days), **Calendar** (preset; era; months textarea of `Name` or `Name | days`
-lines; days per month), the Off-Screen mirror switch (for a World State that keeps an
-Off-Screen list), **Source of truth** (v0.8: one select per Story Suite area, Automatic / This
-extension / The other one, with a note naming the other extensions announced), and a **Seed
-from World State** button calling `onSeed()`. `onChange(next)` on every edit with a full new
-object; never mutates the input. `renderSettings(…, { others: [names] })` and
-`setOthers(names)` set that note in place, without redrawing. (v0.8.1) `setSource(area,
-choice)` and `setEnabled(on)` take a change made elsewhere (Story Suite's overlay): kept in the
-panel's copy for its next edit and shown in the select or switch, without redrawing or calling
-`onChange`. A *Manage all in Story Suite* line, first in the drawer's content and outside the
-redrawn view, calls `onOpenSuite()`; hidden unless `suiteLink` / `setSuiteLink(true)`. Its
-element carries `data-story-suite-link`, so the overlay can hide it while it holds the panel.
-
-(v0.8.2) The markup is the Story Suite's shared panel (docs/STORY_SUITE.md, "One look for the
-four settings panels"; styled by `src/suite.css`, identical in the four extensions, which
-`index.js` links once per page as `<link id="story-suite-css">` unless an element with that id
-exists). The drawer content is `.story-suite-panel`; the Manage all line is
-`div.story-suite-manage[data-story-suite-link]` (a `menu_button` with `fa-layer-group`);
-`.story-suite-quickbar` holds the two switches and `.story-suite-actions` (Plan arc, Seed from
-World State); the sections are `details.story-suite-fold[data-fold]` (`tracking`, `calendar`,
-`pack`, `arc`, `capture`, `chat`) in `.story-suite-folds`, each `summary` a `<b>` title and a
-`<small>` summary of its main setting (refreshed on every edit), body `.story-suite-fold-body`;
-all start closed and the open ones are kept in `localStorage`
-(`story_director_settings_open_groups`, wrapped). Every setting is a `story-suite-row`
-(`label[for]` when it has a control id): `<span><b>Label</b><small>hint · Now: …</small></span>`
-and the control, a checkbox straight in the row (shown as a pill), a number in
-`.story-suite-number` with its unit; Dormant shelf, World pack and Source of truth are
-`.story-suite-subhead`s; the status line and the world pack message are `.story-suite-notice`s.
-Ids are unchanged.
-
-## `src/ui/quests.js` (v0.7.1)
-
-```js
-export function renderQuests(pane, { quests, finished, formatDate, status }) → void
-// quests: active quest records; finished: resolved ones, most recent first;
-// status(record) → 'overdue' | 'soon' | '' marks the deadline.
-```
-
-Groups by `fields.type` (main, side, bounty, contract, mission, favour, then others by name,
-untyped last); plural spellings join their singular. Never hidden by the spoiler guard.
-(v0.8.2) Every quest's head carries a `story-director-tag is-difficulty is-<difficulty>` tag
-(`questDifficulty`, so `normal` when none was written).
-
-## `src/ui/tab.js`
-
-```js
-export function renderTab(pane, { timeText = '', place = '', selection, findings = [], formatDate = null, canSeed = false, onSeed = null, onPin = null }) → void
-```
-
-For Story Block's sidebar pane: **Now** (time, place); **Due now** and **Arriving**; active
-records by kind (Off-screen, World, Hooks, Clocks, Beats), each with its key and labelled rows
-(now/then/on/due/leg/arrive/encounter/desc, like Story Block's scene facts; a record with an
-`encounter` also has a `fight` tag in its head) and a pin toggle calling
-`onPin(id, pinned)`; **Dormant** (folded `<details>` with a count); **Do not reveal** (folded,
-content added only when opened); **Resolved recently** (folded); **Problems** (findings:
-errors, then warnings, each in its own box under a "Problems" heading counting them; then
-(v0.8.4) every `info` finding, and any severity the contract does not name, in one closed
-**Notes** fold, `details.story-director-fold.is-notes` with its count, remembered open for the
-session like the other folds; with only notes, the fold alone). The lock's counts name errors
-and warnings only, as does the toast after a reply. Empty state: "Nothing tracked yet." plus a **Seed from World State**
-button when `canSeed`.
-
-## `index.js` (SillyTavern glue, written last)
-
-Needs Story Block 0.6+ (`globalThis.StoryBlock.apiVersion >= 1`): registers the `<Director>`
-transport block, reads the scene block, replays `<Director>` blocks from the chat, injects the
-note at `depth` as a system message from its generate interceptor, checks each reply, writes
-the Off-Screen mirror, registers the "Director" tab, and renders settings.
-
-`globalThis.StoryDirector` (`apiVersion: 1`, read-only): `version`, `timeAt(index)`,
-`formatTime(abs)`, and (v0.8) `encountersAt(index)`: `encountersIn` of the Selection the note
-would build for the scene at message `index` (the tracker up to it, the newest scene block at
-or before it), or `[]` on any failure. Story Director never resolves a fight: the caller (RPG
-Battle) runs it, and the model closes the record with `!` or `-` when it narrates the outcome.
-Also (v0.8) `calendar()`: `sharedCalendar(settings.calendar)`, the Gregorian default until the
-reader sets one. (v0.8.2) `questsDoneAt(index)`: `questsDoneIn(trackerAt(index).tracker,
-index)` for an assistant message inside the chat, `[]` for anything else, while tracking is
-off, or on any failure. Like `encountersAt`, an addition keeps `apiVersion` 1; the suite's
-`api` spreads the same object, so it has it too.
-
-**Story Suite** (v0.8): `{ id: 'story-director', name: 'Story Director', version, owns,
-enabled, settings: '#story_director_settings', api }` (`suiteAnnouncement`) is announced while
-Story Block is there (at start, once Story Block links, and after every settings edit; an
-unchanged state is not announced again, since every announcement wakes every listener), and
-withdrawn while it is not. `owns` = `calendar`, `timeline`, `npc`, less any area whose
-`sourceOfTruth` choice is `'theirs'`. (v0.8.1) With tracking off it is announced with
-`enabled: false` and no `owns` rather than withdrawn, so Story Suite's overlay can switch it
-back on; the registry's `owner`, `has` and `api` skip it as before. `api` is
-`{ ...globalThis.StoryDirector, manage }`, built once (the global itself has no `manage`);
-`manage` is `makeManage` over `settings()`, `applySettings` (the same function as the panel's
-`onChange`: store, save, announce, clear the replay cache, refresh Story Block) and the
-settings panel; (v0.8.2) its `tokens` is `noteTokens` of `noteParts` for the next ordinary
-reply, built with the same options as the injected note (`noteOptions`) and with SillyTavern's
-macros filled per part. Nothing (all zeros) while the note is not sent; planner and capture
-calls are quiet calls and not counted, and with capture on *always* the output allowance is 0. `settings` names the wrapper `#story_director_settings` that
-`addSettingsPanel` creates under `#extensions_settings2` (or `#extensions_settings`), which
-the overlay moves into itself while open. One `onChange` listener only refreshes the settings'
-list of the other extensions and the *Manage all in Story Suite* line (`suiteOpener`; a click
-calls `openSuite('story-director')`). Where it matters, `isSourceOfTruth('story-director', area,
-choice)` is asked at the moment of use: `npc` false → `npcPlansOnly` for the note, the
-planner and capture; `timeline` false → no Off-Screen mirror. Any suite failure counts as
-being the source of truth, so Story Director alone behaves exactly as before.
