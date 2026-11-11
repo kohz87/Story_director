@@ -501,4 +501,3 @@ formatTrip(trip, { map }) → "Shorn → Auvoth ≈ 219 km SE (≈ 175 km straig
 
 Land trips take the straight line × `roadFactor`; boats, ships and flight go straight. Days use
 `routes.js`'s `legDays` (half-day round-up) and `restDaysFor`. Pure.
-
