@@ -3,7 +3,7 @@
 // static: nothing of its own. The atlas's two kinds give the change-line instruction one line
 // each (GRAMMAR), which Story Block writes under its `<Changes>` header (SPEC §5): fixed text.
 // tail: one optional line, the known routes from the scene's place with how long each takes
-// (travel.js), within about 80 tokens; nothing when the place has no known route.
+// (travel.js; not the street legs between parts of the town the scene is in), within about 80 tokens; nothing when the place has no known route.
 
 import { mapSettings } from '../../places.js';
 import { packWorld, worldOf } from './world.js';
@@ -52,6 +52,11 @@ export function routesLine(world, here, { map } = {}) {
     const own = id => world.routes.some(route => route.from === id || route.to === id);
     const up = at.parent ? world.find(at.parent) : parentOf(at.name, world)?.parent ?? null;
     const from = !own(at.id) && up && up.id !== at.id ? up : at;
+    // Street legs inside the city the scene is in ("Highmark Capital / Crown Keep", 0.5 day) tell the narrator nothing: skip a leg whose
+    // two ends are the same town's parts (one the other's parent, or both under one parent); legs leaving the town stay.
+    const parentId = place => (place.parent ? world.find(place.parent) : parentOf(place.name, world)?.parent)?.id ?? null;
+    const upId = parentId(from);
+    const inside = other => other.id === upId || parentId(other) === from.id || (upId !== null && parentId(other) === upId);
     const items = world.routes
         .filter(route => route.from === from.id || route.to === from.id)
         .map(route => {
@@ -59,7 +64,7 @@ export function routesLine(world, here, { map } = {}) {
             const trip = travelTime({ places: world.places, routes: [route], find: world.find }, from.id, other.id, { map });
             return { other, route, trip };
         })
-        .filter(entry => entry.other)
+        .filter(entry => entry.other && !inside(entry.other))
         .sort((a, b) => (a.trip?.days ?? Infinity) - (b.trip?.days ?? Infinity) || a.other.name.localeCompare(b.other.name));
     const head = `Routes from ${from.name}: `;
     let text = '';
