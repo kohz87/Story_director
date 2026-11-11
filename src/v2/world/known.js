@@ -178,7 +178,7 @@ export function hereView(state, _args, tools) {
     const atlas = tryQuery(query, 'atlas.here', {}, null);
     const scenePlace = tryQuery(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
     const name = text(atlas?.name) || text(scenePlace?.name);
-    const place = name ? { name: cut(name, 80), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
+    const place = name ? { name: cut(text(atlas?.line) || name, 80), region: cut(text(atlas?.region) || text(scenePlace?.region), 80), kind: cut(text(atlas?.kind) || text(scenePlace?.kind), 40) } : null;
     const moved = Boolean(place) && tryQuery(query, 'scene.moved', {}, false) === true;
     // Story Block's Scene tab shows the weather and World replaces that tab, so Here must too (MODULES §F119/§F122).
     const weather = cut(text(tryQuery(query, 'scene.weather', {}, null)?.text), 80);

@@ -63,7 +63,7 @@ function render(el, props, api) {
 
     // ---- the DOM --------------------------------------------------------------------------------
     const {
-        root, searchBox, input, results, zoomIn, zoomOut, fitAll, centreMe, regionBox, regions, stage, worldGroup, placesLayer, labelsLayer, hereRing,
+        root, searchBox, input, results, zoomIn, zoomOut, fitAll, centreMe, tidyBtn, regionBox, regions, stage, worldGroup, placesLayer, labelsLayer, hereRing,
         markLayer, road, empty, details, legend, legendCard,
     } = createDom(el, doc);
 
@@ -121,7 +121,9 @@ function render(el, props, api) {
 
     function computePoints() {
         const list = s.data.places.map(place => ({ id: place.id, point: mapPoint(place, s.data.orient) }));
-        s.points = placeUnplaced(list, s.data.routes.map(route => [route.from, route.to]));
+        // A place inside a town with no point of its own sits beside the town, as a route would put it.
+        const inside = s.data.places.filter(place => place.parent).map(place => [place.id, place.parent]);
+        s.points = placeUnplaced(list, [...s.data.routes.map(route => [route.from, route.to]), ...inside]);
     }
 
     function remember() {
@@ -222,6 +224,8 @@ function render(el, props, api) {
     });
     listen(details, 'click', event => {
         if (closestWith(event.target, details, node => node.classList?.contains('sd-map-close'))) showDetails('');
+        const kid = closestWith(event.target, details, node => node.classList?.contains('sd-map-inside-item'));
+        if (kid) chooseHit(kid.getAttribute('data-id'));
     });
     listen(input, 'input', runSearch);
     listen(input, 'keydown', event => {
@@ -254,6 +258,13 @@ function render(el, props, api) {
     listen(zoomOut, 'click', () => zoomCentre(1 / BUTTON_ZOOM));
     listen(fitAll, 'click', fit);
     listen(centreMe, 'click', toMe);
+    listen(tidyBtn, 'click', () => {
+        tidyBtn.hidden = true;
+        try {
+            const out = typeof api?.command === 'function' ? api.command('atlas.edit', { tidy: true }) : null;
+            if (out && typeof out.catch === 'function') out.catch(() => {});
+        } catch { /* a click never breaks the map */ }
+    });
 
     listen(stage, 'keydown', event => {
         const step = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[event.key];
@@ -304,6 +315,7 @@ function render(el, props, api) {
         places.setOnSelect(next?.onSelect);
         root.setAttribute('aria-label', text(next?.label) || 'Map');
         // "Centre on where you are" works once a place is known (breaker a3-2): until then it is off and says why.
+        tidyBtn.hidden = !(s.data.tidy > 0);
         centreMe.disabled = !s.data.current;
         centreMe.setAttribute('title', s.data.current ? 'Centre on where you are' : 'Centre on where you are (once the story names where you are)');
         computePoints();

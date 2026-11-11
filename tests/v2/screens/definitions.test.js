@@ -86,7 +86,8 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(director.event_closed, { query: 'director.threads', args: { kind: 'event', status: 'resolved' } });
     // Behind the scenes is the Reveal panel's (director.behind), and so are its problems.
     assert.equal(director.secret_closed, undefined);
-    const { problems, time, arc, behind, threads: threadsOn, ...threads } = director;
+    const { problems, time, status, arc, behind, threads: threadsOn, ...threads } = director;
+    assert.deepEqual(status, { query: 'director.status' }, 'the place line in the clock header');
     // Whether the world-building threads feature is on (null while off): the World card is drawn only then.
     assert.deepEqual(threadsOn, { query: 'director.threads.on' });
     assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });

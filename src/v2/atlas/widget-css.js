@@ -61,6 +61,8 @@ const CSS = `
 .sd-map .sd-map-place { position: absolute; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; margin: 0; padding: 0; transform: translate(-50%, -50%); border: 2px solid var(--sd-map-border); border-radius: 50%; background: var(--sd-map-strong); color: var(--sd-map-fg); font-size: 11px; line-height: 1; pointer-events: auto; }
 .sd-map .sd-map-place[data-visited="false"] { width: 18px; height: 18px; font-size: 9px; border-style: dashed; opacity: 0.7; color: var(--sd-map-muted); }
 .sd-map .sd-map-place.sd-map-far { width: 8px; height: 8px; border-width: 1px; border-style: solid; background: var(--sd-map-muted); }
+.sd-map .sd-map-place[data-child] { width: 9px; height: 9px; border-width: 1px; border-style: solid; opacity: 1; background: var(--sd-map-strong); }
+.sd-map .sd-map-place[data-child] i { display: none; }
 .sd-map .sd-map-place.sd-map-far i { display: none; }
 .sd-map .sd-map-place:hover, .sd-map .sd-map-place:focus-visible { z-index: 2; opacity: 1; }
 .sd-map .sd-map-place[aria-current="location"] { border-color: var(--sd-map-fg); background: var(--ss-accent-soft); box-shadow: 0 0 0 2px var(--sd-map-accent), 0 0 0 4px var(--sd-map-fg); opacity: 1; z-index: 2; }

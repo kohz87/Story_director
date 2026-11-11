@@ -169,7 +169,7 @@ test('beforeGenerate sends the scene\'s place when it is new, and nothing once i
     assert.equal(hook(view(makeState())), undefined);
     let state = makeState({ place: 'Bluewatch Village', kind: 'settlement', region: 'Lakeshore' });
     const out = hook(view(state));
-    assert.deepEqual(out, { commands: [{ type: 'atlas.visit', payload: { name: 'Bluewatch Village', kind: 'settlement', region: 'Lakeshore' } }] });
+    assert.deepEqual(out, { commands: [{ type: 'atlas.visit', payload: { name: 'Bluewatch Village', kind: 'settlement', region: 'Lakeshore', parents: true } }] });
     const runs = [];
     for (const { type, payload } of out.commands) {
         const run = command(state, type, payload);
@@ -187,4 +187,127 @@ test('beforeGenerate sends the scene\'s place when it is new, and nothing once i
     // A v1 location with a spot visits the place.
     assert.equal(hook(view(at(state, 'Bluewatch Village | Market'))), undefined);
     assert.deepEqual(replay(makeState({ place: 'Bluewatch Village', kind: 'settlement', region: 'Lakeshore' }), runs), state);
+});
+
+// ---- parents and saved coordinates (parent.js) --------------------------------------------------------------------------------------
+const TOWNS = {
+    places: [
+        { name: 'Auvoth', region: 'Gate Coast', kind: 'city', x: 59, y: 110 },
+        { name: 'Bluewatch Village', region: 'River', kind: 'village', x: 64, y: 110, aliases: ['Bluewatch'] },
+        { name: 'Old Weir', region: 'River', kind: 'weir', x: 70, y: 100 },
+    ],
+    routes: [{ from: 'Auvoth', to: 'Old Weir', hours: 6, kind: 'road' }],
+};
+const visit = (state, name, extra = {}) => command(state, 'atlas.visit', { name, parents: true, ...extra }, { pack: TOWNS });
+const near = (place, parent) => Math.hypot(place.x - parent.x, place.y - parent.y);
+
+test('parent rules: "X / Y", "X (Y)", "Y in X" and a known-name prefix (alias too) set the parent and coordinates from it', () => {
+    let state = makeState();
+    for (const name of ['Auvoth (Southern Gatehouse)', 'Auvoth / Pale Alley', 'Iron Lantern in Auvoth', 'Bluewatch Watchhouse']) {
+        const run = visit(state, name);
+        assert.ok(run.ok, run.message);
+        state = run.state;
+    }
+    const atlas = state.domains.atlas;
+    const auvoth = placeNamed(state, 'auvoth');
+    const blue = placeNamed(state, 'bluewatch village');
+    for (const [name, parent] of [['auvoth (southern gatehouse)', auvoth], ['auvoth / pale alley', auvoth], ['iron lantern in auvoth', auvoth], ['bluewatch watchhouse', blue]]) {
+        const place = placeNamed(state, name);
+        assert.equal(place.parent, parent.id, name);
+        const base = parent === auvoth ? { x: 59, y: 110 } : { x: 64, y: 110 };
+        const d = near(place, base);
+        assert.ok(d >= 0.29 && d <= 0.51, `${name} ${d}`);
+    }
+    // The pack's parents became atlas places (not visited), the children are not.
+    assert.equal(auvoth.discovered, false);
+    assert.deepEqual(part.domains.atlas.validate(atlas), []);
+    // A pack place keeps its own coordinates and gets no parent; a name no rule splits gets none.
+    const pack = visit(makeState(), 'Bluewatch').state;
+    assert.equal(placeNamed(pack, 'bluewatch village').parent, undefined);
+    assert.equal(placeNamed(pack, 'bluewatch village').x, undefined);
+});
+
+test('a missing parent is made as an atlas place with coordinates, then the child under it; the offset is fixed and replays the same', () => {
+    const first = visit(makeState(), 'Auvoth (Old Dock)');
+    const again = visit(first.state, 'Frontier Road (Halfway Brook)');
+    // "Frontier Road" is nowhere: made, placed next to the previous visited place (Old Dock), and Halfway Brook sits by it.
+    const road = placeNamed(again.state, 'frontier road');
+    const brook = placeNamed(again.state, 'frontier road (halfway brook)');
+    assert.ok(road, 'the parent was made');
+    assert.equal(brook.parent, road.id);
+    assert.ok(Number.isFinite(road.x) && Number.isFinite(brook.x));
+    const dock = placeNamed(again.state, 'auvoth (old dock)');
+    assert.ok(near(road, dock) <= 0.51);
+    // Same offset on a second chat that visits the same name under the same parent.
+    const other = visit(visit(makeState(), 'Auvoth (Old Dock)').state, 'Auvoth (Old Dock)').state;
+    assert.equal(placeNamed(other, 'auvoth (old dock)').x, dock.x);
+    assert.equal(placeNamed(other, 'auvoth (old dock)').y, dock.y);
+    // Replay of the recorded ops gives the same atlas.
+    const fresh = makeState();
+    assert.deepEqual(replay(fresh, [first, again]), again.state);
+});
+
+test('with no parent a place goes to the middle of its region, else beside the previous place, else gets no coordinates', () => {
+    let state = visit(makeState(), 'Bluewatch Village').state;
+    state = command(state, 'atlas.edit', { place: placeNamed(state, 'bluewatch village').id, x: 20, y: 30 }, { pack: TOWNS }).state;
+    // Same region: the pack's Old Weir is unvisited but placed in "River"; the centroid of Bluewatch (20,30) and Old Weir (70,100).
+    const loose = visit(state, 'Outside the Stray Oar', { region: 'River' }).state;
+    const oar = placeNamed(loose, 'outside the stray oar');
+    assert.equal(oar.parent, undefined);
+    assert.ok(Math.hypot(oar.x - 45, oar.y - 65) <= 0.51, `${oar.x},${oar.y}`);
+    // No region: next to the previous visited place that has a point.
+    const next = visit(state, 'Northern Watch-Horn').state;
+    assert.ok(near(placeNamed(next, 'northern watch-horn'), { x: 20, y: 30 }) <= 0.51);
+    // Nothing placed at all: an old-style row (no coordinates).
+    const none = visit(makeState(), 'Nowhere Special').state;
+    assert.equal(placeNamed(none, 'nowhere special').x, undefined);
+});
+
+test('a visit recorded without the rule keeps the old atlas: no parent, no coordinates, no parent place made (Re-read stays byte-identical)', () => {
+    const old = command(makeState(), 'atlas.visit', { name: 'Auvoth (Southern Gatehouse)' }, { pack: TOWNS });
+    const place = placeNamed(old.state, 'auvoth (southern gatehouse)');
+    assert.deepEqual({ ...place, id: undefined }, { id: undefined, name: 'Auvoth (Southern Gatehouse)', region: '', kind: '', layer: '', discovered: true, rev: 1 });
+    assert.equal(Object.keys(old.state.domains.atlas.places).length, 1);
+    assert.equal(replay(makeState(), [old]).domains.atlas.checkpoint, old.state.domains.atlas.checkpoint);
+    assert.deepEqual(replay(makeState(), [old]), old.state);
+    // A checkpoint without `parent` validates as before; one with it is checked.
+    assert.deepEqual(part.domains.atlas.validate(old.state.domains.atlas), []);
+    const bad = structuredClone(visit(makeState(), 'Auvoth (Gate)').state.domains.atlas);
+    Object.values(bad.places).find(item => item.parent).parent = 'nope';
+    assert.match(part.domains.atlas.validate(bad).join(' '), /parent must be the id of another place/);
+});
+
+test('the place line reads "Town · Spot" (the town alone at the town); atlas.here carries it', () => {
+    let state = visit(makeState(), 'Auvoth (Southern Gatehouse)').state;
+    state = at(state, 'Auvoth (Southern Gatehouse)');
+    assert.equal(query(state, 'atlas.here', {}, { pack: TOWNS }).line, 'Auvoth · Southern Gatehouse');
+    assert.equal(query(at(state, 'Auvoth'), 'atlas.here', {}, { pack: TOWNS }).line, 'Auvoth');
+    state = visit(state, 'Bluewatch Village / Guild Office').state;
+    assert.equal(query(at(state, 'Bluewatch Village / Guild Office'), 'atlas.here', {}, { pack: TOWNS }).line, 'Bluewatch Village · Guild Office');
+});
+
+test('the routes line at a child place uses its parent\'s routes (and names the parent)', () => {
+    const state = at(visit(makeState(), 'Auvoth (Southern Gatehouse)').state, 'Auvoth (Southern Gatehouse)');
+    const tail = part.context.tail({ state, query: (name, args) => query(state, name, args, { pack: TOWNS }), settings: () => ({}) });
+    assert.match(tail.optional[0], /^Routes from Auvoth: Old Weir by road, 6 h/);
+});
+
+test('"Tidy the map" gives saved coordinates to visited places without any, as one recorded reader action that replays the same', () => {
+    const old = command(makeState(), 'atlas.visit', { name: 'Auvoth (Southern Gatehouse)' }, { pack: TOWNS });
+    const old2 = command(old.state, 'atlas.visit', { name: 'Bluewatch Watchhouse' }, { pack: TOWNS });
+    const run = command(old2.state, 'atlas.edit', { tidy: true }, { pack: TOWNS });
+    assert.ok(run.ok, run.message);
+    assert.match(run.result.summary, /^2 places placed on the map\.$/);
+    const gate = placeNamed(run.state, 'auvoth (southern gatehouse)');
+    assert.ok(Number.isFinite(gate.x) && gate.parent);
+    assert.ok(near(gate, { x: 59, y: 110 }) <= 0.51);
+    assert.deepEqual(replay(makeState(), [old, old2, run]), run.state);
+    // Nothing left to tidy: a plain sentence, nothing saved.
+    const again = command(run.state, 'atlas.edit', { tidy: true }, { pack: TOWNS });
+    assert.equal(again.ok, false);
+    assert.equal(again.state, run.state);
+    // The map offers the action only while a place has none.
+    assert.equal(query(old2.state, 'atlas.map', {}, { pack: TOWNS }) !== null, true);
+    assert.equal(query(old2.state, 'atlas.view', {}, { pack: TOWNS }).tidy, 2);
+    assert.equal(query(run.state, 'atlas.view', {}, { pack: TOWNS }).tidy, 0);
 });

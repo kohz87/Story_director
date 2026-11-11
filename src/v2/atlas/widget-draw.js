@@ -13,6 +13,7 @@ export const SVG_NS = 'http://www.w3.org/2000/svg';
 const R_VISITED = 12;
 const R_KNOWN_FAR = 4;
 const R_KNOWN = 9;
+const R_CHILD = 4;
 
 export function createDraw(s, dom) {
     const { doc, regions, regionBox, worldGroup, nodes, labels, placesLayer, labelsLayer, empty, stage, markLayer, road, legend, legendCard, placeAt, hereRing } = dom;
@@ -63,6 +64,7 @@ export function createDraw(s, dom) {
             node.setAttribute('data-id', place.id);
             node.setAttribute('data-visited', String(place.visited));
             if (place.kind) node.setAttribute('data-kind', place.kind.slice(0, 64));
+            if (place.parent) node.setAttribute('data-child', 'true');
             const about = [place.kind && humanize(place.kind), place.region, place.visited ? '' : 'not visited', place.id === s.data.current ? 'you are here' : ''].filter(Boolean).join(', ');
             node.setAttribute('aria-label', about ? `${place.name} (${about})` : place.name);
             node.setAttribute('title', place.name);
@@ -206,16 +208,16 @@ export function createDraw(s, dom) {
             node.classList.toggle('sd-map-far', isFar);
             node.classList.toggle('sd-map-picked', place.id === s.picked);
             const onScreen = p.x > -40 && p.y > -40 && p.x < width + 40 && p.y < height + 40;
-            if (onScreen) markers.push({ id: place.id, x: p.x, y: p.y, r: place.visited ? R_VISITED : isFar ? R_KNOWN_FAR : R_KNOWN });
+            if (onScreen) markers.push({ id: place.id, x: p.x, y: p.y, r: place.parent ? R_CHILD : place.visited ? R_VISITED : isFar ? R_KNOWN_FAR : R_KNOWN });
         }
         // Names by priority: the one under the pointer or focus, the picked one, where you are, the
         // visited places, then (closer in) the unvisited ones.
         const visible = new Set(markers.map(marker => marker.id));
         const rank = place => (place.id === s.hovered ? 0 : place.id === s.picked ? 1 : place.id === s.data.current ? 2 : place.visited ? 3 : 4);
         const items = s.shown
-            .filter(place => visible.has(place.id) && (place.visited || zoom >= KNOWN_LABEL_ZOOM || place.id === s.hovered || place.id === s.picked))
+            .filter(place => visible.has(place.id) && (place.parent ? [s.hovered, s.picked, s.data.current].includes(place.id) : place.visited || zoom >= KNOWN_LABEL_ZOOM || place.id === s.hovered || place.id === s.picked))
             .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
-            .map(place => ({ id: place.id, x: at.get(place.id).x, y: at.get(place.id).y, r: markers.find(marker => marker.id === place.id).r, text: place.name }));
+            .map(place => ({ id: place.id, x: at.get(place.id).x, y: at.get(place.id).y, r: markers.find(marker => marker.id === place.id).r, text: place.inside ? `${place.name} · ${place.inside} ${place.inside === 1 ? 'place' : 'places'} inside` : place.parent ? place.line : place.name }));
         const placed = new Map(placeLabels(items, markers, width, height).map(entry => [entry.id, entry]));
         for (const [id, label] of labels) {
             const spot = placed.get(id);

@@ -843,3 +843,42 @@ test('the trip prop is cleaned: junk, a missing end and a leg id the map lacks d
     assert.equal($$('.sd-map-trip-leg').length + $$('.sd-map-you').length + $$('.sd-map-mover').length, 0);
     assert.equal($('.sd-map-road').hidden, false, 'the panel still tells the trip');
 });
+
+test('places inside a town: small dots round it, "N places inside" on its label, its details list them, the row under the map only for places with no coordinates', () => {
+    let state = story();
+    for (const name of ['Bluewatch Village / Guild Office', 'Bluewatch Village (River Quay)', 'Bluewatch Watchhouse Cellar']) {
+        state = command(at(state, name), 'atlas.visit', { name, parents: true }, { pack: PACK }).state;
+    }
+    state = at(state, 'Bluewatch Village');
+    const { $$, shownLabels, data } = draw({ state });
+    const kids = data.places.filter(place => place.parent);
+    assert.ok(kids.length >= 2, 'the children carry their parent');
+    const town = data.places.find(place => place.name === 'Bluewatch Village');
+    assert.equal(town.inside, kids.filter(kid => kid.parent === town.id).length);
+    assert.ok(kids.every(kid => Number.isFinite(kid.x) && Math.hypot(kid.x - 64, kid.y - 110) < 1), 'saved coordinates beside the parent');
+    assert.equal($$('.sd-map-place').filter(node => node.getAttribute('data-child') === 'true').length, kids.length);
+    // The town's label counts its places (a crowded map may shorten it to its first word, as every label).
+    assert.ok(shownLabels().some(text => new RegExp(`^Bluewatch(…| Village · ${town.inside} places? inside)$`).test(text)), shownLabels().join('|'));
+    assert.ok(!shownLabels().some(text => /River Quay/.test(text)), 'a child has no label until it is picked');
+    // Tapping the town lists its places; a tap on one goes to it.
+    const again = draw({ state });
+    again.$('.sd-map-me').dispatch('click', {});   // the town is where you are: its details open
+    assert.match(again.$('.sd-map-details').textContent, /places? inside/);
+    const items = again.$$('.sd-map-inside-item');
+    assert.equal(items.length, town.inside);
+    items[0].dispatch('click', {});
+    assert.equal(again.$('.sd-map-details').getAttribute('data-id'), items[0].getAttribute('data-id'));
+    assert.match(again.$('.sd-map-name').textContent, /^Bluewatch Village · /);
+    assert.equal(again.$('.sd-map-tidy').hidden, true, 'nothing to tidy');
+});
+
+test('"Tidy the map" shows while a visited place has no coordinates and sends one atlas.edit { tidy: true }', () => {
+    const state = command(at(story(), 'Camp Nine'), 'atlas.visit', { name: 'Camp Nine' }, { pack: PACK }).state;
+    const sent = [];
+    const { $ } = draw({ state, api: { query: (name, args) => query(state, name, args, { pack: PACK }), command: (type, payload) => { sent.push([type, payload]); } } });
+    const tidy = $('.sd-map-tidy');
+    assert.equal(tidy.hidden, false);
+    tidy.dispatch('click', {});
+    assert.deepEqual(sent, [['atlas.edit', { tidy: true }]]);
+    assert.equal(tidy.hidden, true);
+});

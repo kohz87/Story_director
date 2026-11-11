@@ -12,6 +12,7 @@ import {
     MAX_NAME, PACK_NODE, cleanName, cleanWord, findPlace, isRecord, keyOf, newId, revOf, routesBetween,
 } from './domain.js';
 import { recordRef } from './canonical.js';
+import { settlePlace, tidyPlaces } from './parent.js';
 import { packPlace, packWorld, worldOf } from './world.js';
 
 /** New places, and new routes, one reply's lines may add; a line that would add more is not used (B-b1r2-7). */
@@ -304,10 +305,21 @@ export function visit(ctx, payload = {}) {
         kind: cleanWord(payload.kind, { lower: true }),
         coords: location.coords,
     });
-    return { summary: changed ? `${place.name} is on the map.` : '', narrate: false, data: { place: place.id, created } };
+    // `parents`: the visit is from a reader that saves a place's parent and coordinates (beforeGenerate sends it); a visit recorded
+    // before that has none, so a Re-read keeps the atlas it made.
+    const settled = payload.parents === true && settlePlace(atlas, ctx, pack, place, { ensure: ensurePlace, canMake: Object.keys(atlas.places).length < MAX_PLACES });
+    if (settled) place.rev = revOf(ctx);
+    return { summary: changed || settled ? `${place.name} is on the map.` : '', narrate: false, data: { place: place.id, created } };
 }
 
-const EDIT_FIELDS = ['place', 'name', 'x', 'y', 'layer', 'region', 'kind'];
+const EDIT_FIELDS = ['place', 'name', 'x', 'y', 'layer', 'region', 'kind', 'tidy'];
+
+// `atlas.edit { tidy: true }` ("Tidy the map"): saved coordinates for the visited places that have none, as one reader action.
+function tidy(ctx, atlas) {
+    const count = tidyPlaces(atlas, ctx, packWorld(queryOf(ctx)), { ensure: ensurePlace, canMake: Object.keys(atlas.places).length < MAX_PLACES });
+    if (!count) return ctx.fail('INVALID', 'Nothing to tidy: every visited place already has its coordinates.');
+    return { summary: `${count} ${count === 1 ? 'place' : 'places'} placed on the map.`, narrate: false, data: { tidied: count } };
+}
 
 /** `atlas.edit { place, name?, x?, y?, layer?, region?, kind? }`: the reader's corrections. */
 export function edit(ctx, payload = {}) {
@@ -315,6 +327,7 @@ export function edit(ctx, payload = {}) {
     const unknown = Object.keys(payload).filter(key => !EDIT_FIELDS.includes(key));
     if (unknown.length) return ctx.fail('INVALID', `The map cannot change ${unknown.join(', ')}.`);
     const atlas = ctx.draft('atlas');
+    if (payload.tidy === true && Object.keys(payload).length === 1) return tidy(ctx, atlas);
     let ref = payload.place;
     let found = findPlace(atlas, ref);
     // A pack place picked on the map: the reader's change makes it the atlas's.

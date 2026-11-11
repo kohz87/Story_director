@@ -48,7 +48,7 @@ export function readView(props) {
         places.push({
             id, name: text(place.name) || id, aliases: (Array.isArray(place.aliases) ? place.aliases : []).map(text).filter(Boolean),
             region: text(place.region), kind: text(place.kind), icon: text(place.icon), plane: text(place.plane), layer: text(place.layer),
-            x: num(place.x), y: num(place.y), visited: place.visited === true, here: place.here === true,
+            x: num(place.x), y: num(place.y), line: text(place.line) || text(place.name) || id, parent: text(place.parent), inside: Math.max(0, num(place.inside) ?? 0), visited: place.visited === true, here: place.here === true,
         });
     }
     const routes = (Array.isArray(given.routes) ? given.routes : [])
@@ -61,7 +61,7 @@ export function readView(props) {
     const orient = { north: given.orient?.north === 'down' ? 'down' : 'up', east: given.orient?.east === 'left' ? 'left' : 'right' };
     const kinds = given.kinds && typeof given.kinds === 'object' ? given.kinds : {};
     const layer = layers.some(item => item.id === given.layer) ? given.layer : ALL;
-    return { places, routes, layers, current, orient, kinds, layer };
+    return { places, routes, layers, current, orient, kinds, layer, tidy: Math.max(0, num(given.tidy) ?? 0) };
 }
 
 /**

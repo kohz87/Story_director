@@ -43,7 +43,11 @@ const TEMPLATE = `
   </div>
   <div class="sd-row sd-place" data-if="state.scene.place.name" data-class="sd-new: changed('state.scene.place')">
     <dt><i class="fa-solid fa-location-dot" aria-hidden="true"></i> Place</dt>
-    <dd>{{ state.scene.place.name }}<small data-if="state.scene.place.region"> · {{ state.scene.place.region }}</small></dd>
+    <dd>{{ q.status.place }}</dd>
+  </div>
+  <div class="sd-row sd-region" data-if="q.status.region">
+    <dt><i class="fa-solid fa-map" aria-hidden="true"></i> Region</dt>
+    <dd>{{ q.status.region }}</dd>
   </div>
   <div class="sd-row sd-coords" data-if="q.status.coords">
     <dt><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> Coordinates</dt>

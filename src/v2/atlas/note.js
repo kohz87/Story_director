@@ -7,6 +7,7 @@
 
 import { mapSettings } from '../../places.js';
 import { packWorld, worldOf } from './world.js';
+import { parentOf } from './parent.js';
 import { travelTime } from './travel.js';
 import { TRIP_FEATURE, calendarOf, tripLines, tripView } from './trip.js';
 
@@ -45,8 +46,12 @@ export function scenePlace(view) {
 
 /** "Routes from Bluewatch Village: Old Weir by road, 2 h · Thunder Ruins by trail, ≈ 1.5 days." or ''. */
 export function routesLine(world, here, { map } = {}) {
-    const from = world.find(here);
-    if (!from) return '';
+    const at = world.find(here);
+    if (!at) return '';
+    // A place with no way of its own, inside a town ("Auvoth · Southern Gatehouse"), goes by the town's routes and names it.
+    const own = id => world.routes.some(route => route.from === id || route.to === id);
+    const up = at.parent ? world.find(at.parent) : parentOf(at.name, world)?.parent ?? null;
+    const from = !own(at.id) && up && up.id !== at.id ? up : at;
     const items = world.routes
         .filter(route => route.from === from.id || route.to === from.id)
         .map(route => {

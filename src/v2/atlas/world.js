@@ -90,7 +90,7 @@ export function packWorld(query) {
 
 /**
  * The joined world: `{ places, routes, find(ref) }`. A place:
- * `{ id, key, name, region, kind, layer, x, y, discovered, source: 'atlas' | 'pack', atlasId, aliases, hidden }`
+ * `{ id, key, name, region, kind, layer, x, y, parent (the atlas id it sits in, or null), discovered, source: 'atlas' | 'pack', atlasId, aliases, hidden }`
  * (`id` is the atlas id, or `pack:<key>` for a pack place the atlas lacks). A route:
  * `{ id, from, to, kind, hours, km, source }` between place ids (`hours` from the story or the
  * pack, `km` from the pack; null when not given). `find` takes an id, a node id, a name or an alias.
@@ -121,6 +121,7 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
             layer: own.layer || from?.layer || '',
             x: hasOwn ? own.x : from?.x ?? null,
             y: hasOwn ? own.y : from?.y ?? null,
+            parent: own.parent ?? null,
             discovered: own.discovered,
             source: 'atlas',
             atlasId: own.id,
@@ -135,7 +136,7 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
     for (const place of places) for (const alias of place.aliases) if (!byKey.has(keyOf(alias))) byKey.set(keyOf(alias), place);
     for (const from of pack.places ?? []) {
         if (usedPack.has(from.key) || byKey.has(from.key)) continue;
-        const place = { id: `${PACK_NODE}${from.key}`, key: from.key, name: from.name, region: from.region, kind: from.kind, layer: from.layer, x: from.x, y: from.y, discovered: false, source: 'pack', atlasId: null, aliases: [...(from.aliasNames ?? [])], hidden: Boolean(from.hidden) };
+        const place = { id: `${PACK_NODE}${from.key}`, key: from.key, name: from.name, region: from.region, kind: from.kind, layer: from.layer, x: from.x, y: from.y, discovered: false, parent: null, source: 'pack', atlasId: null, aliases: [...(from.aliasNames ?? [])], hidden: Boolean(from.hidden) };
         places.push(place);
         byId.set(place.id, place);
         byKey.set(from.key, place);

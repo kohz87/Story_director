@@ -25,7 +25,18 @@ export function createPlaces({ dom, view, hooks }) {
         const about = [place.kind && humanize(place.kind), place.region].filter(Boolean).join(' · ');
         const status = place.id === s.data.current ? 'You are here.' : place.visited ? 'Visited.' : 'Not visited yet.';
         const trip = h(doc, 'p', 'sd-map-trip');
-        details.replaceChildren(h(doc, 'h3', 'sd-map-name', place.name), ...(about ? [h(doc, 'p', 'sd-map-about', about)] : []), h(doc, 'p', 'sd-map-status', status), trip, close);
+        // A town lists the places inside it ("Tap a town: the places inside it"); a tap on one goes to it.
+        const kids = s.data.places.filter(other => other.parent === place.id).sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
+        const list = h(doc, 'ul', 'sd-map-inside');
+        for (const kid of kids) {
+            const item = h(doc, 'li');
+            const go = button(doc, 'sd-map-result sd-map-inside-item', kid.name);
+            go.setAttribute('data-id', kid.id);
+            item.append(go);
+            list.append(item);
+        }
+        const inside = kids.length ? [h(doc, 'p', 'sd-map-about', `${kids.length} ${kids.length === 1 ? 'place' : 'places'} inside`), list] : [];
+        details.replaceChildren(h(doc, 'h3', 'sd-map-name', place.line), ...(about ? [h(doc, 'p', 'sd-map-about', about)] : []), h(doc, 'p', 'sd-map-status', status), ...inside, trip, close);
         details.setAttribute('data-id', place.id);
         details.hidden = false;
         paint();

@@ -9,6 +9,7 @@ import { mapSettings, parseLocation } from '../../places.js';
 import { findPlace, keyOf } from './domain.js';
 import { atlasView, mapProps } from './map.js';
 import { scenePlace } from './note.js';
+import { placeLine } from './parent.js';
 import { travelTime } from './travel.js';
 import { packPlace, packWorld, worldOf } from './world.js';
 
@@ -91,16 +92,17 @@ export const queries = {
     /**
      * The scene's place as the atlas knows it: `{ id, name, kind, placeKind, region }`: the scene's
      * kind, else the atlas's or the pack's (a `~ place` line that moves the scene may leave the
-     * scene's kind empty, or keep the last place's); `placeKind` the atlas's or the pack's alone; the
+     * scene's kind empty, or keep the last place's); `line` the place line ("Auvoth · Southern Gatehouse"); `placeKind` the atlas's or the pack's alone; the
      * place's own region over the scene's wider one. Null when the scene is nowhere the atlas or a
      * pack knows.
      */
     'atlas.here': (state, _args, tools) => {
         const scene = scenePlace({ state, query: toolsQuery(tools) });
-        const place = scene.name ? worldFrom(state, tools).find(parseLocation(scene.name).name.trim()) : null;
+        const world = worldFrom(state, tools);
+        const place = scene.name ? world.find(parseLocation(scene.name).name.trim()) : null;
         if (!place) return null;
         // `placeKind`: the map's own kind for the place, whatever the scene says now.
-        return { id: place.id, name: place.name, kind: scene.kind || place.kind, placeKind: place.kind, region: place.region || scene.region };
+        return { id: place.id, name: place.name, line: placeLine(place, world), kind: scene.kind || place.kind, placeKind: place.kind, region: place.region || scene.region };
     },
     /** The place picked on the map (`atlas.focus`) with its routes, or null. */
     'atlas.selected': (state, _args, tools) => {
@@ -129,7 +131,7 @@ export function beforeGenerate(view) {
     const packRegion = known && scene.region && known.region === scene.region ? packPlace(packWorld(view.query ?? null), name)?.region : '';
     const fresh = !known || !known.discovered || (scene.kind && !known.kind) || (scene.region && !known.region) || Boolean(packRegion && packRegion !== known.region);
     if (!fresh) return undefined;
-    const payload = { name: scene.name.trim() };
+    const payload = { name: scene.name.trim(), parents: true };
     if (scene.kind) payload.kind = scene.kind;
     if (scene.region) payload.region = scene.region;
     return { commands: [{ type: 'atlas.visit', payload }] };
