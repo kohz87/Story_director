@@ -83,6 +83,8 @@ function addNote(ctx, kp, { kind, name, head, rest, key, goneRev }) {
  * told. `reason`: died | archived | unpinned. Returns the sentence for the receipt.
  */
 function writeGone(ctx, kp, key, name, reason, now, defer = false) {
+    // A record an older reply made is rewritten field by field: marked, so it is passed over when that reply was deleted.
+    if (Object.hasOwn(kp.gone, key) && typeof ctx.ifThere === 'function') ctx.ifThere('keypeople', gonePath(key));
     delete kp.gone[key];
     // `owed`: the card line is for the reply that follows this step (`keypeople.tell`), not the reply that holds it.
     kp.gone[key] = { name, reason, on: now, rev: revOf(ctx), ...(defer ? { owed: true } : {}) };

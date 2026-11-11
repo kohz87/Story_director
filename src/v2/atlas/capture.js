@@ -112,6 +112,8 @@ export function ensurePlace(atlas, ctx, pack, name, { discovered = true, region,
         changed = true;
     } else {
         place = atlas.places[place.id];
+        // Its writes are inside a place an older reply may have made: passed over on replay when that reply was deleted.
+        if (typeof ctx.ifThere === 'function') ctx.ifThere('atlas', `/places/${place.id}`);
         if (discovered && !place.discovered) {
             place.discovered = true;
             changed = true;

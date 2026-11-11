@@ -145,16 +145,28 @@ export const queries = {
 export function beforeGenerate(view) {
     const atlas = view?.state?.domains?.atlas;
     if (!atlas) return undefined;
+    // From the first reply generated on this build, trips rest as the estimate does (trip.js `planTrip`): the mark is a command on the head reply.
+    const commands = tripsOn(view) && atlas.tripRest !== true ? [{ type: 'atlas.mark', payload: { tripRest: true } }] : [];
     const scene = scenePlace(view);
     const name = parseLocation(scene.name).name.trim();
-    if (!keyOf(name)) return undefined;
+    if (!keyOf(name)) return commands.length ? { commands } : undefined;
     const known = findPlace(atlas, name);
     // A region saved from the scene where a pack says better is mended by a visit (ensurePlace).
     const packRegion = known && scene.region && known.region === scene.region ? packPlace(packWorld(view.query ?? null), name)?.region : '';
     const fresh = !known || !known.discovered || (scene.kind && !known.kind) || (scene.region && !known.region) || Boolean(packRegion && packRegion !== known.region);
-    if (!fresh) return undefined;
+    if (!fresh) return commands.length ? { commands } : undefined;
     const payload = { name: scene.name.trim(), parents: true };
     if (scene.kind) payload.kind = scene.kind;
     if (scene.region) payload.region = scene.region;
-    return { commands: [{ type: 'atlas.visit', payload }] };
+    return { commands: [...commands, { type: 'atlas.visit', payload }] };
+}
+
+// Whether the trips feature is on (`view.feature` when the host has it, else on).
+function tripsOn(view) {
+    if (typeof view?.feature !== 'function') return true;
+    try {
+        return view.feature('story-director.trip') !== false;
+    } catch {
+        return true;
+    }
 }

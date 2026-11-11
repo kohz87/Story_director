@@ -16,7 +16,7 @@
 // the trip leaves later delays harmless (they have nothing to move).
 
 import { DEFAULT_PACES, MODERN_PACES, parseLocation } from '../../places.js';
-import { DEFAULT_RULES, MODERN_RULES, legDays } from '../../routes.js';
+import { DEFAULT_RULES, MODERN_RULES, legDays, restDaysFor } from '../../routes.js';
 import { PRESETS, makeCalendar } from '../../calendar.js';
 import { TOWN_HOP_DAYS, hopMode, townOf } from './travel.js';
 import { cleanName, cleanWord, isRecord, keyOf } from './domain.js';
@@ -136,11 +136,12 @@ function shortestKm(world, start, goal, mode, options) {
 /**
  * Plans a trip. `from`: `{ node }` (a place id) or `{ road: { from, to, km, kind, along } }` ({{user}} is `along` km down the road
  * between two places, `from` and `to` as names, in the direction they are going: `along` counted from `from`); `via`: place ids to
- * pass through, in order; `to`: a place id. `world` is the joined world (world.js). Starting on a road the party goes on to the road's end or back to its start,
+ * pass through, in order; `to`: a place id; `rest`: count rest days as the estimate does (travel.js `travelTime`: `restDaysFor` over the trip's travelling
+ * days, each leg taking the rests that fall within it, so the total is the estimate's), else the legs are travel days only (a trip from before rest days counted). `world` is the joined world (world.js). Starting on a road the party goes on to the road's end or back to its start,
  * whichever gets there with the fewer km ("no turnings mid-leg"). Returns `{ legs, km, days }` (legs with `start` and `arrive`
  * in story minutes from `at`), or `{ error }` naming the gap (the two places no known route joins).
  */
-export function planTrip(world, { from, via = [], to, mode, pace = null, modern = false, at }) {
+export function planTrip(world, { from, via = [], to, mode, pace = null, modern = false, at, rest = false }) {
     const options = { modern, pace };
     const name = id => world.find(id)?.name ?? id;
     const chain = (start, stops) => {
@@ -151,16 +152,21 @@ export function planTrip(world, { from, via = [], to, mode, pace = null, modern 
             const [out, into] = [townOf(world, world.find(here)), townOf(world, world.find(stop))];
             const way = shortestKm(world, out?.id ?? here, into?.id ?? stop, mode, options);
             if (!way) return { error: `No known route from ${name(here)} to ${name(stop)}.` };
-            const town = (from, to) => ({ from, to, route: { kind: '' }, edge: { km: 1, days: TOWN_HOP_DAYS } });
+            const town = (from, to) => ({ from, to, route: { kind: '' }, edge: { km: 1, days: TOWN_HOP_DAYS, town: true } });
             hops.push(...(out ? [town(here, out.id)] : []), ...way, ...(into ? [town(into.id, stop)] : []));
             here = stop;
         }
         return { hops };
     };
-    const legOf = (hop, extra = {}) => ({
-        from: name(hop.from), to: name(hop.to), km: Math.max(1, Math.round(hop.edge.km)), kind: cleanWord(hop.route.kind, { lower: true }),
-        days: hop.edge.days, ...extra,
-    });
+    const townLegs = new Set();
+    const legOf = (hop, extra = {}) => {
+        const leg = {
+            from: name(hop.from), to: name(hop.to), km: Math.max(1, Math.round(hop.edge.km)), kind: cleanWord(hop.route.kind, { lower: true }),
+            days: hop.edge.days, ...extra,
+        };
+        if (hop.edge.town) townLegs.add(leg);
+        return leg;
+    };
     const stops = [...via, to];
     let first = null;
     let hops = null;
@@ -192,6 +198,18 @@ export function planTrip(world, { from, via = [], to, mode, pace = null, modern 
     const legs = [...(first ? [first] : []), ...hops.map(hop => legOf(hop))];
     if (!legs.length) return { error: 'You are already there.' };
     if (legs.length > MAX_LEGS) return { error: `That is ${legs.length} stages: ${MAX_LEGS} is as many as a trip keeps. Go by stages.` };
+    if (rest) {
+        // The short town hops add no rest on a map told in days, as the estimate leaves them out; on a modern map they count.
+        const rules = modern ? MODERN_RULES : DEFAULT_RULES;
+        let active = 0;
+        let rested = 0;
+        for (const leg of legs) {
+            if (modern || !townLegs.has(leg)) active = tidy(active + leg.days);
+            const total = restDaysFor(mode, active, rules);
+            leg.days = tidy(leg.days + (total - rested));
+            rested = total;
+        }
+    }
     let clock = at;
     for (const leg of legs) {
         leg.start = clock;

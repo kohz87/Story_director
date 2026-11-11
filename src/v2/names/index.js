@@ -323,6 +323,7 @@ export function applyPerson(ctx, line) {
     }
     const why = reasons.map(reasonText).join('; ');
     if (reasons.some(reason => reason.kind !== 'near')) {
+        if (Object.hasOwn(taken, key) && typeof ctx.ifThere === 'function') ctx.ifThere('names', `/taken/${jsonKey(key)}`);
         delete taken[key];
         taken[key] = { name, rev: revOf(ctx), told: false };
         oldest(taken, MAX_TAKEN);

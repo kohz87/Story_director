@@ -12,7 +12,7 @@ import { createModule } from '../../../src/v2/module.js';
 import { PRESETS, makeCalendar } from '../../../src/calendar.js';
 import { dayOf, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 
-const SEEDS = [21, 22, 23];
+const SEEDS = [21, 22, 23, 76, 90, 97];
 const REPLIES = 18;
 const DELETE_AT = [6, 12, 18];
 const CAPS = { FULL: 3, KEEP: 5 };
@@ -139,6 +139,9 @@ for (const seed of SEEDS) {
             await host.send('And then?', said('Quiet.', ['! time +1d']));
             await host.send('Rest.', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);
+            // The storage, not only the reader: after a digest every stored day is one the last digest listed (leftovers are cleared).
+            const lastWritten = writtenOf(host.head().domains.chronicle);
+            if (lastWritten) for (const day of orderedDays(host.head().domains.chronicle, { all: true })) assert.ok(lastWritten.days.includes(day.day), `seed ${seed}: day ${day.day} is stored but not listed`);
             const again = await createHost({ modules: [createModule()], settings });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));

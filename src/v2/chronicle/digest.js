@@ -221,7 +221,7 @@ export function digestCommand(ctx, payload = {}) {
     const turned = !before || today > before.through;
     const settle = noted?.settle ?? null;
     const skip = Boolean(turned && settle && settle.to === now && isInt(settle.from) && now - settle.from >= settings.skipMinutes);
-    chronicle.written = toSlot({ through: today, days: orderedDays(chronicle).map(digest => digest.day), at, skip });
+    chronicle.written = toSlot({ through: today, days: orderedDays(chronicle, { all: true }).map(digest => digest.day), at, skip });
     return {
         summary: written.length ? `Day digest written: ${written.join(', ')}.` : '',
         narrate: false,

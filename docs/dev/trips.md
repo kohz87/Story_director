@@ -19,6 +19,13 @@ counts those hours. Pace for `by: riding`: Story Block's query `mounts.pace` (`{
 `pace` is already the walking pace, and no mount is named) when it answers, else the default ride pace (35); foot and the rest use the default
 paces. `setOut` is the story time of the reply (`ctx.time()` at the line); no clock, no trip.
 
+**Rest days.** The legs count rest days as the travel estimate does (`travel.js` `travelTime`: `restDaysFor` over the whole trip's travelling days;
+on a map told in days the short town hops add none, on a modern map they count): each leg takes the rests that fall within it, so a trip's total is
+the estimate's and `leg.days`, `start`, `arrive` include them. Only for replies written after the mark: `beforeGenerate` sends `atlas.mark
+{ tripRest: true }` (a command on the head reply, once; `atlas.tripRest`) while trips are on, and a trip line reads the flag. A reply recorded
+before it has no mark, so a Re-read plans it as it always did, byte for byte. Deleting the reply that carried the first mark also takes the flag away from
+replies after it, which then plan without rest days on replay.
+
 A trip begun **mid-road** continues along the current leg: onward to its end or back to its start (the fewer km in all; onward on a tie). Its
 first leg runs the road in the direction of travel with `skip` km already behind; the others follow. When neither end has a route to the
 destination the line is refused naming both gaps, and the old trip stands.
