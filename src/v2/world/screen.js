@@ -339,10 +339,10 @@ summary.wv-head::before, summary.wv-cathead::before { box-sizing: border-box; wi
 .wv-sub { display: block; color: var(--sd-muted); }
 .wv-facts { list-style: none; padding-left: 0 !important; }
 .wv-note { margin: 0; font-size: 0.85em; color: var(--sd-muted); }
-@media (min-width: 720px) {
-  .wv-now { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
-  .wv-here { grid-column: 1 / -1; }
-}
+/* Columns from the screen's own width (not the window's): as many 320px columns as fit, one when the box is narrower (the Story panel is
+   about 300px wide in a 1000px window; a 320px minimum overflowed it by 4px). */
+.wv-now { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); align-items: start; }
+.wv-here { grid-column: 1 / -1; }
 `;
 
 const DATA = Object.freeze({
