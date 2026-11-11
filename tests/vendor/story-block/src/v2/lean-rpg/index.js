@@ -45,6 +45,7 @@ export { setStartNotes, skipOf, startNotes } from './start.js';
 export { claimed, createPrecall } from './precall.js';
 export { boardInputError } from './board/commit.js';
 export { dropOf } from './ambush.js';
+export { foesOf, rpgBlocks } from './view/party-data.js';   // (the prompt's fight cue reads them through rpgLib: the page start must not load them)
 export { narratedFoeGrammar } from './board/narrated-grammar.js';
 export { boardGrammar, boardReplyGrammar, boardXpGuide } from './board/prompt.js';
 export { DICE_VERSION, FLOW_VERSION, RESULT_VERSION, claimKey, leanRpgGuard, outcomeOf, positionalDice, prepare, resolve, rollPrepared, rollsOf } from './resolve.js';

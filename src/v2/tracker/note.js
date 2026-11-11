@@ -217,5 +217,7 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     // A note with nothing else in it still says when and where it is.
     if (extra.length && !parts.some(entry => entry.label === 'Header')) parts = [{ label: 'Header', text: noteHeader(selection, calendar), join: '\n' }, ...parts];
     const text = v2Lines(tailNote(insertAfterKinds(parts, extra)));
-    return { lines: text ? text.split('\n') : [], optional: [] };
+    // The Initiative line is kept (Story Block pins a `{ text, keep: true }` tail line under a tight budget); the rest are plain lines.
+    const pinnedLine = initiative ? v2Lines(initiative).trimEnd() : '';
+    return { lines: text ? text.split('\n').map(line => (pinnedLine && line.trimEnd() === pinnedLine ? { text: line, keep: true } : line)) : [], optional: [] };
 }
