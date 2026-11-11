@@ -415,8 +415,12 @@ export const part = {
     settings: {
         defaults: { mode: 'lively', showUnderReply: false },
         schema: {
-            mode: { type: 'choice', label: 'World pulse', options: [...MODES], feature: FEATURE },
-            showUnderReply: { type: 'bool', label: 'Show the pulse under the reply', feature: FEATURE },
+            mode: {
+                type: 'choice', form: 'segmented', label: 'World pulse', feature: FEATURE,
+                options: [{ value: 'off', label: 'Off' }, { value: 'quiet', label: 'Quiet' }, { value: 'lively', label: 'Lively' }],
+                help: 'Off: nothing. Quiet: small background touches only. Lively: rumours, meetings, arrivals and schedule shifts too.',
+            },
+            showUnderReply: { type: 'bool', label: 'Show the roll under replies', help: 'Off: only the Director tab shows it (spoilers).', feature: FEATURE },
         },
     },
 };

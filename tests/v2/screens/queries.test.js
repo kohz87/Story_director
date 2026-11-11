@@ -6,6 +6,8 @@ import {
     at, closed, earlierState, fair, headState, makeQueries, makeRunner, makeState, pelts, plot, raid, rats, ring, smuggler, thread, wolves,
 } from './helpers/fixtures.js';
 import { calendarSetting, createScreensPart, readerWords } from '../../../src/v2/screens/index.js';
+import { agendaSteps } from '../../../src/v2/screens/queries.js';
+import { toSlot } from '../../../src/v2/slot.js';
 
 const { run } = makeRunner();
 
@@ -118,4 +120,35 @@ test('director.problems: a Problem about a missing goal goes once that is no lon
     const queries = makeQueries();
     const result = queries['director.problems'](state, {}, { query: () => ({ hasGoal: false }) });
     assert.equal(result.length, 2);
+});
+
+test('director.plan: an agenda carries its step progress, place and "arriving within the hour"; one without the pulse\'s fields carries none', () => {
+    const fields = { now: 'at the pump', then: 'a; b; c', stepAt: '3', stepOf: '4', stepSince: String(at('June 10, 2025, 9:00 am')), where: 'Bluewatch Village', arrive: 'June 11, 2025, 9:30 am' };
+    const agenda = thread('th_bregje01', 'agenda', 'Bregje', fields, { summary: 'manage the desk alone' });
+    const plain = thread('th_joren001', 'agenda', 'Joren', { now: 'on the road' }, { summary: 'deliver the tallow' });
+    const plan = run(makeState({ minutes: at('June 11, 2025, 9:00 am'), threads: [agenda, plain] }), 'director.plan');
+    assert.deepEqual(plan.agendas.map(item => item.steps), [
+        { at: 3, of: 4, line: 'step 3 of 4 · since June 10', place: 'Bluewatch Village', arriving: true },
+        null,
+    ]);
+    // An arrival more than an hour away (or already past) is not "within the hour"; no step fields and no place is no progress at all.
+    const calendar = { format: minutes => `d${minutes}`, parse: () => null };
+    assert.equal(agendaSteps({ arrive: 'x' }, { calendar, now: 100 }), null);
+    assert.equal(agendaSteps({ ...fields, arrive: 'June 11, 2025, 11:00 am' }, { calendar: makeState().calendar ?? undefined, now: at('June 11, 2025, 9:00 am') })?.arriving ?? false, false);
+    assert.deepEqual(agendaSteps({ stepAt: '2' }, { calendar, now: 0 }), { at: 2, of: 0, line: 'step 2', place: '', arriving: false });
+});
+
+test('pulse.view: this reply\'s roll as a row, the recent rows newest first, the table pill, the settings; null is the feature\'s (off)', () => {
+    const part = createScreensPart({ settings: { 'pulse.mode': 'quiet', 'pulse.showUnderReply': true } });
+    assert.equal(part.queries['pulse.view'].feature, 'story-director.pulse');
+    const results = [{ at: 2, clock: 1, kind: 'SKIP', skipped: 'quiet', text: '' }, { at: 4, clock: 2, kind: 'CALM', d20: 1, table: 'duo', text: '' }];
+    const base = makeState({ threads: [thread('th_a0000001', 'agenda', 'A', { now: 'x' }, {}), thread('th_b0000001', 'agenda', 'B', { now: 'y' }, {})] });
+    const state = { ...base, domains: { ...base.domains, director: { ...base.domains.director, pulse: toSlot({ results }), pulseQuiet: toSlot({ on: true }) } } };
+    const view = part.queries['pulse.view'](state, {}, {});
+    assert.deepEqual([view.mode, view.quiet, view.card, view.show, view.rollAt, view.count, view.table], ['quiet', true, true, true, 4, 2, 'duo · 2 away']);
+    assert.deepEqual(view.recent.map(row => [row.die, row.label, row.text]), [['1', 'Calm', 'nothing happened'], ['—', 'Skipped', 'quiet scene']]);
+    // Off hides the card; no results yet is an empty card; the setting reads the module's flat key or the part's own.
+    assert.equal(createScreensPart({ settings: { mode: 'off' } }).queries['pulse.view'](state, {}, {}).card, false);
+    const empty = createScreensPart({ settings: {} }).queries['pulse.view'](base, {}, {});
+    assert.deepEqual([empty.mode, empty.quiet, empty.show, empty.now, empty.rollAt, empty.table], ['lively', false, false, null, -1, '']);
 });

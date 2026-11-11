@@ -17,6 +17,7 @@
 
 import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
+import { dateOf } from '../../relevance.js';
 import { problemList } from '../tracker/domain.js';
 import { heroDate } from '../tracker/clock-set.js';
 import { BEHIND, BEHIND_KINDS } from './reveal.js';
@@ -267,7 +268,7 @@ export function isBehindProblem(problem, director) {
 function behindThread(thread) {
     if (thread.kind === 'secret') return { id: thread.id, key: text(thread.key), summary: '', fields: {}, ended: null };
     const fields = {};
-    for (const name of ['now', 'then', 'on', 'due', 'place', 'reach', 'shown']) if (text(thread.fields?.[name])) fields[name] = text(thread.fields[name]);
+    for (const name of ['now', 'then', 'on', 'due', 'place', 'reach', 'shown', 'arrive', 'where', 'stepAt', 'stepOf', 'stepSince']) if (text(thread.fields?.[name])) fields[name] = text(thread.fields[name]);
     return { id: thread.id, key: text(thread.key), summary: text(thread.summary), fields, ended: thread.ended ? { outcome: text(thread.ended.outcome) } : null };
 }
 
@@ -290,19 +291,37 @@ export function behindView(state, args, tools) {
 }
 
 /**
+ * An off-screen agenda's progress as its card draws it (the pulse's optional fields, written by code): `{ at, of, line, place, arriving }`, or
+ * null when it has none. `line`: "step 3 of 4 · since Goldwane 19"; `arriving`: its `arrive` date is within the next hour (an ENTER_CHECK).
+ */
+export function agendaSteps(fields, { calendar = null, now = null, query = null } = {}) {
+    const [at, of, since] = [fields?.stepAt, fields?.stepOf, fields?.stepSince].map(Number);
+    const place = text(fields?.where) ? text(ask(query, 'atlas.line', { name: fields.where }, '')) || text(fields.where) : '';
+    const arrive = calendar && Number.isSafeInteger(now) ? dateOf({ fields }, 'arrive', { calendar, reference: now }) : null;
+    const arriving = Boolean(arrive?.hasTime) && arrive.abs >= now && arrive.abs - now <= 60;
+    const steps = at > 0 ? `step ${at}${of > 0 ? ` of ${of}` : ''}` : '';
+    const when = Number.isSafeInteger(since) && calendar ? `since ${calendar.format(since, { time: false, era: false })}` : '';
+    if (!steps && !place && !arriving) return null;
+    return { at: at > 0 ? at : 0, of: of > 0 ? of : 0, line: [steps, when].filter(Boolean).join(' · '), place, arriving };
+}
+
+/**
  * `director.plan` → `{ hooks, clocks, beats, agendas, secrets, problems, any }`: what the Director screen's cards show (the plan; spoilers):
  * the open hooks with their Next, and, while the feature `story-director.threads` is on, the open clocks (with Due), beats, agendas (off-screen) and
  * secrets (name only), then every problem, newest first (the ones about the visible threads, then those behind the scenes). Each thread is
  * `{ id, key, summary, fields }` as `director.behind` gives it.
  */
-export function planView(state, args, tools) {
+export function planView(state, args, tools, { settings = null } = {}) {
     const query = queryFrom(tools);
     const hooks = threadsOf(state, query, { kind: 'hook', status: 'active' }).filter(thread => isRecord(thread) && !thread.ended).map(behindThread);
     const behind = threadsOn(tools) ? behindView(state, args, tools) : { kinds: [], problems: [] };
     const open = kind => behind.kinds.find(group => group.kind === kind)?.open ?? [];
+    const calendar = calendarFrom(settings, query);
+    const now = state?.domains?.director?.time?.minutes;
+    const agendas = open('agenda').map(agenda => ({ ...agenda, steps: agendaSteps(agenda.fields, { calendar, now, query }) }));
     // Newest first (the lists are kept oldest first), so a card's first rows are the latest reply's problems.
     const problems = [...problemsList(state, { behind: false }, tools).reverse(), ...[...behind.problems].reverse()];
-    const view = { hooks, clocks: open('clock'), beats: open('beat'), agendas: open('agenda'), secrets: open('secret'), problems };
+    const view = { hooks, clocks: open('clock'), beats: open('beat'), agendas, secrets: open('secret'), problems };
     return { ...view, any: Object.values(view).some(list => list.length > 0) };
 }
 
@@ -387,7 +406,7 @@ export function screenQueries({ settings = null } = {}) {
         'director.behind': Object.assign((state, args, tools) => behindView(state, args, tools), { feature: THREADS_FEATURE }),
         // `{ on: true }` while the feature is on, null while it is off: the Director screen's World card and the World screen's News and Factions read it.
         // The Director screen's cards (planView).
-        'director.plan': (state, args, tools) => planView(state, args, tools),
+        'director.plan': (state, args, tools) => planView(state, args, tools, { settings }),
         'director.threads.on': Object.assign(() => ({ on: true }), { feature: THREADS_FEATURE }),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'quest.board': (state, args, tools) => questBoard(state, args, tools),

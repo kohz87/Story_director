@@ -137,6 +137,21 @@ export const PLAN_WIDGET = 'story-director.plan';
 const PLAN_SHOWN = 3;
 const PLAN_CARDS = [['beats', 'Beats', 'beat'], ['hooks', 'Hooks the story is planning', 'hook'], ['clocks', 'Clocks', 'clock'], ['agendas', 'Off-screen', 'agenda'], ['secrets', 'Secrets', 'secret'], ['problems', 'Problems', 'problem']];
 
+// An agenda's step bar and its progress line (the pulse's fields): done steps filled, the current one lighter, the rest empty.
+function stepsLine(make, steps) {
+    const box = make('div', 'sd-stepsbox');
+    if (steps.of > 1) {
+        const bar = make('span', 'sd-steps', undefined, { role: 'img', 'aria-label': steps.line });
+        for (let n = 1; n <= steps.of; n += 1) bar.append(make('i', n < steps.at ? 'd' : n === steps.at ? 'c' : ''));
+        box.append(bar, ' ');
+    }
+    const line = make('p', 'sd-meta');
+    const bits = [steps.line && make('span', '', steps.line), steps.place && make('b', 'sd-place', steps.place), steps.arriving && make('span', 'sd-arriving', '→ arriving within the hour')].filter(Boolean);
+    line.append(...spaced(bits));
+    box.append(line);
+    return box;
+}
+
 function renderPlan(el, props) {
     const make = maker(el.ownerDocument ?? globalThis.document);
     const root = make('div', 'sd-behind sd-plan');
@@ -154,6 +169,7 @@ function renderPlan(el, props) {
         li.append(make('span', 'sd-key', item.key));
         if (kind === 'secret' || kind === 'beat') return li;
         if (item.summary) li.append(' ', make('p', 'sd-line', kind === 'agenda' ? `wants: ${item.summary}` : item.summary));
+        if (kind === 'agenda' && item.steps) li.append(' ', stepsLine(make, item.steps));
         const meta = [kind === 'agenda' && item.fields?.now ? `At: ${item.fields.now}` : '', kind === 'clock' && item.fields?.due ? `Due: ${item.fields.due}` : '', item.fields?.then ? `Next: ${item.fields.then}` : ''].filter(Boolean);
         // The text sits in a span: the sheet hides a `.sd-meta` with no child element.
         if (meta.length) {
