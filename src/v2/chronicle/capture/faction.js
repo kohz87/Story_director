@@ -56,3 +56,22 @@ export function applyFactionLine(ctx, line) {
     const changes = changeFaction(faction, fields, rev);
     return { summary: changes.length ? factionSummary(faction) : `Faction: ${faction.name} is unchanged.`, narrate: false, data: { faction: faction.id } };
 }
+
+/**
+ * The factions a `world` line's `factions:` names that the chronicle does not know yet (no name or aka match), added on the draft:
+ * name, summary "Seen in: <event>", area the event's place, no stance. Only for a story line on a reply that carries Story Block's
+ * `factionTags` rule mark (`ctx.carrier.rules`); a reply recorded before it keeps its chronicle as it was on a Re-read. Past
+ * MAX_FACTIONS the rest are skipped quietly. Returns the names made.
+ */
+export function tagFactions(ctx, chronicle, names, event) {
+    const marked = Array.isArray(ctx.carrier?.rules) && ctx.carrier.rules.includes('factionTags');
+    if (!marked || ctx.cause !== 'story' || !Array.isArray(names)) return [];
+    const made = [];
+    for (const name of names) {
+        if (findIn(chronicle.factions, name) || Object.keys(chronicle.factions).length >= MAX_FACTIONS) continue;
+        const id = newId(ctx, 'fa', chronicle.factions);
+        chronicle.factions[id] = { id, name, summary: cleanSummary(`Seen in: ${event.name}`), area: event.place ?? '', stance: '', aka: [], rev: revOf(ctx) };
+        made.push(name);
+    }
+    return made;
+}

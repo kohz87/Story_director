@@ -95,7 +95,7 @@ export function query(state, name, args, options = {}) {
  * `{ ok: false, code, message, state }` with the state untouched. `time`: what `ctx.time()`
  * answers (a function of the state; default: none, so the clock is read through `director.time`).
  */
-export function runCommand(state, handler, payload, { seed = 7, cause = 'story', atlas = null, time = undefined, owned = ['chronicle'], caller = null } = {}) {
+export function runCommand(state, handler, payload, { seed = 7, cause = 'story', atlas = null, time = undefined, owned = ['chronicle'], caller = null, carrier = undefined } = {}) {
     const rev = state.meta.rev + 1;
     const drafts = {};
     const random = sfc32(seed);
@@ -105,6 +105,7 @@ export function runCommand(state, handler, payload, { seed = 7, cause = 'story',
         rev,
         cause,
         caller,
+        ...(carrier ? { carrier } : {}),
         receiptId: `rc_test${String(rev).padStart(4, '0')}`,
         read: domain => deepFreeze(structuredClone(drafts[domain] ?? state.domains[domain])),
         draft: domain => {
