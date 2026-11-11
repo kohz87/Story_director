@@ -25,10 +25,10 @@ const receipts = host => host.sdk.receipts().map(entry => entry.receipt);
 const digests = host => receipts(host).filter(receipt => receipt.type === DIGEST);
 const lineOf = (host, date) => host.sdk.query('chronicle.days').find(day => day.date === date)?.line ?? null;
 
-async function newHost(settings = {}) {
+async function newHost(settings = {}, extra = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeFightRunner(), module], settings: { modules: { 'story-director': settings } } });
+    host = await createHost({ modules: [fakeFightRunner(), module], settings: { modules: { 'story-director': settings }, ...extra } });
     return host;
 }
 
@@ -299,7 +299,7 @@ test('neutral outcome journal entries survive receipt-data trimming', async t =>
     sameOnReload(host, 'neutral journal after trim');
 });
 
-test('8/9 on the host: a first-day chat sends no [Earlier days] and no sentence; once a day has passed the tail has it, dated by code, and the sentence is taught once', async () => {
+test('8/9 on the host: a first-day chat sends no [Earlier days] and no sentence; once a day has passed the tail has it, dated by code, with its sentence, and the static prompt never changes', async () => {
     const host = await newHost();
     await host.send('Start.', reply('Evening.', ['~ time June 3, 1200, 08:00 pm', '~ place Harrow', '+ coin 40']));
     await host.send('On.', reply('Later.', ['! time +1h']));
@@ -310,9 +310,25 @@ test('8/9 on the host: a first-day chat sends no [Earlier days] and no sentence;
     await host.send('More.', reply('Later.'));
     const tail = sent(host, TAIL_KEY).at(-1);
     assert.match(tail, /\[Earlier days\]\nJune 3, 1200 \(yesterday\): /);
+    assert.match(tail, new RegExp(`${BACKLOG_STATIC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n\\[Earlier days\\]`), 'the sentence rides in the tail, right before the block');
     const statics = sent(host, STATIC_KEY);
-    assert.ok(statics.at(-1).includes(BACKLOG_STATIC));
-    assert.equal(new Set(statics.map(bare)).size, 1, 'the sentence is the only change');
-    assert.equal(new Set(statics.slice(statics.findIndex(text => text.includes(BACKLOG_STATIC)))).size, 1, 'then the same bytes');
+    assert.ok(statics.every(text => !text.includes(BACKLOG_STATIC)), 'the static prompt never has the sentence');
+    assert.equal(new Set(statics).size, 1, 'the static prompt is the same bytes from the first reply to the last (the cached prefix never changes)');
     host.close();
 });
+
+test('8/9 on the host: under a tail budget far too small, the [Earlier days] cue (sentence and block) is still sent, as it was never the cut\'s to make', async () => {
+    const host = await newHost({}, { host: { tailBudget: 20 } });
+    try {
+        await host.send('Start.', reply('Evening.', ['~ time June 3, 1200, 08:00 pm', '~ place Harrow', '+ coin 40']));
+        await host.send('Sleep.', reply('A long sleep.', ['! time +14h']));
+        await host.send('Wake.', reply('Morning.'));
+        await host.send('More.', reply('Later.'));
+        const tail = sent(host, TAIL_KEY).at(-1);
+        assert.match(tail, /\[Earlier days\]\nJune 3, 1200 \(yesterday\): /);
+        assert.ok(tail.includes(BACKLOG_STATIC));
+    } finally {
+        host.close();
+    }
+});
+

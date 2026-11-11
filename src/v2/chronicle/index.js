@@ -23,7 +23,7 @@
 import { threadOutcome } from './thread-outcome.js';
 import { applyFactionLine, applyWorldLine, edit, lasting, remove, rumor } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
-import { BACKLOG_BUDGET, BACKLOG_STATIC, DIGEST_TAIL_BUDGET, NOTE, backlogTail, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
+import { BACKLOG_BUDGET, DIGEST_TAIL_BUDGET, NOTE, backlogCue, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
 import { initialChronicle, validateChronicle } from './domain.js';
 import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, chronicleTail } from './note.js';
 import { SURFACE, beforeGenerate as surfaceHook, surface } from './pick.js';
@@ -48,16 +48,20 @@ const noteHandler = ctx => noteCommand(ctx);
 // The pick of the open events for the next reply's [World] lines is the threads feature's: with it off nothing is picked or written.
 const surfaceHandler = Object.assign((ctx, payload) => surface(ctx, payload), { feature: THREADS_FEATURE });
 
-/** `beforeGenerate(view)`: the last reply's day facts, the digest when a day ended, then the world events' pick (while the threads feature is on). */
+/**
+ * `beforeGenerate(view)`: the last reply's day facts, the digest when a day ended, then the world events' pick (while the threads feature is on);
+ * and the [Earlier days] block as a pinned cue (it is kept whatever the tail budget says, and its sentence goes with it).
+ */
 export function beforeGenerate(view) {
     const commands = [...noteCommands(view), ...digestCommands(view), ...(threadsOn(view) ? surfaceHook(view)?.commands ?? [] : [])];
-    return commands.length ? { commands } : undefined;
+    const lines = backlogCue(view);
+    return commands.length || lines.length ? { ...(commands.length ? { commands } : {}), ...(lines.length ? { lines } : {}) } : undefined;
 }
 
-/** `context.tail(view)`: the [World] lines (while the threads feature is on), the last day's line after a time skip and the [Earlier days] block (both optional). */
+/** `context.tail(view)`: the [World] lines (while the threads feature is on) and the last day's line after a time skip (optional). The [Earlier days] block is a cue (beforeGenerate). */
 export function tail(view) {
     const out = threadsOn(view) ? chronicleTail(view) : { lines: [], optional: [] };
-    const optional = [...out.optional, digestTailLine(view), backlogTail(view)].filter(Boolean);
+    const optional = [...out.optional, digestTailLine(view)].filter(Boolean);
     return optional.length ? { lines: out.lines, optional } : out;
 }
 
@@ -95,8 +99,6 @@ export const part = {
         staticFeature: THREADS_FEATURE,
         tail: view => tail(view),
         budget: TAIL_BUDGET + DIGEST_TAIL_BUDGET + BACKLOG_BUDGET,
-        // The sentence that explains [Earlier days]: taught only while the block has lines (module.js tells the parts `backlog`).
-        inline: [{ feature: DIGEST_FEATURE, static: env => (env?.backlog ? BACKLOG_STATIC : '') }],
     },
     hooks: { beforeGenerate },
     settings: {

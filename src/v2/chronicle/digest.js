@@ -313,7 +313,7 @@ export function digestTailLine(view) {
 
 /** About 200 tokens: the block is optional, and Story Block drops it before anything else. */
 export const BACKLOG_BUDGET = 200;
-/** The one static sentence that explains the block: taught only while the block is not empty (module/create.js), so older chats' static prompt stays as it was. */
+/** The one sentence that explains the block: the first line of its cue (backlogCue), never part of the static prompt. */
 export const BACKLOG_STATIC = 'Lines under [Earlier days] are what happened on past days, each with how long ago it was (counted by code): let people remember them as dated, and never invent other days.';
 
 const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeof entry === 'string' ? entry : entry?.name)).filter(name => typeof name === 'string' && name.trim());
@@ -323,7 +323,7 @@ const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeo
  * (`director.journal`, so secrets and planner text never go in), the scene is who is present now, the current place and the open
  * quests and threads. Nothing while the digest is off, on a first day, or when the Journal cannot be read. The Journal is the World view's
  * query (`director.journal`), so with the World view feature off there is no block, and (the same lines gate the one static sentence,
- * module/create.js) no sentence either: block and sentence stand or fall together.
+ * module/create.js) no sentence either: block and sentence are one cue.
  */
 export function backlogLines(view) {
     if (!digestOn(view) || !view?.state?.domains?.chronicle) return [];
@@ -338,5 +338,13 @@ export function backlogLines(view) {
     return backlogBlock({ days: journal.days, now, present, place: String(place?.name ?? ''), threads: open.map(thread => thread.key) });
 }
 
-/** The tail's optional block: the lines of `backlogLines` as one text ('' when there is none). */
-export const backlogTail = view => backlogLines(view).join('\n');
+/**
+ * The [Earlier days] block as one pinned cue (`{ text, keep: true }`, from `beforeGenerate`): the explaining sentence, then the block, one text,
+ * so the two stand or fall together and the static prompt never changes mid-chat (it used to gain the sentence at the first past day). A pinned cue
+ * is kept whatever the host's tail budget says; the optional tail line it replaces was the first thing the host dropped (LIVERUN1, item 5).
+ * `[]` when the block has no lines.
+ */
+export function backlogCue(view) {
+    const lines = backlogLines(view);
+    return lines.length ? [{ text: `${BACKLOG_STATIC}\n${lines.join('\n')}`, keep: true }] : [];
+}
