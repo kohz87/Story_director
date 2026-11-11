@@ -270,6 +270,7 @@ const RIPPLES = { powers: [{ id: 'crown', name: 'The Crown', base: 50, aliases: 
 let factionLines = 0;
 let quietFlips = 0;
 let passersBy = 0;
+let passersMet = 0;
 function dayLines(rd, n) {
     const lines = [];
     if (rd.chance(0.4)) {
@@ -280,8 +281,9 @@ function dayLines(rd, n) {
     if (rd.chance(0.3)) lines.push(`~ place ${BASE_PLACES[0]} / Spot${n}`, ...(n % 2 ? [`~ place ${BASE_PLACES[0]}`] : []));
     if (rd.chance(0.3)) {
         passersBy += 1;
-        const who = rd.pick(['Aino', 'Borka', 'Cael', 'Dren']);
-        lines.push(`+ present ${who}`, `- present ${who}`);
+        // Wren is not one of CAST_IDS (their names are never told outside a cue); the reply's text names her, so the meeting counts as seen.
+        lines.push('+ present Wren', '- present Wren');
+        lines.passer = true;
     }
     return lines;
 }
@@ -297,6 +299,8 @@ const castEntry = (id, rc, version) => ({
     start: { place: rc.pick(CAST_PLACES), goal: `${id} goal`, routine: rc.pick(['', 'works the night ferry', 'at the forge in the morning', 'sells wares by day']) },
     drawnTo: rc.chance(0.4) ? ['the reply'] : [], canDieUnmet: rc.chance(0.3), fields: { Calling: callingOf(id) },
 });
+// A person the replies name when she passes through a scene inside one reply (like Ylva, not one of CAST_IDS).
+const wrenEntry = version => ({ pack: 'ersveil', packVersion: version, id: 'wren', name: 'Wren', about: 'Wren is somebody.', look: 'weathered', fields: { Calling: 'courier' }, start: { place: BASE_PLACES[0], goal: 'wren goal', routine: '' }, drawnTo: [] });
 const CAST_IDS = ['aino', 'borka', 'cael', 'dren', 'eska', 'fotu'];
 // A calling each person can be sought by ("Is there a ferryman around?"): the reader asks for one now and then and the scripted planner names the person.
 const CALLINGS = { aino: 'ferryman', borka: 'scout', cael: 'smith', dren: 'healer', eska: 'priest', fotu: 'guide' };
@@ -404,7 +408,7 @@ for (const seed of SEEDS) {
         const rd = prng(seed ^ 0xD0A5);
         const madeOffers = [...BASE_OFFERS];
         const source = { version: '1.0.0', enabled: true, entries: [] };
-        source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version)];
+        source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version), wrenEntry(source.version)];
         castPlans.clear();
         let host = null;
         const delta = Object.fromEntries(KEY_BASE.map(name => [name, {}]));
@@ -431,12 +435,14 @@ for (const seed of SEEDS) {
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
                 const near = nearLines(rn, n);
-                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...(seed >= EXTRAS_FROM ? dayLines(rd, n) : [])];
+                const day = seed >= EXTRAS_FROM ? dayLines(rd, n) : [];
+                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...day];
                 const seeking = rs.chance(0.6) ? rs.pick(SOUGHT_ASK) : '';
                 // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
                 const names = seeking === 'cartographer' || sought === 'cartographer';
                 sought = seeking;
-                await host.send(seeking ? `Is there a ${seeking} around (${n})?` : r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.${names ? ' Ylva nods.' : ''}`, lines));
+                await host.send(seeking ? `Is there a ${seeking} around (${n})?` : r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.${names ? ' Ylva nods.' : ''}${day.passer ? ' Wren passes through.' : ''}`, lines));
+                if (day.passer && host.head().domains.cast.people['ersveil:wren']?.met) passersMet += 1;
                 if (host.head().domains.cast.people['ersveil:ylva']?.met?.why === 'sought') soughtMeetings += 1;
                 if (near.tie) {
                     tieLinesMade += 1;
@@ -514,12 +520,13 @@ for (const seed of SEEDS) {
                 // payment's block with it (it depends on the debt), which Story Block reports as skipped, so it is
                 // not "a later block no longer applies" for any other reason.
                 const closedHere = Object.values(host.head().domains.director.threads).filter(thread => thread.owed?.paid && String(chat[user + 1]?.mes).includes(`- quest ${thread.key} `));
+                const dump = JSON.stringify(chat.slice(user, user + 2).map(message => message.mes));
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
                 const skipped = host.store.problems().map(problem => problem.why ?? problem.message);
                 if (closedHere.length) assert.ok(skipped.length <= closedHere.length * 2 + 1, `${where}: only the payments of the deleted turn-in are skipped (${skipped.join(' / ')})`);
-                else assert.deepEqual(skipped, [], `${where}: a later block no longer applies`);
+                else assert.deepEqual(skipped, [], `${where}: a later block no longer applies; the deleted pair: ${dump}`);
                 const live = JSON.stringify(host.head());
                 const shown = JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal'), host.sdk.query('ripples.sway'), host.sdk.query('chronicle.factions')]);
                 host.store.rebuild();
@@ -560,7 +567,7 @@ for (const seed of SEEDS) {
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
-            t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
+            t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, passers met ${passersMet}, pulse kinds ${JSON.stringify(Object.fromEntries(host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').map(entry => entry.receipt.data?.kind).reduce((map, kind) => map.set(kind, (map.get(kind) ?? 0) + 1), new Map())))}, rumour events ${Object.values(host.head().domains.chronicle.events).filter(event => event.rumour !== undefined).length}, new factions ${host.sdk.receipts().filter(entry => /New factions?:/.test(entry.receipt.summary ?? '')).length}, places with a parent ${Object.values(host.head().domains.atlas?.places ?? {}).filter(place => place.parent).length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
             assert.ok(!source.enabled || host.sdk.query('ripples.sway')?.length === 2, `seed ${seed}: the pack's ripples table is read`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
@@ -584,6 +591,11 @@ for (const seed of SEEDS) {
 test('delete fuzz: the reader sought a kind of person and the cast answered (a meeting, a rumor) in the seeds', () => {
     assert.ok(soughtMeetings > 0, 'a person the reader sought came in');
     assert.ok(soughtRumors > 0, 'a person the reader sought who was elsewhere was heard of');
+});
+
+test('delete fuzz: a person who passed through a scene inside one reply counted as met', t => {
+    t.diagnostic(`passers-by ${passersBy}, met ${passersMet}`);
+    assert.ok(passersMet > 0, 'a person who arrived and left inside one reply was met');
 });
 
 test('delete fuzz: near-name quest lines were reached, and settled on the quest', t => {
