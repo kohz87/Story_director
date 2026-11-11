@@ -426,3 +426,23 @@ test('names: the step before a reply notes who else is in use (scene, cast, doss
     assert.equal(again.lines.length, 1);
     assert.equal(namesBefore(namesView(initialNames(), { on: false }), {}), undefined);
 });
+
+test('one tail build asks each query once for the same arguments, and the next build asks again', () => {
+    let calls = 0;
+    let answer = 'one';
+    const part = {
+        context: { tail: view => ({ lines: [view.query('x.ask', { a: 1 }), view.query('x.ask', { a: 1 }), view.query('x.ask', { a: 2 })], optional: [] }), budget: 10 },
+    };
+    const def = createModule({ parts: [['a', part]] });
+    const view = { state: {}, settings: () => ({}), query: (name, args) => { if (name === 'x.ask') calls++; return `${answer}${args?.a}`; } };
+    assert.deepEqual(def.context.tail(view).lines, ['one1', 'one1', 'one2']);
+    assert.equal(calls, 2);
+    answer = 'two';
+    assert.deepEqual(def.context.tail(view).lines, ['two1', 'two1', 'two2']);
+    // A query that throws is asked again, not remembered.
+    let tries = 0;
+    const throwing = { context: { tail: view => { const out = []; for (let i = 0; i < 2; i++) { try { out.push(view.query('x.bad', {})); } catch { out.push('threw'); } } return { lines: out, optional: [] }; }, budget: 10 } };
+    const def2 = createModule({ parts: [['a', throwing]] });
+    assert.deepEqual(def2.context.tail({ state: {}, settings: () => ({}), query: name => { if (name === 'x.bad') tries++; throw new Error('x'); } }).lines, ['threw', 'threw']);
+    assert.equal(tries, 2);
+});
