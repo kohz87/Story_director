@@ -17,10 +17,10 @@ test('Journal lines wrap inside the card, grid children may shrink, section rule
     assert.match(rule(css, '.wv-find-label') + rule(css, '.wv-journal, .wv-journal li'), /wv-find-label/);
 });
 
-test('the hook status pill keeps its width beside the name; the description wraps under it', () => {
+test('the Director cards wrap their text and grow with their rows: no inner scroll box, no nowrap but the tag', () => {
     const css = directorScreen.css;
-    assert.match(rule(css, '.sd-tags .ss-pill'), /white-space: nowrap/);
-    assert.match(rule(css, '.sd-tags {'), /flex: none/);
-    assert.match(rule(css, '.sd-thread .ss-listcard-main'), /min-width: 0/);
-    assert.doesNotMatch(css, /max-width: 42%/);
+    assert.match(rule(css, '.sd-problem .sd-ptag'), /white-space: nowrap/);
+    assert.match(rule(css, '.sd-thread .sd-key'), /overflow-wrap: anywhere/);
+    assert.doesNotMatch(css, /overflow-y: (auto|scroll)/, 'no inner scroll box anywhere');
+    assert.doesNotMatch(css, /max-height/, 'a card grows with its rows');
 });

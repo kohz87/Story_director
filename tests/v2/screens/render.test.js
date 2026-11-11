@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { resolveData, runtime, skipReason } from './helpers/runtime.js';
 import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
-import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, createRipplesWidget, part, questsWidget, screens } from '../../../src/v2/screens/index.js';
+import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, createRipplesWidget, part, planWidget, questsWidget, screens } from '../../../src/v2/screens/index.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
 
 // The module's own widgets on the Director screen, with a planner that is not there and a reveal choice
@@ -15,7 +15,7 @@ import { createArcWidget } from '../../../src/v2/arc/widget.js';
 let shown = true;
 const stillReveal = { guard: () => true, revealed: () => shown, set: on => { shown = on; }, hidden: () => !shown, subscribe: () => () => {} };
 const noPlanner = { status: () => ({ available: true, busy: false, draft: null, error: '', hidden: !shown, arc: null }), subscribe: () => () => {}, plan() {}, end() {} };
-const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.ripples': createRipplesWidget() });
+const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.plan': planWidget, 'story-director.ripples': createRipplesWidget() });
 
 const skip = runtime ? false : skipReason;
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
@@ -63,41 +63,17 @@ test('every screen compiles and renders without a warning, and its CSS scopes cl
     }
 });
 
-test('director: the header shows the story time on the chat\'s calendar and the place; offered and ready tags', { skip }, () => {
-    const { el } = draw(DIRECTOR_ID, headState());
-    assert.equal(squash(el.querySelector('header.sd-clock').textContent), `${calendar.format(at('June 11, 2025, 9:00 am'))} · Bluewatch Village`);
-    const { el: unset } = draw(DIRECTOR_ID, makeState({ threads: [wolves()] }));
-    assert.equal(unset.querySelector('header.sd-clock'), null, 'no clock line before the story sets the time');
-    const held = draw(DIRECTOR_ID, makeState({ threads: [wolves({ ready: { rev: 12 } }), rats({ shown: { turn: 9 } })] })).el;
-    // An older chat's offer: tagged "offered" here only (the quiet note), never "held".
-    assert.match(squash(held.querySelector('[data-thread="th_rats0001"]').textContent), /offered/);
-    assert.doesNotMatch(squash(held.querySelector('[data-thread="th_rats0001"]').textContent), /held/);
-    assert.match(squash(held.querySelector('[data-thread="th_wolves01"]').textContent), /ready/);
-});
-
-test('director: threads by kind, open first and closed folded, secrets by name, problems newest first', { skip }, () => {
+test('director: the arc then the plan cards; secrets by name; problems (visible, then behind the scenes); nothing tracked says so', { skip }, () => {
     const { el } = draw(DIRECTOR_ID, headState());
     const kinds = el.querySelectorAll('section.sd-kind').map(node => node.getAttribute('data-kind'));
-    // The arc panel, what the reader may see, then behind the scenes (revealed here), then the problems.
-    assert.deepEqual(kinds, ['arc', 'quest', 'event', 'agenda', 'clock', 'secret', 'problems']);
-    const quests = el.querySelector('section[data-kind="quest"]');
-    const open = quests.querySelectorAll(':scope > ul > li').map(node => squash(node.querySelector('.ss-listcard-title').textContent));
-    assert.deepEqual(open, ['East Bluff Wolves', 'Tanner Pelts', 'Granary Rats']);
-    assert.match(squash(quests.querySelector('[data-thread="th_rats0001"]').textContent), /offered/);
-    const closedBox = quests.querySelector('details.sd-closed');
-    assert.equal(closedBox.hasAttribute('open'), false);
-    assert.match(squash(closedBox.textContent), /Closed 1 Lost Ring done/);
+    assert.deepEqual(kinds, ['arc', 'clock', 'agenda', 'secret', 'problem'], 'a Clocks card, but no Quests or World list');
     const agenda = squash(el.querySelector('section[data-kind="agenda"]').textContent);
-    assert.match(agenda, /Smuggler Vane moving crates at night At: the docks Next: meet the reeve/);
-    const secret = el.querySelector('section[data-kind="secret"] .sd-thread');
-    assert.equal(squash(secret.textContent), 'The Reeve Is Bought', 'a secret shows only its name');
-    const problems = el.querySelectorAll('.sd-problem').map(node => squash(node.textContent));
-    assert.equal(problems.length, 2);
-    assert.match(problems[1], /The story time is not set yet/);
+    assert.match(agenda, /Smuggler Vane wants: moving crates at night At: the docks · Next: meet the reeve/);
+    assert.equal(squash(el.querySelector('section[data-kind="secret"] .sd-thread').textContent), 'The Reeve Is Bought', 'a secret shows only its name');
+    assert.equal(el.querySelectorAll('.sd-problem').length, 2);
     assert.equal(el.querySelector('.sd-empty'), null);
     const { el: none } = draw(DIRECTOR_ID, makeState());
-    assert.match(squash(none.textContent), /No arc planned yet\. Plan arc Nothing tracked yet\.$/);
-    assert.equal(none.querySelector('.sd-behind'), null, 'nothing behind the scenes: no Reveal panel');
+    assert.match(squash(none.textContent), /Director shows spoilers .*No arc planned yet\. Plan arc Nothing planned yet\.$/);
 });
 
 test('status card: time, place, goal and step, progress, with what this reply changed marked; no next beat', { skip }, () => {
@@ -328,19 +304,6 @@ test('status card: each reply\'s card is drawn from that reply\'s state (stateAt
     cards.destroy();
 });
 
-test('director: a ready thread is an outline pill and an offer a soft one, so the two read apart', { skip }, () => {
-    const state = makeState({ rev: 20, minutes: at('June 11, 2025, 9:00 am'), threads: [wolves({ ready: { rev: 11 } }), rats()] });
-    const { el } = draw(DIRECTOR_ID, state);
-    const ready = el.querySelector('.sd-ready');
-    assert.ok(ready, 'a ready thread is drawn');
-    assert.equal(squash(ready.textContent), 'ready');
-    assert.equal(ready.classList.contains('ss-pill-outline'), true);
-    const offered = el.querySelector('[data-thread="th_rats0001"] .ss-pill');
-    assert.equal(squash(offered.textContent), 'offered');
-    assert.equal(offered.classList.contains('ss-pill-soft'), true);
-    assert.equal(offered.classList.contains('ss-pill-outline'), false, 'the two are different pills');
-});
-
 test('status card rows: a row with no value is left out; no box of its own (the rows sit in the fold)', { skip }, () => {
     const queries = {
         ...makeQueries(),
@@ -369,13 +332,6 @@ test('status card rows: a row with no value is left out; no box of its own (the 
     const { el: noClock } = draw(STATUS_CARD_ID, headState({ minutes: null }));
     assert.deepEqual(noClock.querySelectorAll('.sd-row').map(row => row.querySelector('dt').textContent.trim()), ['Place', 'Region', 'Goal']);
 });
-
-test('Director clock line: the place is the place line ("Town · Spot") from director.status', { skip }, () => {
-    const queries = { ...makeQueries(), 'atlas.here': () => ({ id: 'pl_a', name: 'Auvoth (Southern Gatehouse)', line: 'Auvoth · Southern Gatehouse', region: 'Gate Coast' }) };
-    const { el } = draw(DIRECTOR_ID, headState(), { queries });
-    assert.equal(squash(el.querySelector('.sd-where').textContent), '· Auvoth · Southern Gatehouse');
-});
-
 // The Ripples card (spoilers): each power's sway bar and top reasons, "+N more"; behind Reveal; nothing without a table.
 test('director: the Ripples card shows each power\'s sway bar and its top reasons, +N more; always drawn (no Reveal); none without a table', { skip }, () => {
     const reason = (delta, text) => ({ kind: 'quest', delta, text, when: null });

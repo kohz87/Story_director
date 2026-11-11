@@ -14,7 +14,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.problems', 'director.status', 'director.threads.on', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.plan', 'director.problems', 'director.status', 'director.threads.on', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -28,7 +28,7 @@ test('every screen passes validateScreen', () => {
 
 test('each screen mounts where it is meant to', () => {
     assert.deepEqual(byId[QUESTS_ID].mounts, ['tab', 'screen']);
-    assert.deepEqual(byId[DIRECTOR_ID].mounts, ['tab', 'screen']);
+    assert.deepEqual(byId[DIRECTOR_ID].mounts, ['screen'], 'the game view only: never a tab in the Story panel');
     assert.deepEqual(byId[STATUS_CARD_ID].mounts, ['card']);
     for (const screen of screens) {
         assert.ok(screen.id.startsWith('story-director/'), screen.id);
@@ -43,18 +43,19 @@ test('the screens register in Story Block\'s screen registry and list by mount',
     assert.deepEqual(registry.problems(), []);
     // Story Block sorts the navigation by screen `order` (SB #75): an id ending in /quests takes the
     // usual quests place (20); the Director screen gives no order, so it comes after the usual ones.
-    assert.deepEqual(registry.list('tab').map(entry => entry.id), [QUESTS_ID, DIRECTOR_ID]);
+    assert.deepEqual(registry.list('tab').map(entry => entry.id), [QUESTS_ID], 'the Story panel\'s strip has no Director');
+    assert.ok(registry.list('screen').some(entry => entry.id === DIRECTOR_ID), 'the game view has it');
     assert.deepEqual(registry.list('card').map(entry => entry.id), [STATUS_CARD_ID]);
     assert.deepEqual(registry.list('hud'), [], 'no HUD strip: the time and place are in the Status fold');
     assert.deepEqual(registry.list('dialog'), []);
 });
 
-test('Quests, World and Map say `bar: true` (in the bar by default); the Director and the card do not', () => {
+test('Quests, World and Map say `bar: true` (in the bar by default); the Director is in the game view bar too (no tab), the card is not', () => {
     for (const screen of [byId[QUESTS_ID], worldScreen, mapScreen]) {
         assert.equal(screen.bar, true, screen.id);
         assert.deepEqual(validateScreen(screen, { id: screen.id }), [], screen.id);
     }
-    assert.equal(byId[DIRECTOR_ID].bar, undefined);
+    assert.equal(byId[DIRECTOR_ID].bar, true);
     assert.equal(byId[STATUS_CARD_ID].bar, undefined);
     // A Story Block that knows the key (2.12.0) reads it back from the registry; an older one ignores it and the screens still register.
     const registry = runtime.createScreens({ reader: () => ({}), saveReader() {} });
@@ -62,7 +63,7 @@ test('Quests, World and Map say `bar: true` (in the bar by default); the Directo
     assert.deepEqual(registry.problems(), []);
     if (typeof registry.declaredBar === 'function') {
         assert.deepEqual([QUESTS_ID, worldScreen.id, mapScreen.id].map(id => registry.declaredBar(id)), [true, true, true]);
-        assert.equal(registry.declaredBar(DIRECTOR_ID), false);
+        assert.equal(registry.declaredBar(DIRECTOR_ID), true);
     }
 });
 
@@ -82,22 +83,13 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.equal(byId[STATUS_CARD_ID].data.progress, undefined);
     assert.equal(byId[STATUS_CARD_ID].data.time.query, 'director.time');
     const director = byId[DIRECTOR_ID].data;
-    assert.deepEqual(director.quest_open, { query: 'director.threads', args: { kind: 'quest', status: 'active' } });
-    assert.deepEqual(director.event_closed, { query: 'director.threads', args: { kind: 'event', status: 'resolved' } });
-    // Behind the scenes is the Reveal panel's (director.behind), and so are its problems.
-    assert.equal(director.secret_closed, undefined);
-    const { problems, time, status, arc, behind, ripples, threads: threadsOn, ...threads } = director;
-    assert.deepEqual(ripples, { query: 'ripples.sway' }, 'the Ripples card');
-    assert.deepEqual(status, { query: 'director.status' }, 'the place line in the clock header');
-    // Whether the world-building threads feature is on (null while off): the World card is drawn only then.
-    assert.deepEqual(threadsOn, { query: 'director.threads.on' });
-    assert.deepEqual(problems, { query: 'director.problems', args: { behind: false } });
-    assert.deepEqual([arc, behind], [{ query: 'director.arc' }, { query: 'director.behind' }]);
+    // The Director draws the arc, the plan cards and the Ripples card only: no Quests list, no World list, no clock line (no time, no thread kinds).
+    assert.deepEqual(director, { arc: { query: 'director.arc' }, plan: { query: 'director.plan' }, ripples: { query: 'ripples.sway' } });
+    const { time } = byId[STATUS_CARD_ID].data;
     // The reply's card shows no next beat (a spoiler); it adds the map coordinates and the weather.
     assert.equal(byId[STATUS_CARD_ID].data.next, undefined);
     assert.deepEqual(byId[STATUS_CARD_ID].data.status, { query: 'director.status' });
     assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
-    assert.ok(Object.values(threads).every(binding => binding.query === 'director.threads'));
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
     assert.deepEqual(byId[QUESTS_ID].data, { threads: { query: 'director.threads' } });
 });

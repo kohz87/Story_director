@@ -18,17 +18,17 @@ import { directorScreen } from './director.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
-import { BEHIND_WIDGET, RIPPLES_WIDGET, behindWidget, ripplesWidget } from './behind.js';
+import { BEHIND_WIDGET, PLAN_WIDGET, RIPPLES_WIDGET, behindWidget, planWidget, createRipplesWidget, ripplesWidget } from './behind.js';
 import { QUESTS_WIDGET, questsWidget } from './quest-cards.js';
 import { THREADS_FEATURE } from '../threads.js';
 
 export { DIRECTOR_ID, KIND_GROUPS } from './director.js';
 export { QUESTS_ID } from './quests.js';
 export { STATUS_CARD_ID } from './status-card.js';
-export { BEHIND_WIDGET, RIPPLES_WIDGET, behindWidget, createBehindWidget, createRipplesWidget, ripplesWidget } from './behind.js';
+export { BEHIND_WIDGET, PLAN_WIDGET, RIPPLES_WIDGET, behindWidget, createBehindWidget, planWidget, createRipplesWidget, ripplesWidget } from './behind.js';
 export { QUESTS_WIDGET, chipOf, createQuestsWidget, isQuestThread, questsWidget, rowsOf } from './quest-cards.js';
 export { BEHIND, BEHIND_KINDS, HIDE_SETTING, browserStore, createReveal, reveal } from './reveal.js';
-export { calendarSetting, currentGoal, nextDue, problemsList, readerWords, screenQueries } from './queries.js';
+export { calendarSetting, currentGoal, nextDue, planView, problemsList, readerWords, screenQueries } from './queries.js';
 
 export const MODULE_ID = 'story-director';
 
@@ -57,13 +57,13 @@ export function createScreensPart({ settings = hostSettings } = {}) {
         hooks: {},
         tabs: [],
         screens: [...screens],
-        widgets: { [BEHIND_WIDGET]: behindWidget, [RIPPLES_WIDGET]: ripplesWidget, [QUESTS_WIDGET]: questsWidget },
+        widgets: { [BEHIND_WIDGET]: behindWidget, [PLAN_WIDGET]: planWidget, [RIPPLES_WIDGET]: ripplesWidget, [QUESTS_WIDGET]: questsWidget },
         settings: {
             defaults: { hideBehind: true },
             schema: {
                 // Per chat, Reveal shows them (remembered in this browser); this hides nothing from the story.
                 // Shown only while the feature `story-director.threads` is on (what it hides is that feature's).
-                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets until you press Reveal', feature: THREADS_FEATURE },
+                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets (the Director screen shows everything and ignores this)', feature: THREADS_FEATURE },
             },
         },
     };

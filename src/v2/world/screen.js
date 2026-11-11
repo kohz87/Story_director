@@ -2,21 +2,26 @@
 // SPEC §13.1) with two views the reader switches between: **Now** (Here: the place and the people present;
 // the news, events and factions {{user}} knows; what {{user}} knows is coming) and **Journal** (each story
 // day: where {{user}} went, who they met, the news, the quests; the day digest's data, which the Days
-// screen showed before). Only what {{user}} knows (known.js); the Director tab stays the GM's view, with
-// what is behind the scenes behind Reveal. The view picked is the screen's own draft (nothing is saved);
+// screen showed before). Only what {{user}} knows (known.js); the Director screen (game view only) is the author's view of the plan. The view picked is the screen's own draft (nothing is saved);
 // Now shows until Journal is picked. Read-only: nothing here is a story action (F95), and the only
-// buttons are the people's dossier links (widget `story-director.people`, people.js).
+// buttons are the people's dossier links (widget `story-director.people`, people.js) and the Pin / Unpin of Elsewhere.
 //
 // Here covers what Story Block's Scene tab shows, so Story Block hides Scene by default while World is there
 // (MODULES §F119): the place with its kind and region and "moved here this reply" (Story Block's
 // `scene.moved`), the weather (`scene.weather`: the Scene tab's, which would otherwise be lost with it), the
-// story time in the header while the clock is set, and the people: NPC State Delta's own
+// story time and date while the clock is set, and the people: NPC State Delta's own
 // present-cast cards (portraits, now lines, meters) when it is there, else names; each with their thought
 // from the newest reply's Inner chatter.
 //
 // One scene header: the Game view's hero header shows the place, the time and the weather above every screen, so there Here
-// shows the people (and the trip) only; the Story panel's tab has no hero and keeps the place, weather and date lines. The
-// News and events and the Factions are the feature `story-director.threads`' (src/v2/threads.js): off, they are not drawn.
+// shows the people (and the trip) only; the Story panel's tab has no hero and keeps the place, region, time and weather lines.
+// Here is one block with a purple line: the place line "Town · Spot" (`place.line`) and its kind chip, the region, "moved here
+// this reply", ◷ time · date, ☁ weather; then People here. Every Now section folds (People here, Elsewhere, Leads, Upcoming, News
+// and events, Factions): a centred chevron and the count in its head (widget `story-director.fold`, elsewhere.js), remembered per
+// chat on this device. Elsewhere is the pinned key people who are not in the scene (the key-people widget; + Pin stays, its token
+// note is an ⓘ); Leads are the hooks the player has heard of (`director.world.leads`); the date tag of Upcoming and the state tag
+// of News sit on the title line, in its right corner; Factions show only once one is known. There is no Around here. The News
+// and events and the Factions are the feature `story-director.threads`' (src/v2/threads.js): off, they are not drawn.
 //
 // `story-director/days` (the old Days screen's id) is kept as a dialog of the Journal alone, so an older
 // layout or a reader's own copy that names it still finds a screen; it is no tab and no game-view screen.
@@ -27,6 +32,7 @@ import { FEATURE } from './known.js';
 import { PEOPLE_WIDGET } from './people.js';
 import { EVENTS_WIDGET } from './events-widget.js';
 import { KEY_PEOPLE_WIDGET } from '../keypeople/widget.js';
+import { FOLD_WIDGET } from './elsewhere.js';
 
 export const WORLD_ID = 'story-director/world';
 export const DAYS_ID = 'story-director/days';
@@ -79,69 +85,81 @@ const JOURNAL = `
     </li>
   </ol>`;
 
-// Around here's heading: the place on one line, cut with "…" when it is long (its full text is the tooltip), then the time of day, which goes
-// first when the two do not fit together (CSS: `.wv-around .wv-label > small`).
-const AROUND_WHERE = '<span class="wv-clip" data-if="q.cast.place" title="{{ q.cast.place }}">{{ q.cast.place }}</span> <span class="wv-daytime" data-if="q.cast.day">{{ q.cast.dayText }}</span>';
+// The head of a folding section (widget story-director.fold, elsewhere.js): a centred chevron, the title and the count, in the
+// section marked `data-fold`. Every Now section folds, remembered per chat on this device.
+const fold = (id, title, count = '') => `<ss-widget class="sd-fold-slot" name="${FOLD_WIDGET}" data-props='{"id":"${id}","title":"${title}","count":"${count}","chat":"{{ q.chat.id }}"}'></ss-widget>`;
 
 const NOW = `
   <section class="sd-kind wv-here ss-glass" data-kind="here" aria-label="Here">
     ${label('Here', { scene: true })}
-    <p class="wv-place wv-scene" data-if="q.world.here.place" data-class="wv-moved: q.world.here.moved"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.name }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span> <small data-if="q.world.here.place.region">· {{ q.world.here.place.region }}</small> <span class="ss-pill ss-pill-soft wv-moved-tag" data-if="q.world.here.moved">moved here this reply</span></p>
+    <p class="wv-place wv-scene" data-if="q.world.here.place"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> <span class="sd-key">{{ q.world.here.place.line }}</span> <span class="ss-pill wv-kind" data-if="q.world.here.place.kind">{{ q.world.here.place.kind }}</span></p>
+    <p class="wv-sub wv-scene" data-if="q.world.here.place.region">{{ q.world.here.place.region }}</p>
+    <p class="wv-sub wv-scene" data-if="q.world.here.moved"><span class="ss-pill ss-pill-soft wv-moved-tag">moved here this reply</span></p>
     <p class="sd-empty wv-scene" data-if="!q.world.here.place">Nowhere named yet.</p>
-    <p class="wv-weather wv-scene" data-if="q.world.here.weather"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i> <span class="sd-key">Weather</span> <span>{{ q.world.here.weather }}</span></p>
+    <p class="wv-when wv-scene" data-if="q.world.clockSet"><i class="fa-solid fa-clock" aria-hidden="true"></i> <span>{{ q.world.time }}</span> · <span>{{ q.world.date }}</span></p>
+    <p class="wv-weather wv-scene" data-if="q.world.here.weather"><i class="fa-solid fa-cloud" aria-hidden="true"></i> <span>{{ q.world.here.weather }}</span></p>
     <p class="wv-weather wv-road" data-if="q.trip.row"><i class="fa-solid fa-route" aria-hidden="true"></i> <span class="sd-key">On the road</span> <span>{{ q.trip.row }}</span></p>
-    ${label('People here', { count: '{{ len(q.world.here.people) }}', show: 'q.world.here.hasPeople' })}
-    <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
-    <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
+    <div class="sd-fold wv-people-box" data-fold="people">
+      ${fold('people', 'People here', '{{ len(q.world.here.people) }}')}
+      <div class="sd-fold-body">
+        <ss-widget name="${PEOPLE_WIDGET}" data-props='{"bind":"q.world.here"}' data-if="q.world.here.hasPeople"></ss-widget>
+        <p class="sd-empty" data-if="!q.world.here.hasPeople">No one else is in the scene.</p>
+      </div>
+    </div>
   </section>
-  <section class="sd-kind wv-around ss-glass" data-kind="around" aria-label="Around here" data-if="q.cast.on == true">
-    ${label('Around here', { count: AROUND_WHERE, when: 'q.cast.heading' })}
-    <div class="wv-row" data-if="q.cast.hasNear"><span>Cast whose paths may cross yours here</span><b>{{ q.cast.near }}, not yet met</b></div>
-    <div class="wv-row" data-if="q.cast.hasMet"><span>Cast you have met</span><span class="wv-row-list"><span class="wv-row-item" data-each="q.cast.metList as m">{{ m.name }}<small data-if="m.news">, last heard: {{ m.news }}</small></span></span></div>
-    <div class="wv-row"><span>Met from the {{ q.cast.packLabel }}</span><b>{{ q.cast.met }} of {{ q.cast.total }}</b></div>
-    <p class="wv-note">{{ q.cast.note }}</p>
+  <section class="sd-kind sd-fold wv-key ss-glass" data-kind="key" data-fold="elsewhere" aria-label="Elsewhere" data-if="q.keys.on == true">
+    ${fold('elsewhere', 'Elsewhere', '{{ q.keys.elsewhere }}')}
+    <div class="sd-fold-body">
+      <ss-widget name="${KEY_PEOPLE_WIDGET}" data-props='{"bind":"q.keys"}'></ss-widget>
+    </div>
   </section>
-  <section class="sd-kind wv-key ss-glass" data-kind="key" aria-label="Key people" data-if="q.keys.on == true">
-    ${label('Key people', { count: '{{ q.keys.countText }}' })}
-    <ss-widget name="${KEY_PEOPLE_WIDGET}" data-props='{"bind":"q.keys"}'></ss-widget>
+  <section class="sd-kind sd-fold wv-leads ss-glass" data-kind="leads" data-fold="leads" aria-label="Leads" data-if="q.leads.has">
+    ${fold('leads', 'Leads', '{{ q.leads.count }}')}
+    <div class="sd-fold-body">
+      <ul class="sd-list wv-leadlist">
+        <li class="sd-lead" data-each="q.leads.rows as l">
+          <span class="sd-key sd-lead-title">{{ l.name }}</span>
+          <span class="sd-heard" data-if="l.heard">{{ l.heard }}</span>
+          <span class="sd-meta"><span data-if="l.where">{{ l.where }}</span><span data-if="l.heardAgo">Heard {{ l.heardAgo }}</span></span>
+        </li>
+      </ul>
+    </div>
   </section>
-  <section class="sd-kind wv-upcoming ss-listcard ss-glass" data-kind="upcoming" aria-label="Upcoming">
-    ${label('Upcoming', { card: true, count: 'next {{ q.world.upcomingDays }} days' })}
+  <section class="sd-kind sd-fold wv-upcoming ss-listcard ss-glass" data-kind="upcoming" data-fold="upcoming" aria-label="Upcoming">
+    ${fold('upcoming', 'Upcoming', 'next {{ q.world.upcomingDays }} days')}
+    <div class="sd-fold-body">
     <p class="ss-listcard-empty" data-if="!q.world.clockSet">The story's clock is not set, so nothing has a date yet.</p>
     <p class="ss-listcard-empty" data-if="q.world.clockSet && !q.world.hasUpcoming">Nothing you know of is coming up.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasUpcoming">
       <li class="ss-listcard-row wv-item" data-each="q.world.upcoming as u" data-kind="{{ u.kind }}" data-class="wv-overdue: u.overdue">
-        <div class="ss-listcard-item">
-          <span class="ss-listcard-main">
-            <span class="ss-listcard-title">{{ u.name }}</span>
-            <span class="ss-listcard-sub" data-if="u.goal">{{ u.goal }}</span>
-            <span class="sd-meta"><span>{{ u.when }}</span><span class="ss-pill" data-if="u.overdue">overdue</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></span>
-          </span>
-          <span class="ss-listcard-value" data-if="u.label"><span class="ss-pill">{{ u.label }}</span></span>
+        <div class="ss-listcard-item wv-rowcol">
+          <span class="wv-line1"><span class="ss-listcard-title">{{ u.name }}</span><span class="ss-pill" data-if="u.label">{{ u.label }}</span></span>
+          <span class="ss-listcard-sub" data-if="u.goal">{{ u.goal }}</span>
+          <span class="sd-meta"><span>{{ u.when }}</span><span class="ss-pill" data-if="u.overdue">overdue</span><span data-if="u.kind == 'quest'">Quest due</span><span data-if="u.kind == 'holiday'">Holiday</span><span data-if="u.kind == 'event'">Event</span><span data-if="u.kind == 'hook'">Lead</span></span>
         </div>
       </li>
     </ul>
+    </div>
   </section>
-  <section class="sd-kind wv-news ss-listcard ss-glass" data-kind="news" aria-label="News and events" data-if="q.threads.on">
-    ${label('News and events', { card: true, count: '{{ q.world.newsCount }}', when: 'q.world.hasNews' })}
+  <section class="sd-kind sd-fold wv-news ss-listcard ss-glass" data-kind="news" data-fold="news" aria-label="News and events" data-if="q.threads.on">
+    ${fold('news', 'News and events', '{{ q.world.newsCount }}')}
+    <div class="sd-fold-body">
     <p class="ss-listcard-empty" data-if="!q.world.hasNews">No news yet.</p>
     <ul class="ss-listcard-rows" data-if="q.world.hasNews">
       <li class="ss-listcard-row wv-item" data-each="q.world.news as n" data-kind="{{ n.kind }}" data-state="{{ n.state }}">
-        <div class="ss-listcard-item">
-          <span class="ss-listcard-main">
-            <span class="ss-listcard-title">{{ n.name }}</span>
-            <span class="ss-listcard-sub" data-if="n.summary">{{ n.summary }}</span>
-            <span class="sd-meta"><span data-if="n.place">At {{ n.place }}</span><span data-if="n.factions">{{ n.factions }}</span><span data-if="n.ago">{{ n.ago }}</span></span>
-          </span>
-          <span class="ss-listcard-value" data-if="n.state"><span class="ss-pill">{{ n.state }}</span></span>
+        <div class="ss-listcard-item wv-rowcol">
+          <span class="wv-line1"><span class="ss-listcard-title">{{ n.name }}</span><span class="ss-pill" data-if="n.state">{{ n.state }}</span></span>
+          <span class="ss-listcard-sub" data-if="n.summary">{{ n.summary }}</span>
+          <span class="sd-meta"><span data-if="n.place">At {{ n.place }}</span><span data-if="n.factions">{{ n.factions }}</span><span data-if="n.ago">{{ n.ago }}</span></span>
         </div>
       </li>
     </ul>
+    </div>
   </section>
-  <section class="sd-kind wv-factions ss-listcard ss-glass" data-kind="factions" aria-label="Factions" data-if="q.threads.on">
-    ${label('Factions', { card: true, count: '{{ q.world.factionCount }}', when: 'q.world.hasFactions' })}
-    <p class="ss-listcard-empty" data-if="!q.world.hasFactions">No factions known yet.</p>
-    <ul class="ss-listcard-rows" data-if="q.world.hasFactions">
+  <section class="sd-kind sd-fold wv-factions ss-listcard ss-glass" data-kind="factions" data-fold="factions" aria-label="Factions" data-if="q.threads.on == true && q.world.hasFactions">
+    ${fold('factions', 'Factions', '{{ q.world.factionCount }}')}
+    <div class="sd-fold-body">
+    <ul class="ss-listcard-rows">
       <li class="ss-listcard-row wv-item" data-each="q.world.factions as f">
         <div class="ss-listcard-item">
           <span class="ss-listcard-main">
@@ -152,6 +170,7 @@ const NOW = `
         </div>
       </li>
     </ul>
+    </div>
   </section>`;
 
 const TEMPLATE = `
@@ -161,7 +180,6 @@ const TEMPLATE = `
       <label class="wv-view"><input type="radio" name="wv-view" data-draft="view" value="now"> <span><i class="fa-solid fa-earth-americas" aria-hidden="true"></i> Now</span></label>
       <label class="wv-view"><input type="radio" name="wv-view" data-draft="view" value="journal"> <span><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</span></label>
     </div>
-    <p class="wv-when wv-scene" data-if="q.world.today"><i class="fa-solid fa-clock" aria-hidden="true"></i> {{ q.world.today }}</p>
   </header>
   <div class="wv-now" data-if="draft.view != 'journal'">${NOW}
   </div>
@@ -183,7 +201,7 @@ const CSS = `${BASE_CSS}
 .wv-when { margin: 0; font-size: 0.9em; color: var(--sd-muted); overflow-wrap: anywhere; }
 .wv-when i { color: var(--sd-accent); }
 .wv-now { display: grid; gap: 14px; min-width: 0; }
-.wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; }
+.wv-here { display: grid; gap: 8px; padding: 12px 14px; min-width: 0; border-left: 3px solid var(--sd-accent); }
 .wv-label { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; min-width: 0; white-space: nowrap; }
 /* The separator: a hairline filling the rest of the row, centred on the label; it shrinks to nothing rather than push the label. */
 .wv-label::after { content: ""; flex: 1 1 0; min-width: 0; height: 1px; background: var(--ss-rule, var(--ss-border)); }
@@ -192,18 +210,37 @@ const CSS = `${BASE_CSS}
 .wv-label.ss-listcard-head { margin-bottom: 2px; padding: 0 6px; }
 .wv-place { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
 .wv-place i, .wv-weather i { color: var(--sd-accent); }
-.wv-place .sd-key { font-size: 1.15em; font-weight: 800; }
-.wv-place.wv-moved { padding-left: 8px; border-left: 3px solid var(--sd-accent); }
+.wv-place .sd-key { font-size: 1.15em; font-weight: 700; }
+.wv-sub { margin: 0; color: var(--sd-muted); overflow-wrap: anywhere; }
 .wv-kind { text-transform: capitalize; }
 .wv-weather { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; overflow-wrap: anywhere; }
 /* The scene lines the Game view's hero header already shows (BASE_CSS sets --sd-line-display to none there): the place, the weather
    and the empty-place note, the "Here" heading over them, and the date by the view switch. "On the road" is not one of them. */
 .wv-place.wv-scene, .wv-weather.wv-scene { display: var(--sd-line-display, flex); }
-.sd-empty.wv-scene, .wv-when.wv-scene { display: var(--sd-line-display, block); }
+.sd-empty.wv-scene, .wv-when.wv-scene, .wv-sub.wv-scene { display: var(--sd-line-display, block); }
 /* The "Here" heading is one of them: with the place and weather lines gone, a bare heading would sit above the people. */
 .wv-label.wv-scene { display: var(--sd-line-display, flex); }
 .wv-scene[hidden] { display: none; }
-.wv-upcoming, .wv-news, .wv-factions, .wv-key { min-width: 0; }
+.wv-upcoming, .wv-news, .wv-factions, .wv-key, .wv-leads { min-width: 0; }
+.wv-leads { display: grid; gap: 4px; padding: 12px 14px; align-content: start; }
+.wv-leadlist { gap: 8px; }
+.sd-lead { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.sd-heard { color: var(--sd-text); }
+/* A folding section: its head is the widget's button (a centred chevron, the title, the count); a folded one hides its body. */
+.sd-fold { min-width: 0; }
+.sd-fold-slot { display: block; min-width: 0; }
+.sd-fold-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; margin: 0; padding: 0; font: inherit; font-weight: 700; text-align: left; color: var(--sd-text); background: none; border: 0; cursor: pointer; }
+.sd-fold-head:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.sd-fold-chev { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; color: var(--sd-accent); transition: transform 0.15s; }
+.sd-fold-shut > .sd-fold-head .sd-fold-chev, .sd-fold-shut > .sd-fold-slot .sd-fold-chev { transform: rotate(-90deg); }
+.sd-fold-count { font-weight: 600; color: var(--sd-muted); }
+.sd-fold-body { display: grid; gap: 6px; min-width: 0; }
+.sd-fold-body[hidden] { display: none; }
+.wv-people-box { margin-top: 2px; }
+/* The tag (date, state) sits on the title line, in its right corner. */
+.wv-rowcol { display: grid; gap: 2px; min-width: 0; }
+.wv-line1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+.wv-line1 .ss-pill { flex: none; max-width: 45%; white-space: normal; }
 .wv-key { display: grid; gap: 4px; padding: 12px 14px; align-content: start; }
 .wv-key-body { display: grid; gap: 8px; min-width: 0; }
 .wv-key-list { display: grid; margin: 0; padding: 0; list-style: none; }
@@ -225,17 +262,9 @@ const CSS = `${BASE_CSS}
 .wv-key-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; width: 100%; margin: 0; padding: 6px 12px; font: inherit; text-align: left; cursor: pointer; color: inherit; background: var(--sd-surface); border: 1px solid var(--sd-border); border-radius: var(--sd-radius); }
 .wv-key-pick:hover { border-color: var(--sd-accent); }
 .wv-key-from { color: var(--sd-muted); }
+.wv-key-i { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; color: var(--sd-accent-text); }
+.wv-key-info { min-width: 0; }
 .wv-key-note { margin: 0; font-size: 0.8em; line-height: 1.45; color: var(--sd-muted); }
-.wv-around { display: grid; gap: 4px; padding: 12px 14px; align-content: start; min-width: 0; }
-/* The heading is "AROUND HERE" (never shrinks), the place cut with an ellipsis, then the time of day. The time of day wraps to a second line
-   when it does not fit beside the place, and the one-line height of the small clips it: it goes first, the place only after it. */
-.wv-around .wv-label { min-width: 0; }
-.wv-around .wv-label > small { display: flex; flex-wrap: wrap; column-gap: .35em; flex: 0 1 auto; min-width: 0; max-width: 100%; line-height: 1.3; max-height: 1.3em; overflow: hidden; }
-.wv-clip { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wv-daytime { flex: none; white-space: nowrap; }
-.wv-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 6px 0; border-top: 1px solid var(--sd-border); }
-.wv-row-list { display: grid; gap: 2px; text-align: right; min-width: 0; overflow-wrap: anywhere; }
-.wv-row-item small { color: var(--sd-muted); }
 .wv-item .ss-listcard-title, .wv-item .ss-listcard-sub { overflow-wrap: anywhere; }
 .wv-item .ss-listcard-value { max-width: 45%; min-width: 0; }
 .wv-item .ss-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
@@ -294,8 +323,9 @@ const DATA = Object.freeze({
     journal: Object.freeze({ query: 'director.journal' }),
     // The Key people section (keypeople part, feature `story-director.key-people`): `{ on: true, … }`, null while the feature is off.
     keys: Object.freeze({ query: 'director.keyPeople.view' }),
-    // The Around here section (cast part, feature `story-director.cast`): the numbers and the met people's news, null while off or with no cast.
-    cast: Object.freeze({ query: 'director.cast.view' }),
+    // The Leads section: the hooks the player has heard of (elsewhere.js).
+    leads: Object.freeze({ query: 'director.world.leads' }),
+    chat: Object.freeze({ query: 'director.world.chat' }),
     // The trip (atlas.trip, feature story-director.trip), shown under the weather while one is on: null with none.
     trip: Object.freeze({ query: 'atlas.trip' }),
 });

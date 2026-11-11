@@ -4,7 +4,7 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { withD1 } from '../helpers/d1.js';
 import { createModule } from '../../../src/v2/module.js';
 import { fakeFightRunner } from '../integration/helpers/fake-fight-runner.js';
-import { worldScreen } from '../../../src/v2/world/index.js';
+import { FOLD_WIDGET, foldWidget, worldScreen } from '../../../src/v2/world/index.js';
 import { compileTemplate, renderTemplate } from '../../vendor/story-block/src/v2/view/template/index.js';
 import { conditionEvaluator } from '../../vendor/story-block/src/v2/view/bind.js';
 import { compile, evaluate } from '../../vendor/story-block/src/v2/events/index.js';
@@ -60,11 +60,11 @@ export function drawWorld(q, { draft = {}, widgets = {}, screen = worldScreen } 
     const scopeOf = () => ({ state: {}, q, draft: own, settings: {}, mount: 'tab', screenId: screen.id, api: {} });
     const view = renderTemplate(el, compiled, scopeOf(), {
         evaluate: conditionEvaluator({ compile, evaluate }),
-        widgets,
+        widgets: { [FOLD_WIDGET]: foldWidget, ...widgets },
         onWarn: message => warnings.push(message),
     });
     return { el, view, warnings, doc, set: next => { Object.assign(own, next); view.update(scopeOf()); } };
 }
 
 /** The World screen's data as the host answers it (`threads`: null while the world-building threads feature is off). */
-export const worldData = host => ({ world: host.sdk.query('director.world'), journal: host.sdk.query('director.journal'), threads: host.sdk.query('director.threads.on') });
+export const worldData = host => ({ world: host.sdk.query('director.world'), journal: host.sdk.query('director.journal'), threads: host.sdk.query('director.threads.on'), leads: host.sdk.query('director.world.leads') });
