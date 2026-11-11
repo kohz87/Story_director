@@ -48,10 +48,24 @@ export function packWorld(query) {
             return [];
         }
     };
+    const rawPlaces = read('places');
+    const rawRoutes = read('routes');
+    // The packs answer with fresh copies each time, so what they gave is compared by content: the same content gives the world built
+    // before (one slot; a pack installed, switched or changed gives other content and so a new build).
+    if (!readable) return buildPackWorld(rawPlaces, rawRoutes, false);
+    let signature;
+    try { signature = JSON.stringify([rawPlaces, rawRoutes]); } catch { return buildPackWorld(rawPlaces, rawRoutes, true); }
+    if (lastPackWorld?.signature !== signature) lastPackWorld = { signature, world: buildPackWorld(rawPlaces, rawRoutes, true) };
+    return { ...lastPackWorld.world };
+}
+
+let lastPackWorld = null;
+
+function buildPackWorld(rawPlaces, rawRoutes, readable) {
     const places = [];
     const candidates = [];
     const seen = new Set();
-    for (const entry of read('places')) {
+    for (const entry of rawPlaces) {
         if (!isRecord(entry) || typeof entry.name !== 'string') continue;
         const name = cleanName(entry.name);
         const key = keyOf(name);
@@ -79,7 +93,7 @@ export function packWorld(query) {
         });
     }
     const routes = [];
-    for (const entry of read('routes')) {
+    for (const entry of rawRoutes) {
         if (!isRecord(entry)) continue;
         const from = cleanName(entry.from);
         const to = cleanName(entry.to);
