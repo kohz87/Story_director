@@ -23,7 +23,8 @@ const goRecord = host => Object.values(trips(host) ?? {}).find(record => record.
 async function newHost(options = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [module], ...options });
+    // The World pulse is left off: these tests count receipts and revs and compare exact tails.
+    host = await createHost({ modules: [module], ...options, settings: { ...options.settings, features: { 'story-director.pulse': false, ...options.settings?.features } } });
     const installed = await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' });
     assert.equal(installed.ok, true, JSON.stringify(installed.errors));
     return host;

@@ -234,3 +234,26 @@ export function lasting(ctx, payload = {}) {
     event.fire = { rev, by: caller };
     return { summary: sentence(eventSummary(event, false)), narrate: false, data: { event: event.id, state: event.state, ...(gone.length ? { pruned: gone } : {}) } };
 }
+
+/**
+ * `chronicle.rumor { at, event: { name, summary?, place?, factions? } }` (cause `system`, a step of the World pulse): talk of something goes
+ * round, written as a `looming` world event (so the player knows of it; news, never a secret). Refused from a click. A name the chronicle
+ * already has is left as it is. Fails (NOT_YET) while the clock is not set, and (REFUSED) when MAX_EVENTS are all under way.
+ */
+export function rumor(ctx, payload = {}) {
+    if (ctx.cause === 'ui') return ctx.fail('REFUSED', 'Rumours are started by Story Director itself, before a reply.');
+    const given = isRecord(payload?.event) ? payload.event : null;
+    const name = cleanName(typeof given?.name === 'string' ? given.name : '');
+    if (!given || !keyOf(name)) return ctx.fail('INVALID', 'chronicle.rumor takes { at, event: { name, summary?, place?, factions? } }.');
+    const now = clockOf(ctx);
+    if (now === null) return ctx.fail('NOT_YET', 'The story has no date yet; a rumour waits for one.');
+    const chronicle = ctx.draft('chronicle');
+    if (findIn(chronicle.events, name)) return { summary: '', narrate: false, data: { event: null } };
+    const events = Object.values(chronicle.events);
+    if (events.length >= MAX_EVENTS && events.every(isOpen)) return ctx.fail('REFUSED', `The chronicle already follows ${MAX_EVENTS} world events under way.`);
+    const id = newId(ctx, 'ev', chronicle.events);
+    const factions = (Array.isArray(given.factions) ? given.factions : []).map(item => cleanName(String(item ?? ''))).filter(item => keyOf(item)).slice(0, 4);
+    chronicle.events[id] = { id, name, summary: cleanSummary(typeof given.summary === 'string' ? given.summary : ''), state: 'looming', since: now, updated: now, place: cleanName(typeof given.place === 'string' ? given.place : ''), factions, aka: [], rev: revOf(ctx) };
+    prune(chronicle);
+    return { summary: '', narrate: false, data: { event: id } };
+}

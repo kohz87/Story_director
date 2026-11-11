@@ -182,3 +182,183 @@ test('the validator takes the slot and refuses a malformed one', () => {
     assert.deepEqual(part.domains.director.validate({ ...state.domains.director, initiative: [{ round: 'x' }] }), ['director.initiative must be null or [{ at, round, key, name, recent }].']);
     assert.deepEqual(part.domains.director.validate({ ...state.domains.director, initiative: null }), []);
 });
+
+// ---- World pulse (pulse/effects.js): the same shape as the initiative: a seeded step before the reply, a slot, one tail line ----
+
+import { PULSE, QUIET, agendaProgress, modeOf, part as pulsePart, pulseCommand, pulseHook, pulseTail, quietCommand, resultsOf, weatherFrom } from '../../../src/v2/pulse/effects.js';
+import { rumor } from '../../../src/v2/chronicle/capture/world.js';
+import { d20Of } from '../../../src/v2/pulse/tables.js';
+
+const seededPulse = seed => (ctx, payload) => pulseCommand({ ...ctx, rng: rng(seed) }, payload);
+const pulseAt = (state, seed, { at = 5, settings = {}, call = null, queries = {} } = {}) => runCommand(state, seededPulse(seed), { at }, { settings, call, queries });
+const clocked = () => withScene(story(WORLD, makeState()), { present: ['Elula', 'Bram'] });
+
+test('pulse: the roll is a system step drawn with its seed: same seed same result, a click is refused, a swipe (new seed) rolls again', () => {
+    const state = clocked();
+    const one = pulseAt(state, 42);
+    const two = pulseAt(state, 42);
+    assert.equal(one.ok, true, one.message);
+    assert.deepEqual(one.state.domains.director.pulse, two.state.domains.director.pulse);
+    const [entry] = resultsOf(one.state.domains.director);
+    assert.equal(entry.at, 5);
+    assert.ok(entry.d20 >= 1 && entry.d20 <= 20 && ['std', 'duo'].includes(entry.table));
+    assert.deepEqual(part.domains.director.validate(one.state.domains.director), []);
+    const seen = new Set();
+    for (let seed = 1; seed <= 60; seed += 1) seen.add(resultsOf(pulseAt(state, seed).state.domains.director)[0].d20);
+    assert.ok(seen.size > 8, `fresh rolls per seed: ${seen.size} different d20s`);
+    assert.equal(runCommand(state, (ctx, payload) => pulseCommand({ ...ctx, cause: 'ui' }, payload), { at: 5 }).code, 'REFUSED');
+    assert.equal(runCommand(state, pulseCommand, { at: -1 }).code, 'INVALID');
+    assert.equal(d20Of(0), 1);
+    assert.equal(d20Of(0.999999), 20);
+});
+
+test('pulse: only the last 5 results are kept; a result for the same reply (a redo) replaces its own', () => {
+    let state = clocked();
+    for (let at = 1; at <= 8; at += 1) state = pulseAt(state, at, { at }).state;
+    assert.deepEqual(resultsOf(state.domains.director).map(entry => entry.at), [4, 5, 6, 7, 8]);
+    state = pulseAt(state, 99, { at: 8 }).state;
+    assert.deepEqual(resultsOf(state.domains.director).map(entry => entry.at), [4, 5, 6, 7, 8]);
+    assert.equal(part.domains.director.validate({ ...state.domains.director, pulse: [{ results: [...resultsOf(state.domains.director), ...resultsOf(state.domains.director)] }] }).length, 1);
+    assert.equal(part.domains.director.validate({ ...state.domains.director, pulse: [{ results: [{ at: 'x' }] }] }).length, 1);
+    assert.equal(part.domains.director.validate({ ...state.domains.director, pulse: null }).length, 0);
+});
+
+test('pulse: skipped (and the reason recorded) in a fight, in a quiet scene, with no clock, after a rest and after a 6-hour jump; mode off does nothing', () => {
+    const state = clocked();
+    const reason = result => resultsOf(result.state.domains.director).at(-1).skipped;
+    assert.equal(reason(pulseAt(state, 3, { queries: { 'combat.session': () => ({ status: 'active' }) } })), 'fight');
+    const quiet = runCommand(state, quietCommand, { on: true }).state;
+    assert.equal(reason(pulseAt(quiet, 3)), 'quiet');
+    assert.equal(runCommand(state, quietCommand, { on: 'yes' }).code, 'INVALID');
+    assert.deepEqual(part.domains.director.validate(quiet.domains.director), []);
+    const noClock = makeState();
+    assert.equal(reason(pulseAt(noClock, 3)), 'clock');
+    // After a roll, a jump of 6+ hours: skipped; a smaller one rolls.
+    const first = pulseAt(state, 3, { at: 5 }).state;
+    const later = hours => { const next = structuredClone(first); next.domains.director.time.minutes += hours * 60; return next; };
+    assert.equal(reason(pulseAt(later(6), 3, { at: 7 })), 'jump');
+    assert.equal(reason(pulseAt(later(5), 3, { at: 7 })), undefined);
+    const rested = later(1);
+    rested.domains.dataModules = { instances: { a: { chat: { fields: { 'rested-at': rested.domains.director.time.minutes } } } } };
+    assert.equal(reason(pulseAt(rested, 3, { at: 7 })), 'rest');
+    const off = pulseAt(state, 3, { settings: { mode: 'off' } });
+    assert.equal(off.state.domains.director.pulse, null);
+    assert.equal(modeOf({ mode: 'x' }), 'lively');
+});
+
+test('pulse: the hook asks for one step per reply written; a swipe is one below the chat length; a Continue, off and mode off ask for none', () => {
+    const state = clocked();
+    const view = (extra = {}) => ({ state, settings: {}, chat: { length: 5, lastUser: '' }, ...extra });
+    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5 } }] });
+    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5 } }] });
+    assert.ok(pulseHook(view(), { type: 'regenerate' }));
+    assert.equal(pulseHook(view(), { type: 'continue', commit: false }), undefined);
+    assert.equal(pulseHook(view({ feature: id => id !== 'story-director.pulse' })), undefined);
+    assert.equal(pulseHook(view({ settings: { mode: 'off' } })), undefined);
+    // The swipe does not stop at "the pick is made": it asks again (a fresh roll), unlike the initiative.
+    const rolled = pulseAt(state, 3).state;
+    assert.ok(pulseHook({ ...view({ chat: { length: 6 } }), state: rolled }, { type: 'swipe' }));
+    assert.equal(pulsePart.hooks.beforeGenerate, pulseHook);
+    assert.equal(pulsePart.commands[PULSE].feature, 'story-director.pulse');
+    assert.equal(pulsePart.commands[QUIET].feature, 'story-director.pulse');
+});
+
+test('pulse: the tail line is optional, this reply\'s only, and none on CALM or a skip', () => {
+    const state = clocked();
+    const quiet = settings => ({ mode: 'lively', ...settings });
+    let shown = 0;
+    for (let seed = 1; seed <= 40; seed += 1) {
+        const rolled = pulseAt(state, seed).state;
+        const [entry] = resultsOf(rolled.domains.director);
+        const out = pulseTail({ state: rolled, settings: quiet(), chat: { length: 5 } });
+        assert.deepEqual(out.lines, []);
+        if (entry.kind === 'CALM' || !entry.text) assert.deepEqual(out.optional, []);
+        else {
+            shown += 1;
+            assert.match(out.optional[0], /^World this reply: /);
+            assert.ok(out.optional[0].length <= 'World this reply: '.length + 160);
+            assert.doesNotMatch(out.optional[0], /[{}<>]/);
+        }
+        // A swipe (the chat holds the reply: length 6) still shows it; the next reply (7) does not; off shows none.
+        assert.deepEqual(pulseTail({ state: rolled, settings: quiet(), chat: { length: 6 } }), out);
+        assert.deepEqual(pulseTail({ state: rolled, settings: quiet(), chat: { length: 7 } }).optional, []);
+        assert.deepEqual(pulseTail({ state: rolled, settings: { mode: 'off' }, chat: { length: 5 } }).optional, []);
+    }
+    assert.ok(shown > 5);
+    const skipped = runCommand(runCommand(state, quietCommand, { on: true }).state, pulseCommand, { at: 5 }).state;
+    assert.deepEqual(pulseTail({ state: skipped, settings: {}, chat: { length: 5 } }).optional, []);
+    // The module's tail carries it too, after the Director lines.
+    const withLine = [...Array(40).keys()].map(seed => pulseAt(state, seed + 1).state).find(next => pulseTail({ state: next, settings: {}, chat: { length: 5 } }).optional.length);
+    assert.ok(part.context.tail({ state: withLine, settings: {}, chat: { length: 5, lastUser: '' } }).optional.length === 0, 'the tracker part itself adds none');
+});
+
+test('pulse: quiet mode makes flavour only; lively with real people and news can write a rumour, a meeting or an agenda change', () => {
+    const base = withScene(story([{ lines: [WORLD[0].lines, '+ agenda Courier — rides in | now: far north | then: reaches the gate | on: March 3, 2026, 06:00 pm'].join('\n') }], makeState()), { present: ['Elula', 'Bram', 'Orsa'] });
+    const cast = { people: { ann: { name: 'Ann', alive: true, met: null, where: 'Elsewhere' } } };
+    const calls = [];
+    const queries = { 'chronicle.events': () => [{ id: 'ev_1', name: 'Wolf Plague', summary: 'wolves in the fold', state: 'ongoing', place: 'Harrow', factions: [] }], 'atlas.here': () => ({ name: 'Harrow', placeKind: 'town' }) };
+    const call = (type, payload) => { calls.push(type); return {}; };
+    const kinds = new Set();
+    for (let seed = 1; seed <= 150; seed += 1) {
+        const state = { ...base, domains: { ...base.domains, cast } };
+        const result = runCommand(state, seededPulse(seed), { at: 5 }, { call, queries, owned: ['director'] });
+        assert.equal(result.ok, true, result.message);
+        const [entry] = resultsOf(result.state.domains.director);
+        kinds.add(entry.kind);
+        const quietRun = runCommand(state, seededPulse(seed), { at: 5 }, { settings: { mode: 'quiet' }, call: () => assert.fail('quiet mode writes no effect'), queries });
+        assert.equal(resultsOf(quietRun.state.domains.director)[0].effect, undefined);
+        if (entry.kind === 'TASK_SHIFT' || entry.kind === 'ENTER_CHECK') {
+            const fields = Object.values(result.state.domains.director.threads).find(thread => thread.key === 'Courier').fields;
+            assert.ok(entry.kind === 'ENTER_CHECK' ? fields.arrive : fields.on !== 'March 3, 2026, 06:00 pm', JSON.stringify(fields));
+            assert.deepEqual(part.domains.director.validate(result.state.domains.director), []);
+        }
+    }
+    for (const type of ['chronicle.rumor', 'cast.meet']) assert.ok(calls.includes(type), `${type} was called`);
+    assert.ok(kinds.has('TASK_SHIFT') || kinds.has('ENTER_CHECK'), [...kinds].join());
+});
+
+test('pulse: chronicle.rumor writes a looming event once, refused from a click, waits for the clock', () => {
+    const chronicle = { events: {}, factions: {}, seen: [], seenAt: {}, round: 0, surfaced: null, days: {}, written: null, dayFacts: {}, noted: null, questLog: {} };
+    const payload = { at: 5, event: { name: 'Rumour of Plague', summary: 'coughing', place: 'Harrow', factions: [] } };
+    const run = (extra = {}, body = payload) => {
+        const draft = structuredClone(chronicle);
+        const ctx = { cause: 'system', rev: 3, rng: () => 0.5, id: prefix => `${prefix}_abcdefgh`, time: () => 100, draft: () => draft, query: () => 100, fail: (code, message) => { throw Object.assign(new Error(message), { code }); }, ...extra };
+        try { return { out: rumor(ctx, body), draft }; } catch (error) { return { code: error.code }; }
+    };
+    const made = run();
+    assert.equal(Object.values(made.draft.events)[0].state, 'looming');
+    assert.equal(Object.values(made.draft.events)[0].name, 'Rumour of Plague');
+    assert.equal(run({ cause: 'ui' }).code, 'REFUSED');
+    assert.equal(run({}, { at: 5, event: { name: '' } }).code, 'INVALID');
+    assert.equal(run({ time: () => null, query: () => null }).code, 'NOT_YET');
+});
+
+test('pulse: agenda progress: step, steps and since follow now/then; where is the atlas place; old agendas without them are valid', () => {
+    assert.deepEqual(agendaProgress(null, { now: 'the docks', then: 'sells; hides; leaves' }, { minutes: 90 }), { step: '1', steps: '4', since: '90' });
+    assert.deepEqual(agendaProgress({ now: 'the docks', then: 'a', step: '1', steps: '2' }, { now: 'the market', then: 'b', step: '1', steps: '2' }, { minutes: 200, where: 'Market' }), { step: '2', since: '200', where: 'Market' });
+    assert.equal(agendaProgress({ now: 'a', then: 'b' }, { now: 'a', then: 'b' }, { minutes: 5 }), null);
+    assert.equal(agendaProgress({ now: 'a', then: 'b', step: '2', steps: '2' }, { now: 'c', then: 'b', step: '2', steps: '2' }, {})?.step, undefined);
+    assert.equal(weatherFrom('soft rain, mild'), 'rain');
+    assert.equal(weatherFrom('clear'), null);
+});
+
+test('pulse: replay: a middle delete, a swipe and a rebuild keep the world the same (the real host)', async () => {
+    const { createHost } = await import('../../vendor/story-block/testkit/index.js');
+    const { createModule } = await import('../../../src/v2/module.js');
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), feature: id => host?.sdk.feature(id) } });
+    host = await createHost({ modules: [module] });
+    try {
+        const lines = text => `${text}\n<Changes>\n~ time June 3, 1200, 08:00 am\n</Changes>`;
+        for (const n of [1, 2, 3, 4]) await host.send(`Go ${n}.`, lines(`Reply ${n}.`));
+        const results = () => resultsOf(host.head().domains.director);
+        assert.ok(results().length >= 1 && results().length <= 5);
+        const before = results().length;
+        await host.swipe();
+        assert.equal(results().length, before, 'a swipe replaces the roll, it does not stack another');
+        assert.deepEqual(part.domains.director.validate(host.head().domains.director), []);
+        assert.equal(host.sdk.receipts().some(entry => entry.receipt.type === PULSE), true);
+    } finally {
+        host.close();
+    }
+});

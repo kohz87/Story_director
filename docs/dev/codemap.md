@@ -31,6 +31,10 @@ Generated 2026-11-07.
 - `src/v2/chronicle/digest.js`: Note and digest commands that turn fresh change receipts into daily Chronicle facts and tail lines.
 - `src/v2/chronicle/thread-outcome.js`: Records a thread's outcome text in the Chronicle quest log for the committing reply.
 
+## src/v2/pulse/
+- `src/v2/pulse/tables.js`: World pulse tables (Standard and Duo d20 rows), the table choice by real counts, the fixed draw order (d20, actor, line), place groups by atlas kind, flavour lines per group and weather, and the step-down past an entry that cannot happen here; pure.
+- `src/v2/pulse/effects.js`: the World pulse part (feature `story-director.pulse`): the `director.pulse` roll step, quiet-scene command, hook, optional tail line, settings and the skip check; effect builders (rumour, chance meeting, ENTER_CHECK arrival, TASK_SHIFT step shift) and agenda step progress.
+
 ## src/v2/screens/
 - `src/v2/screens/behind.js`: Behind-the-scenes Director widget showing agendas, beats, clocks and name-only secrets after Reveal.
 - `src/v2/screens/dom.js`: Shared text-only DOM helpers for Director widgets: elements, buttons, plurals and spacing.

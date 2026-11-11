@@ -21,7 +21,7 @@
 // world's lasting change, which the story's own `world` lines cannot move on, see capture.js).
 
 import { threadOutcome } from './thread-outcome.js';
-import { applyFactionLine, applyWorldLine, edit, lasting, remove } from './capture.js';
+import { applyFactionLine, applyWorldLine, edit, lasting, remove, rumor } from './capture.js';
 import { DIGEST, DIGEST_DEFAULTS, DIGEST_FEATURE, FULL_MAX, KEEP_MAX } from './days.js';
 import { DIGEST_TAIL_BUDGET, NOTE, digestCommand, digestCommands, digestTailLine, noteCommand, noteCommands } from './digest.js';
 import { initialChronicle, validateChronicle } from './domain.js';
@@ -77,6 +77,8 @@ export const part = {
         'chronicle.edit': edit,
         'chronicle.remove': remove,
         'chronicle.lasting': lasting,
+        // The World pulse's news (pulse/effects.js): a looming world event, written by code before a reply.
+        'chronicle.rumor': rumor,
         [SURFACE]: surfaceHandler,
         [DIGEST]: digestHandler,
         [NOTE]: noteHandler,

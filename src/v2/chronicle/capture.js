@@ -26,10 +26,12 @@
 // the Director's clock. While the clock is not set the command fails (NOT_YET), so the pack event waits and is
 // tried again on the next reply; an entry therefore always has a date, and a delay counted from `since` can come due.
 //
+// `chronicle.rumor { at, event }` (cause `system`, the World pulse's step) adds a `looming` event: talk that goes round.
+//
 // The code lives in capture/ (text.js, world.js, faction.js, commands.js); this file re-exports every
 // name it exported before, so the old import path keeps working.
 
 export { lineText, clockOf, readState, readNames } from './capture/text.js';
-export { worldLineText, applyWorldLine, lasting } from './capture/world.js';
+export { worldLineText, applyWorldLine, lasting, rumor } from './capture/world.js';
 export { applyFactionLine } from './capture/faction.js';
 export { edit, remove } from './capture/commands.js';

@@ -33,7 +33,8 @@ test('a quiet story: the Director prompt is one line per family and well under t
             await host.send('Hello.', reply('Dawn.', ['~ time June 3, 1200, 08:00 am']));
             await host.send('Again.', 'More.');
             const text = promptOf(host);
-            assert.ok(text.length < 1800, `${text.length} characters`);
+            // 1,950: the World pulse's one static sentence (feature `story-director.pulse`, on by default) is in it.
+            assert.ok(text.length < 1950, `${text.length} characters`);
             assert.match(text, /^\+ agenda\|event\|clock\|beat\|secret Name — summary/m);
             assert.match(text, /^\+ hook\|quest Name — /m);
             assert.match(text, /^~ time <date, clock time/m);
