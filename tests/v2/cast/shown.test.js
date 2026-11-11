@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { namedIn } from '../../../src/v2/cast/world.js';
+import { namedIn, unshown } from '../../../src/v2/cast/world.js';
 import { OPENING, castCue, castHost, castSource, entry, people, receipts, said, slice, validatorErrors } from './helpers.js';
 
 const TEMIWA = entry('temiwa', { name: 'Sister Temiwa', aliases: ['Temiwa', 'Last Candle'], start: { place: 'Harrow', goal: 'tend the dying', routine: 'at the infirmary by day' } });
@@ -203,4 +203,38 @@ test('a reply with no change lines at all is judged too: not showing her withdra
     } finally {
         host.close();
     }
+});
+
+test('someone who arrives and leaves within the reply was shown: the meeting stands (from the reply\'s present lines, not its end state); swipe, Re-read and rebuild agree', async t => {
+    quiet(t);
+    const host = await toMeeting('A woman in grey crosses the yard and is gone.', { lines: [...LINE, '+ present Sister Temiwa', '- present Sister Temiwa'] });
+    try {
+        assert.equal(people(host)['ersveil:temiwa'].met.why, 'place');
+        assert.equal(receipts(host, 'cast.withdraw').length, 0);
+        assert.equal(notes(host).length, 1);
+        assert.equal(host.sdk.query('director.cast').length, 1);
+        const kept = JSON.stringify(host.head());
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), kept, 'rebuild == live');
+        const index = host.ctx.chat.length - 1;
+        assert.equal((await host.sdk.reread(index)).ok, true);
+        assert.equal(JSON.stringify(host.head()), kept, 'Re-read of the unchanged reply decides the same');
+        await host.swipe(said('Only smoke.', LINE));
+        assert.equal(people(host)['ersveil:temiwa'].met, null, 'a swipe that never shows her still withdraws');
+        assert.deepEqual(validatorErrors(host), []);
+    } finally {
+        host.close();
+    }
+});
+
+test('unshown: a meeting marked seen counts the reply\'s present history; an older one only its end; a label two people share shows neither', () => {
+    const person = (key, name, aliases = []) => ({ key, name, aliases, met: { why: 'place', rev: 5 } });
+    const two = { 'a:one': person('a:one', 'Sister Temiwa', ['the captain']), 'b:two': person('b:two', 'Old Rask', ['the captain']) };
+    const base = { people: two, notes: {}, day: null };
+    const meeting = extra => [{ at: 4, keys: ['a:one'], rev: 5, ...extra }];
+    const call = (extra, seen) => unshown({ ...base, meeting: meeting(extra) }, { index: 4, text: 'Smoke.', present: new Set(), seen: new Set(seen) });
+    assert.deepEqual(call({ seen: 1 }, ['sister temiwa']), [], 'seen at some point');
+    assert.deepEqual(call({}, ['sister temiwa']), ['a:one'], 'an older meeting: the end state only');
+    assert.deepEqual(call({ seen: 1 }, ['the captain']), ['a:one'], 'a shared label does not show her');
+    assert.deepEqual(call({ seen: 1 }, []), ['a:one']);
 });

@@ -52,7 +52,8 @@ function payloadOf(value) {
 
 function actionOf(raw, at) {
     if (!isRecord(raw)) return null;
-    const label = oneLine(raw.label ?? '', 32);
+    // (32 code points, the way benchLabel counts: an emoji name must not lose its tail to a UTF-16 cut)
+    const label = [...oneLine(raw.label ?? '', 128)].slice(0, 32).join('');
     const command = typeof raw.command === 'string' && COMMAND.test(raw.command) ? raw.command : '';
     const open = typeof raw.open === 'string' && /^[A-Za-z0-9._\-/]{1,120}$/.test(raw.open) ? raw.open : '';
     if (!label || (!command && !open)) return null;

@@ -91,7 +91,7 @@ export function createBlocks(deps) {
         // Each field and each button is a slot the form uses. A block with a role is a template written by hand, whose stats and latches are
         // fields no kind sets: only its kinds count.
         const slots = definition.role ? Object.keys(definition.kinds).length : Object.keys(definition.state).length + Object.values(definition.kinds).filter(kind => kind.ui).length;
-        if (slots > (definition.role === 'skills' && isTypedSkills(definition.state) ? L.skillsKinds : L.kinds)) refuse('DM_BUDGET', 'fields', B.kindLimit);
+        if (slots > (definition.role === 'skills' && isTypedSkills(definition.state) ? L.skillsKinds : definition.role === 'foes' ? L.foesKinds : L.kinds)) refuse('DM_BUDGET', 'fields', B.kindLimit);
         // A Character made here (the wizard, Edit first, the template) joins the party: the limit is checked now and the party is witnessed for a replay.
         const joins = action === 'define' && definition.role === 'character';
         if (joins) partyFull(ctx, prefix);

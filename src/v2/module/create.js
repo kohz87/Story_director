@@ -25,6 +25,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const capabilities = [];
     const screenList = [];
     const widgets = {};
+    const headerControls = [];
     const readsByPart = {};
     // What the parts are told of the module set: `fights`, whether a fight runner is there (true until
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
@@ -141,6 +142,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             own(owners.screen, screen?.id, ns, 'the screen');
             screenList.push(screen);
         }
+        for (const control of part.headerControls ?? []) headerControls.push(control);
         for (const [name, widget] of Object.entries(part.widgets ?? {})) {
             own(owners.widget, name, ns, 'the widget');
             widgets[name] = widget;
@@ -218,6 +220,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         screens: screenList,
     };
     if (Object.keys(widgets).length) def.widgets = widgets;
+    // Story Block's game view header toggle (the host's `headerControls`, one per module): the Quiet scene switch.
+    if (headerControls.length) def.headerControls = headerControls;
     if (features.length) def.features = features;
     // The names a pack's `requires.capabilities` can ask of this module (Story Block lists a pack as missing one that no module declares).
     if (capabilities.length) def.capabilities = capabilities;

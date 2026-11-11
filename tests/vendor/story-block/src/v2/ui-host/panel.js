@@ -31,9 +31,7 @@ export function createUiPanel({ doc, sdk, tabSource, tabOrder, barDeclared, moun
         else getTabHost().refresh();
     }
     function closePanel() {
-        // More's sheet, if it is open, goes with the panel: its scrim and its keys (the focus does not go to a hidden tile). The
-        // dialogs the panel opened go too (their opener is in the panel, and it is about to be hidden).
-        getTabHost()?.bar?.closeMore({ focus: false });
+        // The dialogs the panel opened go with it (their opener is in the panel, and it is about to be hidden).
         mounts.dialog?.closeOpenedIn?.(panel);
         panel.hidden = true;
         doc.body.classList.remove('story-suite-sheet-open');

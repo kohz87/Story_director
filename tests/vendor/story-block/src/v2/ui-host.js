@@ -68,7 +68,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
     const { registry, store, sdk, settings, events } = runtime;
     const { queryAt, widgets, coreOn, blockTemplates, blockWidgets, liveCtx, savePoints, inspector, hostWidgets, renderer,
         screens, tabOrder, extraTabs, navPresent, barDeclared, setSharedTabs } = createHostSetup({
-        runtime, ctx, doc, registry, store, sdk, openSettings, inspectorProblems, getRpg: () => rpg,
+        runtime, ctx, doc, registry, store, sdk, openSettings, inspectorProblems, getRpg: () => rpg, openScreen: id => mounts?.screen?.open?.(id) ?? false,
     });
     const { rpgOn, blockPresentation, syncScreens } = createScreenSync({ doc, registry, sdk, screens, setSharedTabs });
 
@@ -182,7 +182,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
     const gameButton = iconButton(doc, 'story-suite-bar-game', 'fa-expand', S.bar.game, S.bar.gameTitle);
     gameButton.setAttribute('aria-keyshortcuts', 'Alt+G');
     const settingsButton = iconButton(doc, 'story-suite-bar-settings', 'fa-sliders', S.bar.suite, S.bar.suiteTitle);
-    // The dot on the Story button while a card offer waits for an answer (the app's own alert dot, view/mounts.css).
+    // The dot on the Story button while a card offer waits for an answer (the app's own alert dot, view/mounts-*.css).
     const offerDot = el(doc, 'span', 'ss-screenbar-alert ss-card-offer-dot');
     offerDot.hidden = true;
     storyButton.appendChild(offerDot);

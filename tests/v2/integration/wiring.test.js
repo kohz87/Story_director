@@ -166,7 +166,6 @@ const TABLE = {
     standingModule: 'pack.test/standing',
     worldDirections: [{ event: 'Grain Levy', favours: 'corvin' }],
 };
-const withTable = section => ({ id: 'fake-pack', name: 'fake pack', version: '0.0.0-test', queries: { 'packs.ripples': () => section } });
 const thread = (key, giver, outcome, difficulty = '') => ({ kind: 'quest', key, summary: '', fields: { giver, difficulty }, status: 'resolved', ended: { outcome } });
 const toolsOf = ({ threads = [], events = [], receipts = [], chat = {}, section = TABLE } = {}) => ({
     query: (name, args) => ({
@@ -246,7 +245,9 @@ test('ripples on the real host: registered, sway follows the replies and is the 
     t.mock.method(console, 'warn', () => {});
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [fakeFightRunner(), withTable(TABLE), module] });
+    host = await createHost({ modules: [fakeFightRunner(), module] });
+    // Story Block's own packs part answers `packs.ripples` now; hand it an enabled pack that carries the table.
+    t.mock.method(host.packs.packs, 'packs', () => [{ id: 'fake-pack', ripples: TABLE }]);
     t.after(() => host.close());
     const rows = () => host.sdk.query('ripples.sway', {}).map(row => [row.id, row.sway]);
     assert.ok(host.registry.query('ripples.leader'), 'the leader query is registered');

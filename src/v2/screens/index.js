@@ -14,7 +14,7 @@
 // is its namespaced key. The status card is
 // on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
-import { PULSE_FEATURE, directorScreen, pulseView } from './director.js';
+import { PULSE_FEATURE, directorScreen, pulseQuiet, pulseView } from './director.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
@@ -52,8 +52,11 @@ export function createScreensPart({ settings = hostSettings } = {}) {
     return {
         domains: {},
         commands: {},
-        // `pulse.view`: the World pulse card and the status card's roll row (feature `story-director.pulse`).
-        queries: { ...screenQueries({ settings }), 'pulse.view': Object.assign((state, args, tools) => pulseView(state, args, tools, settings), { feature: PULSE_FEATURE }) },
+        // `pulse.view`: the World pulse card and the status card's roll row; `pulse.quiet`: the header switch's state (feature `story-director.pulse`).
+        queries: { ...screenQueries({ settings }), 'pulse.view': Object.assign((state, args, tools) => pulseView(state, args, tools, settings), { feature: PULSE_FEATURE }),
+            'pulse.quiet': Object.assign((state, args, tools) => pulseQuiet(state, args, tools, settings), { feature: PULSE_FEATURE }) },
+        // The Quiet scene switch in Story Block's game view header (a host that has `headerControls`; the Director tab keeps its own switch otherwise).
+        headerControls: [{ id: 'quiet', label: 'Quiet scene', icon: '🌙', query: 'pulse.quiet', command: 'director.pulse.quiet', feature: PULSE_FEATURE }],
         kinds: {},
         hooks: {},
         tabs: [],

@@ -15,6 +15,11 @@ export const tryLive = (fn, fallback) => {
         return fallback;
     }
 };
+/**
+ * Whether the live Story Block has the game view header's module toggle (its `sdk.modules()` entries carry a `headerControls` list; an older host's do
+ * not). False when no host can be asked: the Quiet scene switch then stays on the Director tab (the stand-alone path).
+ */
+export const hostHasHeaderSlot = () => tryLive(() => liveSdk()?.modules?.().some(entry => Array.isArray(entry?.headerControls)), false) === true;
 export const LIVE_HOST = Object.freeze({
     settings: id => tryLive(() => liveSdk()?.settings?.(id), null),
     substitute: text => tryLive(() => liveSdk()?.substitute?.(text), undefined),

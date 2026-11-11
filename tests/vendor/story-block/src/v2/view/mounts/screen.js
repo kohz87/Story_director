@@ -1,7 +1,7 @@
 // Story Suite v2: the `screen` mount (SPEC §13.4), a full-screen game view over the chat. Its navigation is the screen bar
-// (view/screen-bar.js): one strip of every screen that scrolls sideways (no More); from 1000px wide
-// it is one full row (mounts.css does the switch). The navigation is in Home-first order
-// (screens.js screenOrder). A close button, and Escape closes it (Escape first closes More, if it is open). It shows the
+// (view/screen-bar.js): one strip of every screen that scrolls sideways; from 1000px wide
+// it is one full row (mounts-*.css does the switch). The navigation is in Home-first order
+// (screens.js screenOrder). A close button, and Escape closes it. It shows the
 // head state and redraws when the head changes while it is open.
 //
 // The reader's order and hidden screens (Settings → Tabs & Packs → Tabs, view/tab-order.js) come in through
@@ -14,11 +14,18 @@
 // is told whether the header is up (`settings._heroShown`): Home leaves its Where card out then, as the header has the place, time,
 // weather and people.
 //
+// A module's header toggle (registry `headerControls`, view/game-header.js headerControlItems): a small pill in the title bar, between the
+// title and the close button, drawn from `deps.headerControls(state)` on open, on a screen change and on every redraw. The pills are made
+// once per control and updated in place (the label and the size never change with the state, so nothing moves; focus stays), with
+// aria-pressed for on/off. A press sends the control's command with `{ ...payload, on: !on }` through `deps.api.command`; the redraw
+// that follows the commit shows the new state. No `headerControls`, or none answering: no pill.
+//
 // deps (see common.js) plus:
 //   container   () → element the view is added to (optional, default document.body)
 //   inNav       (screenId) → bool: listed in the navigation (optional, default every screen)
 //   inBar       (screenId) → bool: in the bar, not under More (optional, default every screen)
 //   heroOf      (state) → the props of the header's ss.hero, or null (optional: no header)
+//   headerControls (state) → [{ key, label, icon, command, payload, on }] the title bar's toggles (optional: none)
 //
 // → { mount(el, screenId, opts) → handle, open(screenId?) → bool, close(), isOpen(), current(), update(), destroy() }
 
@@ -61,7 +68,7 @@ export function createScreenMount(deps) {
                 moreOnly: typeof deps.inBar === 'function' && !deps.inBar(entry.id) };
         });
         // One scrolling strip with every screen (nothing is under More); the bar's CSS makes it one full row from 1000px.
-        view.bar.update({ items, current: view.screenId, strip: true });
+        view.bar.update({ items, current: view.screenId });
         return entries;
     }
 
@@ -100,6 +107,40 @@ export function createScreenMount(deps) {
         else view.hero = hero.render(view.heroSlot, props, deps.api ?? {});
     }
 
+    // The title bar's module toggles: one pill per key, kept and updated in place, in the answered order, before the close button.
+    function drawControls() {
+        if (!view) return;
+        let items = [];
+        if (typeof deps.headerControls === 'function') {
+            try { items = deps.headerControls(headState(deps)) ?? []; } catch { items = []; }
+        }
+        const pills = view.pills;
+        for (const [key, pill] of [...pills]) if (!items.some(item => item.key === key)) { pill.remove(); pills.delete(key); }
+        for (const item of items) {
+            let pill = pills.get(item.key);
+            if (!pill) {
+                pill = button(doc, 'ss-gameview-pill', '');
+                pill.setAttribute('data-ss-control', item.key);
+                pill._icon = make(doc, 'span', 'ss-gameview-pill-icon');
+                pill._icon.setAttribute('aria-hidden', 'true');
+                pill._label = make(doc, 'span', 'ss-gameview-pill-label');
+                pill.append(pill._icon, pill._label);
+                pill.addEventListener('click', () => {
+                    const now = pill._item;
+                    if (!now || pill.getAttribute('aria-disabled') === 'true') return;
+                    pill.setAttribute('aria-disabled', 'true');
+                    Promise.resolve(deps.api?.command?.(now.command, { ...now.payload, on: !now.on })).catch(() => null).finally(() => pill.removeAttribute('aria-disabled'));
+                });
+                pills.set(item.key, pill);
+                view.titleBar.insertBefore(pill, view.closer);   // only when new: moving a focused pill would drop its focus
+            }
+            pill._item = item;
+            pill._icon.textContent = item.icon;
+            pill._label.textContent = item.label;
+            pill.setAttribute('aria-pressed', String(item.on));
+        }
+    }
+
     // Board redraws can open or discard a fight without changing the head or navigating away.
     function syncBoardHero() {
         if (view && boardHero() !== view.boardHero) drawHero();
@@ -110,8 +151,6 @@ export function createScreenMount(deps) {
 
     function show(screenId, { byName = false } = {}) {
         if (!view) return false;
-        // Every navigation closes More's sheet first (its scrim and its keys with it); the focus goes back to More, as a tile's does.
-        if (view.bar.isMoreOpen()) view.bar.closeMore({ focus: true });
         view.screenId = screenId;
         const entries = drawBar();
         const entry = entries.find(item => item.id === screenId);
@@ -120,6 +159,7 @@ export function createScreenMount(deps) {
         view.title.textContent = entry?.screen.title ?? deps.screens.resolve(screenId)?.screen?.title ?? screenId;
         view.handle?.unmount();
         drawHero();
+        drawControls();
         view.handle = mount(view.body, screenId, { settings: bodySettings() });
         syncBoardHero();
         return true;
@@ -152,17 +192,18 @@ export function createScreenMount(deps) {
         const onWidth = () => {
             drawBar();
             drawHero();
+            drawControls();
         };
         phone?.addEventListener?.('change', onWidth);
         const body = make(doc, 'div', 'ss-gameview-body');
         main.append(bar, heroSlot, body);
         root.append(main);
-        // The bar comes last in the window (after the body): created here, it appends its own bar, scrim and sheet to the window.
+        // The bar comes last in the window (after the body): created here, it appends its own bar to the window.
         const screenBar = createScreenBar(doc, main, {
             label: STRINGS.bar.screens,
             className: 'ss-gameview-nav',
             onSelect: id => show(id),
-            // a slot or a tile names its screen, as the game view's buttons always did (the tests and the modules use it)
+            // a slot names its screen, as the game view's buttons always did (the tests and the modules use it)
             decorate: (node, item) => node.setAttribute('data-ss-target', item.id),
         });
         (deps.container?.() ?? doc.body).appendChild(root);
@@ -172,13 +213,13 @@ export function createScreenMount(deps) {
         root.addEventListener('click', event => { if (event.target === root && pressedScrim) close(); });
         doc.body?.classList?.add('ss-gameview-open');
 
-        // A layer of the shared stack (modal-stack.js): Escape closes the view when no layer above it (the More sheet, a dialog) is open,
+        // A layer of the shared stack (modal-stack.js): Escape closes the view when no layer above it (a dialog) is open,
         // Tab stays in it, and closing it hands the focus back to what opened it.
         const layer = stackOf(doc).push({ name: 'game view', root, onEscape: () => { close(); return true; } });
         const Observer = doc.defaultView?.MutationObserver;
         const boardObserver = Observer ? new Observer(syncBoardHero) : null;
         boardObserver?.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-        view = { root, bar: screenBar, title, body, handle: null, screenId: target, layer, off: onHead(deps, update), heroSlot, hero: null, heroShown: false, boardHero: false, boardObserver, phone, onWidth };
+        view = { root, titleBar: bar, closer, pills: new Map(), bar: screenBar, title, body, handle: null, screenId: target, layer, off: onHead(deps, update), heroSlot, hero: null, heroShown: false, boardHero: false, boardObserver, phone, onWidth };
         show(target, { byName: named === target });
         // by pointer: the window takes the focus (no ring); by key: the close button (its ring is the keyboard's), one task later:
         // the key that opened the view is still being handled, and its own activation (Enter, Space) would click whatever has the
@@ -214,6 +255,7 @@ export function createScreenMount(deps) {
         }
         drawBar();
         drawHero();
+        drawControls();
         view.handle?.update();
     }
 
@@ -224,10 +266,6 @@ export function createScreenMount(deps) {
         update,
         isOpen: () => !!view,
         current: () => view?.screenId ?? null,
-        /** The bar's More sheet: opened, closed (focus back to More) and asked. */
-        openMore: () => !!view && view.bar.openMore(),
-        closeMore: () => { if (view) view.bar.closeMore({ focus: true }); },
-        isMoreOpen: () => !!view && view.bar.isMoreOpen(),
         destroy() {
             close();
             doc.removeEventListener?.('pointerdown', onPointer, true);
