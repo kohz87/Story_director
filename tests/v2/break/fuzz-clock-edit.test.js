@@ -12,7 +12,7 @@ import { createModule } from '../../../src/v2/module.js';
 import { PRESETS, makeCalendar } from '../../../src/calendar.js';
 import { dayOf, orderedDays, writtenOf } from '../../../src/v2/chronicle/days.js';
 
-const SEEDS = [21, 22, 23];
+const SEEDS = [21, 22, 23, 76, 90, 97];
 const REPLIES = 18;
 const DELETE_AT = [6, 12, 18];
 const CAPS = { FULL: 3, KEEP: 5 };

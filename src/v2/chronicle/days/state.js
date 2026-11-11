@@ -52,8 +52,16 @@ export function followDigest(digest, left, { state = null, currency = null, dayO
     return makeDigest(digest.day, { ...facts, quests }, { date: digest.date, currency, made: digest.made, revs: facts.revs, src: left.map(item => item.rev) });
 }
 
-/** The days kept, oldest first (daysOf's options). */
-export const orderedDays = (chronicle, options) => Object.values(daysOf(chronicle, options)).sort((a, b) => a.day - b.day);
+/**
+ * The days kept, oldest first (daysOf's options). Only the days `written.days` lists are read: it is what the last digest left. A
+ * digest stored for another day is a leftover (the clock went back past it, or the block that dropped it for the keep cap was
+ * deleted in the middle), so it is not read. `all: true` (the digest command, which writes `written` itself) keeps every stored one.
+ */
+export function orderedDays(chronicle, options) {
+    const listed = options?.all ? null : writtenOf(chronicle)?.days;
+    const left = Array.isArray(listed) ? new Set(listed) : null;
+    return Object.values(daysOf(chronicle, options)).filter(digest => !left || left.has(digest.day)).sort((a, b) => a.day - b.day);
+}
 
 /** `chronicle.written` (where digests were last written), or null. */
 export const writtenOf = chronicle => slotValue(chronicle?.written);
