@@ -16,7 +16,7 @@ import { applyAdvance, applyMeet, applyRumor, applySync, planSync, syncEmpty, sy
 import { sha256 } from '../hash.js';
 import { cueLines, pinned } from './note.js';
 import { cutPoints, isInt, keysOfPerson } from './domain.js';
-import { castOf, fightOn, packName, partyPlace, presentKeys, ask } from './entries.js';
+import { castOf, fightOn, packName, partyPlace, presentKeys, seenKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { kindWords } from './sought.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
@@ -328,7 +328,7 @@ export function createCastHooks({ plans }) {
         const chat = typeof view?.story?.chat === 'function' ? view.story.chat() : null;
         const message = Array.isArray(chat) ? chat[info.index] : null;
         if (!message || typeof message.mes !== 'string') return undefined;
-        const keys = unshown(slice, { index: info.index, text: shownText(message.mes), present: presentKeys(queryOf(view), view?.state) });
+        const keys = unshown(slice, { index: info.index, text: shownText(message.mes), present: presentKeys(queryOf(view), view?.state), seen: seenKeys(info.receipts) });
         return keys.length ? { commands: [{ type: 'cast.withdraw', payload: { at: info.index, keys } }] } : undefined;
     }
 

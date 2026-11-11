@@ -240,7 +240,7 @@ export function applyMeet(cast, payload, env) {
             });
         }
     }
-    if (cued.length && isInt(payload.at)) cast.meeting = [{ at: payload.at, keys: cued.slice(0, 4), rev }];
+    if (cued.length && isInt(payload.at)) cast.meeting = [{ at: payload.at, keys: cued.slice(0, 4), rev, seen: 1 }];   // `seen`: judged by who the reply had in the scene at any point (older meetings: at its end)
     return met;
 }
 
