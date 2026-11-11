@@ -214,7 +214,7 @@ export function initiativeCommand(ctx, payload = {}) {
     return {
         summary: chosen ? `Initiative for the next reply: ${chosen.name}.` : '',
         narrate: false,
-        data: { round, key: chosen?.key ?? null, name: chosen?.name ?? null },
+        data: { keep: true, round, key: chosen?.key ?? null, name: chosen?.name ?? null },
     };
 }
 

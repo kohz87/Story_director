@@ -4,7 +4,7 @@
 // slot `director.pulse = [{ results: [last 5] }]`. The step is a host prelude: it is previewed for the prompt and stored on the generated reply
 // itself (same seed), so a swipe, a regenerate or a delete of the reply takes its roll and effects back. Its receipt's summary is the one
 // "World this reply: …" cue (none on CALM or a skip; at most 40 tokens), told in the leading note, not an optional tail line.
-// A reply is skipped, and the skip recorded, during a fight, after an explicit rest, after a jump of 6+ story hours, while the
+// A reply is skipped, and the skip recorded, during a fight (a board open, or Foes slots that changed in the last STALE_REPLIES replies), after an explicit rest, after a jump of 6+ story hours, while the
 // reader's quiet-scene flag is set (`director.pulse.quiet { on }`, slot `director.pulseQuiet`) and while the clock is unset.
 // The builders below are pure (no state, no ctx, no model call); the part (the command, hook, settings) is at the end.
 //
@@ -29,7 +29,7 @@
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { slotValue, toSlot } from '../slot.js';
-import { castOf, fightOn } from '../cast/entries.js';
+import { castOf, fightOn, foesLeftover, foesSignature } from '../cast/entries.js';
 import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
@@ -39,6 +39,11 @@ import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plain
 
 export const JUMP_MINUTES = 360;
 export const REPLY_MINUTES = 20;
+/**
+ * A Foes slot the narrator never cleared is a fight only while it moves: when the live slots read the same on this many replies running (the
+ * replies' own rolls record them, `foes`), the pulse rolls again. A step from a reply written before this rule has no `age` flag and keeps the old rule.
+ */
+export const STALE_REPLIES = 2;
 // The note line is at most 40 tokens (4 characters each): the label and TAIL_CHARS of text stay under 150 characters.
 export const TAIL_CHARS = 128;
 export const RUMOUR_ROOM = 54;
@@ -367,19 +372,22 @@ export function pulseCommand(ctx, payload = {}) {
     const clock = isInt(director.time?.minutes) ? director.time.minutes : null;
     const last = before.at(-1);
     const scene = sceneOf(query, state);
+    // Only a step that carries `age` (every new reply) knows a leftover Foes slot; an older reply re-read keeps the rule it was written under.
+    const foes = foesSignature(state);
+    const stale = payload?.age === 1 && foesLeftover(state, before, STALE_REPLIES);
     const skipped = skipReason({
-        fight: fightOn(query, state), rested: restedSince(state, last?.clock, clock), quiet: slotValue(director.pulseQuiet)?.on === true, clock,
+        fight: fightOn(query, state, { leanOn: !stale }), rested: restedSince(state, last?.clock, clock), quiet: slotValue(director.pulseQuiet)?.on === true, clock,
         jumpMinutes: isInt(last?.clock) && isInt(clock) ? clock - last.clock : null,
     });
     // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
     if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
     const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode });
-    director.pulse = toSlot({ results: [...before, { at, clock, ...entry }].slice(-RESULTS_MAX) });
+    director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
     const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text);
     // A chance meeting also carries the cast's cue for the person met: the prelude is previewed on the head state, which has no meeting yet.
-    return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
+    return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { keep: true, kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
 }
 
 /** `director.pulse.quiet { on }` (the reader's): the quiet-scene flag, a slot written whole; while it is on every reply is skipped. */
@@ -396,7 +404,7 @@ export function pulseHook(view, info = {}) {
     const length = view?.chat?.length;
     if (info?.commit === false || !['normal', 'swipe', 'regenerate'].includes(type) || !isInt(length)) return undefined;
     // The chat holds the reply being swiped, so the reply's place is one below its length.
-    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)) } }] };
+    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1 } }] };
 }
 
 // A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.
