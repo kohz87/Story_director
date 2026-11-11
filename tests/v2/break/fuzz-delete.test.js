@@ -37,7 +37,7 @@ import { problemList } from '../../../src/v2/tracker/domain.js';
 import { fakeDelta } from '../keypeople/helpers.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
-const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 24, 25, 26, 27, 28, 29, 30, 31, 32];
 // Seeds from EXTRAS_FROM carry the last days' lines (dayLines, the quiet switch); seeds 1-3 keep the stories the aggregate checks below were set on.
 const EXTRAS_FROM = 4;
 const REPLIES = 20;
