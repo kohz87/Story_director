@@ -173,7 +173,27 @@ export function dropProblems(director, drop) {
 const isInt = value => Number.isSafeInteger(value);
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+// A thread that is frozen all the way down (a state's own) is checked once per object and id: the states of a replay share
+// their unchanged threads, so a block that changed one thread no longer re-checks the others. Anything else is checked each time.
+const checkedThreads = new WeakMap();
+const frozenThreads = new WeakSet();
+const frozenAll = value => {
+    if (value === null || typeof value !== 'object' || frozenThreads.has(value)) return true;
+    if (!Object.isFrozen(value) || !Reflect.ownKeys(value).every(key => frozenAll(value[key]))) return false;
+    frozenThreads.add(value);
+    return true;
+};
+
 function threadErrors(id, thread) {
+    if (thread === null || typeof thread !== 'object' || !frozenAll(thread)) return threadErrorsOf(id, thread);
+    const known = checkedThreads.get(thread);
+    if (known?.id === id) return known.errors;
+    const errors = threadErrorsOf(id, thread);
+    checkedThreads.set(thread, { id, errors });
+    return errors;
+}
+
+function threadErrorsOf(id, thread) {
     const errors = [];
     const at = `director.threads.${id}`;
     if (!isRecord(thread)) return [`${at} is not a thread.`];

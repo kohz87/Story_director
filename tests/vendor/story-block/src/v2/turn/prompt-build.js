@@ -5,13 +5,14 @@
 
 import { extractBlock, hasHidden, hasLegacy, stripBlock } from '../capture.js';
 import { HOST_MODULE } from '../registry.js';
-import { assemble, contextNotice, estimateTokens } from '../prompt.js';
+import { assemble, contextNotice, estimateTokens, KEPT_TAIL_TOKENS } from '../prompt.js';
 import { ensureModules, makeView } from '../sdk.js';
 import { cutAt } from '../../text.js';
 import { CORE_FEATURE } from '../features.js';
 import { DICE as RPG_DICE, RESOLVE as RPG_RESOLVE } from '../lean-rpg/names.js';
 import { NO_ROLLS_LINE, receiptCue } from '../lean-rpg/cue.js';
-import { holdStart } from './fight-start.js';
+import { fightCue, holdStart } from './fight-start.js';
+import { rpgLib } from '../rpg-lazy.js';
 import { readRecord } from '../persist.js';
 import { hashText } from '../assist/common.js';
 import { boardFailure, boardStartState } from './held-board.js';
@@ -20,6 +21,8 @@ import { TIMED_OUT, defuseMacros, firstLine, mapContent, stripBattleMarker, subs
 // The most a module's hook may keep whole in the tail (`{ text, keep: true }` lines): two meeting cues and a rumor fit; more is droppable.
 export const KEPT_LINES_MAX = 4;
 export const KEPT_CHARS_MAX = 4000;
+// A prelude cue a module marks kept (receipt `data.keep === true`) is pinned too, up to this many tokens in all per reply; the rest are plain cues.
+export const KEPT_PRELUDE_TOKENS = KEPT_TAIL_TOKENS;
 
 export function createPromptBuild(s, deps) {
     const { ctx, metadata, store, bus, registry, settings, events, timeline, onBlocked, notify, initial, prepare, hostSettings, viewReader, view, contextNow, hasCarrier, lastCarrier, isPrelude, markBusy, markIdle, setPrompts, clearPrompts, problem, trySave, held, claimQuiet, FOREGROUND, HOOK_TIMEOUT_MS, ASSIST_WAIT_MS, RPG_LOAD_WAIT_MS, OWN_PROMPT_PARTS, OWN_PROMPT_CHARS, STRIP_CACHE, HAS_BLOCK, HAS_LEGACY, hookTimeout, normalizeType } = deps;
@@ -117,6 +120,7 @@ export function createPromptBuild(s, deps) {
         }
         // Other cues may settle a fight or change a modifier. Preview on the state they leave,
         // which is also the state the generated reply's prelude will start from.
+        let keptPrelude = 0;
         for (const { moduleId, type: preludeType, payload, seed } of requested) {
             if (preludeType === RPG_RESOLVE && payload?.board?.setup?.opening) {
                 const checked = boardStartState(bus, store.head(), payload.board);
@@ -135,12 +139,27 @@ export function createPromptBuild(s, deps) {
                 // A prelude that says it is not for the narrator (`narrate: false`, the RPG's no-rolls note) is stored with the reply and told to no one.
                 if (result.receipt.narrate === false) continue;
                 const told = `[Happened]\n${receiptCue(result.receipt)}`;
-                cues[moduleId] = [...(cues[moduleId] ?? []), preludeType === RPG_RESOLVE ? { text: told, keep: true, ...(payload?.board ? { board: true } : {}) } : told];
+                // A module may mark its prelude cue kept (`receipt.data.keep === true`): pinned like the RPG's, but only while the pinned
+                // prelude text of the reply stays within KEPT_PRELUDE_TOKENS in all, so pinning can never starve the rest of the tail.
+                let pin = false;
+                if (preludeType !== RPG_RESOLVE && result.receipt.data?.keep === true) {
+                    const size = estimateTokens(told);
+                    if (keptPrelude + size <= KEPT_PRELUDE_TOKENS) { keptPrelude += size; pin = true; }
+                }
+                cues[moduleId] = [...(cues[moduleId] ?? []), preludeType === RPG_RESOLVE ? { text: told, keep: true, ...(payload?.board ? { board: true } : {}) } : pin ? { text: told, keep: true } : told];
             } else if (preludeType === RPG_RESOLVE && payload?.board) {
                 const reason = boardFailure('The fight could not be prepared:', result?.message);
                 problem({ module: moduleId, code: result?.code ?? 'FAILED', message: reason });
                 return { blocked: { moduleId, reason } };
             } else problem({ module: moduleId, code: result?.code ?? 'FAILED', message: `The cue "${preludeType}" was not prepared: ${result?.message ?? 'unknown error'}` });
+        }
+        // A fight narrated with no foes line (fight-start.js fightCue): one short tail line for this reply, only with the RPG on and no foe set.
+        // (A swipe: the reply being swiped is the last message, so the reader's message and the reply before it sit one place further back.)
+        const back = type === 'swipe' ? 1 : 0, last = ctx?.chat?.at(-1 - back), prior = ctx?.chat?.at(-2 - back);
+        if (type !== 'continue' && battleOn() && last?.is_user && prior && !prior.is_user && !prior.is_system && readRecord(prior)) {
+            const state = store.head(), lib = rpgLib(), foesNow = (lib?.rpgBlocks(state) ?? []).some(block => block.role === 'foes' && lib.foesOf(block).length > 0);
+            const cue = fightCue(prior, { foesNow });
+            if (cue) cues[HOST_MODULE] = [...(cues[HOST_MODULE] ?? []), cue];
         }
         // Saved with the reply (MESSAGE_RECEIVED), not now: each save writes the whole chat file, and the
         // reply's save comes moments later with these cues in it. A reply that never comes still has them
@@ -149,7 +168,7 @@ export function createPromptBuild(s, deps) {
             store.deferSave?.();
             s.deferred = true;
         }
-        return { cues, prechecks, previewState, boardStop };
+        return { cues, prechecks, previewState, boardStop, keptPrelude };
     }
 
     // What modules send with the reply on their own, under their own prompt keys (SPEC §5: NPC State
@@ -180,13 +199,13 @@ export function createPromptBuild(s, deps) {
         return out;
     }
 
-    function build(cues = {}, state = null, boardStop = null) {
+    function build(cues = {}, state = null, boardStop = null, keptTokens = 0) {
         const untold = store.untold();
         // (`state`: the state the reply's prelude rolls leave, when it has one; the tail's lines are made from it)
         const current = state ? makeView({ store, registry, settings, chat: ctx?.chat, active: viewReader, state, boardStop }) : view();
         const own = sentByModules(current);
         const ownTokens = own.reduce((sum, part) => sum + part.tokens, 0);
-        const result = assemble({ registry, view: current, untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow(), ownTokens, rolled: state !== null });
+        const result = assemble({ registry, view: current, untold, settings: hostSettings(), cues, substitute: text => substituteNames(text, ctx), context: contextNow(), ownTokens, rolled: state !== null, keptTokens });
         for (const message of result.problems) problem({ code: 'FAILED', message });
         return { ...result, own, untold };
     }
@@ -359,9 +378,9 @@ export function createPromptBuild(s, deps) {
                 block(blocked, abort);
                 return;
             }
-            const { cues, prechecks, previewState, boardStop, blocked: cueBlocked } = await runCues(kind);
+            const { cues, prechecks, previewState, boardStop, keptPrelude, blocked: cueBlocked } = await runCues(kind);
             if (cueBlocked) { block(cueBlocked, abort); return; }
-            const built = build(cues, previewState, boardStop);
+            const built = build(cues, previewState, boardStop, keptPrelude);
             tellTooSmall(built.fit);
             const chat = ctx.chat;
             const last = chat.length - 1;

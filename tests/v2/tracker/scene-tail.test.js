@@ -41,8 +41,10 @@ function withScene(state, { place = '', region = '', present = [] } = {}) {
 }
 
 const view = (state, settings = {}, extra = {}) => ({ state, settings, chat: { length: 9, lastUser: '' }, ...extra });
-const tailOf = (state, settings = {}, extra = {}) => part.context.tail(view(state, settings, extra)).lines;
-const lineOf = (lines, label) => lines.find(line => line.startsWith(`${label}:`) || line.startsWith(label)) ?? '';
+// The kept Initiative line is a { text, keep: true } object: these tests read the text.
+const tailOf = (state, settings = {}, extra = {}) => part.context.tail(view(state, settings, extra)).lines.map(line => line.text ?? line);
+const textOf = lines => lines.map(line => line.text ?? line);
+const lineOf = (lines, label) => textOf(lines).find(line => line.startsWith(`${label}:`) || line.startsWith(label)) ?? '';
 // Only the NPC initiative is off (the stub used to answer false for every feature, which now also means the world-building threads are off).
 const NO_INITIATIVE = id => id !== 'story-director.initiative';
 const BEHIND = ['Smuggler Bram', 'Storm', 'Bell Tolls', 'Flood', 'Ren is the lost heir'];
@@ -151,7 +153,7 @@ test('the tail stays within its budget with many threads; Elsewhere goes first w
     // With room, the Elsewhere line is there, still within the budget.
     const roomy = withScene(story([...WORLD], makeState()), { place: 'Harrow', region: 'Vale', present: ['Elula'] });
     const small = directorTail(view(roomy, { elsewhere: 10 }), { budget: 140 }).lines;
-    assert.ok(estimateTokens(small.join('\n')) <= 140, small.join('\n'));
+    assert.ok(estimateTokens(textOf(small).join('\n')) <= 140, textOf(small).join('\n'));
     const big = directorTail(view(roomy, { elsewhere: 10 }), { budget: TAIL_BUDGET }).lines;
     assert.ok(lineOf(big, 'Elsewhere').split(' · ').length >= lineOf(small, 'Elsewhere').split(' · ').length);
     assert.ok(lineOf(big, 'Initiative'));
@@ -170,4 +172,16 @@ test('the static part is byte-identical whatever the scene, the threads or the p
     assert.equal(part.context.parts[0].feature, 'story-director.initiative');
     assert.equal(part.context.parts[0].static(), part.context.parts[0].static());
     assert.doesNotMatch(part.context.parts[0].static(), /Elula|Harrow|\d/);
+});
+
+test('wholeWord keeps its answers when a name is asked again and past the pattern memo bound', async () => {
+    const { wholeWord } = await import('../../../src/v2/tracker/scene.js');
+    for (let i = 0; i < 3; i++) {
+        assert.equal(wholeWord("Vorn's Return", 'Vorn'), true);
+        assert.equal(wholeWord('Annual Fair', 'Ann'), false);
+        assert.equal(wholeWord('Élodie  spoke', 'élodie'), true);
+    }
+    for (let i = 0; i < 2500; i++) assert.equal(wholeWord(`meet Name${i} now`, `Name${i}`), true);
+    assert.equal(wholeWord("Vorn's Return", 'Vorn'), true);
+    assert.equal(wholeWord('ab', 'ab'), false);
 });

@@ -31,11 +31,15 @@ export const DM_LIMITS = freeze({
     // A Skills block made with the types holds eleven slots (eight combat, three utility) of seven fields each (a `type` per slot), their `who` and the mark: 79 fields and a learn and
     // a practice line per slot, so `skillsFields` 80 and `skillsKinds` 22 (a block of the earlier eight slots is far inside both).
     skillsLegacyFields: 56, skillsFields: 80, skillsKinds: 22, skillTailTokens: 47,
+    // A Foes block (role `foes`) holds up to six groups of three kinds each (set, hurt, clear): 18 kinds, two over the others' 16 (its fields, 24, are inside 32).
+    foesKinds: 18,
     // The most stages a role block's bar field (health, mana, stamina, a foe's health) may have, counted up from 0.
     stages: 10,
     // The same for a character's bar that carries `scale: 2` (the doubled sizes, lean-rpg/templates-bars.js): the most it holds is 2 x (4 + 20/5) = 16 at the stat
     // maximum 20, so 17 stages (0 to 16); a test holds this to the template's own maximum.
     scaledStages: 17,
+    // The same for a foe's health that carries `blocks: "foe"` (the harder-foes rule: 12 + level/30 blocks, at most 15, so 16 stages; lean-rpg/foes.js hardMax).
+    foeStages: 16,
     // A List of entries field (`type: "entries"`): the sub-fields of one entry, the entries a story may add (default and most), and the longest `at` a line may write.
     entrySubs: 8, entriesDefault: 30, entriesMax: 50, entryAt: 60,
     // A block with a List of entries says more in the tail (its open entries by number and title): 250 tokens instead of 100.

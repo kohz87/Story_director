@@ -72,9 +72,9 @@ test('the feature: declared, on by default, out of the Lean preset; initiative a
 
 test('on: the static part and the kinds are what the fixtures hold, byte for byte; off: the paragraphs and the thread grammar line are gone', async () => {
     // The Key people feature (story-director.key-people) adds its own paragraph and two kinds to the prompt: left off here, so these bytes
-    // are the ones the fixtures hold (tests/v2/keypeople says what it adds, and that off adds nothing).
-    const on = await newHost({ features: { [KEY_PEOPLE_FEATURE]: false } });
-    const off = await newHost({ features: { [THREADS_FEATURE]: false, [KEY_PEOPLE_FEATURE]: false } });
+    // are the ones the fixtures hold (tests/v2/keypeople says what it adds, and that off adds nothing); the same for the names part (on by default, its `person` line is not in the fixtures).
+    const on = await newHost({ features: { [KEY_PEOPLE_FEATURE]: false, 'story-director.names': false } });
+    const off = await newHost({ features: { [THREADS_FEATURE]: false, [KEY_PEOPLE_FEATURE]: false, 'story-director.names': false } });
     try {
         const was = fixture('prompt-threads-on.json');
         const now = fixture('prompt-threads-off.json');

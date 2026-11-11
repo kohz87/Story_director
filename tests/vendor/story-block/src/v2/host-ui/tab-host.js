@@ -22,7 +22,7 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
     let release = null;       // what the last drawing of the pane left behind (a dispose function or { destroy }), taken down on the next draw
     const pane = el(doc, 'div', 'story-suite-pane');
     root.replaceChildren(pane);
-    // The panel's own names on each tab's button and its More tile: `story-suite-tab` and `data-tab-id` (the tests and the
+    // The panel's own names on each tab's button: `story-suite-tab` and `data-tab-id` (the tests and the
     // modules use them), and the full label as the title (the bar cuts a long one).
     const bar = createScreenBar(doc, barHost ?? root, {
         label: S.panel.tabs,
@@ -37,7 +37,7 @@ export function createTabHost(root, { registry, view, api = null, doc = globalTh
     // The strip: every tab in one row that scrolls sideways, the ones in the bar first (the reader's order), the rest after them.
     function drawBar(tabs) {
         bar.update({ items: tabs.map(tab => ({ id: tab.id, label: tab.title, icon: iconFor(tab.id, tab.icon), alert: tab.alert === true,
-            alertText: tab.alertText ?? '', moreOnly: typeof inBar === 'function' && !inBar(tab) })), current: current ?? '', strip: true });
+            alertText: tab.alertText ?? '', moreOnly: typeof inBar === 'function' && !inBar(tab) })), current: current ?? '' });
     }
 
     function draw() {

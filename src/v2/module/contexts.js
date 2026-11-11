@@ -28,6 +28,23 @@ export function partView(ns, view, shared) {
     });
 }
 
+// A view whose `query` answers a question asked again, with the same arguments, from what it answered the first time. For one
+// prompt build only (the tail): the state, the settings and the packs cannot change while it runs, so every part and `learn` ask the
+// same of the same, and the work (the atlas's world, the scene) is done once. An answer that threw is not kept.
+export function memoQueries(view) {
+    if (!isObject(view) || typeof view.query !== 'function') return view;
+    const answers = new Map();
+    const query = (name, args) => {
+        let key;
+        try { key = `${name}\u0000${JSON.stringify(args) ?? ''}`; } catch { return view.query(name, args); }
+        if (answers.has(key)) return answers.get(key);
+        const value = view.query(name, args);
+        answers.set(key, value);
+        return value;
+    };
+    return Object.freeze({ ...view, query });
+}
+
 // The tools a part's query sees: the host's (`query`, `receipts`, …) plus settings(), substitute() and feature(id).
 export function partTools(ns, tools, shared, host) {
     const base = typeof tools === 'function' ? { query: tools } : isObject(tools) ? tools : {};

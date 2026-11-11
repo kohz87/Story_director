@@ -220,3 +220,28 @@ test('atlasView is pure and the same for the same world', () => {
     assert.equal(atlasView(world, '').current, '');
     assert.equal(atlasView(world, 'Nowhere').layer, '');
 });
+
+test('packWorld is built once for the same pack content and again when the content changes', () => {
+    let asked = 0;
+    const ask = pack => (name, { kind }) => { asked++; return structuredClone(pack[kind]); };
+    const first = packWorld(ask(PACK));
+    const again = packWorld(ask(PACK));
+    assert.deepEqual(again, first);
+    assert.equal(again.places[0], first.places[0], 'the same content gives the world built before');
+    assert.ok(asked >= 4, 'the packs are still asked every time');
+    // Another pack, a changed place, a removed route: each is seen at once.
+    const changed = structuredClone(PACK);
+    changed.places[0].region = 'Elsewhere';
+    assert.equal(packWorld(ask(changed)).places[0].region, 'Elsewhere');
+    const fewer = { places: PACK.places, routes: PACK.routes.slice(1) };
+    assert.equal(packWorld(ask(fewer)).routes.length, PACK.routes.length - 1);
+    assert.equal(packWorld(ask(PACK)).places[0].region, first.places[0].region);
+    // A query that throws or is missing is no cache hit and says so.
+    assert.equal(packWorld(() => { throw new Error('no'); }).readable, false);
+    assert.equal(packWorld(null).readable, false);
+    assert.equal(packWorld(ask(PACK)).readable, true);
+    // A caller that changes what it got does not change the next answer's list.
+    const mine = packWorld(ask(PACK));
+    mine.places = [];
+    assert.equal(packWorld(ask(PACK)).places.length, first.places.length);
+});

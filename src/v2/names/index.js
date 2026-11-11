@@ -1,6 +1,6 @@
 // Story Director v2, part **names**: the names' core (pure: the name key and the titles a name is compared by, the banned and
 // overused names, the collision check, the deterministic suggestion pick from a pack's `names` lists, the one-line profile of
-// a minor person) and the part built on it (feature `story-director.names`, off until the reader turns it on; domain `names`).
+// a minor person) and the part built on it (feature `story-director.names`, on by default like the pulse; domain `names`).
 //
 // * Kind `person`: `+ person Name | look: … | flaw: … | voice: … | temper: …`, written once when a named person first appears. The
 //   name is checked against the names in use (`people`: declared before; `seen`: the scene, the whole cast incl. unmet people,
@@ -323,6 +323,7 @@ export function applyPerson(ctx, line) {
     }
     const why = reasons.map(reasonText).join('; ');
     if (reasons.some(reason => reason.kind !== 'near')) {
+        if (Object.hasOwn(taken, key) && typeof ctx.ifThere === 'function') ctx.ifThere('names', `/taken/${jsonKey(key)}`);
         delete taken[key];
         taken[key] = { name, rev: revOf(ctx), told: false };
         oldest(taken, MAX_TAKEN);
@@ -430,7 +431,7 @@ export function tail(view) {
 }
 
 export const part = {
-    features: [{ id: FEATURE, label: 'Names', describe: 'Checks the name of a person who first appears (banned, overused and already-used names), offers unused names from the pack, and remembers a one-line profile for minor people.', default: false }],
+    features: [{ id: FEATURE, label: 'Names', describe: 'Checks the name of a person who first appears (banned, overused and already-used names), offers unused names from the pack, and remembers a one-line profile for minor people.', default: true }],
     domains: { names: { initial: initialNames, validate: validateNames } },
     commands: { 'names.seen': Object.assign(seeSeen, { feature: FEATURE }), 'names.told': Object.assign(told, { feature: FEATURE }) },
     queries: { 'names.profile': Object.assign((state, args = {}, tools) => (namesOn(tools) ? profileOf(state?.domains?.names, args?.name) : null), { feature: FEATURE }) },

@@ -34,10 +34,10 @@ function fakeNsd() {
     };
 }
 
-async function newHost(modules = []) {
+async function newHost(modules = [], settings = undefined) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
-    host = await createHost({ modules: [...modules, module] });
+    host = await createHost({ modules: [...modules, module], ...(settings ? { settings } : {}) });
     return host;
 }
 
@@ -163,7 +163,9 @@ test('pulse: a chance meeting reaches the narrator with the cast cue, names the 
     const host = await castHost({ source: castSource([entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother', routine: '' } })]), features: { 'story-director.pulse': true } });
     try {
         await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Elula', '+ present Bram', '+ present Orsa', '+ agenda Courier — rides in | now: far north | on: June 3, 1200, 06:00 pm', '+ world Plague — coughing in the fold | state: ongoing']));
-        await host.send('Go.', said('Reply.', ['~ time June 3, 1200, 08:10 am']));
+        // This reply rolls too: if its own roll meets her (about one in ten), it must show her as well, or the cast withdraws the meeting
+        // (an unshown person is unmet again) and the check below sees no meeting.
+        await host.send('Go.', said('Sera steps out of the crowd.', ['~ time June 3, 1200, 08:10 am']));
         const last = () => host.head().domains.director.pulse[0].results.at(-1);
         // Every swipe's reply shows Sera (the reply is written before the roll is known), so a roll that meets her must keep the meeting.
         let tries = 0;
@@ -175,6 +177,33 @@ test('pulse: a chance meeting reaches the narrator with the cast cue, names the 
         assert.ok(!('cue' in last()), 'the cue is told, not stored in the roll');
         assert.equal(host.head().domains.cast.people['ersveil:sera']?.met?.why, 'goal', 'the meeting survives the reply that shows her');
         assert.ok(!host.sdk.receipts().some(item => item.receipt.type === 'cast.withdraw'), 'nothing was taken back');
+    } finally {
+        host.close();
+    }
+});
+
+// ---- Kept lines: the Initiative line and the world pulse line survive a tight, crowded tail (tailBudget 550) ----
+
+const CROWD = Array.from({ length: 14 }, (_, n) => `+ hook Crowd ${n} — a long errand number ${n} in the busy lanes of Harrow | giver: Elula | goal: Do thing ${n} for the people of the town | reward: ${n + 4} gold`);
+
+test('kept lines: under tailBudget 550 with a crowded tail the Initiative line and the world pulse line still reach the prompt', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await newHost([], { host: { tailBudget: 550 }, features: { 'story-director.pulse': true } });
+    try {
+        await host.send('Hello.', reply('Harrow at dawn.', [...OPENING, ...CROWD]));
+        await host.send('I look around.', reply('Elula waves.', ['~ time June 3, 1200, 08:10 am']));
+        const crowded = sent(host, TAIL_KEY).at(-1);
+        assert.ok(crowded.split('\n').length >= 3, 'the tail is not empty');
+        assert.equal(initiativeIn(crowded), 'Initiative: Elula may approach You about Wolf Contract.', 'the Initiative line is kept');
+        // A swipe rolls the world pulse again; once a roll with a line comes, it is told as well under the same budget.
+        const last = () => host.head().domains.director.pulse?.[0]?.results?.at(-1);
+        let tries = 0;
+        while (!sent(host, TAIL_KEY).at(-1).includes('World this reply: ') && tries < 60) { await host.swipe(reply('Elula waves again.', ['~ time June 3, 1200, 08:10 am'])); tries += 1; }
+        const tail = sent(host, TAIL_KEY).at(-1);
+        assert.match(tail, /World this reply: /, `a pulse line (kind ${last()?.kind}) is told under the tight budget`);
+        assert.equal(initiativeIn(tail), 'Initiative: Elula may approach You about Wolf Contract.', 'the Initiative line is still there');
+        // The pulse receipt marks its cue kept; the receipt is the only thing stored (the prompt is not).
+        assert.ok(host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').every(entry => entry.receipt.data?.keep === undefined || entry.receipt.data.keep === true));
     } finally {
         host.close();
     }

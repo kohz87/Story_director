@@ -26,6 +26,9 @@ export const RULE_LINES = Object.freeze({
     diedAny: line => line?.kind === 'key' && line.op === '-' && [line.text, ...Object.keys(line.labels ?? {}), ...Object.values(line.labels ?? {})].some(part => DEATH.test(String(part ?? ''))),
     // `+/~/- world Event | factions: A, B`: Story Director names unknown factions from an event's tags (feat/faction-from-events). Any world line counts, so an old reply with one never gains the new creation on Re-read.
     factionTags: line => line?.kind === 'world',
+    // A preset's ^ before every word of a change line is dropped when the block is read (capture/lines.js stripCaretWords). It changes how a
+    // line is read, not what a parsed line is, so no parsed line falls under it: only a reply's first live capture is marked.
+    caretWords: () => false,
 });
 
 /** A narrator's set-slot line, using normalized labels and the same omitted-kind inference as the handler. */

@@ -160,7 +160,7 @@ test('meet: the first meeting sets met and the cue slot; a second is nothing; th
     const met = applyMeet(slice, { at: 6, who: [{ key: 'ersveil:fenna', why: 'place', reason: '' }, { key: 'ersveil:nobody', why: 'goal', reason: 'x' }] }, { now: SYNC_NOW, rev: 5 });
     assert.deepEqual(met, ['ersveil:fenna']);
     assert.deepEqual(slice.people['ersveil:fenna'].met, { on: SYNC_NOW, where: 'Bluewatch docks', why: 'place', reason: '', rev: 5 });
-    assert.deepEqual(slice.meeting, [{ at: 6, keys: ['ersveil:fenna'], rev: 5 }]);
+    assert.deepEqual(slice.meeting, [{ at: 6, keys: ['ersveil:fenna'], rev: 5, seen: 1 }]);
     assert.deepEqual(applyMeet(slice, { at: 7, who: [{ key: 'ersveil:fenna', why: 'place', reason: '' }] }, { now: SYNC_NOW, rev: 6 }), []);
     assert.deepEqual(slice.meeting[0].at, 6);
     const person = slice.people['ersveil:fenna'];

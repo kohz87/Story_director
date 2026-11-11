@@ -56,9 +56,18 @@ export function ask(query, name, args = {}, fallback = null) {
 const normalize = value => flat(value).toLowerCase();
 
 // Word boundaries that work for accented names too (\b is ASCII-only), as v1's relevance.js.
+// One compiled pattern per name (no g or y flag, so it holds no state); bounded, cleared whole when full.
+const PATTERNS = new Map();
+const PATTERNS_MAX = 2048;
 function wordPattern(name) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu');
+    let pattern = PATTERNS.get(name);
+    if (!pattern) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu');
+        if (PATTERNS.size >= PATTERNS_MAX) PATTERNS.clear();
+        PATTERNS.set(name, pattern);
+    }
+    return pattern;
 }
 const names = (value, name) => name.length >= MIN_NAME && wordPattern(name).test(value);
 /** Whether `value` holds `name` as whole words (and `name` is at least MIN_NAME long): "Vorn" is in "Vorn's Return", "Ann" is not in "Annual Fair". */

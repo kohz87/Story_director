@@ -10,7 +10,7 @@ import { GRAMMAR, STATIC_TEXT, TAIL_BUDGET, TAIL_HEADER, chronicleTail } from '.
 import { SURFACE, TAIL_EVENTS, beforeGenerate, hashUnit, nearness, pickEvents, pickFresh, tailPick } from '../../../src/v2/chronicle/pick.js';
 import { agoText } from '../../../src/v2/chronicle/queries.js';
 import { part } from '../../../src/v2/chronicle/index.js';
-import { BACKLOG_BUDGET, BACKLOG_STATIC, DIGEST_TAIL_BUDGET, backlogLines } from '../../../src/v2/chronicle/digest.js';
+import { BACKLOG_BUDGET, BACKLOG_STATIC, DIGEST_TAIL_BUDGET, backlogCue, backlogLines } from '../../../src/v2/chronicle/digest.js';
 import { BACKLOG_CHARS, BACKLOG_LINES, BACKLOG_TAG, agoWords, backlogBlock } from '../../../src/v2/chronicle/backlog.js';
 import { clockAt, command, eventNamed, lines, makeState, replay, runCommand, sceneAt, viewOf } from './helpers/fake-ctx.js';
 import { seenOf, surfacedOf } from '../../../src/v2/chronicle/domain.js';
@@ -233,12 +233,22 @@ test('8: backlogLines reads the Journal\'s known days (never a hidden line), the
     assert.deepEqual(backlogLines({ ...view, query: () => null }), []);
 });
 
-test('9: the one static sentence is taught only while the block has lines (env.backlog), under the digest feature', () => {
-    const inline = part.context.inline[0];
-    assert.equal(inline.feature, 'story-director.digest');
-    assert.equal(inline.static({ backlog: false }), '');
-    assert.equal(inline.static({}), '');
-    assert.equal(inline.static({ backlog: true }), BACKLOG_STATIC);
+test('9: the sentence and the block are one pinned cue (never a static line), under the digest feature; no cue while the block is empty', () => {
+    const journal = { days: [pastDay(18, { eventLines: ['Derk blamed Astra'], search: 'Derk' }), pastDay(19)] };
+    const query = name => ({ 'director.journal': journal, 'director.time': { minutes: 20 * DAY }, 'scene.place': { name: 'Bluewatch' }, 'scene.present': [{ name: 'Derk' }] }[name] ?? null);
+    const view = { state: { domains: { chronicle: {}, director: { time: { minutes: 20 * DAY } } } }, query, feature: () => true };
+    const [cue, ...more] = backlogCue(view);
+    assert.equal(more.length, 0);
+    assert.equal(cue.keep, true, 'pinned: kept whatever the tail budget says');
+    const all = backlogLines(view);
+    assert.equal(cue.text, `${BACKLOG_STATIC}\n${all.slice(0, 2).join('\n')}`, 'the sentence, the tag and the newest day only');
+    assert.ok(cue.text.length <= 320, 'about 80 tokens');
+    assert.deepEqual(part.context.tail(view).optional, all.slice(2), 'the older day lines are optional tail lines');
+    assert.equal(part.hooks.beforeGenerate(view).lines[0].text, cue.text, 'the hook hands it to the host');
+    assert.deepEqual(backlogCue({ ...view, query: () => null }), []);
+    assert.equal(part.hooks.beforeGenerate({ ...view, query: () => null }), undefined);
+    assert.equal(part.context.tail(view).optional.some(line => line.includes(BACKLOG_TAG)), false, 'the tag rides only in the pinned cue');
+    assert.equal(part.context.inline, undefined, 'and no static sentence: the cached prefix never changes mid-chat');
     assert.doesNotMatch(BACKLOG_STATIC, /\d/);
     assert.equal(part.context.static({ chronicle: false }), '', 'the world paragraph\'s own gate is untouched');
 });

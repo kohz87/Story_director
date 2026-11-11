@@ -34,6 +34,28 @@ test('with Story Block v2 the module registers once, and its chat state is set u
     host.close();
 });
 
+test('with a host that has the header slot the module registers its Quiet scene toggle; an older host gets the module without the field', async () => {
+    const host = await createHost({ modules: [fakeFightRunner()] });
+    assert.ok(host.sdk.modules().every(entry => Array.isArray(entry.headerControls)), 'the vendored host has the slot');
+    const root = { StoryBlock: { apiVersion: 2, ready: Promise.resolve(host.sdk), sdk: host.sdk } };
+    assert.equal((await start({ root, doc: fakeDocument(), wait: noWait, tries: 0 })).registered, true);
+    assert.deepEqual(host.registry.headerControls().map(control => [control.key, control.label, control.query, control.command]), [['story-director/quiet', 'Quiet scene', 'pulse.quiet', 'director.pulse.quiet']]);
+    // The pill's state comes from the module's own query on the head state: off by default, on once the reader sets it.
+    assert.deepEqual(host.sdk.query('pulse.quiet', {}), { on: false });
+    assert.equal((await host.sdk.command('director.pulse.quiet', { on: true })).ok, true);
+    assert.deepEqual(host.sdk.query('pulse.quiet', {}), { on: true });
+    host.close();
+
+    const old = await createHost({ modules: [fakeFightRunner()] });
+    const seen = [];
+    const oldSdk = Object.create(old.sdk, { modules: { value: () => old.sdk.modules().map(({ headerControls, ...rest }) => rest) }, registerModule: { value: def => { seen.push(def); return old.sdk.registerModule(def); } } });
+    const oldRoot = { StoryBlock: { apiVersion: 2, ready: Promise.resolve(oldSdk), sdk: oldSdk } };
+    assert.equal((await start({ root: oldRoot, doc: fakeDocument(), wait: noWait, tries: 0 })).registered, true);
+    assert.equal(seen.length, 1);
+    assert.equal('headerControls' in seen[0], false, 'no field the older host would log as ignored');
+    old.close();
+});
+
 test('Story Block coming up a little later is waited for', async () => {
     const host = await createHost({ modules: [] });
     const root = {};

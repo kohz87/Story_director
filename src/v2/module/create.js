@@ -2,14 +2,13 @@
 
 import { CALENDAR_KEYS, liveCalendarSettings } from '../tracker/calendar-settings.js';
 import { packCalendarOf } from '../tracker/time.js';
-import { backlogLines } from '../chronicle/digest.js';
 import { rareKindsUsed } from '../rare.js';
 import { MODULE_ID, MODULE_NAME, PARTS, STORY_BLOCK_RANGE, VERSION } from './parts.js';
 import { LIVE_HOST, isObject, liveSdk, tryLive } from './shared.js';
 import { fightRunner } from './host.js';
 import { namespaced, readsOf, settingsFor } from './settings.js';
-import { partCtx, partTools, partView, withSettingArgs } from './contexts.js';
-import { linesOf, mergeHook, own, sectionOf, withFeature } from './merge.js';
+import { memoQueries, partCtx, partTools, partView, withSettingArgs } from './contexts.js';
+import { cueLinesOf, linesOf, mergeHook, own, sectionOf, withFeature } from './merge.js';
 
 // Story Block's RPG feature: while it is on, its planner asks for the checks.
 const RPG_FEATURE = 'story-block.rpg';
@@ -25,6 +24,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     const capabilities = [];
     const screenList = [];
     const widgets = {};
+    const headerControls = [];
     const readsByPart = {};
     // What the parts are told of the module set: `fights`, whether a fight runner is there (true until
     // it is known; worked out before each reply's prompt, so the static part is the same bytes for
@@ -32,7 +32,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
     // `chronicle`, `map`, `routes`: whether the story uses the rare kinds (world and faction lines; landmark and route lines; trip lines),
     // so their grammar is taught only then (the lean diet, 3 Nov). All start false and are learnt from the state before each reply.
-    const env = { fights: fightRunner() ?? true, rpg: false, keyPeople: false, chronicle: false, map: false, routes: false, backlog: false };
+    const env = { fights: fightRunner() ?? true, rpg: false, keyPeople: false, chronicle: false, map: false, routes: false };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
@@ -43,8 +43,6 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
         const pins = view?.state?.domains?.keypeople?.pins;
         if (isObject(view?.state?.domains)) env.keyPeople = isObject(pins) && Object.keys(pins).length > 0;
-        // Whether the [Earlier days] block has lines: its one static sentence is taught only then, so a chat with no past day (and an older chat) sends the prompt it always did.
-        if (isObject(view?.state?.domains)) env.backlog = tryLive(() => backlogLines(view).length > 0, false) === true;
     };
     // The model call a part may ask for (the host's `callModel`); built each time the parts' views are, so a host that gains or loses it is followed.
     const modelOf = () => (typeof host?.callModel === 'function' && (typeof host.canCallModel !== 'function' || host.canCallModel()) ? Object.freeze({ callModel: request => host.callModel(request), chat: () => (typeof host.chat === 'function' ? host.chat() : []) }) : null);
@@ -141,6 +139,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
             own(owners.screen, screen?.id, ns, 'the screen');
             screenList.push(screen);
         }
+        for (const control of part.headerControls ?? []) headerControls.push(control);
         for (const [name, widget] of Object.entries(part.widgets ?? {})) {
             own(owners.widget, name, ns, 'the widget');
             widgets[name] = widget;
@@ -165,7 +164,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
         else grouped.push({ feature: chunk.feature, items: [chunk.static] });
     }
-    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes, backlog: env.backlog }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) ?? '').trim()).filter(Boolean).join('\n');
     const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
         .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {
@@ -184,13 +183,15 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         context: {
             // The same bytes every reply: each part's static is fixed text. What a feature owns is a context part of its own.
             static: staticOf(grouped[0] && !grouped[0].feature ? grouped[0].items : []),
-            tail(view) {
+            tail(hostView) {
+                // One memo for this build: learn and every part's tail ask the same queries of the same state.
+                const view = memoQueries(hostView);
                 learn(view);
                 const lines = [];
                 const optional = [];
                 for (const [ns, tail] of tails) {
                     const out = tail(partView(ns, view, shared)) ?? {};
-                    lines.push(...linesOf(out.lines));
+                    lines.push(...cueLinesOf(out.lines));
                     optional.push(...linesOf(out.optional));
                 }
                 return { lines, optional };
@@ -218,6 +219,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         screens: screenList,
     };
     if (Object.keys(widgets).length) def.widgets = widgets;
+    // Story Block's game view header toggle (the host's `headerControls`, one per module): the Quiet scene switch.
+    if (headerControls.length) def.headerControls = headerControls;
     if (features.length) def.features = features;
     // The names a pack's `requires.capabilities` can ask of this module (Story Block lists a pack as missing one that no module declares).
     if (capabilities.length) def.capabilities = capabilities;

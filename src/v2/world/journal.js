@@ -68,7 +68,7 @@ export const isNarratorNote = line => NARRATOR_NOTE.test(String(line ?? '').trim
 
 // ---- the day's lines by kind (the Journal's folds) ------------------------------------------------------------------------
 
-const KINDS = [['met', 'Met'], ['relationships', 'Relationships'], ['events', 'Events'], ['party', 'Party & gear'], ['items', 'Items & money'], ['reputation', 'Reputation'], ['news', 'News']];
+const KINDS = [['met', 'Met'], ['relationships', 'Relationships'], ['events', 'Events'], ['party', 'Party & gear'], ['items', 'Items & money'], ['standing', 'Standing'], ['fame', 'Fame'], ['guild', 'Guild'], ['reputation', 'Reputation'], ['news', 'News']];
 const ARROW = /^(\S+) (.+?) (?:->|→) (.+)$/;
 const LOST = /^Lost (.+?)(?: x(\d+))? \((\d+) left\)\.?$/;
 const plain = detail => ({ title: '', chip: '', detail, note: '', since: '', stepsLabel: '', steps: [], tags: [] });
@@ -157,6 +157,9 @@ function foldsOf(entry, { kept, quests, hidden, threads, format }) {
         events: eventRows({ day: entry.day, quests, hide }, events, { threads, format }),
         party: (made.party ?? []).map(plain),
         items: itemRows(items),
+        standing: (made.standing ?? []).map(plain),
+        fame: (made.fame ?? []).map(plain),
+        guild: (made.guild ?? []).map(plain),
         reputation: (made.reputation ?? []).map(plain),
         news: (entry.brief ? made.news ?? [] : list(entry.world).filter(line => !hide(line))).map(plain),
     };
@@ -174,7 +177,7 @@ function summaryOf(short) {
 
 /**
  * One board day with what {{user}} must not see taken out, its line, facts and search text made again, and its folds by kind
- * (`cats`: Met, Relationships, Events, Party & gear, Items & money, Reputation, News). `context`: `{ now, threads, format }`: the story clock
+ * (`cats`: Met, Relationships, Events, Party & gear, Items & money, Standing, Fame, Guild, Reputation, News). `context`: `{ now, threads, format }`: the story clock
  * (for "3 days ago"), the threads by id and the calendar's date text of story minutes.
  */
 export function knownDay(entry, hidden, { now = null, threads = new Map(), format = null } = {}) {

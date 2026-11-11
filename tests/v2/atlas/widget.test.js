@@ -57,7 +57,7 @@ function draw({ state = story(), props = {}, api = null, win = null, value } = {
 }
 
 // Story Block's phone line (a narrow screen or a coarse pointer): the dots' 44px tap areas and the nearest-dot tap.
-const PHONE_LINE = '(max-width: 759.98px), (pointer: coarse)';
+const PHONE_LINE = '(pointer: coarse)';
 const placeButton = (root, name) => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
 // The Region list: its choices, the chosen one's name, and a choice made (as the browser does: the value, then a change event).
 const regionNames = root => root.querySelectorAll('.sd-map-region option').map(option => option.textContent);
@@ -567,9 +567,9 @@ test('phone taps: the dot keeps its size, its tap area is 44px (CSS), and in a d
     const { doc, root, handle } = clusterDraw(phone);
     const css = MAP_CSS;
     // 44px on the screen: over Story Block's zoom when it draws the screen zoomed (--ss-zoomed), else 44px.
-    assert.match(css, /@media \(max-width: 759\.98px\), \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: calc\(44px \/ var\(--ss-zoomed, 1\)\); height: calc\(44px \/ var\(--ss-zoomed, 1\)\);/);
+    assert.match(css, /@media \(pointer: coarse\) \{\s*\.sd-map \.sd-map-place::before \{[^}]*width: calc\(44px \/ var\(--ss-zoomed, 1\)\); height: calc\(44px \/ var\(--ss-zoomed, 1\)\);/);
     // The dots themselves are unchanged on a phone (no size rule inside the phone block).
-    assert.doesNotMatch(css.slice(css.indexOf('@media (max-width: 759.98px), (pointer: coarse)')), /\.sd-map-place \{[^}]*width/);
+    assert.doesNotMatch(css.slice(css.indexOf('@media (pointer: coarse)')), /\.sd-map-place \{[^}]*width/);
 
     const dot = name => root.querySelectorAll('.sd-map-place').find(node => node.getAttribute('title') === name);
     const at = node => ({ x: parseFloat(node.style.left), y: parseFloat(node.style.top) });
@@ -780,7 +780,7 @@ test('a trip: its legs drawn thick over the known routes, a "You" marker on the 
     assert.equal($$('.sd-map-road-bar').length, 1, 'only the current leg has a bar');
     // The panel sits in the frame with the map (over its corner on a wide screen; under it on a phone: MAP_CSS).
     assert.equal($('.sd-map-frame').children.map(child => child.className).join(' '), 'sd-map-stage sd-map-road');
-    assert.match(MAP_CSS, /@media \(max-width: 759\.98px\) \{\s*\.sd-map \.sd-map-road \{ position: static; width: auto;/);
+    assert.match(MAP_CSS, /@container \(max-width: 759\.98px\) \{\s*\.sd-map \.sd-map-road \{ position: static; width: auto;/);
     assert.match(MAP_CSS, /\.sd-map \.sd-map-road \{ position: absolute;/);
     // The legend names them.
     const legend = $$('.sd-map-legend .ss-listcard-title').map(node => node.textContent);

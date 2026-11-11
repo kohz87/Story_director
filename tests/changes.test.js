@@ -367,3 +367,12 @@ test('a kind and a colon in front of the key name the kind, not the key (0.9.10)
     assert.equal(only('- Quest: Sheepfold Wolves — done').key, 'Sheepfold Wolves');
     assert.equal(only('~ Mister: Smith — now: away').key, 'Mister: Smith', 'not a kind: part of the key');
 });
+
+test('lineKey answers the same for the same string every time (memoised) and for non-text', () => {
+    for (let i = 0; i < 3; i++) assert.equal(lineKey('**Hollin’s Reach graves**'), 'hollins reach graves');
+    assert.equal(lineKey(undefined), '');
+    assert.equal(lineKey(12), '12');
+    // Past the bound the memo is cleared whole and every answer is still right.
+    for (let i = 0; i < 5000; i++) assert.equal(lineKey(`Key ${i}!`), `key ${i}`);
+    assert.equal(lineKey('Jean-Luc'), 'jean luc');
+});

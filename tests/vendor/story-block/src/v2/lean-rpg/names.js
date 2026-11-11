@@ -72,8 +72,8 @@ export const FORMULA = Object.freeze({ die: 20, statDivisor: 2, classWeight: 2, 
 /** Pacing: exchanges per reply. (From the second flow, FLOW_VERSION in resolve.js, only `careful` limits a reply: 1 exchange; the others run to the cap.) */
 export const PACE = Object.freeze({ careful: 1, normal: 5, all: 8 });
 
-/** Foe slots of a Foes block: `foe1`…`foe4` (skill slots: ../skill-slots.js). */
-export const FOE_SLOTS = 4;
+/** Foe slots of a Foes block: `foe1`…`foe6` (an older block has 1…4). */
+export const FOE_SLOTS = 6;
 
 /**
  * What bounds a reply's rolls (SPEC_RPG_v1 §4.5.3): at most `roundCap` rounds whatever the pace says, a round that

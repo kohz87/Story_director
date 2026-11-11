@@ -30,7 +30,7 @@ people:  { [pack:id]: { pack, eid, name, aliases?, ver, joined, where, doing, si
          rumored: undefined | [{ on, where, at, rev }]                       (a slot, written whole: an unmet person the reader sought who is elsewhere, heard of once)
 notes:   { [id]: { at, kind: 'met' | 'moved' | 'updated' | 'heard', head, tag, rest, line, rev } }   what a reply tells its card; the newest 6 messages'
 day:     null | [{ at, rev }]       the story minute the cast was last moved to (a slot)
-meeting: null | [{ at, keys, rev }] who comes into the scene in the reply being written (`at`: the chat's length; a slot)
+meeting: null | [{ at, keys, seen?, rev }] who comes into the scene in the reply being written (`at`: the chat's length; `seen`: 1 on a meeting made on this build, so the withdraw step also counts names the reply's `+ present` lines had at any point; a slot)
 ```
 
 Replay-safe like every domain: a person is added whole under its key; a change inside a person is marked `ctx.ifThere`; a note is a new
@@ -55,7 +55,7 @@ runs), so a note names the message its card goes under (`at`) rather than the re
 
 4. `cast.withdraw { at, keys }` (from `afterCapture`, stored on the reply): a planned meeting counts only if the reply shows the person. After the
    reply's change lines, a person the meeting brought in (`why` place or goal) whose name or alias (whole word, any case; a title alone is not
-   a name) is not in the reply's shown words (hidden comments and the change block out) and is in no `+ present` line is unmet again: a goal
+   a name) is not in the reply's shown words (hidden comments and the change block out) and is in no `+ present` line (for a meeting marked `seen`: none of the reply's own `capture.present` receipts, added or present, had the name, so arriving and leaving in one reply counts as shown; a place line's `with:` is not read) is unmet again: a goal
    arrival goes back to where they were (`met.was`), the "Paths crossed" card line goes, the pace is not used up, they may come again. `why:
    'story'` is never withdrawn. It runs before NPC State Delta's step after the reply (its `npc.tick` follows the `turn` event), so no dossier is
    made for a withdrawn meeting; a swipe or Re-read decides again. The hook opts in (`hook.always`, Story Block's afterCapture) to run for a

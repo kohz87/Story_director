@@ -178,6 +178,11 @@ test('6: Relationships: per person, then the meter changes as small tags; a mete
     assert.deepEqual(rows.map(row => [row.title, row.tags]), [['Torka', ['affection 9 → 11', 'desire 7 → 8']], ['Rika', ['trust wary → friendly']]]);
 });
 
+test('a day with block result kinds folds into Standing, Fame and Guild, not Reputation', () => {
+    const day = knownDay(stored({ happened: ['Astra: deed.', 'Astra: gain.', 'Astra: dues.'], tags: ['capture.dm:deed', 'dm.act:gain', 'capture.dm:dues'], quests: { taken: [], done: [], failed: [], dropped: [] }, npcs: [], world: [], met: [], money: { in: 0, out: 0 }, moneyText: '' }), HIDDEN, { now: NOW });
+    assert.deepEqual(day.cats.map(cat => [cat.id, cat.label, cat.count]), [['standing', 'Standing', 1], ['fame', 'Fame', 1], ['guild', 'Guild', 1]]);
+});
+
 test('2: an old stored day with no types is sorted by the known shapes, the rest under Events', () => {
     const day = knownDay(stored({ tags: undefined, npcs: [] }), HIDDEN, { now: NOW });
     assert.deepEqual(day.cats.map(cat => cat.id), ['met', 'relationships', 'events', 'party', 'items', 'reputation', 'news']);

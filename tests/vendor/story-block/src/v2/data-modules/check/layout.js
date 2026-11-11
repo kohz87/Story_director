@@ -41,11 +41,11 @@ export function layoutKeys(definition, at, add) {
 
 // The RPG draws a role block's health, mana, stamina and foe-health fields as stage bars, one cell and one choice for each stage, so
 // those fields stay small: at most ten stages counted up from empty (0), whatever else the block holds.
-const STAGE_FIELD = /^(health|mana|stamina|hurt[1-4])$/;
+const STAGE_FIELD = /^(health|mana|stamina|hurt[1-6])$/;
 export function stageFields(definition, at, add) {
     for (const [key, schema] of entries(definition.state)) {
         if (!STAGE_FIELD.test(key) || !dmObject(schema) || schema.type !== 'int' || !dmInt(schema.min) || !dmInt(schema.max)) continue;
-        const top = definition.role === 'character' && schema.scale === 2 && schema.blocks === key && ['health', 'stamina', 'mana'].includes(key) ? L.scaledStages : L.stages;
+        const top = definition.role === 'character' && schema.scale === 2 && schema.blocks === key && ['health', 'stamina', 'mana'].includes(key) ? L.scaledStages : /^hurt/.test(key) && schema.blocks === 'foe' ? L.foeStages : L.stages;
         if (schema.max - schema.min >= top || schema.max > top) add('DM_BOUNDS', `${at}.state.${key}`, fill(STRINGS.blocks.stagesLimit, { max: top }));
     }
 }

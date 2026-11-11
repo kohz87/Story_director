@@ -221,7 +221,7 @@ export function digestCommand(ctx, payload = {}) {
     const turned = !before || today > before.through;
     const settle = noted?.settle ?? null;
     const skip = Boolean(turned && settle && settle.to === now && isInt(settle.from) && now - settle.from >= settings.skipMinutes);
-    chronicle.written = toSlot({ through: today, days: orderedDays(chronicle).map(digest => digest.day), at, skip });
+    chronicle.written = toSlot({ through: today, days: orderedDays(chronicle, { all: true }).map(digest => digest.day), at, skip });
     return {
         summary: written.length ? `Day digest written: ${written.join(', ')}.` : '',
         narrate: false,
@@ -311,9 +311,9 @@ export function digestTailLine(view) {
 
 // ---- the [Earlier days] block ----------------------------------------------------------------
 
-/** About 200 tokens: the block is optional, and Story Block drops it before anything else. */
+/** About 200 tokens: the day lines of the block are optional tail lines (all but the newest day's), which Story Block drops before anything else. */
 export const BACKLOG_BUDGET = 200;
-/** The one static sentence that explains the block: taught only while the block is not empty (module/create.js), so older chats' static prompt stays as it was. */
+/** The one sentence that explains the block: the first line of its cue (backlogCue), never part of the static prompt. */
 export const BACKLOG_STATIC = 'Lines under [Earlier days] are what happened on past days, each with how long ago it was (counted by code): let people remember them as dated, and never invent other days.';
 
 const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeof entry === 'string' ? entry : entry?.name)).filter(name => typeof name === 'string' && name.trim());
@@ -322,8 +322,8 @@ const namesOf = value => (Array.isArray(value) ? value : []).map(entry => (typeo
  * The [Earlier days] lines for the next reply: `[]` or `[tag, ...day lines]` (backlog.js). The days are the Journal's known days
  * (`director.journal`, so secrets and planner text never go in), the scene is who is present now, the current place and the open
  * quests and threads. Nothing while the digest is off, on a first day, or when the Journal cannot be read. The Journal is the World view's
- * query (`director.journal`), so with the World view feature off there is no block, and (the same lines gate the one static sentence,
- * module/create.js) no sentence either: block and sentence stand or fall together.
+ * query (`director.journal`), so with the World view feature off there is no block, and no sentence either (the sentence is part of the
+ * pinned cue, `backlogCue`): block and sentence are one cue.
  */
 export function backlogLines(view) {
     if (!digestOn(view) || !view?.state?.domains?.chronicle) return [];
@@ -338,5 +338,23 @@ export function backlogLines(view) {
     return backlogBlock({ days: journal.days, now, present, place: String(place?.name ?? ''), threads: open.map(thread => thread.key) });
 }
 
-/** The tail's optional block: the lines of `backlogLines` as one text ('' when there is none). */
-export const backlogTail = view => backlogLines(view).join('\n');
+/** The pinned cue is the sentence plus the newest day's line, about 80 tokens (Story Block counts four characters a token). */
+export const BACKLOG_PIN_CHARS = 320;
+
+/**
+ * The [Earlier days] cue as one pinned text (`{ text, keep: true }`, from `beforeGenerate`): the explaining sentence, the tag and the newest day's
+ * line, together at most BACKLOG_PIN_CHARS, so they stand or fall together and the static prompt never changes mid-chat. A pinned cue is kept
+ * whatever the host's tail budget says, so it is small: it costs every other section its size under a tight budget. The older day lines are
+ * ordinary optional tail lines (`backlogOlder`), cut first as before. `[]` when the block has no lines.
+ */
+export function backlogCue(view) {
+    const lines = backlogLines(view);
+    if (lines.length < 2) return [];
+    const head = `${BACKLOG_STATIC}\n${lines[0]}\n`;
+    return [{ text: `${head}${cut(lines[1], Math.max(0, BACKLOG_PIN_CHARS - head.length))}`, keep: true }];
+}
+
+/** The day lines after the newest one: optional tail lines (the budget drops them first), each dated, so one needs no tag. */
+export function backlogOlder(view) {
+    return backlogLines(view).slice(2);
+}

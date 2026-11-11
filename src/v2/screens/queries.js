@@ -355,6 +355,19 @@ export function clockText(calendar, minutes) {
 }
 
 /**
+ * The place's map position as text: its own, else its town's (the first part of the place line "Town · Spot", or of the scene's
+ * name when the atlas does not have the place yet), so a spot with no point of its own still shows where it is.
+ */
+function coordsOf(query, here, placeName) {
+    const has = place => isRecord(place) && coordText(place.x) && coordText(place.y);
+    const own = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
+    if (has(own)) return [coordText(own.x), coordText(own.y)];
+    const town = (text(here?.line) || placeName).split(/\s*(?:\||·|—|–)\s*/)[0];
+    const up = town && town !== text(own?.name) ? ask(query, 'atlas.place', { name: town }, null) : null;
+    return has(up) ? [coordText(up.x), coordText(up.y)] : ['', ''];
+}
+
+/**
  * `director.status` → what the reply's Status card adds to Story Block's scene, all of it {{user}}'s own
  * (world/known.js: where they are, the weather they stand in, their rank, what they wear and how they are): `{ summary, when, place, region, coords,
  * weather, rank, wearing, condition }`.
@@ -379,8 +392,7 @@ export function statusExtras(state, _args, tools, { settings = null } = {}) {
     try { when = calendar ? heroDate(calendar, minutes) : ''; } catch { when = ''; }
     const placeName = text(state?.domains?.scene?.place?.name);
     const here = ask(query, 'atlas.here', {}, null);
-    const place = isRecord(here) && text(here.id) ? ask(query, 'atlas.place', { id: here.id }, null) : null;
-    const [x, y] = [coordText(place?.x), coordText(place?.y)];
+    const [x, y] = coordsOf(query, here, placeName);
     // The atlas does not have a place the story has just named until the next send: its line is worked out from the name (atlas.line).
     const line = text(here?.line) || (placeName ? text(ask(query, 'atlas.line', { name: placeName }, '')) : '') || placeName;
     const weather = ask(query, 'scene.weather', {}, null);

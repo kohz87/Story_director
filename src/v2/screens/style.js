@@ -28,6 +28,10 @@ export const BASE_CSS = `
 :root[data-ss-mount="screen"] { --sd-line-display: none; }
 .ss-label { color: var(--sd-text); }
 .sd-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 6px; }
+/* The pulse and Recent heads: small spaced capitals with a rule after them, as the Arc label (mockup-pulse.html). */
+.sd-pulse .sd-h { align-items: center; gap: 8px; font-size: 12.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.sd-pulse .sd-h::after { content: ""; flex: 1; height: 1px; background: var(--sd-border); }
+.sd-pulse .sd-h small { order: 1; letter-spacing: 0.04em; color: var(--sd-muted); }
 .sd-h small { font-weight: normal; color: var(--sd-text); }
 .sd-list { display: grid; gap: var(--sd-gap); margin: 0; padding: 0; list-style: none; }
 .sd-card { display: grid; gap: 4px; padding: 10px 12px; min-width: 0; }
@@ -41,7 +45,8 @@ export const BASE_CSS = `
 .sd-btn.ss-busy { opacity: 0.7; cursor: progress; }
 .sd-reason { margin: 0; font-size: 0.85em; color: var(--sd-text); border-left: 3px solid var(--sd-warn); padding-left: 6px; }
 .sd-empty { margin: 0; color: var(--sd-muted); font-style: italic; }
-@media (min-width: 600px) {
+/* A mouse needs a smaller target than a finger: the switch is the pointer, not the window width. */
+@media (pointer: fine) {
   .sd-btn { flex: 0 0 auto; min-height: 40px; }
 }
 `;

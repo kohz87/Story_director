@@ -55,7 +55,25 @@ export function createReplace(s, deps) {
             // A quarantined record applies nothing and is not rewritten: decided on the record as stored, before the story
             // receipts are filtered out or anything is renumbered.
             if (quarantined(record)) throw new Error(`This reply's story record is kept as it is and not read again: ${ORPHAN}.`);
-            const paired = keptReceipts.length === blocks.length;
+            let paired = keptReceipts.length === blocks.length;
+            // A record an older Re-read stored with two preludes merged into one span is told apart again here: every block
+            // whose receipts are all preludes (all afterCapture steps too, when `settled` is given) goes with its receipts,
+            // because this Re-read plans them all again; what is left then lines up one to one, as a live record does.
+            if (!paired) {
+                const left = [...blocks];
+                let leftReceipts = keptReceipts;
+                for (let n = left.length - 1; n >= 0; n -= 1) {
+                    const own = receiptsFor({ receipts: leftReceipts }, left[n].ops);
+                    if (!own.length || !own.every(receipt => receipt.beforeGenerate === true || (Array.isArray(settled) && receipt.afterCapture === true))) continue;
+                    left.splice(n, 1);
+                    leftReceipts = leftReceipts.filter(receipt => !own.includes(receipt));
+                }
+                if (leftReceipts.length === left.length) {
+                    blocks.splice(0, blocks.length, ...left);
+                    keptReceipts = leftReceipts;
+                    paired = true;
+                }
+            }
             // The old afterCapture steps go when the Re-read ran them again (only told apart one to one).
             const resettle = Array.isArray(settled) && paired;
             if (resettle) {
@@ -101,14 +119,15 @@ export function createReplace(s, deps) {
                         }
                         publish(span, index);     // the lines applied to the state before this point
                         storySpans.push(span);
-                        nextParts.push({ ops: own, span });
-                    } else if (storySpans.length && storySpans.at(-1).story === story && !isMetaSpan(storySpans.at(-1))) {
+                        nextParts.push({ ops: own, span, receipts: piece.receipt ? [piece.receipt] : [] });
+                    } else if (story && storySpans.length && storySpans.at(-1).story === story && !isMetaSpan(storySpans.at(-1))) {   // (a prelude keeps a span of its own, as the live append gave it, so the next Re-read pairs receipts and blocks)
                         storySpans.at(-1).n += piece.n;
                         nextParts.at(-1).ops = [...nextParts.at(-1).ops, ...own];
+                        if (piece.receipt) nextParts.at(-1).receipts.push(piece.receipt);
                     } else {
                         const span = { n: piece.n, story };
                         storySpans.push(span);
-                        nextParts.push({ ops: own, span });
+                        nextParts.push({ ops: own, span, receipts: piece.receipt ? [piece.receipt] : [] });
                     }
                     upTo = step(upTo, own);
                     offset += piece.n;
@@ -116,7 +135,7 @@ export function createReplace(s, deps) {
             } else {
                 const span = { n: fresh.length, story: true };
                 storySpans.push(span);
-                nextParts.push({ ops: fresh, span });
+                nextParts.push({ ops: fresh, span, receipts });
             }
             const keptSpans = [];
             const keptProblems = [];       // this reply's blocks that stay off (the checkpoints after it carry them)
@@ -144,7 +163,7 @@ export function createReplace(s, deps) {
                 }
                 nextOps.push(...blockOps);
                 keptSpans.push(span);
-                nextParts.push({ ops: blockOps, span });
+                nextParts.push({ ops: blockOps, span, receipts: [ran.receipt] });
                 nextReceipts.push(structuredClone(ran.receipt));
             }
             for (const [n, { ops: block, span: was }] of blocks.entries()) {
@@ -158,7 +177,9 @@ export function createReplace(s, deps) {
                 let blockOps;
                 let kept = receipt;
                 let again = null;      // the block as planned again, when it was
-                const asks = typeof rerun === 'function' && !(isMetaSpan(was) && intactReason(record, block, was, receipt)) && ((isMetaSpan(was) && was.guard && was.replan && receipt) || (receipt?.replan && !isGuardedBlock(was, paired ? receipt : receiptsFor({ receipts: keptReceipts }, block))));
+                // (a decision whose guard still holds on the state before it is kept as it was, never asked again)
+                const decided = isMetaSpan(was) && was.guard?.predicate?.kind === 'events.decision' && (() => { try { guardHolds(state, was, message); return true; } catch { return false; } })();
+                const asks = typeof rerun === 'function' && !decided && !(isMetaSpan(was) && intactReason(record, block, was, receipt)) && ((isMetaSpan(was) && was.guard && was.replan && receipt) || (receipt?.replan && !isGuardedBlock(was, paired ? receipt : receiptsFor({ receipts: keptReceipts }, block))));
                 if (asks) {
                     let out = null;
                     try { out = rerunBlock(rerun, state, receipt, index, was, nextParts, keptAlloc); } catch { out = null; }
@@ -171,7 +192,7 @@ export function createReplace(s, deps) {
                     } else {
                         again = out;
                         blockOps = asOps(out.ops);
-                        kept = { ...structuredClone(out.receipt), id: receipt.id, ...(receipt.beforeGenerate === true ? { beforeGenerate: true } : {}) };
+                        kept = { ...structuredClone(out.receipt), id: receipt.id, ...(receipt.afterCapture === true ? { afterCapture: true } : {}), ...(receipt.beforeGenerate === true ? { beforeGenerate: true } : {}) };
                         const own = [...blockOps].reverse().find(op => op?.path === '/meta/rev' && Number.isInteger(op.value))?.value;
                         if (Number.isInteger(own)) rev = Math.max(rev, own);
                     }
@@ -225,7 +246,7 @@ export function createReplace(s, deps) {
                 if (applied) publish(span, index);
                 nextOps.push(...blockOps);
                 keptSpans.push(span);
-                nextParts.push({ ops: blockOps, span });
+                nextParts.push({ ops: blockOps, span, receipts: applied ? (kept ? [kept] : receiptsFor({ receipts: keptReceipts }, block)) : [] });
                 if (kept) nextReceipts.push(kept);
             }
             // Every kept receipt follows its ops through every rev they moved to (once: by the rev it had), the guarded one too.
