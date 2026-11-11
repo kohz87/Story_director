@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
     DIGEST_DEFAULTS, FULL_MAX, KEEP_MAX, MAX_HAPPENED, MAX_LINE, briefOf, capDays, cut, dayFacts, dayLine, dayOf, digestSettings,
-    entryOf, factsOf as factsOfEntries, foldEntries, makeDigest, moneyText, validateDays, walkDays,
+    entryOf, factsOf as factsOfEntries, foldEntries, makeDigest, moneyText, sceneOf, validateDays, walkDays,
 } from '../../../src/v2/chronicle/days.js';
 import { bucketDay, classify, classifyText, trimCats } from '../../../src/v2/chronicle/backlog.js';
 import { noteFactsQuery } from '../../../src/v2/chronicle/queries.js';
@@ -350,4 +350,25 @@ test('witnesses: the note query starts from the scene the last note left and han
     assert.deepEqual(first.present, ['Bregje', 'Dag']);
     const bare = noteFactsQuery({}, { after: null, minutes: D * DAY }, tools);
     assert.deepEqual(bare.entries[0].entry.happened.map(item => item.who), [undefined, ['Bregje', 'Dag']], 'nobody recorded before the first present receipt');
+});
+
+// A place move: Story Block empties the scene but for who `with:` brings along, and says so only on the place receipt.
+const moveTo = (type, present, left) => r(type, { module: 'story-block', summary: 'The scene moves to the docks.', data: { name: 'The docks', moved: true, present, left } });
+
+test('witnesses: a move to another place leaves the people behind off the later lines (same day and the next), and `with:` keeps a companion', () => {
+    const list = [told('Astra argued with Bregje.'), moveTo('capture.place', [], ['Bregje']), told('Astra bought a fish at the docks.')];
+    const entry = entryOf(list, D, { present: ['Bregje'] });
+    assert.deepEqual(entry.happened.map(item => item.who), [['Bregje'], undefined]);
+    assert.deepEqual(sceneOf(list, ['Bregje']), [], 'the next day starts from nobody');
+    const next = entryOf([told('Astra sold the fish.')], D + 1, { present: sceneOf(list, ['Bregje']) });
+    assert.equal(next.happened[0].who, undefined);
+    const along = entryOf([moveTo('scene.place', ['Torka'], ['Bregje']), told('Torka haggled.')], D, { present: ['Bregje', 'Torka'] });
+    assert.deepEqual(along.happened.at(-1).who, ['Torka']);
+    assert.deepEqual(sceneOf([moveTo('scene.place', ['Torka'], ['Bregje'])], ['Bregje', 'Torka']), ['Torka']);
+});
+
+test('witnesses: only named people; descriptions in the present list are not witnesses', () => {
+    const entry = entryOf([told('Astra signed the ledger.')], D, { present: ['clerk', 'the collectors', 'two guards', 'Guard', 'Crowd', 'The crowd', 'Bregje', 'Ætheline', 'Nelje'] });
+    assert.deepEqual(entry.happened[0].who, ['Bregje', 'Ætheline', 'Nelje']);
+    assert.deepEqual(sceneOf([here(['3 guards', 'a clerk', 'Torka'])], []), ['Torka']);
 });

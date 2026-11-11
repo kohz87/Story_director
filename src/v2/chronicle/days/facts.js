@@ -2,24 +2,28 @@
 
 import {
     ECHO, ENTRY_HAPPENED, MAX_ITEM, MAX_MET, MAX_NAME, MAX_NPCS, MAX_PLACES, MAX_QUESTS,
-    MAX_WHO, MAX_WORLD, PLANNED_TYPES, PRESENT_TYPES, TOLD_ELSEWHERE, clockSet, cut, dayOf, flat,
+    MAX_WHO, MAX_WORLD, PLANNED_TYPES, PRESENT_TYPES, SCENE_TYPES, TOLD_ELSEWHERE, clockSet, cut, dayOf, flat,
     isBookkeeping, isInt, isRecord, quiet, text,
 } from './shared.js';
 
 // ---- facts out of one day's receipts ----------------------------------------------------------
 
-// The people of a present list (names only, once each, in order, at most MAX_WHO).
+// Plain descriptions Story Block lets a present list hold ("- present clerk", "+ present the collectors"): not people with names.
+const NOT_NAMES = /^(?:the|an?|some|several|many|few|all|both|another|other|one|two|three|four|five|six|seven|eight|nine|ten|dozens?|guards?|crowd|clerks?|collectors?|villagers?|soldiers?|townsfolk|servants?|merchants?|customers?|patrons?|strangers?|man|woman|men|women|children|people|everyone|nobody|someone)(?![\p{L}\p{N}])/iu;
+const isNamed = name => /^\p{L}/u.test(name) && !/^\p{Ll}/u.test(name) && !NOT_NAMES.test(name);
+
+// The people of a present list (named people only, once each, in order, at most MAX_WHO).
 function namesOf(list) {
     const out = [];
     const seen = new Set();
-    for (const name of list) if (typeof name === 'string') pushUnique(out, name, MAX_WHO, seen);
+    for (const name of list) if (typeof name === 'string' && isNamed(flat(name))) pushUnique(out, name, MAX_WHO, seen);
     return out;
 }
 
 /** The scene after a run of receipts: `present` (the people in it before) moved on by each present receipt's `data.present`. */
 export function sceneOf(receipts, present = []) {
     let scene = namesOf(present);
-    for (const receipt of receipts) if (PRESENT_TYPES.has(receipt?.type) && Array.isArray(receipt.data?.present)) scene = namesOf(receipt.data.present);
+    for (const receipt of receipts) if (SCENE_TYPES.has(receipt?.type) && Array.isArray(receipt.data?.present)) scene = namesOf(receipt.data.present);
     return scene;
 }
 
@@ -94,8 +98,8 @@ export function entryOf(receipts, day = null, { lasting = null, present = null }
         if (quiet(receipt) || clockSet(receipt) || PLANNED_TYPES.has(receipt.type)) continue;
         count += 1;
         const data = isRecord(receipt.data) ? receipt.data : {};
-        // The scene after this receipt's own change: the one who came in (or went out) with it was there for the line.
-        if (scene && PRESENT_TYPES.has(receipt.type) && Array.isArray(data.present)) scene = namesOf(data.present);
+        // The scene after this receipt's own change: the one who came in (or went out, or was left behind by a move) with it was there for the line.
+        if (scene && SCENE_TYPES.has(receipt.type) && Array.isArray(data.present)) scene = namesOf(data.present);
         const said = cut(receipt.summary, MAX_ITEM);
         const happened = happenedText(receipt);
         if (happened && !seenHappened.has(happened)) {

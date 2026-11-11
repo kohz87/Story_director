@@ -36,7 +36,7 @@ function pending(state, tools, { calendar, now, written }) {
     const byDay = entriesByDay(chronicle);
     const fresh = new Map();
     const noted = notedOf(chronicle);
-    const plan = tryQuery(queryOf(tools), 'chronicle.noteFacts', { after: isInt(noted?.rev) ? noted.rev : null, minutes: isInt(noted?.minutes) ? noted.minutes : null }, null);
+    const plan = tryQuery(queryOf(tools), 'chronicle.noteFacts', { after: isInt(noted?.rev) ? noted.rev : null, minutes: isInt(noted?.minutes) ? noted.minutes : null, ...(Array.isArray(noted?.present) ? { present: noted.present } : {}) }, null);
     for (const item of Array.isArray(plan?.entries) ? plan.entries : []) {
         if (!isInt(item?.day) || !isRecord(item.entry) || !(item.entry.count > 0)) continue;
         if (!fresh.has(item.day)) fresh.set(item.day, []);

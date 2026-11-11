@@ -44,6 +44,8 @@ export const quiet = receipt => QUIET_TYPES.has(receipt.type) || (receipt.cause 
 export const SETTLE = 'time.settle';
 // Story Block's scene receipts that name who came into the scene (`data.added`).
 export const PRESENT_TYPES = new Set(['capture.present', 'scene.present']);
+// Every Story Block receipt that carries the whole present list after it: a place move empties the scene but for who `with:` brings along.
+export const SCENE_TYPES = new Set([...PRESENT_TYPES, 'capture.place', 'scene.place']);
 // Receipts a section of the digest already tells (places, money, world), or the reader's own edits and
 // a fight's blow-by-blow: never repeated under "happened".
 export const TOLD_ELSEWHERE = new Set([

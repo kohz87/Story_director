@@ -10,7 +10,7 @@
 // "Goldwane 18 (3 days ago): …": the relative day is counted in code from the story clock (agoWords), never by the
 // model. Each day gives one line; a thread's several lines of one day keep only the latest, and the body is cut to
 // BODY_CHARS, then the people who were there for it (the day's recorded present lists, new days only) follow in brackets: at most three names, then "+N";
-// when the block runs over its budget the names go first, lowest-ranked line first. The days come from the Journal's known days (world/journal.js knownDay), so what {{user}} does not
+// the plain lines are fitted first, then the names go back on from the highest-ranked line down while there is room. The days come from the Journal's known days (world/journal.js knownDay), so what {{user}} does not
 // know (secrets, planner text) never goes in. Nothing on the first day or with no clock. The block is about
 // 200 tokens (BACKLOG_CHARS): when space is short, the lowest-ranked lines go first. Pure and deterministic.
 
@@ -215,17 +215,22 @@ export function backlogBlock({ days = [], now = null, present = [], place = '', 
         const plain = `${date}${ago ? ` (${ago})` : ''}: ${body}`;
         ranked.push({ day: day.day, plain, line: `${plain}${witnessText(who)}` });
     }
-    // The budget is unchanged: the names go first, from the lowest-ranked line up, before any line is skipped.
-    const size = items => items.reduce((sum, item) => sum + 1 + item.line.length, BACKLOG_TAG.length);
-    for (let index = ranked.length - 1; index >= 0 && size(ranked) > BACKLOG_CHARS; index -= 1) ranked[index].line = ranked[index].plain;
+    // The budget is unchanged. The plain lines are fitted first (the lowest-ranked that do not fit are skipped); then the names go back on
+    // the surviving lines from the highest-ranked down, each only while it still fits.
     const block = [];
     let used = BACKLOG_TAG.length;
     for (const item of ranked) {
         if (block.length >= BACKLOG_LINES) break;
-        if (used + 1 + item.line.length > BACKLOG_CHARS) continue;
+        if (used + 1 + item.plain.length > BACKLOG_CHARS) continue;
         block.push(item);
-        used += 1 + item.line.length;
+        used += 1 + item.plain.length;
+    }
+    for (const item of block) {
+        const extra = item.line.length - item.plain.length;
+        if (used + extra > BACKLOG_CHARS) continue;
+        item.shown = item.line;
+        used += extra;
     }
     if (!block.length) return [];
-    return [BACKLOG_TAG, ...block.sort((a, b) => b.day - a.day).map(item => item.line)];
+    return [BACKLOG_TAG, ...block.sort((a, b) => b.day - a.day).map(item => item.shown ?? item.plain)];
 }
