@@ -162,7 +162,7 @@ export function presentKeys(query, state) {
 }
 
 /**
- * Everyone the reply's own scene lines (`+ present`, a place's `with`, its own safety-net lines) had in the scene at any point, as keys:
+ * Everyone the reply's own scene lines (`+ present` lines and its own safety-net `capture.present` receipts; a place line's `with:` is not read) had in the scene at any point, as keys:
  * the added names and the list after each line. A previous reply's late lines (`assist: 'late'`) are not this reply's.
  */
 export function seenKeys(receipts) {

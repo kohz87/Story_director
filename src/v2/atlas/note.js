@@ -48,19 +48,29 @@ export function scenePlace(view) {
 export function routesLine(world, here, { map } = {}) {
     const at = world.find(here);
     if (!at) return '';
-    // A place with no way of its own, inside a town ("Auvoth · Southern Gatehouse"), goes by the town's routes and names it.
-    const own = id => world.routes.some(route => route.from === id || route.to === id);
-    const up = at.parent ? world.find(at.parent) : parentOf(at.name, world)?.parent ?? null;
-    const from = !own(at.id) && up && up.id !== at.id ? up : at;
-    // Street legs inside the city the scene is in ("Highmark Capital / Crown Keep", 0.5 day) tell the narrator nothing: skip a leg whose
-    // two ends are the same town's parts (one the other's parent, or both under one parent); legs leaving the town stay.
+    // Street legs inside a city ("Highmark Capital / Crown Keep", 0.5 day) tell the narrator nothing: skip a leg whose two ends are the same
+    // town's parts (one the other's parent, or both under one parent); legs leaving the town stay.
     const parentId = place => (place.parent ? world.find(place.parent) : parentOf(place.name, world)?.parent)?.id ?? null;
-    const upId = parentId(from);
-    const inside = other => other.id === upId || parentId(other) === from.id || (upId !== null && parentId(other) === upId);
+    const insideOf = place => {
+        const upId = parentId(place);
+        return other => other.id === upId || parentId(other) === place.id || (upId !== null && parentId(other) === upId);
+    };
+    const otherEnd = (route, id) => world.places.find(place => place.id === (route.from === id ? route.to : route.from));
+    // A place with no way out of its own ("Auvoth · Southern Gatehouse"), or only street legs inside its town (a district whose one road
+    // is to its city), goes by the town's routes and names it.
+    const up = at.parent ? world.find(at.parent) : parentOf(at.name, world)?.parent ?? null;
+    const insideAt = insideOf(at);
+    const leaves = world.routes.some(route => {
+        if (route.from !== at.id && route.to !== at.id) return false;
+        const other = otherEnd(route, at.id);
+        return other && !insideAt(other);
+    });
+    const from = !leaves && up && up.id !== at.id ? up : at;
+    const inside = insideOf(from);
     const items = world.routes
         .filter(route => route.from === from.id || route.to === from.id)
         .map(route => {
-            const other = world.places.find(place => place.id === (route.from === from.id ? route.to : route.from));
+            const other = otherEnd(route, from.id);
             const trip = travelTime({ places: world.places, routes: [route], find: world.find }, from.id, other.id, { map });
             return { other, route, trip };
         })

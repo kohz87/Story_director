@@ -95,3 +95,12 @@ test('the tail skips street legs inside the scene\'s own city, keeps the ways ou
     assert.match(district, /Iron Guard Fortress by road/);
     assert.equal(district, 'Routes from Highmark Capital / Crown Keep: Iron Guard Fortress by road, 4.5 days.');
 });
+
+test('a district whose only road is its street to its city shows the city\'s ways out (Ersveil shape)', () => {
+    let state = makeState({ place: 'Highmark Capital / Civic Ward' });
+    state = lines(state, [
+        '+ route Highmark Capital / Civic Ward — Highmark Capital | hours: 12 | kind: street',
+        '+ route Highmark Capital — Iron Guard Fortress | days: 4.5 | kind: road',
+    ].join('\n')).state;
+    assert.equal(part.context.tail(view(state)).optional[0], 'Routes from Highmark Capital: Iron Guard Fortress by road, 4.5 days.');
+});
