@@ -204,7 +204,8 @@ function render(el, props, api) {
     function openOnTown() {
         const here = byId(s.data.current);
         const town = byId(here?.parent || (here?.inside ? here.id : ''));
-        const at = town && onLayer(town, s.layer) ? s.points.get(town.id) : null;
+        // Only a town with a real point: in a map with no points the row is the fallback and Fit keeps "you are here" in view.
+        const at = town && Number.isFinite(town.x) && Number.isFinite(town.y) && onLayer(town, s.layer) ? s.points.get(town.id) : null;
         if (!at || views.has(`${viewKey}|${s.layer}`)) return;
         measure();
         s.view = centreOn(s.view, at, box, limits, closeEnough(town.id));

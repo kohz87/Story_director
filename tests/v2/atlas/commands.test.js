@@ -361,6 +361,10 @@ test('a pack update after a story-made parent: the pack\'s coordinates win and t
     assert.equal(findAtlas(state, 'Auvoth').auto, undefined);
     assert.deepEqual([seen(auvoth.id).x, seen(auvoth.id).y], [70, 70]);
     assert.ok(near(seen(gate.id), { x: 70, y: 70 }) <= 0.51);
+    // A pack that gains the child itself: its point wins over the parent's offset.
+    const withChild = { places: [...TOWNS.places, { name: 'Auvoth (Gate)', x: 58, y: 112 }] };
+    const packed = query(state, 'atlas.place', { id: gate.id }, { pack: withChild });
+    assert.deepEqual([packed.x, packed.y], [58, 112]);
 });
 
 test('Tidy counts only what it can place; a child under a coordinate-less parent is placed after Tidy, parent first', () => {
@@ -384,6 +388,19 @@ test('Tidy counts only what it can place; a child under a coordinate-less parent
     assert.ok(Number.isFinite(gatehouse().x));
     assert.ok(near(gatehouse(), findAtlas(state, 'Zeth')) <= 0.51);
     assert.equal(query(state, 'atlas.view', {}, { pack: TOWNS }).tidy, 0);
+});
+
+test('a child that cannot be placed is not settled again and again; a rename keeps the drawn point', () => {
+    const state = visitAll(visitAll(makeState(), ['Zeth']), ['Zeth Gatehouse']);
+    const again = command(state, 'atlas.visit', { name: 'Zeth Gatehouse', parents: true });
+    assert.equal(JSON.stringify(again.state.domains.atlas), JSON.stringify(state.domains.atlas), 'nothing changed, no rev bump');
+    const placed = visitAll(makeState(), ['Auvoth (Southern Gatehouse)']);
+    const gate = findAtlas(placed, 'Auvoth (Southern Gatehouse)');
+    const drawn = id => query(placed, 'atlas.place', { id }, { pack: TOWNS });
+    const before = [drawn(gate.id).x, drawn(gate.id).y];
+    const renamed = command(placed, 'atlas.edit', { place: gate.id, name: 'Southern Gatehouse' }, { pack: TOWNS }).state;
+    const after = query(renamed, 'atlas.place', { id: gate.id }, { pack: TOWNS });
+    assert.deepEqual([after.x, after.y], before);
 });
 
 test('the place line keeps the spot of "Bluewatch — Guild Office", works before the atlas has the place, uses the saved parent, and a town counts as visited through a child', () => {

@@ -132,7 +132,8 @@ test('a trip from or to a place inside a town goes by the town\'s road plus a sh
     const out = travelTime(world, gate.id, 'Shorn');
     assert.equal(out.source, 'routes');
     assert.deepEqual(out.hops, road.hops, 'the town\'s road');
-    assert.ok(Math.abs(out.activeDays - (road.activeDays + TOWN_HOP_DAYS)) < 1e-6);
+    // A trip told in days leaves the hop out: same days, same text, no extra rest day.
+    assert.deepEqual([out.activeDays, out.restDays, out.text], [road.activeDays, road.restDays, road.text]);
     assert.equal(travelTime(world, 'Shorn', gate.id).hops.length, road.hops.length);
     // Child to its town, and two children of one town: the fixed hops (half an hour each side), not the map offset's round-up.
     assert.equal(travelTime(world, gate.id, 'Auvoth').text, '30 min');

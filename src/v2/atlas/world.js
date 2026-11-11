@@ -105,6 +105,7 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
         for (const alias of place.aliases ?? []) if (!packByKey.has(alias)) packByKey.set(alias, place);
     }
     const places = [];
+    const packed = new Set();
     const byId = new Map();
     const byKey = new Map();
     const usedPack = new Set();
@@ -113,6 +114,7 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
         const from = packByKey.get(key) ?? Object.entries(atlas.keys ?? {}).filter(([, id]) => id === own.id).map(([alias]) => packByKey.get(alias)).find(Boolean) ?? null;
         if (from) usedPack.add(from.key);
         // Placed by the map (`auto`) and the pack has a point: the pack's wins.
+        if (own.auto && from?.x !== null && from?.x !== undefined && own.x !== undefined) packed.add(own.id);
         const hasOwn = own.x !== undefined && own.y !== undefined && !(own.auto && from?.x !== null && from?.x !== undefined);
         const place = {
             id: own.id,
@@ -134,13 +136,18 @@ export function worldOf(atlas, pack = { places: [], routes: [] }) {
         byId.set(place.id, place);
     }
     // An auto-placed child sits by its live parent (the parent's point may be a pack's): parents first, a chain of three at most.
+    const done = new Set();
+    const firstKey = new Map();
+    for (const [alias, id] of Object.entries(atlas?.keys ?? {})) if (!firstKey.has(id)) firstKey.set(id, alias);
     const follow = (place, depth = 0) => {
         const own = atlas.places[place.id];
         const up = own?.auto && own.parent ? byId.get(own.parent) : null;
-        if (!up || up.id === place.id || depth > 3) return;
+        if (!up || up.id === place.id || depth > 3 || packed.has(place.id) || done.has(place.id)) return;
+        done.add(place.id);
         follow(up, depth + 1);
         if (up.x === null || up.y === null) return;
-        const { dx, dy } = childOffset(place.key);
+        // The offset comes from the name the place was first saved under (a rename keeps it as an alias), so a rename never moves the point.
+        const { dx, dy } = childOffset(firstKey.get(place.id) ?? place.key);
         Object.assign(place, { x: round3(up.x + dx), y: round3(up.y + dy) });
     };
     for (const place of places) follow(place);

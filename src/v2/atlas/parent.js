@@ -125,10 +125,10 @@ function looseSpot(atlas, world, place) {
  * it gives are marked `auto` (a pack's win over them, a reader's edit clears the mark). Leaves a pack place and a place that has
  * coordinates as it is. `canMake`: whether the atlas has room for one more place. Returns whether anything changed.
  */
-export function settlePlace(atlas, ctx, pack, place, { ensure, canMake = true, seen = new Set() } = {}) {
+export function settlePlace(atlas, ctx, pack, place, { ensure, canMake = true, seen = new Set(), world: given } = {}) {
     if (!place || place.x !== undefined || packPlace(pack, place.name) || seen.has(place.id)) return false;
     seen.add(place.id);
-    const world = worldOf(atlas, pack);
+    const world = given ?? worldOf(atlas, pack);
     const apart = { find: ref => { const found = world.find(ref); return found?.id === place.id ? null : found; } };
     const saved = place.parent ? apart.find(place.parent) : null;
     const found = saved ? { parent: saved, text: saved.name } : parentOf(place.name, apart);
@@ -141,9 +141,11 @@ export function settlePlace(atlas, ctx, pack, place, { ensure, canMake = true, s
             if (spot) Object.assign(own, spot, { auto: true });
         } else if (!pointOf(world.find(own.id))) settlePlace(atlas, ctx, pack, own, { ensure, canMake, seen });
         const point = pointOf(worldOf(atlas, pack).find(own.id));
-        place.parent = own.id;
         // A place inside a town is in the town's region (the map shows it on the same layer).
-        if (!place.region) place.region = found.parent?.region || own.region || '';
+        const region = place.region || found.parent?.region || own.region || '';
+        if (place.parent === own.id && region === place.region && !point) return false;
+        place.parent = own.id;
+        place.region = region;
         if (point) Object.assign(place, around(point, keyOf(place.name)), { auto: true });
         place.rev = revOf(ctx);
         return true;
@@ -162,10 +164,15 @@ export function settlePlace(atlas, ctx, pack, place, { ensure, canMake = true, s
 export function tidyPlaces(atlas, ctx, pack, options) {
     const seen = new Set();
     let count = 0;
+    // The joined world is built once and rebuilt only after a change (a place that settles to nothing changes nothing).
+    let world = null;
     for (const own of orderedPlaces(atlas)) {
         const place = atlas.places[own.id];
         if (!place?.discovered || place.x !== undefined) continue;
-        if (settlePlace(atlas, ctx, pack, place, { ...options, seen }) && place.x !== undefined) count += 1;
+        world ??= worldOf(atlas, pack);
+        const changed = settlePlace(atlas, ctx, pack, place, { ...options, seen, world });
+        if (changed) world = null;
+        if (changed && place.x !== undefined) count += 1;
     }
     return count;
 }

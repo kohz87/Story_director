@@ -112,11 +112,14 @@ export function travelTime(world, from, to, { map = DEFAULT_MAP, mode = null } =
     const extra = tidy((up ? TOWN_HOP_DAYS : 0) + (down ? TOWN_HOP_DAYS : 0));
     const hops = start.id === goal.id ? (extra ? [] : null) : shortest(world, start.id, goal.id, trip, modern);
     if (hops) {
-        const activeDays = tidy(hops.reduce((sum, hop) => sum + hop.days, extra));
+        const timed = hops.every(hop => hop.route.hours !== null && hop.route.hours !== undefined);
+        const sum = add => tidy(hops.reduce((total, hop) => total + hop.days, add));
+        const unitOf = total => (modern || (timed && total < 1) ? 'hour' : 'day');
+        // A trip told in days leaves the half-hour hops out (they add no rest day and no fraction of a day); one told in hours keeps them.
+        const unit = unitOf(tidy(sum(extra) + restDaysFor(trip, sum(extra), rules)));
+        const activeDays = sum(unit === 'day' ? 0 : extra);
         const restDays = restDaysFor(trip, activeDays, rules);
         const days = tidy(activeDays + restDays);
-        const timed = hops.every(hop => hop.route.hours !== null && hop.route.hours !== undefined);
-        const unit = modern || (timed && days < 1) ? 'hour' : 'day';
         const km = hops.length && hops.every(hop => hop.route.km > 0) ? tidy(hops.reduce((sum, hop) => sum + hop.route.km, 0)) : null;
         return {
             from: a.id, to: b.id, days, activeDays, restDays, unit, mode: trip, source: 'routes',
