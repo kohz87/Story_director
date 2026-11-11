@@ -13,7 +13,7 @@ import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { MODULE_ID, createModule } from '../../../src/v2/module.js';
 import { fakeFightRunner } from './helpers/fake-fight-runner.js';
 import { problemList } from '../../../src/v2/tracker/domain.js';
-import { leaderQuery, swayQuery, validateRipples } from '../../../src/v2/ripples/index.js';
+import { leaderQuery, problemsQuery, swayQuery, validateRipples } from '../../../src/v2/ripples/index.js';
 
 const STATIC_KEY = 'story_suite_static';
 const TAIL_KEY = 'story_suite_tail_1';
@@ -174,6 +174,7 @@ const toolsOf = ({ threads = [], events = [], receipts = [], chat = {}, section 
     })[name]?.(args),
     receipts: () => receipts,
 });
+const problemsQueryOf = section => problemsQuery(DIRECTOR, {}, toolsOf({ section }));
 const DIRECTOR = { domains: { director: { time: { minutes: 100 } } } };
 const sway = (state, tools, powers) => Object.fromEntries(swayQuery(state, { powers }, tools).map(row => [row.id, row.sway]));
 const fight = name => ({ receipt: { type: 'rpg.fight', data: { v2: { result: { fight: { groups: [{ name, count: 2, level: 1 }] } } } } } });
@@ -201,7 +202,7 @@ test('ripples: each signal (quest done/great/failed/abandoned, world direction, 
     assert.deepEqual(t({ events: [levy] }), { wendhild: 36, corvin: 43, hasse: 35 }, 'a resolved event: the favoured +8, a touched faction -4');
     assert.equal(t({ events: [{ ...levy, open: true }] }).corvin, 35, 'an open event counts nothing');
     assert.equal(t({ chat: { wen: 6 } }).wendhild, 46, 'standing: its key\'s value');
-    assert.equal(t({ receipts: [fight('two Lothar guards')] }).wendhild, 44, 'a won fight: 2 x weight 2');
+    assert.equal(t({ receipts: [fight('two Lothar guards')] }).wendhild, 36, 'a won fight against its people: -2 x weight 2');
     assert.equal(t({ receipts: [{ receipt: { type: 'rpg.fight', data: {} } }] }).wendhild, 40, 'a receipt with no fight record: nothing');
 });
 
@@ -209,7 +210,7 @@ test('ripples: caps (per signal, then per power), ties by pack order, determinis
     const many = Array.from({ length: 6 }, (_, n) => thread(`Job ${n}`, 'Sir Lothar', 'done', 'hard'));
     assert.equal(sway(DIRECTOR, toolsOf({ threads: many })).wendhild, 52, 'quests stop at the signal cap 12');
     const all = toolsOf({ threads: many, chat: { wen: 50 }, receipts: Array.from({ length: 9 }, () => fight('Lothar')) });
-    assert.equal(sway(DIRECTOR, all).wendhild, 60, '12 + 10 + 6 = 28 held to the power cap 20');
+    assert.equal(sway(DIRECTOR, all).wendhild, 56, '12 + 10 - 6 = 16, within the power cap 20');
     const tools = toolsOf();
     assert.equal(leaderQuery(DIRECTOR, { among: ['corvin', 'hasse'], pick: 'top' }, tools), 'corvin', 'a tie: pack order, top');
     assert.equal(leaderQuery(DIRECTOR, { among: ['corvin', 'hasse'], pick: 'bottom' }, tools), 'corvin', 'a tie: pack order, bottom');
@@ -260,4 +261,25 @@ test('ripples on the real host: registered, sway follows the replies and is the 
     await host.st.deleteMessage(a - 1);
     assert.deepEqual(rows(), [['wendhild', 40], ['corvin', 35], ['hasse', 35]], 'deleting the reply that finished it takes the sway back');
     assert.deepEqual(host.store.problems(), []);
+});
+
+test('ripples: a quest scores for the one power it served; fights lower; whole words; direction by ending; base; problems; receipts bound', () => {
+    const t = over => sway(DIRECTOR, toolsOf(over));
+    const expose = { ...thread('Expose Lord Hasse', 'Sir Lothar', 'done'), summary: 'proof of Hasse\'s smuggling' };
+    assert.deepEqual(t({ threads: [expose] }), { wendhild: 44, corvin: 35, hasse: 35 }, 'the giver\'s power only, not the target');
+    const three = { ...thread('Court intrigue', '', 'done'), summary: 'Corvin, Hasse and Wendhild all want it' };
+    assert.deepEqual(t({ threads: [three] }), { wendhild: 40, corvin: 35, hasse: 35 }, 'three claimants named, no giver: none');
+    assert.equal(t({ threads: [{ ...thread('Escort', '', 'done'), summary: 'for Corvin' }] }).corvin, 39, 'no giver: the one power the summary names');
+    assert.equal(t({ threads: [thread('Hunt with the Chasseurs', 'Old Mag', 'done')] }).hasse, 35, 'Chasseurs is not Hasse');
+    const levy = { id: 'e1', name: 'Grain Levy', aka: ['Grain Levy'], summary: 'the granaries burned', factions: [], open: false };
+    const dir = { ...TABLE, worldDirections: [{ event: 'grain levy', favours: 'corvin', unless: ['burned'] }] };
+    assert.equal(t({ events: [levy], section: dir }).corvin, 27, 'ended against the favoured power: -8');
+    assert.equal(t({ events: [{ ...levy, summary: 'the grain arrived' }], section: dir }).corvin, 43, 'ended well: +8');
+    assert.equal(t({ events: [{ ...levy, name: 'Hunger', summary: 'ok' }], section: dir }).corvin, 43, 'matched by aka, folded');
+    assert.equal(t({ chat: { wen: 36 }, section: { ...TABLE, powers: [{ ...TABLE.powers[0], standingBase: 30 }, ...TABLE.powers.slice(1)] } }).wendhild, 46, 'standing: the change since the base');
+    const bad = { ...TABLE, powers: [...TABLE.powers, { id: 'Bad Id', name: 'x', base: 1 }] };
+    assert.ok(problemsQueryOf(bad).length > 0 && problemsQueryOf(TABLE).length === 0, 'the table\'s Problems are reported');
+    const late = [{ index: 1, receipt: fight('Lothar').receipt }, { index: 5, receipt: fight('Lothar').receipt }];
+    const bounded = { ...toolsOf({ receipts: late }), reply: { index: 3 } };
+    assert.equal(sway(DIRECTOR, bounded).wendhild, 36, 'only the fight up to the queried reply');
 });

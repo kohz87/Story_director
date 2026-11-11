@@ -127,20 +127,20 @@ export function createBehindWidget({ reveal = pageReveal } = {}) {
 
 export const behindWidget = createBehindWidget();
 
-// ---- the Ripples card (Director tab, spoilers): each power's sway bar and its top reasons, behind the same Reveal ----
+// ---- the Ripples card (Director tab, spoilers): each power's sway bar and its top reasons; always drawn (the Director is game-view only) ----
 
 export const RIPPLES_WIDGET = 'story-director.ripples';
 const TOP_REASONS = 3;
 const signed = n => (n > 0 ? `+${n}` : String(n));
 
-function renderRipples(el, props, _api, reveal) {
+function renderRipples(el, props) {
     const doc = el.ownerDocument ?? globalThis.document;
     const make = maker(doc);
     const root = make('div', 'sd-ripples');
     el.replaceChildren(root);
     let rows = Array.isArray(props?.value) ? props.value : [];
     function draw() {
-        if (reveal.hidden() || !rows.length) return root.replaceChildren();
+        if (!rows.length) return root.replaceChildren();
         const section = make('section', 'sd-kind ss-glass', undefined, { 'data-kind': 'ripples' });
         section.append(make('h4', 'sd-h', 'Ripples'), ' ');
         const list = make('ul', 'sd-list sd-ripple-list');
@@ -159,7 +159,6 @@ function renderRipples(el, props, _api, reveal) {
         section.append(list);
         root.replaceChildren(section);
     }
-    const off = reveal.subscribe(draw);
     draw();
     return {
         update(next) {
@@ -167,19 +166,18 @@ function renderRipples(el, props, _api, reveal) {
             draw();
         },
         destroy() {
-            off?.();
             root.remove();
         },
     };
 }
 
-/** The widget `story-director.ripples` (bound to `ripples.sway`); shares the page's Reveal, so it stays hidden until revealed. */
-export function createRipplesWidget({ reveal = pageReveal } = {}) {
+/** The widget `story-director.ripples` (bound to `ripples.sway`): no Reveal step; the Director screen is where spoilers live. */
+export function createRipplesWidget() {
     return Object.freeze({
         props: Object.freeze({ value: Object.freeze({ type: 'array', default: Object.freeze([]) }) }),
         primary: 'value',
         validate: props => (props?.value !== undefined && props.value !== null && !Array.isArray(props.value) ? ['value must be the ripples.sway rows.'] : []),
-        render: (el, props, api) => renderRipples(el, props, api, reveal),
+        render: (el, props) => renderRipples(el, props),
     });
 }
 

@@ -180,7 +180,7 @@ const data = {
     // The agendas, clocks, beats and secrets (and the World card): null while the feature `story-director.threads` is off.
     behind: { query: 'director.behind' },
     threads: { query: 'director.threads.on' },
-    // Each pack power's hidden sway (the Ripples card; empty without a pack table), shown only once revealed.
+    // Each pack power's hidden sway (the Ripples card; empty without a pack table), always shown (no Reveal).
     ripples: { query: 'ripples.sway' },
 };
 for (const [kind] of OPEN_KIND_GROUPS) {

@@ -15,7 +15,7 @@ import { createArcWidget } from '../../../src/v2/arc/widget.js';
 let shown = true;
 const stillReveal = { guard: () => true, revealed: () => shown, set: on => { shown = on; }, hidden: () => !shown, subscribe: () => () => {} };
 const noPlanner = { status: () => ({ available: true, busy: false, draft: null, error: '', hidden: !shown, arc: null }), subscribe: () => () => {}, plan() {}, end() {} };
-const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.ripples': createRipplesWidget({ reveal: stillReveal }) });
+const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.ripples': createRipplesWidget() });
 
 const skip = runtime ? false : skipReason;
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
@@ -377,7 +377,7 @@ test('Director clock line: the place is the place line ("Town · Spot") from dir
 });
 
 // The Ripples card (spoilers): each power's sway bar and top reasons, "+N more"; behind Reveal; nothing without a table.
-test('director: the Ripples card shows each power\'s sway bar and its top reasons, +N more; hidden until Reveal; none without a table', { skip }, () => {
+test('director: the Ripples card shows each power\'s sway bar and its top reasons, +N more; always drawn (no Reveal); none without a table', { skip }, () => {
     const reason = (delta, text) => ({ kind: 'quest', delta, text, when: null });
     const rows = [
         { id: 'wendhild', name: 'Princess Wendhild', sway: 52, reasons: [reason(8, 'finished the grain levy for Sir Lothar'), reason(4, 'finished a b'), reason(-3, 'failed c'), reason(-1, 'gave up on d')] },
@@ -387,7 +387,7 @@ test('director: the Ripples card shows each power\'s sway bar and its top reason
     shown = true;
     const { el } = draw(DIRECTOR_ID, headState(), { queries });
     const card = el.querySelector('section[data-kind="ripples"]');
-    assert.ok(card, 'the card is drawn once revealed');
+    assert.ok(card, 'the card is drawn');
     const first = card.querySelector('[data-power="wendhild"]');
     assert.equal(first.querySelector('[role="meter"]').getAttribute('aria-valuenow'), '52');
     assert.equal(first.querySelector('.sd-ripple-fill').style.width, '52%');
@@ -395,7 +395,7 @@ test('director: the Ripples card shows each power\'s sway bar and its top reason
     assert.equal(squash(first.querySelector('.sd-more').textContent), '+1 more');
     assert.equal(card.querySelector('[data-power="corvin"]').querySelectorAll('.sd-reason').length, 0);
     shown = false;
-    assert.equal(draw(DIRECTOR_ID, headState(), { queries }).el.querySelector('section[data-kind="ripples"]'), null, 'hidden until Reveal');
+    assert.ok(draw(DIRECTOR_ID, headState(), { queries }).el.querySelector('section[data-kind="ripples"]'), 'drawn with Behind hidden, no Reveal needed');
     shown = true;
     assert.equal(draw(DIRECTOR_ID, headState()).el.querySelector('section[data-kind="ripples"]'), null, 'no table: no card');
 });

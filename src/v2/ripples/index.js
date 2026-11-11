@@ -10,20 +10,22 @@
 //   unique; base is 0..100; tiers and caps are whole numbers (else their default).
 // * **Signals** (`swayOf`). Each signal's total is clamped to its own cap (`caps.quest`, `caps.event`,
 //   `caps.standing`, `caps.fight`), then the power's total to ±`caps.power`. Sway = base + total, 0..100.
-//   - quests: a resolved quest whose giver, key, name or summary names the power (its labels or givers).
-//     done: +small, or +great when the quest is `great`; failed: −failed; abandoned: −abandoned. Open ones: 0.
-//   - world events: an event the pack gives a direction to (`worldDirections`, the first entry naming it) and
-//     that is resolved (`open: false`). The favoured power gets +great; a power the event's factions name gets
-//     −small when it is not the favoured one.
-//   - standing: Story Block's standing change for the power's `standing` key (the wiring supplies the deltas).
-//   - fights: a board fight won against a group that names one of the power's `npcs`: +fight × the npc's weight.
+//   - quests: a resolved quest scores for ONE power, the one it served: the giver's (the giver names the power's
+//     labels or givers); with no giver match, the power the key, name or summary names when that is only one.
+//     Two or more claimants named: none. done: +small, or +great when `great`; failed: −failed; abandoned: −abandoned.
+//   - world events: a resolved event (`open: false`) the pack gives a direction to (`worldDirections`: matched by
+//     name, aka or id, folded). The favoured power gets +great, or −great when how it ended (the event's summary)
+//     has one of the entry's `unless` words; a power the event's factions name gets −small when the event went
+//     the favoured way.
+//   - standing: Story Block's standing key change since the chat's start: its value minus the power's `standingBase` (0).
+//   - fights: a board fight won against a group naming one of the power's `npcs` (its own people): −fight × the weight.
 // * **Inputs** (plain arrays, newest first is the wiring's choice; ties keep that order):
 //   `quests [{ key, name, giver, summary, outcome: 'done'|'failed'|'abandoned'|null, great, at }]`,
-//   `events [{ id, name, factions: [name], open, at }]`, `standing [{ key, delta, at }]`,
+//   `events [{ id, name, aka: [name], summary, factions: [name], open, at }]`, `standing [{ key, delta, at }]`,
 //   `fights [{ won, groups: [name], at }]`.
 // * **Leader** (`leaderOf`): the top or bottom power among a list of ids (pack order breaks ties); null when
 //   there is no table, no powers to pick from, or `pick` is neither 'top' nor 'bottom'.
-// Names match as a case-folded substring test (a name inside a longer text counts).
+// Names match case-folded, as whole words ("Corvin's" matches Corvin; "Chasseurs" does not match Hasse).
 
 import { questDifficulty } from '../../changes.js';
 
@@ -46,12 +48,22 @@ const whole = (value, max) => Number.isSafeInteger(value) && value >= 0 && value
 const clamp = (value, limit) => Math.max(-limit, Math.min(limit, value));
 const when = value => (Number.isSafeInteger(value) ? value : null);
 
-/** True when `haystack` contains one of the non-empty `needles` (folded). */
+const WORDS = new Map();
+/** The whole-word test of one folded needle (cached: a table has few names). */
+function wordTest(want) {
+    if (!WORDS.has(want)) {
+        if (WORDS.size > 500) WORDS.clear();
+        WORDS.set(want, new RegExp(`(?<![\\p{L}\\p{N}])${want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u'));
+    }
+    return WORDS.get(want);
+}
+
+/** True when `haystack` (folded once by the caller, or here) holds one of the non-empty `needles` as a whole word. */
 function mentions(haystack, needles) {
     const hay = fold(haystack);
     return needles.some(needle => {
         const want = fold(needle);
-        return want !== '' && hay.includes(want);
+        return want !== '' && wordTest(want).test(hay);
     });
 }
 
@@ -118,10 +130,11 @@ function powerOf(raw, index, seen, problems) {
         npcs,
         base: raw.base,
         standing: text(raw.standing) || null,
+        standingBase: Number.isSafeInteger(raw.standingBase) ? raw.standingBase : 0,
     };
 }
 
-/** The pack's world directions: `{ event, favours }`, `favours` a power id of the table. */
+/** The pack's world directions: `{ event, favours, unless }`, `favours` a power id of the table, `unless` words of a bad ending. */
 function directionsOf(raw, powerIds, problems) {
     if (raw === undefined || raw === null) return [];
     if (!Array.isArray(raw)) {
@@ -136,7 +149,7 @@ function directionsOf(raw, powerIds, problems) {
             problems.push('ripples.worldDirections: an entry needs an event and the id of a power');
             continue;
         }
-        out.push({ event, favours });
+        out.push({ event, favours, unless: namesOf(item.unless, problems, 'ripples.worldDirections.unless') });
     }
     return out;
 }
@@ -165,17 +178,25 @@ export function validateRipples(section) {
     return { table: { powers, tiers, caps, worldDirections, standingModule }, problems };
 }
 
+/** The id of the one power a quest served (its giver's; else the one its key, name or summary names), or null. */
+function questOwner(quest, table) {
+    const pick = haystack => {
+        const hits = table.powers.filter(power => mentions(haystack, [...labelsOf(power), ...power.givers]));
+        return hits.length === 1 ? hits[0].id : hits.length > 1 ? false : null;
+    };
+    const byGiver = text(quest.giver) ? pick(quest.giver) : null;
+    if (byGiver !== null) return byGiver || null;
+    return pick([quest.key, quest.name, quest.summary].map(text).join(' | ')) || null;
+}
+
 /** Sway per power from one signal's point of view: the matching entries, with their deltas and texts. */
-function questReasons(power, quests, tiers) {
+function questReasons(power, quests, tiers, table) {
     const out = [];
-    const needles = [...labelsOf(power), ...power.givers];
     for (const quest of list(quests)) {
         const delta = quest.outcome === 'done' ? (quest.great === true ? tiers.great : tiers.small)
             : quest.outcome === 'failed' ? -tiers.failed
             : quest.outcome === 'abandoned' ? -tiers.abandoned : 0;
-        if (!delta) continue;
-        const haystack = [quest.giver, quest.key, quest.name, quest.summary].map(text).join(' | ');
-        if (!mentions(haystack, needles)) continue;
+        if (!delta || questOwner(quest, table) !== power.id) continue;
         const label = cut(text(quest.name) || text(quest.key) || 'a quest', MAX_NAME);
         const giver = text(quest.giver);
         const verb = quest.outcome === 'done' ? 'finished' : quest.outcome === 'failed' ? 'failed' : 'gave up on';
@@ -189,12 +210,15 @@ function eventReasons(power, events, directions, tiers) {
     for (const event of list(events)) {
         if (event.open !== false) continue;
         const name = cut(text(event.name), MAX_NAME);
-        const entry = directions.find(item => item.event === name || item.event === text(event.id));
+        const known = [name, text(event.id), ...list(event.aka).map(text)].map(fold).filter(Boolean);
+        const entry = directions.find(item => known.includes(fold(item.event)));
         if (!entry) continue;
+        const against = entry.unless.length > 0 && mentions(event.summary, entry.unless);
         const factions = list(event.factions).map(text);
         if (entry.favours === power.id) {
-            out.push({ kind: 'event', delta: tiers.great, text: cut(`${name} went ${power.name}'s way`, MAX_TEXT), when: when(event.at) });
-        } else if (factions.some(faction => mentions(faction, [...labelsOf(power), ...power.factions]))) {
+            const delta = against ? -tiers.great : tiers.great;
+            out.push({ kind: 'event', delta, text: cut(against ? `${name} went against ${power.name}` : `${name} went ${power.name}'s way`, MAX_TEXT), when: when(event.at) });
+        } else if (!against && factions.some(faction => mentions(faction, [...labelsOf(power), ...power.factions]))) {
             out.push({ kind: 'event', delta: -tiers.small, text: cut(`${name} cost ${power.name} ground`, MAX_TEXT), when: when(event.at) });
         }
     }
@@ -219,7 +243,7 @@ function fightReasons(power, fights, tiers) {
         const groups = list(fight.groups).map(text);
         const npc = power.npcs.find(item => groups.some(group => mentions(group, [item.name])));
         if (!npc) continue;
-        out.push({ kind: 'fight', delta: tiers.fight * npc.weight, text: cut(`won a fight against ${npc.name}`, MAX_TEXT), when: when(fight.at) });
+        out.push({ kind: 'fight', delta: -tiers.fight * npc.weight, text: cut(`won a fight against ${npc.name}'s people`, MAX_TEXT), when: when(fight.at) });
     }
     return out;
 }
@@ -230,7 +254,7 @@ function reasonsOf(table, inputs) {
     const out = new Map();
     for (const power of table.powers) {
         out.set(power.id, [
-            ...questReasons(power, inputs.quests, table.tiers),
+            ...questReasons(power, inputs.quests, table.tiers, table),
             ...eventReasons(power, inputs.events, directions, table.tiers),
             ...standingReasons(power, inputs.standing),
             ...fightReasons(power, inputs.fights, table.tiers),
@@ -290,9 +314,16 @@ const listOf = value => (Array.isArray(value) ? value : []);
 
 /** The pack's table: the `packs.ripples` section (a host that has none gives null), validated; a bad one is ignored. */
 export function tableOf(tools) {
-    const found = ask(tools, 'packs.ripples', {});
-    return validateRipples(found && typeof found === 'object' ? found : null).table;
+    return checkedTable(tools).table;
 }
+
+const checkedTable = tools => {
+    const found = ask(tools, 'packs.ripples', {});
+    return validateRipples(found && typeof found === 'object' ? found : null);
+};
+
+/** `ripples.problems` → the pack table's Problems (strings), [] when it is fine or there is no section. */
+export const problemsQuery = (state, args, tools) => checkedTable(tools).problems;
 
 /** The inputs `swayOf` reads, from the head state: resolved quests, resolved world events, standing, won board fights. */
 export function inputsOf(state, tools, table) {
@@ -302,20 +333,22 @@ export function inputsOf(state, tools, table) {
         great: GREAT.has(questDifficulty(thread.fields?.difficulty)), at: thread.ended?.at ?? null,
     }));
     const events = listOf(ask(tools, 'chronicle.events', { open: false })).map(event => ({
-        id: event.id, name: event.name, factions: listOf(event.factions).map(item => item?.name ?? item), open: event.open, at: event.updated ?? null,
+        id: event.id, name: event.name, aka: listOf(event.aka), summary: event.summary, factions: listOf(event.factions).map(item => item?.name ?? item), open: event.open, at: event.updated ?? null,
     }));
-    // Standing: the data module's current value of the power's key (it starts at 0, so the value is the change).
+    // Standing: the change since the chat's start: the key's value now minus the power's `standingBase` (0 unless the pack says).
     const standing = [];
     const fields = table.standingModule ? ask(tools, 'dataModules.view', { module: table.standingModule })?.chat : null;
     for (const power of table.powers) {
         const value = fields?.[power.standing];
-        if (power.standing && Number.isSafeInteger(value)) standing.push({ key: power.standing, delta: value, at: null });
+        if (power.standing && Number.isSafeInteger(value)) standing.push({ key: power.standing, delta: value - power.standingBase, at: null });
     }
     // Won board fights: the `rpg.fight` receipts (a fight that is not won writes none) with the groups they faced.
     let entries = [];
     try { entries = typeof tools?.receipts === 'function' ? tools.receipts() ?? [] : []; } catch { entries = []; }
     const fights = [];
+    const upTo = Number.isSafeInteger(tools?.reply?.index) ? tools.reply.index : null;
     for (const entry of listOf(entries)) {
+        if (upTo !== null && Number.isSafeInteger(entry?.index) && entry.index > upTo) continue;
         const receipt = entry?.receipt ?? entry;
         const fight = receipt?.type === 'rpg.fight' ? receipt.data?.v2?.result?.fight : null;
         if (fight && Array.isArray(fight.groups)) fights.push({ won: true, groups: fight.groups.map(group => group?.name), at: null });
@@ -338,11 +371,11 @@ export function leaderQuery(state, args, tools) {
     return leaderOf(swayQuery(state, {}, tools), { among: Array.isArray(args?.among) ? args.among : null, pick: args?.pick ?? 'top' });
 }
 
-/** The part: two read-only queries, no state, no prompt text, no feature (a reader's switch must not change a pack's branch). */
+/** The part: three read-only queries (sway, leader, the table's problems), no state, no prompt text, no feature (a reader's switch must not change a pack's branch). */
 export const part = {
     domains: {},
     commands: {},
-    queries: { 'ripples.sway': swayQuery, 'ripples.leader': leaderQuery },
+    queries: { 'ripples.sway': swayQuery, 'ripples.leader': leaderQuery, 'ripples.problems': problemsQuery },
     kinds: {},
     hooks: {},
     tabs: [],
