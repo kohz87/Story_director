@@ -271,6 +271,7 @@ let factionLines = 0;
 let quietFlips = 0;
 let passersBy = 0;
 let passersMet = 0;
+let swipes = 0;
 function dayLines(rd, n) {
     const lines = [];
     if (rd.chance(0.4)) {
@@ -282,9 +283,11 @@ function dayLines(rd, n) {
     if (rd.chance(0.3)) {
         passersBy += 1;
         // Wren is not one of CAST_IDS (their names are never told outside a cue); the reply's text names her, so the meeting counts as seen.
-        lines.push('+ present Wren', '- present Wren');
+        lines.push('+ present Wren', '- present Wren');   // the reply's text does not name her: only the scene lines show her (cast seenKeys)
         lines.passer = true;
     }
+    // An off-screen agenda with dates: the pulse's arrival and schedule-shift effects write its `arrive` / `on` (a thread another reply may have made).
+    if (rd.chance(0.3)) lines.push(`+ agenda Sched${n} — plots | now: the docks | on: June ${rd.int(10, 25)}, 1200, 09:00 am | arrive: June ${rd.int(10, 25)}, 1200, 02:00 pm`);
     return lines;
 }
 
@@ -430,6 +433,8 @@ for (const seed of SEEDS) {
             for (const name of KEY_BASE) assert.ok((await host.sdk.command('keypeople.pin', { name })).ok);
             const start = host.head().domains.director.time.minutes;
             const times = new Map();
+            let wrenMet = false;
+            let quietOn = false;
             let editsMade = 0;
             let sought = '';
             const clock = () => host.head().domains.director.time.minutes;
@@ -441,8 +446,15 @@ for (const seed of SEEDS) {
                 // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
                 const names = seeking === 'cartographer' || sought === 'cartographer';
                 sought = seeking;
-                await host.send(seeking ? `Is there a ${seeking} around (${n})?` : r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, said(`Reply ${n}.${names ? ' Ylva nods.' : ''}${day.passer ? ' Wren passes through.' : ''}`, lines));
-                if (day.passer && host.head().domains.cast.people['ersveil:wren']?.met) passersMet += 1;
+                const replyText = said(`Reply ${n}.${names ? ' Ylva nods.' : ''}`, lines);
+                await host.send(seeking ? `Is there a ${seeking} around (${n})?` : r.chance(0.3) ? 'I take the job.' : `On we go (${n}).`, replyText);
+                // A swipe of the reply now and then (the same lines again): the pulse is rolled again, the steps of the reply are redone.
+                if (seed >= EXTRAS_FROM && rd.chance(0.12)) {
+                    swipes += 1;
+                    await host.swipe(replyText);
+                }
+                if (day.passer && !wrenMet && host.head().domains.cast.people['ersveil:wren']?.met) { passersMet += 1; wrenMet = true; }
+                if (!host.head().domains.cast.people['ersveil:wren']?.met) wrenMet = false;
                 if (host.head().domains.cast.people['ersveil:ylva']?.met?.why === 'sought') soughtMeetings += 1;
                 if (near.tie) {
                     tieLinesMade += 1;
@@ -487,9 +499,11 @@ for (const seed of SEEDS) {
                 }
                 await keyEdits(rk, host, n, delta);
                 // The reader's quiet scene switch now and then, on the latest reply (a delete may take it back).
-                if (seed >= EXTRAS_FROM && rd.chance(0.25)) {
+                // On for a reply or two, then off again, so the pulse is not starved for the rest of the chat.
+                if (seed >= EXTRAS_FROM && (quietOn || rd.chance(0.2))) {
                     quietFlips += 1;
-                    assert.ok((await host.sdk.command('director.pulse.quiet', { on: rd.chance(0.5) })).ok, `seed ${seed}, reply ${n}: quiet scene switch`);
+                    quietOn = !quietOn;
+                    assert.ok((await host.sdk.command('director.pulse.quiet', { on: quietOn })).ok, `seed ${seed}, reply ${n}: quiet scene switch`);
                 }
                 // The reader sets the clock by hand now and then, forward or back; the model follows (a set, exact).
                 if (re.chance(0.3)) {
@@ -567,7 +581,7 @@ for (const seed of SEEDS) {
             const keyDone = summaries.filter(text => /^Key person: /.test(text));
             assert.ok(keyDone.length >= 1, `seed ${seed}: the fuzz sent a key person away`);
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
-            t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, passers met ${passersMet}, pulse kinds ${JSON.stringify(Object.fromEntries(host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').map(entry => entry.receipt.data?.kind).reduce((map, kind) => map.set(kind, (map.get(kind) ?? 0) + 1), new Map())))}, rumour events ${Object.values(host.head().domains.chronicle.events).filter(event => event.rumour !== undefined).length}, new factions ${host.sdk.receipts().filter(entry => /New factions?:/.test(entry.receipt.summary ?? '')).length}, places with a parent ${Object.values(host.head().domains.atlas?.places ?? {}).filter(place => place.parent).length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
+            t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, passers met ${passersMet}, swipes ${swipes}, pulse kinds ${JSON.stringify(Object.fromEntries(host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').map(entry => entry.receipt.data?.kind).reduce((map, kind) => map.set(kind, (map.get(kind) ?? 0) + 1), new Map())))}, rumour events ${Object.values(host.head().domains.chronicle.events).filter(event => event.rumour !== undefined).length}, new factions ${host.sdk.receipts().filter(entry => /New factions?:/.test(entry.receipt.summary ?? '')).length}, places with a parent ${Object.values(host.head().domains.atlas?.places ?? {}).filter(place => place.parent).length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
             assert.ok(!source.enabled || host.sdk.query('ripples.sway')?.length === 2, `seed ${seed}: the pack's ripples table is read`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
