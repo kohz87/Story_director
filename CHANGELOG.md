@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fix: replies after a deleted middle reply keep applying.** A refused name, a key person's death record or a place line that rewrites a record an older reply made is passed over when that reply was deleted, instead of skipping the whole block; a day digest left by a rewind or a deleted cap drop is no longer listed in the Journal or [Earlier days]. Replies already written replay and Re-read exactly as before.
+
 ## 2.14.0
 
 Update Story Block, Story Director and NPC State Delta together, then re-import the Ersveil pack (2.9.5 needs Story Block 2.31.0). The new features apply to new replies; start a new chat to see them all. Replies already written replay and Re-read exactly as before.
