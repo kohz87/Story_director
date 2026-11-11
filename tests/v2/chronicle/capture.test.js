@@ -322,3 +322,26 @@ test('factionTags: a reply without the mark (recorded before it) keeps its old c
     const marked = lines(initial, TAGGED, MARKED);
     assert.deepEqual(replay(initial, marked.runs), marked.state, 'replay == live for a marked reply');
 });
+
+test('factionTags: only names newly added to the event make factions; a removed one returns only when a later line names it anew', () => {
+    let state = structuredClone(line(makeState({ minutes: DAY }), TAGGED, MARKED).state);
+    const gang = factionNamed(state, 'Red-Cord Gang');
+    delete state.domains.chronicle.factions[gang.id];
+    const same = line(state, '~ world Bluewatch Street Clash — still brawling | factions: River Confederacy, red-cord gang', MARKED);
+    assert.equal(factionNamed(same.state, 'Red-Cord Gang'), undefined, 'an unchanged list makes nothing');
+    assert.doesNotMatch(same.result.summary, /New faction/);
+    const added = line(same.state, '~ world Bluewatch Street Clash | factions: River Confederacy, Quay Watch', MARKED);
+    assert.ok(factionNamed(added.state, 'Quay Watch'));
+    assert.match(added.result.summary, / New faction: Quay Watch\.$/);
+    const back = line(added.state, '~ world Bluewatch Street Clash | factions: River Confederacy, Quay Watch, Red-Cord Gang', MARKED);
+    assert.ok(factionNamed(back.state, 'Red-Cord Gang'), 'named anew, it returns');
+});
+
+test('factionTags: the receipt lists the factions made on a `- world` line that a lock held back', () => {
+    const state = structuredClone(line(makeState({ minutes: DAY }), '+ world Old Truce — peace | factions: River Confederacy', MARKED).state);
+    state.domains.chronicle.events[eventNamed(state, 'Old Truce').id].by = 'event:truce';
+    const run = line(state, '- world Old Truce | factions: River Confederacy, Ferry Guild', MARKED);
+    assert.equal(run.ok, true, run.message);
+    assert.ok(factionNamed(run.state, 'Ferry Guild'));
+    assert.match(run.result.summary, / New faction: Ferry Guild\.$/);
+});

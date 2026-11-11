@@ -97,6 +97,9 @@ function heldSummary(event, changes) {
     return changes.length ? `World: ${kept}; changed: ${changes.join(', ')}.` : `World: ${kept}.`;
 }
 
+// The names of a line's list that the event does not carry yet: only these may make factions.
+const newlyNamed = (names, event) => (Array.isArray(names) ? names.filter(n => !event.factions.some(k => keyOf(k) === keyOf(n))) : names);
+
 // The receipt's words for the factions a line made known.
 const madeText = made => (made.length ? ` New ${made.length === 1 ? 'faction' : 'factions'}: ${made.join(', ')}.` : '');
 
@@ -125,10 +128,11 @@ export function applyWorldLine(ctx, line) {
         if (!found) return ctx.fail('NOT_FOUND', `There is no world event "${name}" in the chronicle to end.`);
         const event = chronicle.events[found.id];
         const { fields, held } = guardLocked(event, { summary: text || undefined, state: 'resolved', place, factions });
+        const fresh = newlyNamed(factions, event);
         const changes = changeEvent(chronicle, event, fields, { now, rev });
-        const made = tagFactions(ctx, chronicle, factions, event);
+        const made = tagFactions(ctx, chronicle, fresh, event);
         prune(chronicle);
-        if (held) return { summary: heldSummary(event, changes), narrate: false, data: { event: event.id, state: event.state, held: true } };
+        if (held) return { summary: heldSummary(event, changes) + madeText(made), narrate: false, data: { event: event.id, state: event.state, held: true } };
         return { summary: (changes.length ? sentence(eventSummary(event, false)) : `World: ${event.name} had already ended.`) + madeText(made), narrate: false, data: { event: event.id, state: event.state } };
     }
 
@@ -145,14 +149,15 @@ export function applyWorldLine(ctx, line) {
         chronicle.events[id] = event;
         const made = tagFactions(ctx, chronicle, factions, event);
         const gone = prune(chronicle);
-        if (!Object.hasOwn(chronicle.events, id)) return { summary: `World: ${name} has ended (too old to keep).`, narrate: false, data: { event: null, pruned: gone } };
+        if (!Object.hasOwn(chronicle.events, id)) return { summary: `World: ${name} has ended (too old to keep).${madeText(made)}`, narrate: false, data: { event: null, pruned: gone } };
         return { summary: sentence(eventSummary(event, true)) + madeText(made), narrate: false, data: { event: id, created: true, state: event.state, ...(gone.length ? { pruned: gone } : {}) } };
     }
 
     const event = chronicle.events[found.id];
     const { fields, held } = guardLocked(event, { summary: text || undefined, state: read?.state, place, factions });
+    const fresh = newlyNamed(factions, event);
     const changes = changeEvent(chronicle, event, fields, { now, rev });
-    const made = tagFactions(ctx, chronicle, factions, event);
+    const made = tagFactions(ctx, chronicle, fresh, event);
     const gone = prune(chronicle);
     if (held) return { summary: heldSummary(event, changes) + madeText(made), narrate: false, data: { event: event.id, state: event.state, held: true, ...(gone.length ? { pruned: gone } : {}) } };
     if (!changes.length) return { summary: `World: ${event.name} is unchanged.${madeText(made)}`, narrate: false, data: { event: event.id, state: event.state } };
