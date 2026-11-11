@@ -78,6 +78,8 @@ export function eventOut(event, { chronicle, calendar, now }) {
         // Only what a pack event's lasting change set, so an older entry's answer is as it was.
         ...(isLocked(event) ? { locked: true } : {}),
         ...(event.keep === true ? { keep: true } : {}),
+        // A rumour of the World pulse: its own marks (known.js leaves it off the World screen until the story's own line named it).
+        ...(typeof event.rumour === 'string' ? { rumour: event.rumour, ...(event.heard === true ? { heard: true } : {}) } : {}),
     };
 }
 

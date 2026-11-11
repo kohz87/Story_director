@@ -6,6 +6,7 @@ import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toTracker } f
 import { addProblem, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
 import { acceptIntent } from './acceptance.js';
 import { threadWriteId } from './thread-writes.js';
+import { agendaProgress, placeNamed, pulseActive } from '../pulse/effects.js';
 import { calendarOf, lineStretch, maxJumpMinutes, packCalendarOf, sameStretch, settingsFrom, splitTimeLine, timeAfter } from './time.js';
 
 /** The longest thread name kept, in characters: a longer one is cut (at a space when there is one). */
@@ -338,6 +339,11 @@ function threadLine(ctx, given) {
         });
     }
     const current = thread ? director.threads[thread] : null;
+    // An agenda's step progress and place (feature `story-director.pulse`): optional fields the pulse reads, written by code, never the story's.
+    if (current?.kind === 'agenda' && current.status === 'active' && pulseActive(ctx)) {
+        const patch = agendaProgress(named?.fields ?? null, current.fields ?? {}, { minutes: director.time.minutes, where: placeNamed(ctx.query, current.fields?.now) });
+        if (patch) current.fields = { ...current.fields, ...patch };
+    }
     if (named?.acceptance && named.status === 'active' && current?.status === 'resolved') {
         ctx.call('chronicle.threadOutcome', { thread, text: `${current.key}: ${current.ended.outcome}.` });
     }

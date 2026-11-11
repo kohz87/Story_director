@@ -87,9 +87,9 @@ test('the reply\'s bookkeeping and each problem are written whole, never inside 
     assert.ok(records.length > 0);
     for (const op of ops) {
         const path = op.path.slice('/domains/director/'.length);
-        const ok = /^(threads|keys)\//.test(path) || ['turn/n', 'turn/now', 'time/minutes', 'checked', 'recap'].includes(path) || /^problems\/\d+\.\d+$/.test(path);
+        const ok = /^(threads|keys)\//.test(path) || ['turn/n', 'turn/now', 'time/minutes', 'checked', 'recap', 'pulse'].includes(path) || /^problems\/\d+\.\d+$/.test(path);
         assert.ok(ok, `${op.op} ${op.path}`);
-        if (/^(turn\/now|checked|recap)$/.test(path)) assert.equal(op.op, 'replace', `${op.path} is written whole`);
+        if (/^(turn\/now|checked|recap|pulse)$/.test(path)) assert.equal(op.op, 'replace', `${op.path} is written whole`);
         if (path.startsWith('problems/')) assert.equal(op.op, 'add', `${op.path}: a problem is added under its own key`);
     }
     assert.equal(replyTurn(director(host)).added, 1);

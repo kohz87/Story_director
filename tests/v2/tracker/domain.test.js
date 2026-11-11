@@ -25,7 +25,7 @@ test('the part has the shape MODULES §A names', () => {
 
 test('initial: an empty director, plain JSON, valid; each call a fresh copy', () => {
     const director = part.domains.director.initial();
-    assert.deepEqual(director, { time: { minutes: null }, threads: {}, keys: {}, writes: {}, problems: {}, turn: { n: 0, now: null }, checked: null, recap: null, initiative: null });
+    assert.deepEqual(director, { time: { minutes: null }, threads: {}, keys: {}, writes: {}, problems: {}, turn: { n: 0, now: null }, checked: null, recap: null, initiative: null, pulse: null, pulseQuiet: null });
     assert.deepEqual(JSON.parse(JSON.stringify(director)), director);
     assert.deepEqual(validate(director), []);
     director.threads.x = 1;

@@ -11,6 +11,8 @@
 //   checked: null | [{ minutes, rev, lapsed, overdue, pay, due }],   // the time part's last settle
 //   recap:   null | [{ fromMinutes, toMinutes, lines, threads, rev, at }], // its While away recap
 //   initiative: null | [{ at, round, key, name, recent: [{ key, round }] }], // NPC initiative's last pick (initiative.js)
+//   pulse: null | [{ results: [{ at, clock, kind, d20?, table?, who?, place?, text, effect?, skipped? }] }], // the World pulse (pulse/effects.js)
+//   pulseQuiet: null | [{ on: bool }],                // the reader's quiet-scene flag
 // }
 // `turn` is this part's own: v1's rules count replies (`n`; a record changed in the last three
 // replies is relevant; a `- hook` beside the `+ quest` of the same reply is not an ending), and
@@ -65,6 +67,9 @@ export function initialDirector() {
         recap: null,
         // NPC initiative's last pick (a slot, initiative.js); an older chat has none (read as null).
         initiative: null,
+        // The World pulse's last results and the reader's quiet-scene flag (slots, pulse/effects.js); an older chat has none (read as null).
+        pulse: null,
+        pulseQuiet: null,
     };
 }
 
@@ -254,7 +259,22 @@ export function validateDirector(slice) {
         || (now && (!Array.isArray(now.quests) || !(now.from === null || isInt(now.from)) || !(now.lone === null || isRecord(now.lone))))) {
         errors.push('director.turn is malformed.');
     }
-    errors.push(...initiativeErrors(slice));
+    errors.push(...initiativeErrors(slice), ...pulseErrors(slice));
+    return errors;
+}
+
+// The World pulse's slots (pulse/effects.js): the last results, at most 5, and the quiet flag.
+function pulseErrors(slice) {
+    const errors = [];
+    const value = Array.isArray(slice?.pulse) && slice.pulse.length === 1 ? slice.pulse[0] : null;
+    if (slice?.pulse !== undefined && slice.pulse !== null && (!isRecord(value) || !Array.isArray(value.results) || value.results.length > 5
+        || value.results.some(entry => !isRecord(entry) || !isInt(entry.at) || !(entry.clock === null || entry.clock === undefined || isInt(entry.clock)) || typeof entry.kind !== 'string' || typeof entry.text !== 'string'
+            || !(entry.d20 === undefined || (isInt(entry.d20) && entry.d20 >= 1 && entry.d20 <= 20)) || !(entry.skipped === undefined || typeof entry.skipped === 'string')
+            || !(entry.effect === undefined || isRecord(entry.effect))))) {
+        errors.push('director.pulse must be null or [{ results: [at most 5 of { at, clock, kind, text, … }] }].');
+    }
+    const quiet = slice?.pulseQuiet;
+    if (quiet !== undefined && quiet !== null && !(Array.isArray(quiet) && quiet.length === 1 && isRecord(quiet[0]) && typeof quiet[0].on === 'boolean')) errors.push('director.pulseQuiet must be null or [{ on }].');
     return errors;
 }
 

@@ -15,8 +15,12 @@ const cueLinesOf = value => (Array.isArray(value) ? value.filter(line => typeof 
 export const linesOf = value => (Array.isArray(value) ? value.filter(line => typeof line === 'string') : []);
 
 // A wrapped handler or query keeps the part's `feature` tag (MODULES §F100: a function with a `feature`
-// property), so Story Block can leave it out while the reader has that feature off.
-export const withFeature = (fn, from) => (typeof from?.feature === 'string' ? Object.assign(fn, { feature: from.feature }) : fn);
+// property), so Story Block can leave it out while the reader has that feature off. A command marked `prelude` (stored on the generated
+// reply, registry.isPrelude) keeps that mark too, or the host would commit its step on the reader's message.
+export const withFeature = (fn, from) => {
+    const tags = { ...(typeof from?.feature === 'string' ? { feature: from.feature } : {}), ...(from?.prelude === true ? { prelude: true } : {}) };
+    return Object.keys(tags).length ? Object.assign(fn, tags) : fn;
+};
 
 // Several parts' functions under one hook name, called in part order. beforeGenerate and afterCapture
 // answers (string[] | { lines, commands }) are joined; canGenerate gives the first refusal; any other

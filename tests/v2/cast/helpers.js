@@ -57,7 +57,7 @@ export async function castHost({ source = castSource(), model = createFakeModel(
         host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat },
     });
     const stub = Object.keys(queries).length ? [{ id: 'cast-test-stub', name: 'Test stand-in', version: '0.0.0-test', domains: {}, commands: {}, queries }] : [];
-    host = await createHost({ modules: [...stub, ...extra, module], callModel: model, settings: { ...(hostSettings ? { host: hostSettings } : {}), modules: { 'story-director': settings }, features } });
+    host = await createHost({ modules: [...stub, ...extra, module], callModel: model, settings: { ...(hostSettings ? { host: hostSettings } : {}), modules: { 'story-director': settings }, features: { 'story-director.pulse': false, ...features } } });
     // The test cast is a real pack, installed before each reply (so a test changes `source` and the next reply sees it).
     for (const method of ['send', 'swipe', 'regenerate', 'cont']) {
         const original = host[method];

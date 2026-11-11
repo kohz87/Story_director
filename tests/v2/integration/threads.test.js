@@ -27,7 +27,8 @@ const OWNED_KINDS = ['agenda', 'event', 'clock', 'beat', 'secret', 'world', 'fac
 async function newHost({ features = {}, modules = [] } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), feature: id => host?.sdk.feature(id) } });
-    host = await createHost({ modules: [...modules, module], settings: { features } });
+    // The World pulse is left off: the fixtures hold the prompt of the thread features alone.
+    host = await createHost({ modules: [...modules, module], settings: { features: { 'story-director.pulse': false, ...features } } });
     return host;
 }
 const tailOf = host => sent(host, TAIL_KEY).at(-1) ?? '';

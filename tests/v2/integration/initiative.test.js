@@ -115,3 +115,67 @@ test('the static part: byte-identical reply to reply, with the initiative line o
         host.close();
     }
 });
+
+// ---- World pulse on the real host: its roll rides the reply's own receipt, so a re-roll replaces it ----
+
+test('pulse: a regenerate, a swipe or a delete of the reply takes its roll and effects back (no stacking); a rebuild is the same', async () => {
+    const host = await newHost();
+    try {
+        await host.send('Begin.', reply('Harrow wakes.', [...OPENING, '+ present Bram', '+ present Orsa',
+            '+ agenda Courier — rides in | now: far north | then: reaches the gate | on: June 3, 1200, 06:00 pm | arrive: June 3, 1200, 05:00 pm',
+            '+ world Wolf Plague — wolves in the fold | state: ongoing', '+ world Grain Tax — the levy rises | state: ongoing']));
+        const original = () => host.head().domains.director.threads;
+        const dateOf = (threads, field) => Object.values(threads).map(thread => thread.fields?.[field]).join('|');
+        const base = { on: dateOf(original(), 'on'), arrive: dateOf(original(), 'arrive') };
+        const effects = () => {
+            const threads = original();
+            const rumours = Object.values(host.head().domains.chronicle.events).filter(event => event.rumour !== undefined).length;
+            return { rumours, arrived: dateOf(threads, 'arrive') === base.arrive ? 0 : 1, shifted: dateOf(threads, 'on') === base.on ? 0 : 1 };
+        };
+        const last = () => host.head().domains.director.pulse[0].results.at(-1);
+        const pulses = () => host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse');
+        await host.send('Go on.', reply('Reply.'));
+        const seen = new Set();
+        const check = label => {
+            const sum = Object.values(effects()).reduce((a, b) => a + b, 0);
+            assert.equal(pulses().length, 2, `${label}: one roll per reply (the opening reply is skipped, the second rolled), never stacked`);
+            assert.ok(sum <= 1 && sum === (['chronicle.rumor', 'director.pulse.arrive', 'director.pulse.shift'].includes(last().effect?.type) ? 1 : 0), `${label}: ${JSON.stringify(effects())} of ${last().kind}`);
+            if (last().effect) seen.add(last().effect.type);
+        };
+        for (let n = 0; n < 12; n += 1) { await host.regenerate('Again.'); check(`regenerate ${n}`); }
+        for (let n = 0; n < 12; n += 1) { await host.swipe('Another.'); check(`swipe ${n}`); }
+        assert.ok(seen.size >= 1, 'a roll with an effect happened');
+        assert.ok(host.st.promptLog.some(entry => String(entry.value ?? '').includes('World this reply: ')), 'the line reached a prompt');
+        const before = JSON.stringify(host.head().domains);
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head().domains), before, 'a rebuild gives the same world');
+        // Delete the reply alone: its roll and effects go with it.
+        await host.st.deleteMessage(host.st.ctx.chat.length - 1);
+        assert.deepEqual(effects(), { rumours: 0, arrived: 0, shifted: 0 });
+        assert.equal(pulses().length, 1);
+    } finally {
+        host.close();
+    }
+});
+
+test('pulse: a chance meeting reaches the narrator with the cast cue, names the person, and survives the reply that shows them', async () => {
+    const { castHost, castSource, entry, said, sent: sentTo } = await import('../cast/helpers.js');
+    const host = await castHost({ source: castSource([entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother', routine: '' } })]), features: { 'story-director.pulse': true } });
+    try {
+        await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Elula', '+ present Bram', '+ present Orsa', '+ agenda Courier — rides in | now: far north | on: June 3, 1200, 06:00 pm', '+ world Plague — coughing in the fold | state: ongoing']));
+        await host.send('Go.', said('Reply.', ['~ time June 3, 1200, 08:10 am']));
+        const last = () => host.head().domains.director.pulse[0].results.at(-1);
+        // Every swipe's reply shows Sera (the reply is written before the roll is known), so a roll that meets her must keep the meeting.
+        let tries = 0;
+        while (last().kind !== 'CHANCE_MEETING' && tries < 80) { await host.swipe(said('Sera steps out of the crowd.', ['~ time June 3, 1200, 08:10 am'])); tries += 1; }
+        assert.equal(last().kind, 'CHANCE_MEETING', 'a swipe rolled the chance meeting');
+        const tail = sentTo(host, TAIL_KEY).at(-1) ?? '';
+        assert.match(tail, /World this reply: Sera crosses your path in Harrow/, 'the pulse line names the person');
+        assert.match(tail, /\[Cast\] Sera comes into the scene in this reply/, 'the narrator got the cast cue for the person met');
+        assert.ok(!('cue' in last()), 'the cue is told, not stored in the roll');
+        assert.equal(host.head().domains.cast.people['ersveil:sera']?.met?.why, 'goal', 'the meeting survives the reply that shows her');
+        assert.ok(!host.sdk.receipts().some(item => item.receipt.type === 'cast.withdraw'), 'nothing was taken back');
+    } finally {
+        host.close();
+    }
+});
