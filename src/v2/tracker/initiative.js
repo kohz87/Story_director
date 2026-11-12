@@ -55,6 +55,14 @@ function personaKey(given) {
     return text === '{{user}}' ? '' : lineKey(cutPoints(text, 80));
 }
 
+/** {{user}}'s name as the host tells it now ('' when unknown): a pulse step stores it, so a Re-read of an older step (none stored) keeps its rule. */
+export function personaName() {
+    let name = '';
+    try { name = personaReader(); } catch { name = ''; }
+    const text = typeof name === 'string' ? name.trim() : '';
+    return text === '{{user}}' ? '' : cutPoints(text, 80);
+}
+
 /** Whether `person` ({ key, name?, names? }) is {{user}}, the player's persona (`persona`: its name, else the host's reader). Never a subject for the Director. */
 export function isPersona(person, persona = null) {
     const me = personaKey(persona);

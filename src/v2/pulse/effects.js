@@ -34,7 +34,7 @@ import { chanceCandidates } from '../cast/world.js';
 import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
-import { isPersona } from '../tracker/initiative.js';
+import { isPersona, personaName } from '../tracker/initiative.js';
 import { orderedThreads } from '../tracker/convert.js';
 import { ask, cutPoints, namesPerson, sceneOf } from '../tracker/scene.js';
 import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plainSlot, resolveKind, tableFor, QUIET_FALLBACK } from './tables.js';
@@ -121,12 +121,12 @@ export function rumourEntry(kind, { known = [], behind = new Set(), at = null, p
  * CHANCE_MEETING: one unmet, living cast person (`cast`: the cast domain) comes across the party at `place` (required: a place
  * the reader is at). Met by the pulse, so the person is met now; the line names them (the cast's own cue rides with it, see `rollEntry`).
  */
-export function meetEntry({ cast = null, at = null, place = '', draw = {}, here = null } = {}) {
+export function meetEntry({ cast = null, at = null, place = '', draw = {}, here = null, persona = '' } = {}) {
     const where = plainSlot(place, NAME_MAX);
     if (!isInt(at) || !where || !isRecord(cast?.people)) return null;
     const people = Object.keys(cast.people).sort()
         .map(key => ({ key, person: cast.people[key] }))
-        .filter(({ key, person }) => isRecord(person) && person.alive !== false && !person.met && plainSlot(person.name, NAME_MAX) && !isPersona({ key, name: person.name }));
+        .filter(({ key, person }) => isRecord(person) && person.alive !== false && !person.met && plainSlot(person.name, NAME_MAX) && !isPersona({ key, name: person.name }, persona));
     const pick = people[pickIndex(people.length, unit(draw.actor))];
     if (!pick) return null;
     return {
@@ -282,7 +282,7 @@ function offscreenAgendas(director, scene) {
 }
 
 // The roll's entry for this reply: the kind from the table (stepping past what cannot happen), its effect applied, its line.
-function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = 0 }) {
+function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = 0, persona = '' }) {
     const here = ask(query, 'atlas.here', {}, null);
     const place = cutPoints(here?.name || scene.place, NAME_MAX);
     const group = placeGroupOf(here?.placeKind ?? here?.kind ?? '');
@@ -291,10 +291,10 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
     // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2 (new steps): road trips only, the party's place or town, from the last known place too (cast/world.js).
-    // {{user}} is never the subject of an event (the narrator would be ordered to write the player's actions): not a mood, not a chance meeting.
-    const others = scene.people.filter(person => !isPersona(person));
-    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: reach === 2 ? roadsOf(query) : travelOf(query), strict: reach === 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }).filter(item => !isPersona({ key: item.key, name: item.person?.name })) : null;
-    const unmet = Object.entries(isRecord(people) ? people : {}).filter(([key, person]) => isRecord(person) && person.alive !== false && !person.met && !isPersona({ key, name: person.name })).map(([, person]) => person);
+    // {{user}} is never the subject of an event (the narrator would be ordered to write the player's actions): not a mood, not a chance meeting. Only a step that carries `persona` (every new reply) knows it; an older reply re-read keeps its rolls.
+    const others = scene.people.filter(person => !isPersona(person, persona));
+    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: reach === 2 ? roadsOf(query) : travelOf(query), strict: reach === 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }).filter(item => !isPersona({ key: item.key, name: item.person?.name }, persona)) : null;
+    const unmet = Object.entries(isRecord(people) ? people : {}).filter(([key, person]) => isRecord(person) && person.alive !== false && !person.met && !isPersona({ key, name: person.name }, persona)).map(([, person]) => person);
     const open = ask(query, 'chronicle.events', { open: true }, []);
     // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
     if (open.some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the roll goes on */ } }
@@ -328,7 +328,7 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
             return { ...base, ...(who && text.includes(who) ? { who } : {}), text: cutWord(text, TAIL_CHARS) };
         }
         const made = effectFor(rolled.kind, {
-            known, behind, at, place, draw, cast: near ? { people: Object.fromEntries(near.map(item => [item.key, item.person])) } : state.domains.cast, here: near ? new Set(near.filter(item => item.here).map(item => item.key)) : null, now: clock, format: minutes => calendar.format(minutes),
+            known, behind, at, place, draw, cast: near ? { people: Object.fromEntries(near.map(item => [item.key, item.person])) } : state.domains.cast, persona, here: near ? new Set(near.filter(item => item.here).map(item => item.key)) : null, now: clock, format: minutes => calendar.format(minutes),
             agendas: agendas.filter(rolled.kind === 'ENTER_CHECK' ? converge : () => true).map(thread => ({ id: thread.id, name: thread.key, named: false, arrive: thread.fields?.arrive, text: thread.fields?.on, abs: dateOf(thread, 'on', { calendar, reference: clock })?.abs })),
         });
         if (made && applyEffect(ctx, director, made)) {
@@ -388,7 +388,7 @@ export function pulseCommand(ctx, payload = {}) {
     });
     // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
     if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
-    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2].includes(payload?.reach) ? payload.reach : 0 });
+    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2].includes(payload?.reach) ? payload.reach : 0, persona: typeof payload?.persona === 'string' ? payload.persona : '' });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
@@ -411,7 +411,7 @@ export function pulseHook(view, info = {}) {
     const length = view?.chat?.length;
     if (info?.commit === false || !['normal', 'swipe', 'regenerate'].includes(type) || !isInt(length)) return undefined;
     // The chat holds the reply being swiped, so the reply's place is one below its length.
-    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 2 } }] };
+    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 2, persona: personaName() } }] };
 }
 
 // A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.

@@ -7,7 +7,7 @@ import { applyAdvance, applyJourney, applyMeet, applySync, planSync, syncEmpty, 
 import { cutWords, initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
 import { atParty, castOf, fightOn, leanFight, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
 import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/v2/cast/plan.js';
-import { atPlace, canBeHere, canReach, chanceCandidates, chooseMeetings, daysBetween, dueMove, linkOf, moveFits, moveReach, movable, paceOf, reachDays, roomLeft, sortComes } from '../../../src/v2/cast/world.js';
+import { atPlace, canBeHere, canReach, chanceCandidates, chooseMeetings, daysBetween, dueMove, linkOf, moveFits, metInTheStory, moveReach, movable, paceOf, reachDays, roomLeft, sortComes } from '../../../src/v2/cast/world.js';
 import { packWorld, worldOf } from '../../../src/v2/atlas/world.js';
 import { travelTime } from '../../../src/v2/atlas/travel.js';
 import { entry } from './helpers.js';
@@ -197,6 +197,12 @@ test('who is met: by place and routine in the order they joined, goal arrivals f
     assert.deepEqual(pick({ party: { place: 'Bluewatch docks', region: '' } }), ['ana:place'], 'the night ferry at night');
     assert.deepEqual(chooseMeetings(slice, cast, { now: 20 * DAY + 9 * HOUR, party, pace }).map(item => item.key), ['ersveil:bo']);
     assert.deepEqual(pick({ party: { place: '', region: '' } }), [], 'no place known');
+    // {{user}} in the pack's cast is never met (not by place, not as a goal arrival, not met in the story); the others still are.
+    assert.deepEqual(pick({ persona: 'Bo' }), [], 'Bo is the player: Cy is not due');
+    assert.deepEqual(pick({ persona: 'Bo', comes: [{ key: 'ersveil:bo', reason: 'x' }] }), []);
+    assert.deepEqual(pick({ persona: 'Ana', party: { place: 'Bluewatch docks', region: '' } }), []);
+    assert.deepEqual(metInTheStory(slice, cast, { present: new Set(['bo', 'cy']), party }).map(item => item.key), ['ersveil:bo', 'ersveil:cy']);
+    assert.deepEqual(metInTheStory(slice, cast, { present: new Set(['bo', 'cy']), party, persona: 'Bo' }).map(item => item.key), ['ersveil:cy']);
     // Pace.
     slice.people['ersveil:ana'].met = { on: evening - HOUR, where: 'x', why: 'place', reason: '', rev: 2 };
     assert.deepEqual([roomLeft(slice, evening, paceOf({})), roomLeft(slice, evening, paceOf({ faces: 'day2' })), roomLeft(slice, evening + DAY, paceOf({})), roomLeft(slice, evening + 3 * DAY, paceOf({ faces: 'week1' })), roomLeft(slice, evening + 8 * DAY, paceOf({ faces: 'week1' }))], [0, 1, 1, 0, 1]);
