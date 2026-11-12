@@ -16,7 +16,7 @@ import { applyAdvance, applyJourney, applyMeet, applyRumor, applySync, planSync,
 import { sha256 } from '../hash.js';
 import { cueLines, pinned } from './note.js';
 import { cutPoints, isInt, keysOfPerson, slotOf } from './domain.js';
-import { castOf, fightOn, foesLeftover, linksOf, packName, pulseResults, partyPlace, placeInfo, presentKeys, roadsOf, seenKeys, ask } from './entries.js';
+import { castOf, fightOn, foesLeftover, linksOf, packName, pulseResults, partyPlace, presentKeys, roadsOf, seenKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { kindWords } from './sought.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
@@ -300,13 +300,13 @@ export function createCastHooks({ plans }) {
                     const died = result.died.filter(item => allowedDeaths.has(item.key)).map(item => ({ key: item.key }));
                     // A place the planner names that is one of the pack's goes by the pack's own name for it.
                     // A move the road trip does not fit in the time since they were placed, or since they left their last known place, is left out,
-                    // as is one with no road towards the party's place, town or region (or onto a place in the party's town); one with no road elsewhere keeps that last known place (`from`).
+                    // as is one with no road towards the party's place, town or region (the town by the atlas's ids and parent links); one with no road elsewhere keeps that last known place (`from`).
                     // Someone on a journey towards the party is not moved (their landing time is the trip's from where they set out).
                     const reach = { party: frame.party, to: due.to, travel: roadsOf(frame.query), placed: placedOf(world) };
                     const moves = result.moves.map(move => ({ ...move, where: frame.cast.places.match(move.where) ?? move.where })).flatMap(move => {
                         const person = world.people[move.key];
                         if (!person) return [move];
-                        const fit = slotOf(person.coming) ? null : moveReach(person, move.where, { ...reach, dest: placeInfo(frame.query, move.where) });
+                        const fit = slotOf(person.coming) ? null : moveReach(person, move.where, reach);
                         return fit ? [fit.from ? { ...move, from: fit.from } : move] : [];
                     });
                     const payload = { from: due.from, to: due.to, ...(at !== null ? { at } : {}), ...(moves.length ? { moves } : {}), ...(died.length ? { died } : {}) };

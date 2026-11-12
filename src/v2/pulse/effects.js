@@ -289,9 +289,9 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const calendar = calendarFrom(query);
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
-    // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2: road trips only, the party's place or town, from the last known place too; 3 (new steps): and in town the places the map placed itself, a road is not a town (cast/world.js).
-    // Reach 2 replays as it was: `old` and no `open` switch the town-by-region and the road-is-not-town rules off (cast/world.js `atPlace`).
-    const party = reach === 2 ? { ...partyPlace(query, state), open: false, old: true } : partyPlace(query, state);
+    // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2: road trips only, the party's place or town, from the last known place too;
+    // 3 (new steps): the place and its town by the atlas's ids and parent links, a road or wilderness only itself (cast/world.js `atPlace`). Reach 2 replays as it was (`old`).
+    const party = reach === 2 ? { ...partyPlace(query, state), old: true } : partyPlace(query, state);
     const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party, now: clock, travel: reach >= 2 ? roadsOf(query) : travelOf(query), strict: reach >= 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }) : null;
     const unmet = Object.values(isRecord(people) ? people : {}).filter(person => isRecord(person) && person.alive !== false && !person.met);
     const open = ask(query, 'chronicle.events', { open: true }, []);

@@ -137,32 +137,62 @@ export function samePlace(a, b) {
     return one === two || one.includes(two) || two.includes(one);
 }
 
-/** Whether two place names are the same by their whole name (one holding the other does not count). */
-export const sameName = (a, b) => Boolean(flat(a)) && normalize(a) === normalize(b);
-
 // Map kinds where no town stands: a road, a wilderness ("Old Rut-Line", kind wild); it is never "in" a town, whatever its parent. (Not the pulse's
-// place groups: those fold a gate, a dock or a port, which stand in towns, into road and water.)
-const OPEN_WORDS = new Set(['wild', 'wilderness', 'road', 'trail', 'track', 'path', 'forest', 'wood', 'woods', 'mountain', 'mountains', 'hill', 'hills', 'moor', 'marsh', 'swamp', 'plain', 'plains', 'valley', 'grove', 'pass', 'ford', 'bluff', 'desert', 'wasteland']);
-const isOpen = kind => String(kind ?? '').toLowerCase().split(/[\s/,;|-]+/).some(word => OPEN_WORDS.has(word));
+// place groups: those fold a gate, a dock or a port, which stand in towns, into road and water.) A kind with a settlement word ("forest village",
+// "hill fort", "mountain hold") is a town, whatever else it says.
+const OPEN_WORDS = new Set(['wild', 'wilderness', 'road', 'trail', 'track', 'path', 'forest', 'wood', 'woods', 'mountain', 'mountains', 'hill', 'hills', 'moor', 'marsh', 'swamp', 'plain', 'plains', 'valley', 'grove', 'pass', 'ford', 'bluff', 'desert', 'wasteland', 'camp', 'field', 'fields', 'crossroads', 'ruin', 'ruins']);
+const TOWN_WORDS = new Set(['town', 'village', 'city', 'hold', 'fort', 'fortress', 'settlement', 'hamlet', 'keep', 'castle', 'capital', 'citadel', 'stronghold', 'outpost', 'district', 'quarter', 'ward']);
+const isOpen = kind => {
+    const words = String(kind ?? '').toLowerCase().split(/[\s/,;|-]+/);
+    return words.some(word => OPEN_WORDS.has(word)) && !words.some(word => TOWN_WORDS.has(word));
+};
 const townOfLine = (line, place) => {
     const town = typeof line === 'string' && line.includes(' · ') ? cutPoints(flat(line.split(' · ')[0]), MAX_PLACE) : '';
     return town && normalize(town) !== normalize(place) ? town : '';
 };
 
-/** What the atlas says of a place name for the reach rule: `{ place, region, town, open }` (`open`: a road or wilderness, by its kind). */
-export function placeInfo(query, name) {
-    const place = cutPoints(flat(name), MAX_PLACE);
-    const detail = place ? ask(query, 'atlas.place', { name: place }, null) : null;
-    return { place, region: cutPoints(flat(detail?.region), MAX_PLACE), town: townOfLine(place ? ask(query, 'atlas.line', { name: place }, '') : '', place), open: isOpen(detail?.kind) };
+// ---- the reach rule's places (world.js `atPlace`, `reach: 3`): the atlas's ids and parent links, never one name holding another ------------
+
+const ARTICLE = /^the\s+/i;
+const UP_MAX = 3;
+
+/**
+ * `locate(name)` for a party: a place's spot `{ key, name, open, up }`. `key`: the atlas's id for it (`id:<id>`), else its whole name (`name:<name>`,
+ * a leading "the" dropped); `open`: a road or wilderness by its map kind; `up`: the places it sits in, nearest first (`{ key, name, open }`, three at
+ * most): the town of its place line (the atlas's saved parent, else the parent the atlas reads from the name, "X / Y"), else, for a place the atlas
+ * has with no parent, the place the atlas finds by its region's last part by whole name or alias ("bluewatch": the pack's alias of Bluewatch
+ * Village; "Shornmarch" is no place, so a place there sits in nothing). Answers are kept for the party's life (one reply's frame or step).
+ */
+export function locator(query) {
+    const memo = new Map();
+    const find = name => (name ? ask(query, 'atlas.place', { name }, null) ?? (ARTICLE.test(name) ? ask(query, 'atlas.place', { name: name.replace(ARTICLE, '') }, null) : null) : null);
+    const locate = raw => {
+        const name = cutPoints(flat(raw), MAX_PLACE);
+        if (!name) return null;
+        if (memo.has(name)) return memo.get(name);
+        memo.set(name, null);
+        const found = find(name);
+        const spot = { key: found?.id ? `id:${found.id}` : `name:${normalize(name).replace(ARTICLE, '')}`, name: cutPoints(flat(found?.name), MAX_PLACE) || name, open: isOpen(found?.kind), up: [] };
+        const line = townOfLine(ask(query, 'atlas.line', { name }, ''), name);
+        const region = !line && found && !spot.open ? find(cutPoints(flat(String(found.region ?? '').split(':').pop()), MAX_PLACE)) : null;
+        const parent = line ? locate(line) : region ? locate(region.name) : null;
+        if (parent && parent.key !== spot.key) spot.up = [{ key: parent.key, name: parent.name, open: parent.open }, ...parent.up.filter(up => up.key !== spot.key)].slice(0, UP_MAX);
+        memo.set(name, spot);
+        return spot;
+    };
+    return locate;
 }
 
-/** The place and region the party is in: `{ place, region, town, open }` (the atlas's, else Story Block's scene), '' for none. `town`: the town the atlas has the place in (its place line "Town · Spot"); `open`: it is a road or wilderness (its own map kind). */
+/**
+ * The place and region the party is in: `{ place, region, town, open, locate }` (the atlas's, else Story Block's scene), '' for none. `town`: the town
+ * the atlas has the place in (its place line "Town · Spot"); `open`: it is a road or wilderness (its own map kind); `locate`: `locator(query)`.
+ */
 export function partyPlace(query, state) {
     const atlas = ask(query, 'atlas.here', {}, null);
     const scene = ask(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
     const place = cutPoints(flat(atlas?.name) || flat(scene?.name), MAX_PLACE);
     const kind = atlas ? atlas.placeKind || atlas.kind : scene?.kind;
-    return { place, region: cutPoints(flat(atlas?.region) || flat(scene?.region), MAX_PLACE), town: townOfLine(atlas?.line, place), open: isOpen(kind) };
+    return { place, region: cutPoints(flat(atlas?.region) || flat(scene?.region), MAX_PLACE), town: townOfLine(atlas?.line, place), open: isOpen(kind), locate: locator(query) };
 }
 
 /** Whether someone at `where` is at the party's place (or in its region). */
