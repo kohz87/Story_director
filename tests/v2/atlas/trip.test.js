@@ -400,7 +400,7 @@ test('a trip set out after the mark counts rest days exactly as the estimate doe
     assert.equal(tripOf(later.domains.atlas).legs.at(-1).arrive - T0, 8 * DAY);
 });
 
-test('rest days with a way by Auvoth, a mid-road start and a modern map follow the estimate too', () => {
+test('rest days with a way by Auvoth and a modern map follow the estimate too', () => {
     const via = goRecord(setOutMarked('~ trip Wolfmere Outpost | by: foot | via: Auvoth').state).legs;
     const estimate = query(stateAt(T0), 'atlas.travel', { from: 'Bluewatch Village', to: 'Wolfmere Outpost', mode: 'foot' }, { pack: PACK });
     assert.ok(estimate.days > 0);

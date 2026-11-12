@@ -240,3 +240,66 @@ test('a new trip mid-road continues along the road; one that cannot is refused a
         host.close();
     }
 });
+
+// The rest-days mark (`atlas.mark`, REV-triprest): host-level, through Re-read, a delete and a rebuild.
+const markers = host => host.ctx.chat.map((message, index) => (JSON.stringify(message).includes('atlas.mark') ? index : -1)).filter(index => index >= 0);
+const dayList = host => goRecord(host).legs.map(leg => leg.days);
+
+async function tripAfterFeatureOn(host) {
+    await host.send('Hello.', reply('Bluewatch.', ['~ place Bluewatch Village', '~ time Goldwane 12, 8:00 am']));
+    await host.send('Wait.', reply('Waiting.'));
+    host.features.set(TRIP_FEATURE, true);
+    await host.send('Go.', reply('The road.', ['~ trip Wolfmere Outpost | by: foot']));
+}
+
+test('an unmarked trip reply that later becomes the mark carrier Re-reads with its record and the head byte for byte', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await newHost({ settings: { features: { [TRIP_FEATURE]: false } } });
+    try {
+        await tripAfterFeatureOn(host);
+        assert.deepEqual(dayList(host), [5, 4], 'planned under the mark: the rest day is in');
+        const carrier = markers(host)[0];
+        await host.st.deleteMessage(carrier);
+        await host.st.deleteMessage(carrier - 1);
+        const at = host.ctx.chat.findIndex(message => /^The road\./.test(message.mes ?? ''));
+        assert.equal((await host.sdk.reread(at)).ok, true);
+        assert.deepEqual(dayList(host), [5, 3], 'the head reply planned without the flag: an old-shape trip reply');
+        await host.send('On.', reply('A day.', ['! time +1 day']));
+        assert.ok(markers(host).includes(at), 'the mark lands on that reply');
+        const record = JSON.stringify(host.ctx.chat[at]);
+        const head = JSON.stringify(host.head());
+        assert.equal((await host.sdk.reread(at)).ok, true);
+        assert.equal(JSON.stringify(host.ctx.chat[at]), record, 'the record is byte for byte the same');
+        assert.equal(JSON.stringify(host.head()), head, 'and so is the head');
+        assert.deepEqual(dayList(host), [5, 3]);
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), head, 'rebuild == live');
+        assert.deepEqual(host.store.problems(), []);
+    } finally {
+        host.close();
+    }
+});
+
+test('deleting the reply that carried the mark: no problem, the stored legs stay, a rebuild agrees, and the next send marks again', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await newHost({ settings: { features: { [TRIP_FEATURE]: false } } });
+    try {
+        await tripAfterFeatureOn(host);
+        await host.send('On.', reply('A day.', ['! time +1 day']));
+        const carrier = markers(host)[0];
+        assert.equal(host.head().domains.atlas.tripRest, true);
+        await host.st.deleteMessage(carrier);
+        await host.st.deleteMessage(carrier - 1);
+        assert.deepEqual(host.store.problems(), []);
+        assert.deepEqual(dayList(host), [5, 4], 'replay keeps the stored times');
+        assert.equal(host.head().domains.atlas.tripRest, undefined, 'the flag went with its carrier');
+        const live = JSON.stringify(host.head());
+        host.store.rebuild();
+        assert.equal(JSON.stringify(host.head()), live, 'rebuild == live');
+        await host.send('More.', reply('More.'));
+        assert.equal(host.head().domains.atlas.tripRest, true, 'the next send marks again');
+        assert.deepEqual(dayList(host), [5, 4]);
+    } finally {
+        host.close();
+    }
+});

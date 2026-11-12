@@ -409,6 +409,9 @@ for (const seed of SEEDS) {
         const rn = prng(seed ^ 0x4EA2);
         const ro = prng(seed ^ 0x0FFE);
         const rd = prng(seed ^ 0xD0A5);
+        // Some seeds start with Trips off and switch it on at reply 4, so the rest-days mark (atlas.mark, which rides on the head reply) lands on a
+        // reply the delete can take (CLAUDE.md rule 3); the others keep it on from the start (the mark on the first reply, never deleted).
+        const lateTrips = seed >= EXTRAS_FROM && seed % 2 === 1;
         const madeOffers = [...BASE_OFFERS];
         const source = { version: '1.0.0', enabled: true, entries: [] };
         source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version), wrenEntry(source.version)];
@@ -416,7 +419,7 @@ for (const seed of SEEDS) {
         let host = null;
         const delta = Object.fromEntries(KEY_BASE.map(name => [name, {}]));
         const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat } });
-        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc, rs) }), settings: { features: { 'story-director.names': true }, modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
+        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc, rs) }), settings: { features: { 'story-director.names': true, 'story-director.trip': !lateTrips }, modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
         // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
         const installCast = async () => {
             const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, ripples: RIPPLES, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
@@ -439,9 +442,10 @@ for (const seed of SEEDS) {
             let sought = '';
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
+                if (lateTrips && n === 4) host.features.set('story-director.trip', true);
                 const near = nearLines(rn, n);
                 const day = seed >= EXTRAS_FROM ? dayLines(rd, n) : [];
-                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...day];
+                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...(lateTrips && n < 4 ? [] : tripLines(rt, n)), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...day];
                 const seeking = rs.chance(0.6) ? rs.pick(SOUGHT_ASK) : '';
                 // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
                 const names = seeking === 'cartographer' || sought === 'cartographer';
