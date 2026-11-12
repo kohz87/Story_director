@@ -205,3 +205,28 @@ test('with the digest off the gate is shut: nothing folds', async t => {
     assert.equal(out.ok, false, 'digest off: the gate is shut');
     assert.equal(dir(h).folded, undefined);
 });
+
+test('a Re-read of the reply that carries a fold, and of one before it, leaves the head as live (the fold applies or is skipped whole)', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    ok(await fold(h));
+    const carrier = h.ctx.chat.length - 1;
+    const text = h.ctx.chat[carrier].mes;
+    await h.st.editMessage(carrier, text);
+    ok(await h.turn.reread(carrier));
+    assert.deepEqual(validateDirector(dir(h)), []);
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+    // A Re-read of an early reply that changes a folded thread: Story Block refuses it (a later change depends on the old lines) or the guard
+    // skips the fold whole; either way the head is valid and a rebuild gives it back.
+    const early = h.ctx.chat.findIndex(message => !message.is_user && message.mes.includes('+ quest Q3 '));
+    await h.st.editMessage(early, wrap('Reply 3.', ['~ time June 3, 1200, 08:00 am', '+ quest Q3 — job 3 changed | giver: Sir Lothar | goal: bring 3 | difficulty: hard', '- quest Q2 — done']));
+    const again = await h.turn.reread(early);
+    assert.ok(again.ok || again.code === 'CONFLICT', JSON.stringify(again));
+    assert.deepEqual(validateDirector(dir(h)), []);
+    const after = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), after);
+});
