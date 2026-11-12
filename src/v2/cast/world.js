@@ -16,7 +16,7 @@
 //   someone can arrive only if they are at the party's place or town or the story time since they were placed covers the atlas's road
 //   trip, and the trip from their last known place too after a hop with no road (`canReach`; a straight-line estimate or no road = far).
 //   A linked person who is too far sets out instead (`sortComes`: a journey, `person.coming`, landing after the real trip time, dropped
-//   when the link goes). The pulse's chance meeting (`reach: 2`) and the planner's moves (`moveReach`) follow the same reach rule.
+//   when the link goes). The pulse's chance meeting (`reach: 2` and `3`) and the planner's moves (`moveReach`) follow the same reach rule.
 // * A meeting counts only if the reply shows the person (`unshown`, after the reply: `cast.withdraw`): the narration (not its hidden
 //   comments) names them (name or alias, whole word) or a `+ present` line does; else they stay unmet, the pace is not used up and
 //   they may come again later. Someone met in the story is no planned meeting and is never withdrawn.
@@ -184,32 +184,65 @@ export function chanceCandidates(slice, cast, { party = {}, now = null, travel =
         .map(item => ({ ...item, here: at(item.person.where, party) }));
 }
 
-// ---- reach, rule 2 (pulse steps with `reach: 2`; every hook choice, which is stored as the reply's payload) ---------------------------
+// ---- reach, rule 2 (pulse steps with `reach: 2`, `reach: 3` and every hook choice, which is stored as the reply's payload) -------------
 // Rule 1 (pulse steps with `reach: 1`, replayed as they were) took a place in the party's region for the party's place and the atlas's
 // first answer, a straight-line estimate too: "Drowned Bell taproom", a place the map placed itself with no road, was half a day from
 // Auvoth at the reader's map scale (one km a unit) though the road is 3.5 days, so Rika was met there 1.2 days after the start.
+// Rule 2 as merged (`party.old`: the steps with `reach: 2`; a party with no atlas reader, `locate`) read a town as a name one place's name
+// holds; the rest reads places by the atlas's ids and saved parent links (`party.locate`, entries.js `locator`), never a region.
 
 const townPart = name => (String(name ?? '').includes('/') ? heads(name)[1] : '');
+const merged = party => party.old || typeof party.locate !== 'function';
+const spotOf = (name, party) => party.locate(name) ?? { key: '', name: '', open: false, up: [] };
+// The party's spot: its own map kind (`party.open`) and, when the atlas gave no parent, the town of its place line (`party.town`).
+function partySpot(party) {
+    const spot = spotOf(party.place, party);
+    const town = !spot.up.length && party.town ? spotOf(party.town, party) : null;
+    return { ...spot, open: typeof party.open === 'boolean' ? party.open : spot.open, up: town?.key && town.key !== spot.key ? [{ key: town.key, name: town.name, open: town.open }, ...town.up] : spot.up };
+}
+// The town a spot stands in: the outermost place it sits in, never across a road or wilderness (an open place is only itself).
+function townOf(spot) {
+    let town = spot;
+    if (!spot.open) for (const up of spot.up) { if (up.open) break; town = up; }
+    return town;
+}
 
-/** Whether someone at `where` is where the party is: its place, or the town it stands in ("X / Y", or the atlas's `party.town`); a region alone is not (a road outside town is not the town). */
+/**
+ * Whether someone at `where` is where the party is: the same place, or (the party not on a road or in a wilderness) someone not on one either in
+ * the town the party's place stands in, by the atlas's ids and saved parent links (else the written "Town / Spot", else the party's place line):
+ * "Bluewatch Village / Guild Office" and "Bluewatch Village". A region is no town ("Drowned Bell taproom", region "bluewatch", no parent: only
+ * itself); a road or wilderness (`party.open`) is only itself and the places in it; one name holding another is nothing. `party.old` or no
+ * `party.locate`: rule 2 as merged.
+ */
 export function atPlace(where, party) {
     if (!where || !party?.place) return false;
-    const mine = townPart(where) || where;
-    return samePlace(where, party.place) || samePlace(mine, party.place) || [townPart(party.place), party.town].some(town => town && samePlace(mine, town));
+    if (merged(party)) {
+        const mine = townPart(where) || where;
+        return samePlace(where, party.place) || samePlace(mine, party.place) || [townPart(party.place), party.town].some(town => town && samePlace(mine, town));
+    }
+    const here = partySpot(party);
+    const there = spotOf(where, party);
+    if (!there.key || !here.key) return false;
+    if (there.key === here.key) return true;
+    if (here.open) return there.up.some(up => up.key === here.key);
+    return !there.open && townOf(there).key === townOf(here).key;
 }
 
 /**
  * Days from `where` to the party by known roads: 0 at its place (`atPlace`), else the longest road trip between the place (or its town) and
- * the party's place (or its town); null when no road says. `travel(from, to)` gives road trips only (entries.js `roadsOf`): a straight-line
- * estimate is no answer, its scale is the reader's map setting and not the world's roads.
+ * the party's place (or its town; a road or wilderness: itself only); null when no road says. `travel(from, to)` gives road trips only
+ * (entries.js `roadsOf`): a straight-line estimate is no answer, its scale is the reader's map setting and not the world's roads.
  */
 export function reachDays(where, party, travel) {
     if (!where || !party?.place) return null;
     if (atPlace(where, party)) return 0;
     if (typeof travel !== 'function') return null;
+    const old = merged(party);
+    const froms = old ? [where, townPart(where)] : [where, townOf(spotOf(where, party)).name];
+    const tos = old ? [party.place, townPart(party.place), party.town] : [party.place, townOf(partySpot(party)).name];
     let most = null;
-    for (const from of new Set([where, townPart(where)].filter(Boolean))) {
-        for (const to of new Set([party.place, townPart(party.place), party.town].filter(Boolean))) {
+    for (const from of new Set(froms.filter(Boolean))) {
+        for (const to of new Set(tos.filter(Boolean))) {
             let days = null;
             try { days = travel(from, to); } catch { days = null; }
             if (Number.isFinite(days) && days >= 0) most = Math.max(most ?? 0, days);
@@ -240,15 +273,16 @@ export function canReach(person, party, { now = null, travel = null, placed = nu
 
 /**
  * Rule 2 for a planner move of `person` to `where` at story minute `to`: null when it does not fit, else `{ from? }`. The trip from where they
- * are and from their last known place (`known`) must fit the time since each; with no road from the last known place the move is kept
- * only away from the party's place, town and region, and `from` keeps that last known place (and the minute they left it) for the reach
- * rule. A move that has a road from it clears `known`. Someone unplaced, or a move with no place, has nothing to check.
+ * are and from their last known place (`known`) must fit the time since each (a move within one town is no trip, by the atlas: `party.locate`);
+ * with no road from the last known place the move is kept only away from the party's place, town and region, and `from` keeps that last
+ * known place (and the minute they left it) for the reach rule. A move that has a road from it clears `known`. Someone unplaced, or a move
+ * with no place, has nothing to check.
  */
 export function moveReach(person, where, { party = {}, to = null, travel = null, placed = null } = {}) {
     if (!person?.where || !where) return {};
     const since = isInt(person.since) ? person.since : placed;
     const base = slotOf(person.known) ?? { where: person.where, since };
-    const dest = { place: where };
+    const dest = { place: where, locate: party.locate };
     const fits = (from, start) => {
         const days = reachDays(from, dest, travel);
         return days === null ? null : days === 0 || !isInt(start) || !isInt(to) || to - start >= Math.ceil(days * DAY);

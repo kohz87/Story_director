@@ -290,10 +290,12 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const calendar = calendarFrom(query);
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
-    // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2 (new steps): road trips only, the party's place or town, from the last known place too (cast/world.js).
+    // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2: road trips only, the party's place or town, from the last known place too;
+    // 3 (new steps): the place and its town by the atlas's ids and parent links, a road or wilderness only itself (cast/world.js `atPlace`). Reach 2 replays as it was (`old`).
     // {{user}} is never the subject of an event (the narrator would be ordered to write the player's actions): not a mood, not a chance meeting. Only a step that carries `persona` (every new reply) knows it; an older reply re-read keeps its rolls.
     const others = scene.people.filter(person => !isPersona(person, persona));
-    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: reach === 2 ? roadsOf(query) : travelOf(query), strict: reach === 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }).filter(item => !isPersona({ key: item.key, name: item.person?.name }, persona)) : null;
+    const party = reach === 2 ? { ...partyPlace(query, state), old: true } : partyPlace(query, state);
+    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party, now: clock, travel: reach >= 2 ? roadsOf(query) : travelOf(query), strict: reach >= 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }).filter(item => !isPersona({ key: item.key, name: item.person?.name }, persona)) : null;
     const unmet = Object.entries(isRecord(people) ? people : {}).filter(([key, person]) => isRecord(person) && person.alive !== false && !person.met && !isPersona({ key, name: person.name }, persona)).map(([, person]) => person);
     const open = ask(query, 'chronicle.events', { open: true }, []);
     // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
@@ -388,7 +390,7 @@ export function pulseCommand(ctx, payload = {}) {
     });
     // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
     if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
-    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2].includes(payload?.reach) ? payload.reach : 0, persona: typeof payload?.persona === 'string' ? payload.persona : '' });
+    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2, 3].includes(payload?.reach) ? payload.reach : 0, persona: typeof payload?.persona === 'string' ? payload.persona : '' });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
@@ -411,7 +413,7 @@ export function pulseHook(view, info = {}) {
     const length = view?.chat?.length;
     if (info?.commit === false || !['normal', 'swipe', 'regenerate'].includes(type) || !isInt(length)) return undefined;
     // The chat holds the reply being swiped, so the reply's place is one below its length.
-    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 2, persona: personaName() } }] };
+    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 3, persona: personaName() } }] };
 }
 
 // A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.

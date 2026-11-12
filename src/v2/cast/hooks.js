@@ -301,7 +301,7 @@ export function createCastHooks({ plans }) {
                     const died = result.died.filter(item => allowedDeaths.has(item.key)).map(item => ({ key: item.key }));
                     // A place the planner names that is one of the pack's goes by the pack's own name for it.
                     // A move the road trip does not fit in the time since they were placed, or since they left their last known place, is left out,
-                    // as is one with no road towards the party's place, town or region; one with no road elsewhere keeps that last known place (`from`).
+                    // as is one with no road towards the party's place, town or region (the town by the atlas's ids and parent links); one with no road elsewhere keeps that last known place (`from`).
                     // Someone on a journey towards the party is not moved (their landing time is the trip's from where they set out).
                     const reach = { party: frame.party, to: due.to, travel: roadsOf(frame.query), placed: placedOf(world) };
                     const moves = result.moves.map(move => ({ ...move, where: frame.cast.places.match(move.where) ?? move.where })).flatMap(move => {
