@@ -14,10 +14,10 @@ standalone checks. Code sets every number; the story only proposes them in chang
 
 | Repo | Module id | Version | Owns |
 |---|---|---|---|
-| kohz87/Story_block | `story-block` | 2.16.6 | The host: store, replay, command bus, `<Changes>` capture, prompt assembly, module registry, settings window, Game view, packs and portraits, save points. Core domains `scene` and `inventory`. |
+| kohz87/Story_block | `story-block` | 2.32.0 | The host: store, replay, command bus, `<Changes>` capture, prompt assembly, module registry, settings window, Game view, packs and portraits, save points. Core domains `scene` and `inventory`. |
 | kohz87/Story_director (this) | `story-director` | 2.15.0 | Clock and calendar, threads and quests, map and trips, Chronicle, World and Journal, Key people, the living cast, arc planning, checks. Needs Story Block >= 2.25.0. |
-| kohz87/npc_state_delta | `npc-state-delta` | 1.7.1 | NPC dossiers, meters, stages, secrets, cast portraits. Needs Story Block; with Story Director it also follows the cast and Key people. |
-| kohz87/Story_studio | (not an extension) | 0.6.0 | An offline single HTML page that writes and checks packs. No install. |
+| kohz87/npc_state_delta | `npc-state-delta` | 1.17.0 | NPC dossiers, meters, stages, secrets, cast portraits. Needs Story Block; with Story Director it also follows the cast and Key people. |
+| kohz87/Story_studio | (not an extension) | 0.12.0 | An offline single HTML page that writes and checks packs. No install. |
 
 Data flows one way: Studio writes a pack file; Story Block validates and stores it; Story Director reads what Story Block holds
 (`packs.content`, `packs.calendar`, `packs.weather`, `scene.*`, `mounts.pace`) and NPC State Delta reads both. Nothing flows
@@ -313,5 +313,5 @@ Delta checked out beside this repo.
 
 ## Version
 
-Story Director 2.15.0 (`manifest.json`, `package.json`, `src/v2/module/parts.js` `VERSION`). Built and tested with Story Block 2.32.0 and
-NPC State Delta 1.17.0. History: [CHANGELOG.md](CHANGELOG.md).
+Story Director 2.15.0 (`manifest.json`, `package.json`, `src/v2/module/parts.js` `VERSION`). Tested with the vendored Story Block 2.31.1 testkit
+(`tests/vendor/story-block/VERSION`); ships with Story Block 2.32.0 and NPC State Delta 1.17.0. History: [CHANGELOG.md](CHANGELOG.md).
