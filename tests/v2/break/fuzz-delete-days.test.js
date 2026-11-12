@@ -28,6 +28,12 @@ const seedsOf = fallback => (process.env.FUZZ_SEEDS
 const foldNow = host => host.bus.command('director.fold', { after: 3, keep: 1 }, { cause: 'system' });
 const foldSkip = problem => /The folded threads or the newest arc changed/.test(problem.why ?? problem.message ?? '');
 const unskipped = host => host.store.problems().filter(problem => !foldSkip(problem));
+// Keys the fold took: a later line that names one makes it again as a thread of that reply, and a delete of that reply then leaves the later changes
+// without their thread (the skip any thread made by a deleted reply has). The generators leave such lines out, as they leave out what a deleted reply made.
+const unfolded = (host, lines) => {
+    const keys = Object.values(host.head().domains.director.folded ?? {}).flatMap(bucket => bucket.items.map(item => item.key));
+    return keys.length ? lines.filter(line => !keys.some(key => line.includes(key))) : lines;
+};
 const SEEDS = seedsOf([11, 12, 13, 14]);
 const REPLIES = 24;
 const DELETE_AT = [8, 14, 20, 24];
@@ -170,7 +176,7 @@ for (const seed of SEEDS) {
             await host.send('Hello.', said('The road.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch', '+ coin 5',
                 ...BASE_OFFERS.map(key => `+ hook ${key} — a job on offer | giver: Brom | reward: 8 gold`)]));
             for (let n = 1; n <= REPLIES; n += 1) {
-                await host.send(`On we go (${n}).`, said(`Reply ${n}.`, [...replyLines(r, n), ...lastingLines(rl), ...offerLines(ro, n), ...dayLines(rd, n)]));
+                await host.send(`On we go (${n}).`, said(`Reply ${n}.`, unfolded(host, [...replyLines(r, n), ...lastingLines(rl), ...offerLines(ro, n), ...dayLines(rd, n)])));
                 if (rf.chance(0.3)) await foldNow(host);
                 if (rd.chance(0.25)) assert.ok((await host.sdk.command('director.pulse.quiet', { on: rd.chance(0.5) })).ok, `seed ${seed}, reply ${n}: quiet scene switch`);
                 const edit = lastingEdit(rl, host, n);

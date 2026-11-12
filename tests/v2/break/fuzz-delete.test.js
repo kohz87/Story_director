@@ -49,6 +49,12 @@ const seedsOf = fallback => (process.env.FUZZ_SEEDS
 const foldNow = host => host.bus.command('director.fold', { after: 3, keep: 1 }, { cause: 'system' });
 const foldSkip = problem => /The folded threads or the newest arc changed/.test(problem.why ?? problem.message ?? '');
 const unskipped = host => host.store.problems().filter(problem => !foldSkip(problem));
+// Keys the fold took: a later line that names one makes it again as a thread of that reply, and a delete of that reply then leaves the later changes
+// without their thread (the skip any thread made by a deleted reply has). The generators leave such lines out, as they leave out what a deleted reply made.
+const unfolded = (host, lines) => {
+    const keys = Object.values(host.head().domains.director.folded ?? {}).flatMap(bucket => bucket.items.map(item => item.key));
+    return keys.length ? lines.filter(line => !keys.some(key => line.includes(key))) : lines;
+};
 const SEEDS = seedsOf([1, 2, 3, 4, 5, 6, 7, 8, 24, 25, 26, 27, 28, 29, 30, 31, 32, 108]);
 // Seeds from EXTRAS_FROM carry the last days' lines (dayLines, the quiet switch); seeds 1-3 keep the stories the aggregate checks below were set on.
 const EXTRAS_FROM = 4;
@@ -455,7 +461,7 @@ for (const seed of SEEDS) {
             for (let n = 1; n <= REPLIES; n += 1) {
                 const near = nearLines(rn, n);
                 const day = seed >= EXTRAS_FROM ? dayLines(rd, n) : [];
-                const lines = [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...day];
+                const lines = unfolded(host, [...replyLines(r, n), ...near.lines, ...lastingLines(rl), ...tripLines(rt, n), ...keyLines(rk, host, n), ...nameLines(rk, n), ...offerLines(ro, n, madeOffers), ...day]);
                 const seeking = rs.chance(0.6) ? rs.pick(SOUGHT_ASK) : '';
                 // The planner's answer is used by the reply after the one it was asked about: the reply after a request for her names her too.
                 const names = seeking === 'cartographer' || sought === 'cartographer';
