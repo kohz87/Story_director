@@ -57,12 +57,15 @@ test('every thread kind has one concrete example line in the static grammar, and
         for (const kind of ['agenda', 'event', 'clock', 'beat']) assert.match(text, new RegExp(`\\+ ${kind} [A-Z][^;]* — `), kind);
     }
     const hook = part.kinds.hook.grammar;
-    assert.match(hook, /Write a hook whenever someone mentions a job, rumour or trouble \{\{user\}\} could follow, e\.g\. \+ hook Missing ferryman — /);
-    assert.match(hook, /once \{\{user\}\} agrees: \+ quest Cellar rats — .*\| giver: Hanna \| reward: 20 copper/);
-    // One line each (no newline), the same bytes for every reply (no state in them), and small: about 600 characters in all.
+    assert.match(hook, /Write a hook when someone mentions a job, rumour or trouble \{\{user\}\} could follow, e\.g\. \+ hook Missing boatman — /);
+    assert.match(hook, /once \{\{user\}\} agrees: \+ quest Pest job — .*\|Pest job — clear a cellar | giver: Person B \| reward: 20 copper/);
+    // One line each (no newline), the same bytes for every reply (no state in them), and small: about 650 characters in all, placeholders spelled out.
     assert.ok(!agenda.includes('\n') && !hook.includes('\n'));
-    assert.ok(agenda.length + hook.length < 1200, `${agenda.length + hook.length}`);
+    assert.ok(agenda.length + hook.length < 1300, `${agenda.length + hook.length}`);
     assert.equal(part.kinds.agenda.grammar({ fights: true }), agenda);
+    // The examples use generic placeholders (Person A / B, Place X), never a person or place of a world pack.
+    assert.match(agenda + hook, /Person A[\s\S]*Place X/);
+    assert.doesNotMatch(agenda + hook, /\b(Dara|Nell|Hanna|Pell|Temiwa|Astra)\b/);
 });
 
 test('each kind has one grammar line for the change instruction, a family on its carrier', () => {

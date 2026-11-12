@@ -35,8 +35,8 @@ test('a quiet story: the Director prompt is one line per family and well under t
             const text = promptOf(host);
             // 2,100: the World pulse's one static sentence (feature `story-director.pulse`, on by default) and the names part's `+ person` line
             // (feature `story-director.names`, on by default since the first real run) are in it.
-            // 2,750: one example line for each thread kind and when to write it (about 600 characters, 12 Nov): flash never wrote them without one.
-            assert.ok(text.length < 2750, `${text.length} characters`);
+            // 2,750: one example line for each thread kind and when to write it (about 650 characters, 12 Nov; generic placeholders): flash never wrote them without one.
+            assert.ok(text.length < 2800, `${text.length} characters`);
             assert.match(text, /^\+ agenda\|event\|clock\|beat\|secret Name — summary/m);
             assert.match(text, /^\+ hook\|quest Name — /m);
             assert.match(text, /^~ time <date, clock time/m);
