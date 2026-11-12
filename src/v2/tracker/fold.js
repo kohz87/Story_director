@@ -153,6 +153,17 @@ export function foldedItems(director) {
         .sort((a, b) => (a.order - b.order) || byId(a.id, b.id));
 }
 
+/**
+ * The id a folded thread had under `key` (a lineKey; the newest one), else null. A thread made again under a folded key takes that
+ * id: a replay whose fold block was skipped (its guard no longer held) still has the old thread, and the new one then replaces it
+ * instead of standing beside it with the same key.
+ */
+export function foldedIdOf(director, key) {
+    if (!director?.folded || !key) return null;
+    const same = foldedItems(director).filter(item => (lineKey(item.key) || item.key) === key);
+    return same.length ? same[same.length - 1].id : null;
+}
+
 /** The names folded threads still hide: `behind` (every name a behind-the-scenes thread reached) and `words` (secrets' keys and aliases). */
 export function foldedHidden(director) {
     const behind = new Set();

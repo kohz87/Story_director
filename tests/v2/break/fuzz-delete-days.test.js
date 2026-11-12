@@ -18,7 +18,17 @@ import { DIGEST, dayOf, entriesByDay, orderedDays, writtenOf } from '../../../sr
 
 // Seeds 11–12 keep few days (older ones go short, which a later digest rewrites); 13–14 keep them
 // whole, so a delete leaves a gap a later digest lists.
-const SEEDS = [11, 12, 13, 14];
+// The sweep: FUZZ_SEEDS="1-200" (or "5,9-12") runs those seeds instead of the listed ones.
+const seedsOf = fallback => (process.env.FUZZ_SEEDS
+    ? process.env.FUZZ_SEEDS.split(',').flatMap(part => { const [from, to = from] = part.split('-').map(Number); return Array.from({ length: to - from + 1 }, (_, i) => from + i); })
+    : fallback);
+// The Director's fold (src/v2/tracker/fold.js), short horizon: now and then a system fold takes what the story finished a few replies ago (a refused
+// one, nothing ready, is fine). A delete or clock edit that changed a folded thread makes its replay guard skip the block: a Problem by design
+// (nothing is lost, the next fold takes the thread again) and the only skip these fuzzers let through.
+const foldNow = host => host.bus.command('director.fold', { after: 3, keep: 1 }, { cause: 'system' });
+const foldSkip = problem => /The folded threads or the newest arc changed/.test(problem.why ?? problem.message ?? '');
+const unskipped = host => host.store.problems().filter(problem => !foldSkip(problem));
+const SEEDS = seedsOf([11, 12, 13, 14]);
 const REPLIES = 24;
 const DELETE_AT = [8, 14, 20, 24];
 
@@ -148,6 +158,7 @@ for (const seed of SEEDS) {
         const rl = prng(seed ^ 0x1A57);
         const ro = prng(seed ^ 0x0FFE);
         const rd = prng(seed ^ 0xD0A5);
+        const rf = prng(seed ^ 0xF01D);
         const whole = seed > 12;
         const caps = whole ? { FULL: 60, KEEP: 60 } : { FULL: 3, KEEP: 5 };
         const settings = settingsOf(caps);
@@ -160,6 +171,7 @@ for (const seed of SEEDS) {
                 ...BASE_OFFERS.map(key => `+ hook ${key} — a job on offer | giver: Brom | reward: 8 gold`)]));
             for (let n = 1; n <= REPLIES; n += 1) {
                 await host.send(`On we go (${n}).`, said(`Reply ${n}.`, [...replyLines(r, n), ...lastingLines(rl), ...offerLines(ro, n), ...dayLines(rd, n)]));
+                if (rf.chance(0.3)) await foldNow(host);
                 if (rd.chance(0.25)) assert.ok((await host.sdk.command('director.pulse.quiet', { on: rd.chance(0.5) })).ok, `seed ${seed}, reply ${n}: quiet scene switch`);
                 const edit = lastingEdit(rl, host, n);
                 if (edit) assert.ok((await host.sdk.command('chronicle.edit', edit)).ok, `seed ${seed}, reply ${n}: the reader's edit`);
@@ -189,7 +201,7 @@ for (const seed of SEEDS) {
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
-                assert.deepEqual(host.store.problems().map(problem => problem.why ?? problem.message), [], `${where}: a later block no longer applies`);
+                assert.deepEqual(unskipped(host).map(problem => problem.why ?? problem.message), [], `${where}: a later block no longer applies`);
                 const live = JSON.stringify(host.head());
                 const shown = JSON.stringify([host.sdk.query('director.world'), host.sdk.query('director.journal'), host.sdk.query('chronicle.factions')]);
                 host.store.rebuild();
@@ -217,7 +229,7 @@ for (const seed of SEEDS) {
             const again = await createHost({ modules: [fakeFightRunner(), createModule(), fakeCraft()], settings });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
-                assert.deepEqual(again.store.problems(), [], `seed ${seed}: a fresh load skips nothing`);
+                assert.deepEqual(unskipped(again), [], `seed ${seed}: a fresh load skips nothing`);
                 assert.equal(JSON.stringify(again.head().domains), JSON.stringify(host.head().domains), `seed ${seed}: fresh replay != live`);
             } finally {
                 again.close();

@@ -21,6 +21,8 @@
 // replies whose world lines name them, and the reader's edits of them, from a random stream of their own.
 // The reader's clock edits (director.clock, own stream): now and then, after a reply, the reader sets the date and time by hand, forward or back
 // (a rewind) inside June 1200; the edit rides on that reply, so a delete of it takes it back, a later `~ time` set stays exact and later moves add on top.
+// The Director's fold (own stream, seeds from EXTRAS_FROM): after a reply a system `director.fold { after: 3, keep: 1 }` takes the threads the story finished; a delete that
+// changes a folded thread makes the fold's replay guard skip the block (the only skip the fuzz allows), and the head must still equal a rebuild and a fresh load.
 // The living cast (own stream): a pack of six people (some with a goal the story touches, some who may die) whose entries change now and
 // then (a new version, one added, one gone, the pack switched off and on) and a scripted planner that moves some of them, brings some to the
 // party and kills one on a day change; meetings by place follow the scene. A delete often takes the reply that holds the sync, a move, a
@@ -37,7 +39,17 @@ import { problemList } from '../../../src/v2/tracker/domain.js';
 import { fakeDelta } from '../keypeople/helpers.js';
 import { LASTING_PACK, lastingEdit, lastingLines } from '../chronicle/helpers/lasting-pack.js';
 
-const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 24, 25, 26, 27, 28, 29, 30, 31, 32, 108];
+// The sweep: FUZZ_SEEDS="1-200" (or "5,9-12") runs those seeds instead of the list above.
+const seedsOf = fallback => (process.env.FUZZ_SEEDS
+    ? process.env.FUZZ_SEEDS.split(',').flatMap(part => { const [from, to = from] = part.split('-').map(Number); return Array.from({ length: to - from + 1 }, (_, i) => from + i); })
+    : fallback);
+// The Director's fold (src/v2/tracker/fold.js) with a short horizon: now and then a system fold takes what the story finished a few replies ago
+// (a refused one, nothing ready, is fine). Its replay guard skips the block when a delete or Re-read changed a folded thread; that skip is a
+// Problem by design (nothing is lost, the next fold takes the thread again) and is the only skip the fuzz lets through.
+const foldNow = host => host.bus.command('director.fold', { after: 3, keep: 1 }, { cause: 'system' });
+const foldSkip = problem => /The folded threads or the newest arc changed/.test(problem.why ?? problem.message ?? '');
+const unskipped = host => host.store.problems().filter(problem => !foldSkip(problem));
+const SEEDS = seedsOf([1, 2, 3, 4, 5, 6, 7, 8, 24, 25, 26, 27, 28, 29, 30, 31, 32, 108]);
 // Seeds from EXTRAS_FROM carry the last days' lines (dayLines, the quiet switch); seeds 1-3 keep the stories the aggregate checks below were set on.
 const EXTRAS_FROM = 4;
 const REPLIES = 20;
@@ -409,6 +421,7 @@ for (const seed of SEEDS) {
         const rn = prng(seed ^ 0x4EA2);
         const ro = prng(seed ^ 0x0FFE);
         const rd = prng(seed ^ 0xD0A5);
+        const rf = prng(seed ^ 0xF01D);
         const madeOffers = [...BASE_OFFERS];
         const source = { version: '1.0.0', enabled: true, entries: [] };
         source.entries = [...CAST_IDS.map(id => castEntry(id, rc, source.version)), ylvaEntry(source.version), wrenEntry(source.version)];
@@ -436,6 +449,7 @@ for (const seed of SEEDS) {
             let wrenMet = false;
             let quietOn = false;
             let editsMade = 0;
+            let folds = 0;
             let sought = '';
             const clock = () => host.head().domains.director.time.minutes;
             for (let n = 1; n <= REPLIES; n += 1) {
@@ -453,6 +467,7 @@ for (const seed of SEEDS) {
                     swipes += 1;
                     await host.swipe(replyText);
                 }
+                if (seed >= EXTRAS_FROM && rf.chance(0.3) && (await foldNow(host)).ok) folds += 1;
                 if (day.passer && !wrenMet && host.head().domains.cast.people['ersveil:wren']?.met) { passersMet += 1; wrenMet = true; }
                 if (!host.head().domains.cast.people['ersveil:wren']?.met) wrenMet = false;
                 if (host.head().domains.cast.people['ersveil:ylva']?.met?.why === 'sought') soughtMeetings += 1;
@@ -538,7 +553,7 @@ for (const seed of SEEDS) {
                 await host.st.deleteMessage(user + 1);
                 await host.st.deleteMessage(user);
                 const where = `seed ${seed}, reply ${n}, deleted ${user}`;
-                const skipped = host.store.problems().map(problem => problem.why ?? problem.message);
+                const skipped = unskipped(host).map(problem => problem.why ?? problem.message);
                 if (closedHere.length) assert.ok(skipped.length <= closedHere.length * 2 + 1, `${where}: only the payments of the deleted turn-in are skipped (${skipped.join(' / ')})`);
                 else assert.deepEqual(skipped, [], `${where}: a later block no longer applies; the deleted pair: ${dump}`);
                 const live = JSON.stringify(host.head());
@@ -583,6 +598,7 @@ for (const seed of SEEDS) {
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
             t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, passers met ${passersMet}, swipes ${swipes}, pulse kinds ${JSON.stringify(Object.fromEntries(host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').map(entry => entry.receipt.data?.kind).reduce((map, kind) => map.set(kind, (map.get(kind) ?? 0) + 1), new Map())))}, rumour events ${Object.values(host.head().domains.chronicle.events).filter(event => event.rumour !== undefined).length}, new factions ${host.sdk.receipts().filter(entry => /New factions?:/.test(entry.receipt.summary ?? '')).length}, places with a parent ${Object.values(host.head().domains.atlas?.places ?? {}).filter(place => place.parent).length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
             assert.ok(!source.enabled || host.sdk.query('ripples.sway')?.length === 2, `seed ${seed}: the pack's ripples table is read`);
+            t.diagnostic(`seed ${seed}: folds ${folds}, folded records ${Object.values(host.head().domains.director.folded ?? {}).reduce((sum, bucket) => sum + bucket.items.length, 0)}`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             undatedLapsed += host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle')
@@ -590,7 +606,7 @@ for (const seed of SEEDS) {
             const again = await createHost({ modules: [fakeFightRunner(), createModule()] });
             try {
                 await again.st.loadChat(structuredClone(host.ctx.chat));
-                assert.deepEqual(again.store.problems(), [], `seed ${seed}: a fresh load skips nothing`);
+                assert.deepEqual(unskipped(again), [], `seed ${seed}: a fresh load skips nothing`);
                 assert.equal(JSON.stringify(again.head().domains), JSON.stringify(host.head().domains), `seed ${seed}: fresh replay != live`);
             } finally {
                 again.close();
