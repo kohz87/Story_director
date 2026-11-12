@@ -11,6 +11,7 @@ import { statusExtras, clockText } from '../../../src/v2/screens/queries.js';
 import { STATUS_SUMMARY, STATUS_TITLE, statusCardScreen } from '../../../src/v2/screens/status-card.js';
 import { BASE_CSS } from '../../../src/v2/screens/style.js';
 import { directorScreen } from '../../../src/v2/screens/director.js';
+import { questsScreen } from '../../../src/v2/screens/quests.js';
 import { worldScreen, createPeopleWidget, foldWidget } from '../../../src/v2/world/index.js';
 import { makeCalendar } from '../../../src/calendar.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
@@ -206,4 +207,14 @@ test('status card: a spot with no point of its own shows its town\'s coordinates
     const state = { domains: { director: { time: { minutes: null } }, scene: { place: { name: 'Auvoth | Gatehouse' } } } };
     assert.equal(statusExtras(state, {}, tools).coords, '59, 110');
     assert.equal(statusExtras(state, {}, { query: () => null }).coords, '', 'nothing known: none');
+});
+
+test('the Behind view and the Quests screen say how many older finished threads were summarised (CX item 5)', { skip }, () => {
+    const behind = { id: 'test/behind', template: '<ss-widget name="story-director.behind" data-props=\'{"bind":"q.behind"}\'></ss-widget>' };
+    const data = older => ({ kinds: [], problems: [], open: 0, total: 0, older });
+    assert.match(squash(draw(behind, null, { q: { behind: data(3) } }).el.textContent), /Older finished threads summarised, no longer listed: 3/);
+    assert.doesNotMatch(squash(draw(behind, null, { q: { behind: data(0) } }).el.textContent), /Older/);
+    const quests = (older) => squash(draw(questsScreen, null, { q: { threads: [], older: { quests: older, total: older } } }).el.textContent);
+    assert.match(quests(4), /Older finished quests summarised, no longer listed: 4/);
+    assert.doesNotMatch(quests(0), /Older/);
 });

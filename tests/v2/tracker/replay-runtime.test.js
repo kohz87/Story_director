@@ -141,7 +141,7 @@ test('the guard: a delete of the reply that finished a folded thread skips the f
     assert.ok(Object.values(dir(h).folded).length >= 1);
 });
 
-test('a fold after a deleted first fold still applies (the folded scratch parent is made on the way)', async t => {
+test('a delete that takes the first fold away: the later fold is asked again on the digest gate and, when a day it needs changed, skipped whole', async t => {
     const h = await createHost({ modules: [createModule()] });
     t.after(() => h.close());
     await story(h, 20);
@@ -153,10 +153,9 @@ test('a fold after a deleted first fold still applies (the folded scratch parent
     const at = h.ctx.chat.findIndex(message => !message.is_user && message.mes.includes('Reply 20.'));
     await h.st.deleteMessage(at);
     await h.st.deleteMessage(at - 1);
-    const left = Object.keys(dir(h).folded);
-    assert.equal(left.length, 1, 'the first fold went with its reply; the later one applied');
-    assert.equal(left.includes(first), false);
-    assert.equal(h.store.problems().filter(problem => /folded/.test(problem.why ?? '')).length, 0);
+    // The delete changed the digest the later fold was made on (one of its threads now sits in a kept day range): the guard fails, closed.
+    assert.equal(dir(h).folded, undefined, `the first fold went with its reply (${first}); the later one was skipped whole`);
+    assert.ok(Object.values(dir(h).threads).filter(thread => thread.key === 'Q4' || thread.key === 'Q12').length === 2, 'its threads are live');
     const live = JSON.stringify(h.head());
     h.store.rebuild();
     assert.equal(JSON.stringify(h.head()), live);
@@ -370,7 +369,7 @@ test('legendEarned stays true: the oldest done quest is kept besides the newest'
     assert.ok(kept.includes('Q29'), 'the newest done quest is kept');
 });
 
-test('a key made again after its fold scores once; a thread folded twice keeps one record', async t => {
+test('a key made again after its fold scores once: the new thread has its own id; a key folded twice keeps one record', async t => {
     t.mock.method(console, 'warn', () => {});
     const h = await createHost({ modules: [createModule()] });
     t.after(() => h.close());
@@ -379,9 +378,104 @@ test('a key made again after its fold scores once; a thread folded twice keeps o
     const folded = Object.values(dir(h).folded)[0].items.find(item => item.key === 'Q3');
     assert.ok(folded);
     await h.send('Again', wrap('Again.', ['+ quest Q3 — job 3 again | giver: Sir Lothar | goal: bring 3']));
-    assert.equal(dir(h).threads[folded.id]?.status, 'active', 'the re-made quest takes the folded id');
-    assert.equal(h.sdk.query('director.folded', {}).items.filter(item => item.id === folded.id).length, 1);
+    const again = Object.values(dir(h).threads).find(thread => thread.key === 'Q3');
+    assert.equal(again.status, 'active');
+    assert.notEqual(again.id, folded.id, 'a fresh id: nothing a skipped fold brings back is overwritten');
+    assert.equal(h.sdk.query('director.folded', {}).items.some(item => item.key === 'Q3'), false, 'the old record is not read while the key is live');
+    assert.deepEqual(validateDirector(dir(h)), []);
     const live = JSON.stringify(h.head());
     h.store.rebuild();
     assert.equal(JSON.stringify(h.head()), live);
+});
+
+// ---- the second review (CX-fold): the digest gate, an unresolved thread, the legend witnesses, a long giver ---------------------------
+import { legendEarned } from '../../vendor/story-block/src/v2/domains/inventory/validate.js';
+
+const earned = h => legendEarned({ query: (name, args) => h.sdk.query(name, args), receipts: () => [] });
+const carrierOf = (h, text) => h.ctx.chat.findIndex(message => !message.is_user && message.mes.includes(text));
+const dropPair = async (h, at) => { await h.st.deleteMessage(at); await h.st.deleteMessage(at - 1); };
+
+test('a delete that takes the digest operation away skips the fold: the quest stays in its full Journal day (CX item 1)', async t => {
+    const settings = { modules: { 'story-director': { 'chronicle.digestDays': 2, 'chronicle.digestKeep': 4 } } };
+    const h = await createHost({ modules: [createModule()], settings });
+    t.after(() => h.close());
+    for (let n = 1; n <= 25; n++) {
+        const lines = [`~ time June ${n}, 1200, 08:00 am`];
+        if (n <= 5) lines.push(`+ quest Q${n} — job ${n} | giver: Fenna | goal: bring ${n}`, ...(n > 1 ? [`- quest Q${n - 1} — done`] : []));
+        await h.send(`Go ${n}`, wrap(`Day ${n}`, lines));
+        if (n === 3) await h.send('A side moment', wrap('Coin side', ['+ coin 2 | from: errand']));
+    }
+    await h.send('Wait', 'Quiet');
+    const q2 = Object.values(dir(h).threads).find(thread => thread.key === 'Q2');
+    const day = Math.floor(q2.track.closed.time / 1440);
+    const doneThatDay = () => (h.sdk.query('chronicle.days', {}) ?? []).find(entry => entry.day === day)?.quests?.done ?? [];
+    ok(await fold(h, { after: 3, keep: 1 }));
+    assert.equal(Object.values(dir(h).folded).flatMap(bucket => bucket.items).some(item => item.id === q2.id), true, 'Q2 folded while its day was brief');
+    await dropPair(h, carrierOf(h, 'Day 6\n'));
+    assert.equal(Object.values(dir(h).folded ?? {}).flatMap(bucket => bucket.items).some(item => item.id === q2.id), false, 'the gate no longer holds: the fold was skipped');
+    assert.ok(dir(h).threads[q2.id], 'Q2 is a live thread again');
+    assert.ok(doneThatDay().includes('Q2'), 'Q2 is in the full day');
+    await dropPair(h, carrierOf(h, 'Coin side\n'));
+    assert.ok(doneThatDay().includes('Q2'), 'still there after an unrelated entry of the day was deleted');
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+});
+
+test('a skipped fold never overwrites a quest that became unresolved: a thread made again under a folded key gets its own id (CX item 2)', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    const q3 = Object.values(dir(h).threads).find(thread => thread.key === 'Q3');
+    ok(await fold(h));
+    assert.equal(dir(h).threads[q3.id], undefined, 'Q3 folded');
+    await h.send('Again', wrap('Again.', ['+ event Q3 — a completely different event']));
+    const event = Object.values(dir(h).threads).find(thread => thread.key === 'Q3');
+    assert.ok(event && event.id !== q3.id && event.kind === 'event', 'the new thread has its own id');
+    const at = carrierOf(h, '- quest Q3 —');
+    await h.st.editMessage(at, h.ctx.chat[at].mes.replace('\n- quest Q3 — done', ''));
+    ok(await h.turn.reread(at));
+    const back = dir(h).threads[q3.id];
+    assert.equal(back?.kind, 'quest', 'the quest is still there, with its giver and goal');
+    assert.equal(back.status, 'active');
+    assert.equal(back.fields.giver, 'Sir Lothar');
+    assert.equal(dir(h).threads[event.id]?.kind, 'event', 'and so is the event');
+    assert.deepEqual(validateDirector(dir(h)), []);
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+});
+
+test('legendEarned stays true after Re-reads of the kept done quests: the fold is skipped while a witness is not done (CX item 3)', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    ok(await fold(h, { after: 3, keep: 1 }));
+    assert.ok(Object.keys(dir(h).folded).length >= 1);
+    for (const key of ['Q1', 'Q29']) {
+        const at = carrierOf(h, `- quest ${key} — done`);
+        await h.st.editMessage(at, h.ctx.chat[at].mes.replace(`\n- quest ${key} — done`, ''));
+        ok(await h.turn.reread(at));
+        assert.equal(dir(h).folded, undefined, `${key} is not done any more: the fold was skipped`);
+        assert.equal(earned(h), true, `legendEarned after the Re-read of ${key}`);
+    }
+    assert.deepEqual(validateDirector(dir(h)), []);
+});
+
+test('a giver longer than 80 characters folds whole: Ripples sway keeps the pack power (CX item 4)', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    const giver = 'The Keeper of the Northern Gate and Warden of the Riverwatch, an envoy who serves Lord Corvin';
+    for (let n = 1; n <= 30; n++) {
+        const lines = [`~ time June ${Math.min(28, n)}, 1200, 08:00 am`, `+ quest Q${n} — job ${n} | giver: ${n === 3 ? giver : 'Sir Lothar'} | goal: bring ${n}`, ...(n > 1 ? [`- quest Q${n - 1} — done`] : [])];
+        await h.send(`Go ${n}`, wrap(`Reply ${n}.`, lines));
+    }
+    h.packs.packs.packs = () => [{ id: 'ripples-test', ripples: { powers: [{ id: 'corvin', name: 'Corvin', base: 40 }] } }];
+    const before = h.sdk.query('ripples.sway', {});
+    assert.ok(before.find(power => power.id === 'corvin').sway > 40, 'the live giver moves Corvin');
+    ok(await fold(h));
+    const record = Object.values(dir(h).folded).flatMap(bucket => bucket.items).find(item => item.key === 'Q3');
+    assert.equal(record?.giver, giver);
+    assert.deepEqual(h.sdk.query('ripples.sway', {}), before);
 });

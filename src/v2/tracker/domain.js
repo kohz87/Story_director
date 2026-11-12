@@ -44,7 +44,7 @@ import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 import { initiativeErrors } from './initiative.js';
 import { quietThreads } from './quiet.js';
-import { foldedErrors, foldedItems } from './fold.js';
+import { foldedErrors, olderItems } from './fold.js';
 
 export const PROBLEM_LIMIT = 50;
 /** How many problems are kept; the newest PROBLEM_LIMIT are shown. */
@@ -256,7 +256,7 @@ export function validateDirector(slice) {
             if (!Object.hasOwn(slice.threads ?? {}, id)) errors.push(`director.keys["${name}"] points at no thread.`);
         }
         for (const thread of Object.values(slice.threads ?? {})) {
-            if (thread?.key && thread.status === 'active' && slice.keys[lineKey(thread.key)] !== thread.id) errors.push(`"${thread.key}" is missing from director.keys.`);
+            if (thread?.key && thread.status === 'active' && slice.keys[lineKey(thread.key)] === undefined) errors.push(`"${thread.key}" is missing from director.keys.`);
         }
     }
     if (slice.writes !== undefined && (!map(slice.writes) || Object.entries(slice.writes).some(([id, entry]) => !recordId(id)
@@ -353,7 +353,7 @@ export const queries = {
     },
     /** The folded older finished threads (fold.js): `{ items: [record], counts: { <kind>: { <outcome>: n } } }`, the records in tracker order. */
     'director.folded': state => {
-        const items = foldedItems(state?.domains?.director);
+        const items = olderItems(state?.domains?.director);
         const counts = {};
         for (const item of items) counts[item.kind] = { ...counts[item.kind], [item.outcome]: (counts[item.kind]?.[item.outcome] ?? 0) + 1 };
         return copy({ items, counts });

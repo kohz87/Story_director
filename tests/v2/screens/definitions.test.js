@@ -14,7 +14,7 @@ const utf8 = new TextEncoder();
 
 test('the part exports the four screens and the view queries, nothing else of its own', () => {
     assert.deepEqual(part.screens.map(screen => screen.id), [QUESTS_ID, DIRECTOR_ID, STATUS_CARD_ID]);
-    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.plan', 'director.problems', 'director.status', 'director.threads.on', 'pulse.quiet', 'pulse.view', 'quest.board']);
+    assert.deepEqual(Object.keys(part.queries).sort(), ['director.behind', 'director.goal', 'director.next', 'director.older', 'director.plan', 'director.problems', 'director.status', 'director.threads.on', 'pulse.quiet', 'pulse.view', 'quest.board']);
     assert.deepEqual([part.domains, part.commands, part.kinds, part.hooks, part.tabs], [{}, {}, {}, {}, []]);
     assert.equal(part.context, undefined, 'no prompt text: the static prompt is unchanged');
     // A fresh part has its own list (a pack or card overriding a screen never edits the defaults).
@@ -91,7 +91,7 @@ test('the bindings use the Director\'s queries: time, threads by kind and status
     assert.deepEqual(byId[STATUS_CARD_ID].data.status, { query: 'director.status' });
     assert.deepEqual(time, { query: 'director.time' }, 'the clock line in its header');
     assert.equal(byId[STATUS_CARD_ID].defaultOn, true, 'on under every reply by default (§F24)');
-    assert.deepEqual(byId[QUESTS_ID].data, { threads: { query: 'director.threads' } });
+    assert.deepEqual(byId[QUESTS_ID].data, { threads: { query: 'director.threads' }, older: { query: 'director.older' } });
 });
 
 test('the status card\'s progress follows its goal binding ($goal.id), and is empty without a goal', () => {

@@ -39,7 +39,8 @@ const BEHIND = new Set(['agenda', 'beat', 'clock', 'secret']);
 // Outcomes Ripples scores (sway); other outcomes keep no summary or difficulty.
 const SCORED = new Set(['done', 'failed', 'abandoned']);
 const HIDE_ROOM = 12;
-const LIMITS = Object.freeze({ key: 120, summary: 600, names: 80 });
+// `giver` and `people` are as long as the thread fields allow (600): a cut name would change what Ripples matches.
+const LIMITS = Object.freeze({ key: 120, summary: 600, names: 80, giver: 600 });
 const RECORD_FIELDS = ['id', 'kind', 'key', 'outcome', 'order', 'giver', 'people', 'summary', 'difficulty', 'hide', 'secret', 'at'];
 const THREAD_ID = /^th_[0-9a-z]{8}$/;
 const BUCKET_KEY = /^\d+$/;
@@ -66,6 +67,12 @@ function aliasesById(director) {
     return names;
 }
 
+/** The ids of the newest and the oldest done quest still live (what `legendEarned` reads once the rest is folded). */
+export function doneWitnesses(director) {
+    const done = orderedThreads(director).filter(thread => thread.status === 'resolved' && thread.kind === 'quest' && thread.ended?.outcome === 'done').sort(newestFirst);
+    return [...new Set([done[0]?.id, done[done.length - 1]?.id].filter(Boolean))];
+}
+
 /** The chronicle's gate, as plain data (see the header). Closed without `on`, or with a gap, folds nothing. */
 function gateHolds(gate, thread) {
     if (gate?.on !== true || gate.gap === true) return false;
@@ -89,9 +96,8 @@ export function foldCandidates(director, { turn = turnOf(director), gate, arc = 
         seen.set(thread.kind, count + 1);
         if (count < keepFor(thread.kind, keep)) kept.add(thread.id);
     }
-    // Story Block's `legendEarned` reads a done quest: keep the newest and the oldest, so a swipe of a recent finish cannot turn it off.
-    const done = resolved.filter(thread => thread.kind === 'quest' && thread.ended.outcome === 'done').sort(newestFirst);
-    for (const thread of [done[0], done[done.length - 1]]) if (thread) kept.add(thread.id);
+    // Story Block's `legendEarned` reads a done quest: keep the newest and the oldest (the guard makes a fold depend on both staying done).
+    for (const id of doneWitnesses(director)) kept.add(id);
     return resolved
         .filter(thread => !kept.has(thread.id) && !isLegacy(thread)
             && !(arc !== null && thread.track?.arc === arc)
@@ -112,7 +118,7 @@ export function foldRecord(thread, aliases = []) {
         order: isInt(thread.track?.order) ? thread.track.order : 0,
     };
     if (isInt(thread.ended?.at)) record.at = thread.ended.at;
-    if (fields.giver) record.giver = cut(fields.giver, LIMITS.names);
+    if (fields.giver) record.giver = cut(fields.giver, LIMITS.giver);
     if (fields.people) record.people = cut(fields.people, LIMITS.summary);
     if ((thread.kind === 'quest' || thread.kind === 'hook') && SCORED.has(outcome)) {
         record.summary = cut(thread.summary, LIMITS.summary);
@@ -149,31 +155,30 @@ export function planFold(director, { turn, gate, arc = null, after, keep, max = 
     return { ids, items, keys, writes };
 }
 
-/** Every folded record, in tracker order (`order`, then id); a thread folded twice keeps the newest bucket's record only. */
+const keyOf = item => lineKey(item.key) || item.key;
+const buckets = director => Object.values(director?.folded ?? {}).sort((a, b) => (a?.rev ?? 0) - (b?.rev ?? 0));
+const itemsOf = bucket => (Array.isArray(bucket?.items) ? bucket.items : []);
+
+/**
+ * Every folded record, in tracker order (`order`, then id); one record per key: a key folded twice (a thread made again under a
+ * folded key gets a new id and may fold again) keeps the newest bucket's record only.
+ */
 export function foldedItems(director) {
     const newest = new Map();
-    for (const bucket of Object.values(director?.folded ?? {}).sort((a, b) => (a?.rev ?? 0) - (b?.rev ?? 0))) {
-        for (const item of Array.isArray(bucket?.items) ? bucket.items : []) newest.set(item.id, item);
-    }
+    for (const bucket of buckets(director)) for (const item of itemsOf(bucket)) newest.set(keyOf(item), item);
     return [...newest.values()].sort((a, b) => (a.order - b.order) || byId(a.id, b.id));
 }
 
-/**
- * The id a folded thread had under `key` (a lineKey; the newest one), else null. A thread made again under a folded key takes that
- * id: a replay whose fold block was skipped (its guard no longer held) still has the old thread, and the new one then replaces it
- * instead of standing beside it with the same key.
- */
-export function foldedIdOf(director, key) {
-    if (!director?.folded || !key) return null;
-    const same = foldedItems(director).filter(item => (lineKey(item.key) || item.key) === key);
-    return same.length ? same[same.length - 1].id : null;
+/** The folded records no live thread has the key of again (a key made again is read from its live thread, not from the old record). */
+export function olderItems(director) {
+    return foldedItems(director).filter(item => !director?.threads?.[item.id] && !director?.keys?.[keyOf(item)]);
 }
 
-/** The names folded threads still hide: `behind` (every name a behind-the-scenes thread reached) and `words` (secrets' keys and aliases). */
+/** The names folded threads still hide: `behind` (every name a behind-the-scenes thread reached) and `words` (secrets' keys and aliases), from every record. */
 export function foldedHidden(director) {
     const behind = new Set();
     const words = new Set();
-    for (const item of foldedItems(director)) {
+    for (const item of buckets(director).flatMap(itemsOf)) {
         for (const name of item.hide ?? []) behind.add(name);
         if (item.secret) for (const name of item.hide ?? []) words.add(name);
     }
@@ -185,8 +190,8 @@ export function foldedHidden(director) {
  * whose id is a live thread again (the key was made again) is left out, as a reopened quest stops scoring its old outcome without a fold.
  */
 export function foldedQuests(director) {
-    return foldedItems(director)
-        .filter(item => (item.kind === 'quest' || item.kind === 'hook') && !director?.threads?.[item.id])
+    return olderItems(director)
+        .filter(item => item.kind === 'quest' || item.kind === 'hook')
         .map(item => ({
             key: item.key, name: item.key, giver: item.giver, summary: item.summary,
             outcome: SCORED.has(item.outcome) ? item.outcome : null, difficulty: item.difficulty, order: item.order, at: item.at ?? null,
@@ -222,7 +227,7 @@ export function foldHook(view) {
     return planFold(director, { gate, arc: newestArcId(view.state?.domains?.arc) }).ids.length >= FOLD_MIN ? { type: FOLD, payload: {} } : null;
 }
 
-/** The guard inputs for a fold: one hash over the folded threads' public projections in id order, and the newest arc. */
+/** The guard inputs for a fold: one hash over the folded threads' public projections in id order, the newest arc and the done-quest witnesses. */
 export function foldGuardInputs(director, ids, arc, hashJson) {
     const sorted = [...ids].sort(byId);
     const threads = director?.threads ?? {};
@@ -230,15 +235,20 @@ export function foldGuardInputs(director, ids, arc, hashJson) {
         const { track: _track, ...publicFields } = threads[id] ?? {};
         return publicFields;
     });
-    return { ids: sorted, hash: hashJson(projections), arc: arc ?? null };
+    return { ids: sorted, hash: hashJson(projections), arc: arc ?? null, witness: doneWitnesses(director) };
 }
 
-/** Whether a fold's guard still holds: every id present and resolved, the same hash, and the same newest arc (`arcNow`). */
-export function foldGuardOk(director, inputs, arcNow, hashJson) {
+/**
+ * Whether a fold's guard still holds: every id present and resolved, the same hash, the same newest arc (`arcNow`), the done-quest
+ * witnesses still done (legendEarned reads a live done quest), and the chronicle's gate (`gate`, asked on the state before the block)
+ * still open for every folded thread: an edit that took the digest operation away would otherwise leave a full day without them.
+ */
+export function foldGuardOk(director, inputs, arcNow, hashJson, gate = null) {
     if (!isRecord(inputs) || !Array.isArray(inputs.ids)) return false;
     if ((arcNow ?? null) !== (inputs.arc ?? null)) return false;
     const threads = director?.threads ?? {};
-    if (!inputs.ids.every(id => threads[id]?.status === 'resolved')) return false;
+    if (!inputs.ids.every(id => threads[id]?.status === 'resolved' && gateHolds(gate, threads[id]))) return false;
+    if (!(inputs.witness ?? []).every(id => threads[id]?.kind === 'quest' && threads[id].status === 'resolved' && threads[id].ended?.outcome === 'done')) return false;
     return foldGuardInputs(director, inputs.ids, inputs.arc, hashJson).hash === inputs.hash;
 }
 
@@ -255,7 +265,7 @@ function recordErrors(at, item) {
     if (item.at !== undefined && !isInt(item.at)) errors.push(`${at}.at must be a whole number.`);
     const text = (value, max) => typeof value === 'string' && [...value].length <= max;
     if (!text(item.key, LIMITS.key) || item.key === '') errors.push(`${at}.key is not text.`);
-    if (item.giver !== undefined && !text(item.giver, LIMITS.names)) errors.push(`${at}.giver is not text.`);
+    if (item.giver !== undefined && !text(item.giver, LIMITS.giver)) errors.push(`${at}.giver is not text.`);
     if (item.people !== undefined && !text(item.people, LIMITS.summary)) errors.push(`${at}.people is not text.`);
     if (item.summary !== undefined && !text(item.summary, LIMITS.summary)) errors.push(`${at}.summary is not text.`);
     if (item.difficulty !== undefined && !text(item.difficulty, LIMITS.names)) errors.push(`${at}.difficulty is not text.`);

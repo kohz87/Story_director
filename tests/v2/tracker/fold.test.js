@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    FOLD_AFTER, foldCandidates, foldedErrors, foldedHidden, foldedItems, foldedQuests, foldGuardInputs, foldGuardOk, foldRecord, newestArcId, planFold,
+    FOLD_AFTER, doneWitnesses, foldCandidates, foldedErrors, foldedHidden, foldedItems, foldedQuests, foldGuardInputs, foldGuardOk, foldRecord, newestArcId, olderItems, planFold,
 } from '../../../src/v2/tracker/fold.js';
 import { hashJson } from '../../../src/v2/tracker/hash.js';
 
@@ -134,11 +134,62 @@ test('the guard holds until a folded thread changes or the newest arc moves', ()
     const t = thread(1, 'quest', { outcome: 'failed' });
     const d = director([t]);
     const inputs = foldGuardInputs(d, [t.id], 'arc_now', hashJson);
-    assert.equal(foldGuardOk(d, inputs, 'arc_now', hashJson), true);
-    assert.equal(foldGuardOk(d, inputs, 'arc_other', hashJson), false);
+    assert.equal(foldGuardOk(d, inputs, 'arc_now', hashJson, OPEN), true);
+    assert.equal(foldGuardOk(d, inputs, 'arc_other', hashJson, OPEN), false);
     const changed = director([{ ...t, summary: 'changed' }]);
-    assert.equal(foldGuardOk(changed, inputs, 'arc_now', hashJson), false);
-    assert.equal(foldGuardOk(director([]), inputs, 'arc_now', hashJson), false);
+    assert.equal(foldGuardOk(changed, inputs, 'arc_now', hashJson, OPEN), false);
+    assert.equal(foldGuardOk(director([]), inputs, 'arc_now', hashJson, OPEN), false);
+});
+
+test('the guard also asks the digest gate on the state before the block (CX item 1)', () => {
+    const t = thread(1, 'quest', { outcome: 'failed', time: 100 });
+    const d = director([t]);
+    const inputs = foldGuardInputs(d, [t.id], null, hashJson);
+    assert.equal(foldGuardOk(d, inputs, null, hashJson, OPEN), true);
+    assert.equal(foldGuardOk(d, inputs, null, hashJson), false, 'no gate answer: closed');
+    assert.equal(foldGuardOk(d, inputs, null, hashJson, { ...OPEN, on: false }), false);
+    assert.equal(foldGuardOk(d, inputs, null, hashJson, { ...OPEN, fullMinutes: [[50, 150]] }), false, 'the closing day became a full digest day');
+    assert.equal(foldGuardOk(d, inputs, null, hashJson, { ...OPEN, ranges: [[1, 1]] }), false, 'its receipt sits in a kept chronicle range');
+    assert.equal(foldGuardOk(d, inputs, null, hashJson, { ...OPEN, throughMinutes: 50 }), false, 'the day is not written yet');
+});
+
+test('the guard needs the done-quest witnesses to stay done (CX item 3)', () => {
+    const a = thread(1, 'quest', { outcome: 'done' });
+    const b = thread(2, 'quest', { outcome: 'failed' });
+    const c = thread(3, 'quest', { outcome: 'done' });
+    const d = director([a, b, c]);
+    assert.deepEqual(doneWitnesses(d), [c.id, a.id]);
+    const inputs = foldGuardInputs(d, [b.id], null, hashJson);
+    assert.deepEqual(inputs.witness, [c.id, a.id]);
+    assert.equal(foldGuardOk(d, inputs, null, hashJson, OPEN), true);
+    const undone = director([a, b, { ...c, status: 'active', ended: null }]);
+    assert.equal(foldGuardOk(undone, inputs, null, hashJson, OPEN), false);
+    const failed = director([a, b, { ...c, ended: { ...c.ended, outcome: 'failed' } }]);
+    assert.equal(foldGuardOk(failed, inputs, null, hashJson, OPEN), false);
+});
+
+test('a giver longer than 80 characters is kept whole up to 600 (CX item 4)', () => {
+    const giver = `${'The Keeper of the Northern Gate and Warden of the Riverwatch, an envoy who serves '}Lord Corvin`;
+    const item = foldRecord(thread(1, 'quest', { outcome: 'done', fields: { giver } }));
+    assert.equal(item.giver, giver);
+    assert.deepEqual(foldedErrors({ folded: { '5': { rev: 5, items: [item] } } }), []);
+    assert.equal(foldRecord(thread(2, 'quest', { outcome: 'done', fields: { giver: 'x'.repeat(700) } })).giver.length, 600);
+});
+
+test('foldedHidden reads every bucket: a name an older record hid stays hidden when the same secret folds again (review F-A)', () => {
+    const first = { ...foldRecord({ ...thread(1, 'secret', { outcome: 'done' }) }, ['alias one']), id: id(1) };
+    const second = { ...first, id: id(9), hide: ['thing 1'] };
+    const hidden = foldedHidden({ folded: { '5': { rev: 5, items: [first] }, '9': { rev: 9, items: [second] } } });
+    assert.equal(hidden.behind.has('alias one'), true);
+    assert.equal(hidden.words.has('alias one'), true);
+});
+
+test('olderItems leaves out a key a live thread has again, however its id came', () => {
+    const t = thread(1, 'quest', { outcome: 'failed' });
+    const folded = { '5': { rev: 5, items: [foldRecord(t)] } };
+    assert.equal(olderItems({ folded }).length, 1);
+    assert.equal(olderItems({ folded, threads: {}, keys: { [t.key.toLowerCase()]: id(7) } }).length, 0);
+    assert.equal(foldedQuests({ folded, threads: {}, keys: { [t.key.toLowerCase()]: id(7) } }).length, 0);
 });
 
 test('the validator accepts a well-formed bucket and refuses a bad key, a rev mismatch or an oversized bucket', () => {
@@ -187,4 +238,7 @@ test('a thread folded twice keeps the newest bucket\'s record; a record whose id
     assert.deepEqual(foldedItems({ folded }).map(item => item.summary), ['newer']);
     assert.equal(foldedQuests({ folded }).length, 1);
     assert.equal(foldedQuests({ folded, threads: { [t.id]: { ...t, status: 'active' } } }).length, 0);
+    // A key folded twice under two ids keeps the newest bucket's record only (the key made again got a new id).
+    const remade = { ...foldRecord(thread(5, 'quest', { outcome: 'done' })), key: t.key, summary: 'remade' };
+    assert.deepEqual(foldedItems({ folded: { ...folded, '12': { rev: 12, items: [remade] } } }).map(item => item.summary), ['remade']);
 });

@@ -118,13 +118,18 @@ export function foldCommand(ctx, payload = {}) {
     return { summary: `Older finished threads were summarised (${plan.ids.length}).`, narrate: false, data: { folded: plan.ids.length } };
 }
 
+// The chronicle's gate on the state a guard is asked on (null when nothing answers: the fold is then skipped).
+function foldGate(query) {
+    try { return typeof query === 'function' ? query('chronicle.foldGate', {}) : null; } catch { return null; }
+}
+
 /** Neutral accept binds the offer and proof bytes, independent of transport revision/ordinal. */
 export function threadReplayGuard({ state, query }, { guard, recorded }) {
     if (guard?.predicate?.kind === 'director.fold') {
         const inputs = guard.predicate.inputs;
         const ok = guard.version === 2 && inputs && hashJson(inputs) === guard.inputHash
-            && foldGuardOk(state?.domains?.director, inputs, newestArcId(state?.domains?.arc), hashJson);
-        return ok ? { ok: true } : { ok: false, reason: 'The folded threads or the newest arc changed.' };
+            && foldGuardOk(state?.domains?.director, inputs, newestArcId(state?.domains?.arc), hashJson, foldGate(query));
+        return ok ? { ok: true } : { ok: false, reason: 'The folded threads, the newest arc, the done quests kept or the digest gate changed.' };
     }
     if (guard?.predicate?.kind !== 'threads.accept') return undefined;
     const off = () => ({ ok: false, reason: 'The offer or reader acceptance evidence changed.' });

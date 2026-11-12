@@ -179,7 +179,8 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         domains,
         commands,
         queries,
-        replayQueries: ['director.thread'].filter(name => Object.hasOwn(queries, name)),
+        // Both depend on the state alone: the guards of accept (the offer) and of fold (the digest gate on the state before the block).
+        replayQueries: ['director.thread', 'chronicle.foldGate'].filter(name => Object.hasOwn(queries, name)),
         context: {
             // The same bytes every reply: each part's static is fixed text. What a feature owns is a context part of its own.
             static: staticOf(grouped[0] && !grouped[0].feature ? grouped[0].items : []),

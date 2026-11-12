@@ -23,6 +23,7 @@ const TEMPLATE = `
       </li>
     </ul>
   </section>
+  <p class="sd-older" data-if="q.older.quests > 0">Older finished quests summarised, no longer listed: {{ q.older.quests }}</p>
 </div>`;
 
 // Every quest is one card: the header (title, then the pills: status and reward; the pills move under the title when the
@@ -63,6 +64,7 @@ const CSS = `${BASE_CSS}
 .sd-q-rows dt { color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); }
 .sd-q-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .sd-q-old { margin: 0; font-size: 12px; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); overflow-wrap: anywhere; }
+.sd-older { margin: 0; font-size: 12px; color: var(--sd-muted); }
 .sd-q-none { margin: 0; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); font-size: 13px; }
 .sd-q-fold { border-top: 1px solid color-mix(in srgb, var(--ss-muted, currentColor) 22%, transparent); min-width: 0; }
 .sd-q-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; color: var(--ss-muted, color-mix(in srgb, currentColor 65%, transparent)); font-size: 13px; font-weight: 600; list-style: none; }
@@ -113,7 +115,7 @@ export const questsScreen = Object.freeze({
     icon: 'fa-scroll',
     bar: true,
     mounts: ['tab', 'screen'],
-    data: { threads: { query: 'director.threads' } },
+    data: { threads: { query: 'director.threads' }, older: { query: 'director.older' } },
     template: TEMPLATE,
     css: CSS,
 });

@@ -6,7 +6,6 @@ import { fromRecord, keysOf, orderedThreads, outcomeOf, sameValue, toTracker } f
 import { addProblem, replyDraft, replyTurn, startReply, turnNumber } from './domain.js';
 import { acceptIntent } from './acceptance.js';
 import { threadWriteId } from './thread-writes.js';
-import { foldedIdOf } from './fold.js';
 import { agendaProgress, placeNamed, pulseActive } from '../pulse/effects.js';
 import { calendarOf, lineStretch, maxJumpMinutes, packCalendarOf, sameStretch, settingsFrom, splitTimeLine, timeAfter } from './time.js';
 
@@ -217,14 +216,6 @@ function newId(ctx, taken) {
     throw new Error('No free thread id.');
 }
 
-// A thread made again under the key of a folded one (fold.js) takes the folded thread's id (see foldedIdOf).
-function freeFoldedId(director, key, taken) {
-    const id = foldedIdOf(director, key);
-    if (!id || taken.has(id)) return null;
-    taken.add(id);
-    return id;
-}
-
 // Problems are the domain's (domain.js addProblem: each under its own key, never a list position).
 export { addProblem };
 
@@ -243,7 +234,7 @@ function writeBack(director, records, ctx, read = new Map()) {
     const idOf = new Map();
     for (const record of records) {
         const prev = before.get(record.id) ?? null;
-        const id = prev?.id ?? freeFoldedId(director, record.id, ids) ?? newId(ctx, ids);
+        const id = prev?.id ?? newId(ctx, ids);
         idOf.set(record.id, id);
         if (prev && read.get(record.id) === JSON.stringify(record)) continue;
         const thread = fromRecord(record, prev, { id, rev, order: prev ? undefined : (order += 1) });
@@ -293,7 +284,7 @@ function threadLine(ctx, given) {
     }
     if (!named && line.op === '+' && line.kind === 'hook' && line.labels?.goal) {
         const taken = new Set(Object.keys(director.threads));
-        const id = freeFoldedId(director, op.id, taken) ?? newId(ctx, taken);
+        const id = newId(ctx, taken);
         ctx.call('threads.offer', { write: threadWriteId(ctx, `offer:${id}`), thread: id, kind: 'hook', key: op.key,
             summary: capSummary(line.text ?? ''), fields: Object.fromEntries(Object.entries(line.labels ?? {}).filter(([key]) => ['goal', 'giver', 'step', 'progress', 'due', 'place', 'people', 'now', 'then', 'on', 'type', 'reward', 'difficulty'].includes(key))), expectedHash: null });
         return { summary: `Director: ${raw}`, narrate: false, data: { thread: id } };

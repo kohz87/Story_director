@@ -19,6 +19,7 @@ import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { problemList } from '../tracker/domain.js';
+import { olderItems } from '../tracker/fold.js';
 import { heroDate } from '../tracker/clock-set.js';
 import { BEHIND, BEHIND_KINDS } from './reveal.js';
 import { THREADS_FEATURE, threadsOn } from '../threads.js';
@@ -272,6 +273,11 @@ function behindThread(thread) {
     return { id: thread.id, key: text(thread.key), summary: text(thread.summary), fields, ended: thread.ended ? { outcome: text(thread.ended.outcome) } : null };
 }
 
+/** How many older finished threads the fold summarised (those `pick` takes), for the "Older" footers: their cards are no longer drawn. */
+function olderCount(state, pick = () => true) {
+    return olderItems(state?.domains?.director).filter(pick).length;
+}
+
 /**
  * `director.behind` → `{ kinds: [{ kind, title, open, closed }], problems, open, total }`: the threads behind
  * the scenes (agendas, clocks, beats, secrets: open ones and the closed ones), the problems about them, and
@@ -287,7 +293,7 @@ export function behindView(state, args, tools) {
     })).filter(group => group.open.length || group.closed.length);
     const open = kinds.reduce((sum, group) => sum + group.open.length, 0);
     const total = kinds.reduce((sum, group) => sum + group.open.length + group.closed.length, 0);
-    return { kinds, problems: problemsList(state, { behind: true }, tools), open, total };
+    return { kinds, problems: problemsList(state, { behind: true }, tools), open, total, older: olderCount(state, item => BEHIND.has(item.kind)) };
 }
 
 /**
@@ -419,6 +425,8 @@ export function screenQueries({ settings = null } = {}) {
         // `{ on: true }` while the feature is on, null while it is off: the Director screen's World card and the World screen's News and Factions read it.
         // The Director screen's cards (planView).
         'director.plan': (state, args, tools) => planView(state, args, tools, { settings }),
+        // The older finished quests and hooks the fold summarised (the Quests screen's footer): `{ quests, total }`.
+        'director.older': state => ({ quests: olderCount(state, item => item.kind === 'quest' || item.kind === 'hook'), total: olderCount(state) }),
         'director.threads.on': Object.assign(() => ({ on: true }), { feature: THREADS_FEATURE }),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'quest.board': (state, args, tools) => questBoard(state, args, tools),

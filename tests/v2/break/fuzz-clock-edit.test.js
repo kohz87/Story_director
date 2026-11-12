@@ -20,7 +20,7 @@ const seedsOf = fallback => (process.env.FUZZ_SEEDS
 // one, nothing ready, is fine). A delete or clock edit that changed a folded thread makes its replay guard skip the block: a Problem by design
 // (nothing is lost, the next fold takes the thread again) and the only skip these fuzzers let through.
 const foldNow = host => host.bus.command('director.fold', { after: 3, keep: 1 }, { cause: 'system' });
-const foldSkip = problem => /The folded threads or the newest arc changed/.test(problem.why ?? problem.message ?? '');
+const foldSkip = problem => /The folded threads, the newest arc, the done quests kept or the digest gate changed/.test(problem.why ?? problem.message ?? '');
 const unskipped = host => host.store.problems().filter(problem => !foldSkip(problem));
 // Keys the fold took: a later line that names one makes it again as a thread of that reply, and a delete of that reply then leaves the later changes
 // without their thread (the skip any thread made by a deleted reply has). The generators leave such lines out, as they leave out what a deleted reply made.

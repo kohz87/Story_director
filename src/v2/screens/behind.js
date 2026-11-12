@@ -88,6 +88,7 @@ function render(el, props, _api, reveal) {
             }
             parts.push(section);
         }
+        if (data.older > 0) parts.push(make('p', 'sd-meta sd-older', `Older finished threads summarised, no longer listed: ${data.older}`));
         if (data.problems?.length) {
             const section = make('section', 'sd-kind ss-glass sd-problems-box', undefined, { 'data-kind': 'behind-problems' });
             section.append(make('h4', 'sd-h', 'Problems behind the scenes'));
