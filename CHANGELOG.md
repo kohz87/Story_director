@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.15.0
+
+Update Story Block, Story Director, NPC State Delta (and Story Studio for pack authors) together. Replies already written replay and Re-read exactly as before; start a new chat to see the new dossier, mood, ties and drives behaviour.
+
 - **Fix: a cast planner call that failed in the connection is made once more, and a plan that still fails shows a Problems line.** One extra request at most, only after a connection error that came back within 15 s; a refusal, an empty answer or a timeout is not asked again. The line "cast planner failed for this reply" appears once, on the reply the plan was for (not on the later replies of that story day). Needs a Story Block that lists a hook's problems. Replies already written replay and Re-read as before.
 
 ## 2.14.1
