@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    FOLD_AFTER, foldCandidates, foldedErrors, foldedHidden, foldedItems, foldedQuests, foldGuardInputs, foldGuardOk, foldRecord, planFold,
+    FOLD_AFTER, foldCandidates, foldedErrors, foldedHidden, foldedItems, foldedQuests, foldGuardInputs, foldGuardOk, foldRecord, newestArcId, planFold,
 } from '../../../src/v2/tracker/fold.js';
 import { hashJson } from '../../../src/v2/tracker/hash.js';
 
@@ -151,4 +151,40 @@ test('the validator accepts a well-formed bucket and refuses a bad key, a rev mi
     const big = Array.from({ length: 121 }, () => item);
     assert.equal(foldedErrors({ folded: { '5': { rev: 5, items: big } } }).length, 1);
     assert.equal(foldedErrors({ folded: { '5': { rev: 5, items: [{ ...item, extra: 1 }] } } }).length, 1);
+});
+
+test('the newest arc id comes from the arc slice: the last by rev, then id; none for no arcs', () => {
+    assert.equal(newestArcId(undefined), null);
+    assert.equal(newestArcId({ arcs: {} }), null);
+    const arcs = { arc_aaaaaaaa: { id: 'arc_aaaaaaaa', rev: 3 }, arc_bbbbbbbb: { id: 'arc_bbbbbbbb', rev: 9 }, arc_cccccccc: { id: 'arc_cccccccc', rev: 9 } };
+    assert.equal(newestArcId({ arcs }), 'arc_cccccccc');
+});
+
+test('the oldest done quest is kept besides the newest (legendEarned survives a swipe of a recent finish)', () => {
+    const done = [1, 2, 3].map(n => thread(n, 'quest', { outcome: 'done', rev: n }));
+    const failed = Array.from({ length: 21 }, (_, i) => thread(i + 4, 'quest', { outcome: 'failed', rev: i + 4 }));
+    const candidates = ids(foldCandidates(director([...done, ...failed]), { gate: OPEN }));
+    assert.equal(candidates.includes(id(1)), false, 'the oldest done stays');
+    assert.equal(candidates.includes(id(3)), false, 'the newest done stays');
+    assert.equal(candidates.includes(id(2)), true, 'the one between folds');
+});
+
+test('a record keeps when the thread ended (`at`), and the validator checks it', () => {
+    const t = { ...thread(1, 'quest', { outcome: 'done' }), ended: { rev: 1, reason: 'r', outcome: 'done', at: 4321 } };
+    const item = foldRecord(t);
+    assert.equal(item.at, 4321);
+    assert.equal(foldRecord(thread(2, 'quest')).at, undefined);
+    assert.deepEqual(foldedErrors({ folded: { '5': { rev: 5, items: [item] } } }), []);
+    assert.equal(foldedErrors({ folded: { '5': { rev: 5, items: [{ ...item, at: 'x' }] } } }).length, 1);
+    assert.equal(foldedQuests({ folded: { '5': { rev: 5, items: [item] } } })[0].at, 4321);
+});
+
+test('a thread folded twice keeps the newest bucket\'s record; a record whose id is live again is not scored', () => {
+    const t = thread(1, 'quest', { outcome: 'failed' });
+    const older = foldRecord(t);
+    const newer = { ...foldRecord(t), summary: 'newer' };
+    const folded = { '5': { rev: 5, items: [older] }, '9': { rev: 9, items: [newer] } };
+    assert.deepEqual(foldedItems({ folded }).map(item => item.summary), ['newer']);
+    assert.equal(foldedQuests({ folded }).length, 1);
+    assert.equal(foldedQuests({ folded, threads: { [t.id]: { ...t, status: 'active' } } }).length, 0);
 });

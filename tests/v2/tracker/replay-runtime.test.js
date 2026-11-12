@@ -230,3 +230,158 @@ test('a Re-read of the reply that carries a fold, and of one before it, leaves t
     h.store.rebuild();
     assert.equal(JSON.stringify(h.head()), after);
 });
+
+// ---- a chat WITH an arc (the guard reads the newest arc from state, never through the feature-gated `director.arc`) ---------------
+import { createFakeModel } from '../../vendor/story-block/testkit/index.js';
+import { createArcController } from '../../../src/v2/arc/index.js';
+import { browserStore, createReveal } from '../../../src/v2/screens/index.js';
+
+const PLAN = '<plan>\nARC: The Drowned Bell — the old bell rings\nBEAT: Bell Rings — it tolls | on: in 2 days\nAGENDA: Mira — wants the bell raised | now: buying rope\n</plan>';
+
+async function arcHost(t, settings = {}) {
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    host = await createHost({ callModel: createFakeModel([PLAN]), modules: [module], settings: { modules: { 'story-director': settings } } });
+    t.after(() => host.close());
+    const memory = new Map();
+    const store = browserStore({ getItem: key => (memory.has(key) ? memory.get(key) : null), setItem: (key, value) => memory.set(key, String(value)) });
+    const reveal = createReveal({ store, chatId: () => 'c1', settings: () => host.sdk.settings('story-director') });
+    const arc = createArcController({ sdk: () => host.sdk, chat: () => host.ctx.chat, chatId: () => 'c1', store, reveal, notify: () => {} });
+    await host.send('Go 0', wrap('Reply 0.', ['~ time June 1, 1200, 08:00 am', '+ hook Old Debt — Mira owes the guild']));
+    assert.equal((await arc.plan()).ok, true);
+    assert.equal((await arc.accept()).ok, true);
+    assert.ok(host.sdk.query('director.arc').current, 'an arc was accepted');
+    return host;
+}
+
+test('a chat with an arc folds: no Problem, the newest arc stays, rebuild and a fresh host give the same head', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const h = await arcHost(t);
+    await story(h, 30);
+    const arcThreads = Object.values(dir(h).threads).filter(thread => thread.track?.arc);
+    assert.ok(arcThreads.length >= 1, 'the arc made threads');
+    ok(await fold(h));
+    assert.equal(Object.values(dir(h).folded).length, 1);
+    for (const thread of arcThreads) assert.ok(dir(h).threads[thread.id], 'an arc thread is still there');
+    assert.deepEqual(h.turn.problems(), []);
+    assert.deepEqual(h.store.problems(), []);
+    assert.deepEqual(validateDirector(dir(h)), []);
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+    assert.deepEqual(h.store.problems(), []);
+    const loaded = await createHost({ modules: [createModule()], st: { chat: structuredClone(h.ctx.chat), extensionSettings: structuredClone(h.ctx.extensionSettings) } });
+    t.after(() => loaded.close());
+    loaded.store.rebuild();
+    assert.equal(JSON.stringify(loaded.head()), live);
+    assert.deepEqual(loaded.store.problems(), []);
+});
+
+test('a chat with an arc: the arc feature off does not unprotect the newest arc, and a delete skips the fold whole', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const h = await arcHost(t);
+    await story(h, 30);
+    h.features.set('story-director.arc', false);
+    const arcThreads = Object.values(dir(h).threads).filter(thread => thread.track?.arc).map(thread => thread.id);
+    ok(await fold(h));
+    for (const id of arcThreads) assert.ok(dir(h).threads[id], 'kept with the feature off');
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+    h.features.set('story-director.arc', true);
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+    const at = h.ctx.chat.findIndex(message => !message.is_user && message.mes.includes('- quest Q4 —'));
+    await h.st.deleteMessage(at);
+    await h.st.deleteMessage(at - 1);
+    assert.equal(dir(h).folded, undefined, 'the fold block was skipped whole');
+    const after = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), after);
+    assert.deepEqual(validateDirector(dir(h)), []);
+});
+
+// Real calendar days, two replies to a day, so the digest writes and the default horizon (200 replies) can pass.
+const dayLine = n => {
+    const when = new Date(Date.UTC(1200, 5, 1 + Math.floor(n / 2)));
+    return `~ time ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][when.getUTCMonth()]} ${when.getUTCDate()}, ${when.getUTCFullYear()}, 0${8 + (n % 2)}:00 am`;
+};
+
+test('a long chat WITH an arc: the hook folds past the 200-reply horizon, no Problem on any reply, replay equals live', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const h = await arcHost(t, { 'chronicle.digestDays': 2, 'chronicle.digestKeep': 4 });
+    for (let n = 1; n <= 240; n++) {
+        await h.send(`Go ${n}`, wrap(`Reply ${n}.`, [dayLine(n), `+ quest Q${n} — job ${n} | giver: Sir Lothar | goal: bring ${n}`, ...(n > 1 ? [`- quest Q${n - 1} — done`] : [])]));
+        assert.deepEqual(h.turn.problems(), [], `no problem at reply ${n}`);
+    }
+    const folds = h.sdk.receipts().filter(entry => entry.receipt.type === 'director.fold');
+    assert.ok(folds.length >= 1, 'the fold committed by itself');
+    assert.ok(Object.values(dir(h).folded).length >= 1);
+    assert.deepEqual(h.store.problems(), []);
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+    assert.deepEqual(h.store.problems(), []);
+});
+
+test('the digest gap: nothing folds while the digest was off (the note sets the gap), and it folds once the digest is back on', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 25);
+    h.features.set('story-director.digest', false);
+    await story(h, 1, { from: 26 });
+    assert.equal(h.sdk.query('chronicle.foldGate', {}), null, 'the gate is shut while the digest is off');
+    assert.equal((await fold(h)).ok, false, 'off: refused');
+    h.features.set('story-director.digest', true);
+    assert.equal(JSON.stringify(h.head().domains.chronicle.noted).includes('"gap"'), true, 'the note left a gap');
+    assert.equal((await fold(h)).ok, false, 'digest back on, the gap still open until the next note: refused');
+    assert.equal(dir(h).folded, undefined);
+    await story(h, 1, { from: 27 });
+    assert.equal(h.sdk.query('chronicle.foldGate', {})?.gap, false, 'the next note closed the gap');
+    ok(await fold(h));
+});
+
+test('a Re-read that really changes a folded thread skips the fold whole (the guard path), and the head is valid', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    ok(await fold(h));
+    assert.equal(Object.values(dir(h).folded)[0].items.some(item => item.key === 'Q3'), true, 'Q3 folded');
+    const early = h.ctx.chat.findIndex(message => !message.is_user && message.mes.includes('+ quest Q3 '));
+    // Q3 was finished by the reply that opens Q4; the Re-read leaves Q3 open in this reply's carrier and changes nothing else that a later line reads.
+    await h.st.editMessage(early, wrap('Reply 3.', ['~ time June 3, 1200, 08:00 am', '+ quest Q3 — job 3 | giver: Sir Lothar | goal: bring 3 | difficulty: hard', '- quest Q2 — done', '~ quest Q3 | progress: begun']));
+    const again = await h.turn.reread(early);
+    ok(again);
+    assert.equal(dir(h).folded, undefined, 'the guard no longer held: the fold block was skipped whole');
+    assert.ok(Object.values(dir(h).threads).some(thread => thread.key === 'Q3'), 'Q3 is back as a live thread');
+    assert.deepEqual(validateDirector(dir(h)), []);
+    const after = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), after);
+});
+
+test('legendEarned stays true: the oldest done quest is kept besides the newest', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    ok(await fold(h));
+    const kept = h.sdk.query('director.threads', { kind: 'quest' }).filter(thread => thread.ended?.outcome === 'done').map(thread => thread.key);
+    assert.ok(kept.includes('Q1'), 'the oldest done quest is kept');
+    assert.ok(kept.includes('Q29'), 'the newest done quest is kept');
+});
+
+test('a key made again after its fold scores once; a thread folded twice keeps one record', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    ok(await fold(h));
+    const folded = Object.values(dir(h).folded)[0].items.find(item => item.key === 'Q3');
+    assert.ok(folded);
+    await h.send('Again', wrap('Again.', ['+ quest Q3 — job 3 again | giver: Sir Lothar | goal: bring 3']));
+    assert.equal(dir(h).threads[folded.id]?.status, 'active', 'the re-made quest takes the folded id');
+    assert.equal(h.sdk.query('director.folded', {}).items.filter(item => item.id === folded.id).length, 1);
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+});

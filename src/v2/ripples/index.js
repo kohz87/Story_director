@@ -335,7 +335,7 @@ export function inputsOf(state, tools, table) {
     }));
     // Finished quests and hooks the fold took still count: their records carry what is scored (tracker/fold.js).
     for (const row of foldedQuests(state?.domains?.director)) {
-        quests.push({ key: row.key, name: row.name, giver: row.giver, summary: row.summary, outcome: row.outcome, great: GREAT.has(questDifficulty(row.difficulty)), at: null });
+        quests.push({ key: row.key, name: row.name, giver: row.giver, summary: row.summary, outcome: row.outcome, great: GREAT.has(questDifficulty(row.difficulty)), at: row.at });
     }
     const events = listOf(ask(tools, 'chronicle.events', { open: false })).map(event => ({
         id: event.id, name: event.name, aka: listOf(event.aka), summary: event.summary, factions: listOf(event.factions).map(item => item?.name ?? item), open: event.open, at: event.updated ?? null,

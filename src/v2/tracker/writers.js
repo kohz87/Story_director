@@ -3,7 +3,7 @@ import { hashJson } from './hash.js';
 import { lineKey } from '../../changes.js';
 import { THREAD_KINDS } from './convert.js';
 import { replyDraft, replyTurn, turnNumber } from './domain.js';
-import { FOLDED_CEILING, FORGET, arcIdOf, foldGuardInputs, foldGuardOk, planFold } from './fold.js';
+import { FOLDED_CEILING, FORGET, newestArcId, foldGuardInputs, foldGuardOk, planFold } from './fold.js';
 import { neutralAcceptance, prepareThreadWrite, threadProjection, threadWriteEntry } from './thread-writes.js';
 import { closed, cursor, hash, map, recordId, source, text } from './thread-shape.js';
 
@@ -99,10 +99,10 @@ export function foldCommand(ctx, payload = {}) {
     }
     const director = ctx.draft('director');
     if (Object.keys(director.folded ?? {}).length >= FOLDED_CEILING) return ctx.fail('LIMITED', 'The folded records are full.');
-    const query = (name, args) => ctx.query(name, args);
     let gate = null;
     try { gate = ctx.query('chronicle.foldGate', {}); } catch { gate = null; }
-    const arc = arcIdOf(query);
+    // From state, whether or not the arc feature is on: the guard on replay reads the same slice.
+    const arc = newestArcId(ctx.read('arc'));
     const plan = planFold(director, { turn: turnNumber(director), gate, arc, after: payload?.after, keep: payload?.keep });
     if (!plan.ids.length) return ctx.fail('REFUSED', 'No finished thread is ready to fold.');
     const inputs = foldGuardInputs(director, plan.ids, arc, ctx.hash);
@@ -123,7 +123,7 @@ export function threadReplayGuard({ state, query }, { guard, recorded }) {
     if (guard?.predicate?.kind === 'director.fold') {
         const inputs = guard.predicate.inputs;
         const ok = guard.version === 2 && inputs && hashJson(inputs) === guard.inputHash
-            && foldGuardOk(state?.domains?.director, inputs, arcIdOf(query), hashJson);
+            && foldGuardOk(state?.domains?.director, inputs, newestArcId(state?.domains?.arc), hashJson);
         return ok ? { ok: true } : { ok: false, reason: 'The folded threads or the newest arc changed.' };
     }
     if (guard?.predicate?.kind !== 'threads.accept') return undefined;

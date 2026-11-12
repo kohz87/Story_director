@@ -9,8 +9,8 @@
 // Rules (DESIGN-fold, with the review's required changes):
 // * eligible: resolved, not a legacy read-only quest (`rpg`, `owed`, `ready`, `shown`), its closing stamped with a
 //   Director reply count (`track.closed.turn`), and at least `after` replies (FOLD_AFTER, 200) since it closed;
-// * kept: the newest `keep` resolved threads per kind (events: KEEP_EVENTS), the newest done quest (legendEarned reads
-//   it), and every thread of the newest arc (`arc`, its beats are still counted);
+// * kept: the newest `keep` resolved threads per kind (events: KEEP_EVENTS), the newest and the oldest done quest (legendEarned reads
+//   them), and every thread of the newest arc (`arc`, its beats are still counted);
 // * the chronicle's gate (`gate`, plain data from `chronicle.foldGate`): the digest must be on with no gap, the thread's
 //   taken and ended receipts must sit in no kept chronicle range, and it must have closed before the digest's `through`
 //   and outside any full digest day. Days are given as minute ranges (`fullMinutes`), not day numbers, so this file
@@ -40,7 +40,7 @@ const BEHIND = new Set(['agenda', 'beat', 'clock', 'secret']);
 const SCORED = new Set(['done', 'failed', 'abandoned']);
 const HIDE_ROOM = 12;
 const LIMITS = Object.freeze({ key: 120, summary: 600, names: 80 });
-const RECORD_FIELDS = ['id', 'kind', 'key', 'outcome', 'order', 'giver', 'people', 'summary', 'difficulty', 'hide', 'secret'];
+const RECORD_FIELDS = ['id', 'kind', 'key', 'outcome', 'order', 'giver', 'people', 'summary', 'difficulty', 'hide', 'secret', 'at'];
 const THREAD_ID = /^th_[0-9a-z]{8}$/;
 const BUCKET_KEY = /^\d+$/;
 
@@ -89,8 +89,9 @@ export function foldCandidates(director, { turn = turnOf(director), gate, arc = 
         seen.set(thread.kind, count + 1);
         if (count < keepFor(thread.kind, keep)) kept.add(thread.id);
     }
-    const newestDone = resolved.filter(thread => thread.kind === 'quest' && thread.ended.outcome === 'done').sort(newestFirst)[0];
-    if (newestDone) kept.add(newestDone.id);
+    // Story Block's `legendEarned` reads a done quest: keep the newest and the oldest, so a swipe of a recent finish cannot turn it off.
+    const done = resolved.filter(thread => thread.kind === 'quest' && thread.ended.outcome === 'done').sort(newestFirst);
+    for (const thread of [done[0], done[done.length - 1]]) if (thread) kept.add(thread.id);
     return resolved
         .filter(thread => !kept.has(thread.id) && !isLegacy(thread)
             && !(arc !== null && thread.track?.arc === arc)
@@ -110,6 +111,7 @@ export function foldRecord(thread, aliases = []) {
         outcome,
         order: isInt(thread.track?.order) ? thread.track.order : 0,
     };
+    if (isInt(thread.ended?.at)) record.at = thread.ended.at;
     if (fields.giver) record.giver = cut(fields.giver, LIMITS.names);
     if (fields.people) record.people = cut(fields.people, LIMITS.summary);
     if ((thread.kind === 'quest' || thread.kind === 'hook') && SCORED.has(outcome)) {
@@ -147,10 +149,13 @@ export function planFold(director, { turn, gate, arc = null, after, keep, max = 
     return { ids, items, keys, writes };
 }
 
-/** Every folded record, in tracker order (`order`, then id). */
+/** Every folded record, in tracker order (`order`, then id); a thread folded twice keeps the newest bucket's record only. */
 export function foldedItems(director) {
-    return Object.values(director?.folded ?? {}).flatMap(bucket => (Array.isArray(bucket?.items) ? bucket.items : []))
-        .sort((a, b) => (a.order - b.order) || byId(a.id, b.id));
+    const newest = new Map();
+    for (const bucket of Object.values(director?.folded ?? {}).sort((a, b) => (a?.rev ?? 0) - (b?.rev ?? 0))) {
+        for (const item of Array.isArray(bucket?.items) ? bucket.items : []) newest.set(item.id, item);
+    }
+    return [...newest.values()].sort((a, b) => (a.order - b.order) || byId(a.id, b.id));
 }
 
 /**
@@ -175,27 +180,31 @@ export function foldedHidden(director) {
     return { behind, words };
 }
 
-/** Folded quests and hooks as Ripples reads live ones (`key`, `giver`, `summary`, `outcome` when scored, `difficulty` raw). */
+/**
+ * Folded quests and hooks as Ripples reads live ones (`key`, `giver`, `summary`, `outcome` when scored, `difficulty` raw, `at`). A record
+ * whose id is a live thread again (the key was made again) is left out, as a reopened quest stops scoring its old outcome without a fold.
+ */
 export function foldedQuests(director) {
     return foldedItems(director)
-        .filter(item => item.kind === 'quest' || item.kind === 'hook')
+        .filter(item => (item.kind === 'quest' || item.kind === 'hook') && !director?.threads?.[item.id])
         .map(item => ({
             key: item.key, name: item.key, giver: item.giver, summary: item.summary,
-            outcome: SCORED.has(item.outcome) ? item.outcome : null, difficulty: item.difficulty, order: item.order,
+            outcome: SCORED.has(item.outcome) ? item.outcome : null, difficulty: item.difficulty, order: item.order, at: item.at ?? null,
         }));
 }
 
-/** The newest arc's id through a query function (`director.arc`), or null (no arc, no arc part, a failing query). */
-export function arcIdOf(query) {
-    try {
-        return (typeof query === 'function' ? query('director.arc', {}) : null)?.current?.id ?? null;
-    } catch {
-        return null;
-    }
+/**
+ * The newest arc's id read from the arc part's state slice (never through the feature-gated `director.arc`, which a replay guard may not
+ * ask): the last of its arcs by rev, then id (the order the arc part's `currentArc` uses), or null.
+ */
+export function newestArcId(arcSlice) {
+    const arcs = isRecord(arcSlice?.arcs) ? Object.values(arcSlice.arcs).filter(isRecord) : [];
+    arcs.sort((a, b) => (a.rev ?? 0) - (b.rev ?? 0) || byId(a.id, b.id));
+    return arcs.length ? (arcs[arcs.length - 1].id ?? null) : null;
 }
 
 /**
- * The hook's cheap pre-check (the handler plans again): `{ type: FOLD, payload: {} }` when at least FOLD_MIN threads are old
+ * The hook's pre-check (the handler plans again, the same way): `{ type: FOLD, payload: {} }` when at least FOLD_MIN threads are old
  * enough and outside the keeps, the digest gate is open and the bucket room is not used up; else null.
  */
 export function foldHook(view) {
@@ -209,7 +218,8 @@ export function foldHook(view) {
         gate = null;
     }
     if (gate?.on !== true) return null;
-    return foldCandidates(director, { gate, arc: arcIdOf(view.query) }).length >= FOLD_MIN ? { type: FOLD, payload: {} } : null;
+    // The same plan the handler makes (same turn, gate and arc), so a cue is only sent when the handler has threads to take.
+    return planFold(director, { gate, arc: newestArcId(view.state?.domains?.arc) }).ids.length >= FOLD_MIN ? { type: FOLD, payload: {} } : null;
 }
 
 /** The guard inputs for a fold: one hash over the folded threads' public projections in id order, and the newest arc. */
@@ -242,6 +252,7 @@ function recordErrors(at, item) {
     if (!THREAD_KINDS.includes(item.kind)) errors.push(`${at} has an unknown kind.`);
     if (!OUTCOMES.includes(item.outcome)) errors.push(`${at} has an unknown outcome.`);
     if (!isInt(item.order)) errors.push(`${at}.order must be a whole number.`);
+    if (item.at !== undefined && !isInt(item.at)) errors.push(`${at}.at must be a whole number.`);
     const text = (value, max) => typeof value === 'string' && [...value].length <= max;
     if (!text(item.key, LIMITS.key) || item.key === '') errors.push(`${at}.key is not text.`);
     if (item.giver !== undefined && !text(item.giver, LIMITS.names)) errors.push(`${at}.giver is not text.`);
