@@ -45,6 +45,16 @@ export const INITIATIVE_STATIC = "Initiative: whoever the note names under Initi
 
 const isInt = value => Number.isSafeInteger(value);
 
+// {{user}}'s name, read from the host (index.js sets it from sdk.substitute): the player is never who takes the initiative.
+let personaReader = () => '';
+export function setPersonaReader(reader) { personaReader = typeof reader === 'function' ? reader : () => ''; }
+function personaKey(given) {
+    let name = given;
+    if (typeof name !== 'string') { try { name = personaReader(); } catch { name = ''; } }
+    const text = typeof name === 'string' ? name.trim() : '';
+    return text === '{{user}}' ? '' : lineKey(cutPoints(text, 80));
+}
+
 /** A number in [0, 1) from `text` (FNV-1a, 32 bits): the same text always gives the same number. */
 export function hashUnit(text) {
     let hash = 0x811c9dc5;
@@ -115,7 +125,7 @@ function nearbyPeople(query, scene) {
  * Who could take the initiative now: `[{ key, name, weight, urgency, topic, dueNow, nearby }]`, by key.
  * `topic`: the key of their most urgent thread when {{user}} knows of it, else ''.
  */
-export function initiativeCandidates({ director: given, state = null, query = null, settings = {}, scene = null } = {}) {
+export function initiativeCandidates({ director: given, state = null, query = null, settings = {}, scene = null, persona = null } = {}) {
     if (!given) return [];
     // A fired beat and a dead person's own threads give nobody the first step (quiet.js).
     const director = dropThreads(given, quietThreads(given, { state, query }));
@@ -129,7 +139,10 @@ export function initiativeCandidates({ director: given, state = null, query = nu
     const open = records.map((record, index) => ({ record, thread: threads[index], index }))
         .filter(({ record }) => record.status === 'active' && KINDS.has(record.kind));
     if (!open.length) return [];
-    const people = [...seen.people, ...nearbyPeople(query, seen)];
+    // The player's persona is in the scene's people but never takes the initiative (matched by the same line keys as the people).
+    const me = personaKey(persona);
+    const people = [...seen.people, ...nearbyPeople(query, seen)]
+        .filter(person => !me || (person.key !== me && !(person.names ?? []).some(word => lineKey(word) === me)));
     const out = [];
     for (const person of people) {
         let best = null;
