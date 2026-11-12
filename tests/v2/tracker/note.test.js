@@ -49,6 +49,22 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     assert.match(GRAMMAR.hook, /done or failed: - it/);
 });
 
+test('every thread kind has one concrete example line in the static grammar, and says when to write it (flash never wrote them)', () => {
+    const agenda = part.kinds.agenda.grammar({ fights: true });
+    const alone = part.kinds.agenda.grammar({ fights: false });
+    for (const text of [agenda, alone]) {
+        assert.match(text, /Write one whenever the story sets something moving, e\.g\./);
+        for (const kind of ['agenda', 'event', 'clock', 'beat']) assert.match(text, new RegExp(`\\+ ${kind} [A-Z][^;]* — `), kind);
+    }
+    const hook = part.kinds.hook.grammar;
+    assert.match(hook, /Write a hook whenever someone mentions a job, rumour or trouble \{\{user\}\} could follow, e\.g\. \+ hook Missing ferryman — /);
+    assert.match(hook, /once \{\{user\}\} agrees: \+ quest Cellar rats — .*\| giver: Hanna \| reward: 20 copper/);
+    // One line each (no newline), the same bytes for every reply (no state in them), and small: about 600 characters in all.
+    assert.ok(!agenda.includes('\n') && !hook.includes('\n'));
+    assert.ok(agenda.length + hook.length < 1200, `${agenda.length + hook.length}`);
+    assert.equal(part.kinds.agenda.grammar({ fights: true }), agenda);
+});
+
 test('each kind has one grammar line for the change instruction, a family on its carrier', () => {
     assert.deepEqual(Object.keys(part.kinds), ['agenda', 'event', 'hook', 'quest', 'clock', 'beat', 'secret', 'time']);
     // The lean diet: agenda carries agenda|event|clock|beat|secret, hook carries hook|quest; the others have no line of their own (the host leaves them out).

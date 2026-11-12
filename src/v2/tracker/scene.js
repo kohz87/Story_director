@@ -124,14 +124,34 @@ function placeTied(record, here) {
 /** The text a thread names people in: its key, giver, people, now and summary. */
 const peopleText = record => [record.key, record.fields?.giver, record.fields?.people, record.fields?.now, record.fields?.desc].map(flat).join('\n');
 
-/** Whether `record` names `person` (any name they go by), or a name it gives (key, giver, people) names them. */
-export function namesPerson(record, person, { strict = false } = {}) {
+// Plurals folded ("wardens" -> "warden") so "South Gate wardens" and a role "Gate warden" meet by the same whole-word rule.
+const foldPlural = value => normalize(value).split(' ').map(word => (word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word)).join(' ');
+
+/** The group words of a person: their dossier's role and faction / group / affiliation (also as a custom field). */
+function groupTags(person) {
+    const dossier = person.dossier ?? {};
+    const custom = isRecord(dossier.customFields) ? dossier.customFields : {};
+    const tags = [dossier.role, ...['faction', 'group', 'affiliation'].flatMap(name => [dossier[name], custom[name]])];
+    return tags.flatMap(tag => flat(tag).split(',')).map(foldPlural).filter(word => word.length >= MIN_NAME);
+}
+
+/**
+ * Whether `record` names `person` (any name they go by), or a name it gives (key, giver, people) names them.
+ * `group`: a group the record's giver or people name ("South Gate wardens") also names a member of it, a person whose
+ * role or faction tag holds the group's words, or the other way round (the same whole-word rule, plurals folded).
+ */
+export function namesPerson(record, person, { strict = false, group = false } = {}) {
     const fields = record.fields ?? {};
     const own = [record.key, ...String(fields.giver ?? '').split(','), ...String(fields.people ?? '').split(',')].map(flat).filter(word => word.length >= MIN_NAME);
     const text = strict ? own.join('\n') : peopleText(record);
     if (person.names.some(name => names(text, name))) return true;
     // "Geva" written for "Senior Listener Geva" present, and the other way round.
-    return own.some(word => person.names.some(name => names(name, word)));
+    if (own.some(word => person.names.some(name => names(name, word)))) return true;
+    if (!group) return false;
+    const tags = groupTags(person);
+    // Only a giver or the people named, not the thread's own key: a key such as "Merchant's ring" names no group.
+    const named = [...String(fields.giver ?? '').split(','), ...String(fields.people ?? '').split(',')].map(foldPlural).filter(word => word.length >= MIN_NAME);
+    return named.some(word => tags.some(tag => names(word, tag) || names(tag, word)));
 }
 
 /** Whether a record's `on:`/`due:`/`arrive:` falls within `days` story days of `now` (or is past). */

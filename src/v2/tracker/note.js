@@ -71,12 +71,12 @@ export const STATIC_TEXT = staticText();
  * `agenda` carries the five world-building threads, `hook` the hook and the quest, `time` itself.
  */
 export const GRAMMAR = Object.freeze({
-    agenda: '+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); a secret is what must not be revealed yet',
+    agenda: '+ agenda|event|clock|beat|secret Name — summary | label: value. Labels: agenda now (where), then (what next), on, leg, arrive; event then, on; clock due, shown: none|sign|warning; beat on, reach (what it changes for {{user}}), encounter (the foes, for a fight); a secret is what must not be revealed yet. Write one whenever the story sets something moving, e.g. + agenda Dara\'s errand — fetches ore for the smith | then: back at dusk; + event Harvest fair — the square fills with stalls; + clock Rising flood — the river keeps climbing | shown: sign; + beat Rival\'s offer — the rival wants an answer | reach: {{user}} must choose',
     event: '',
     clock: '',
     beat: '',
     secret: '',
-    hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type',
+    hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type. Write a hook whenever someone mentions a job, rumour or trouble {{user}} could follow, e.g. + hook Missing ferryman — Nell says he vanished at the narrows | giver: Nell | goal: ask at the docks; once {{user}} agrees: + quest Cellar rats — clear the inn cellar | giver: Hanna | reward: 20 copper',
     quest: '',
     time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) or ! time +2h (time passes), never both for one stretch',
 });
