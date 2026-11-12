@@ -137,14 +137,13 @@ export function samePlace(a, b) {
     return one === two || one.includes(two) || two.includes(one);
 }
 
-/** The place and region the party is in: `{ place, region }` (the atlas's, else Story Block's scene), '' for none. */
+/** The place and region the party is in: `{ place, region, town }` (the atlas's, else Story Block's scene), '' for none. `town`: the town the atlas has the place in (its place line "Town · Spot"). */
 export function partyPlace(query, state) {
     const atlas = ask(query, 'atlas.here', {}, null);
     const scene = ask(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
-    return {
-        place: cutPoints(flat(atlas?.name) || flat(scene?.name), MAX_PLACE),
-        region: cutPoints(flat(atlas?.region) || flat(scene?.region), MAX_PLACE),
-    };
+    const place = cutPoints(flat(atlas?.name) || flat(scene?.name), MAX_PLACE);
+    const town = typeof atlas?.line === 'string' && atlas.line.includes(' · ') ? cutPoints(flat(atlas.line.split(' · ')[0]), MAX_PLACE) : '';
+    return { place, region: cutPoints(flat(atlas?.region) || flat(scene?.region), MAX_PLACE), town: town && normalize(town) !== normalize(place) ? town : '' };
 }
 
 /** Whether someone at `where` is at the party's place (or in its region). */
@@ -164,6 +163,12 @@ export function pinnedKeys(query) {
 export const travelOf = query => (from, to) => {
     const trip = ask(query, 'atlas.travel', { from, to }, null);
     return Number.isFinite(trip?.days) ? trip.days : null;
+};
+
+/** The same by known roads only (the reach rule's, world.js `reachDays`): a trip the atlas estimated from map coordinates (`source: 'map'`) is null. */
+export const roadsOf = query => (from, to) => {
+    const trip = ask(query, 'atlas.travel', { from, to }, null);
+    return trip?.source === 'routes' && Number.isFinite(trip.days) ? trip.days : null;
 };
 
 /** What can really link a goal to the party (world.js `linkOf`): the open threads (a secret never counts) and the names of what the party carries. */

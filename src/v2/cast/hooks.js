@@ -15,12 +15,12 @@
 import { applyAdvance, applyJourney, applyMeet, applyRumor, applySync, planSync, syncEmpty, syncPayload } from './apply.js';
 import { sha256 } from '../hash.js';
 import { cueLines, pinned } from './note.js';
-import { cutPoints, isInt, keysOfPerson } from './domain.js';
-import { castOf, fightOn, foesLeftover, linksOf, packName, pulseResults, partyPlace, presentKeys, seenKeys, travelOf, ask } from './entries.js';
+import { cutPoints, isInt, keysOfPerson, slotOf } from './domain.js';
+import { castOf, fightOn, foesLeftover, linksOf, packName, pulseResults, partyPlace, presentKeys, roadsOf, seenKeys, ask } from './entries.js';
 import { MAX_PEOPLE_ASKED, MAX_SOUGHT, MAX_TOKENS, castRequest, readCast, touches } from './plan.js';
 import { kindWords } from './sought.js';
 import { CALL_MS, FEATURE, HOLD_MS, castOn, settingsOf } from './settings.js';
-import { askedAbout, batchKey, chooseMeetings, chooseRumor, dueMove, fingerprint, judgeKey, metInTheStory, moveFits, movable, paceOf, placedOf, refsOf, seekable, sortComes, unshown } from './world.js';
+import { askedAbout, batchKey, chooseMeetings, chooseRumor, dueMove, fingerprint, judgeKey, metInTheStory, moveReach, movable, paceOf, placedOf, refsOf, seekable, sortComes, unshown } from './world.js';
 
 const REPLY_TYPES = new Set(['normal', 'regenerate', 'swipe']);
 const normalizeType = type => String(type ?? 'normal').toLowerCase();
@@ -299,10 +299,16 @@ export function createCastHooks({ plans }) {
                     const allowedDeaths = new Set(list.filter(item => item.mayDie).map(item => item.key));
                     const died = result.died.filter(item => allowedDeaths.has(item.key)).map(item => ({ key: item.key }));
                     // A place the planner names that is one of the pack's goes by the pack's own name for it.
-                    // A move the trip does not fit in the time since they were placed (or onto the party's place, with no route known) is left out.
-                    const reach = { party: frame.party, to: due.to, travel: travelOf(frame.query), placed: placedOf(world) };
-                    const moves = result.moves.map(move => ({ ...move, where: frame.cast.places.match(move.where) ?? move.where }))
-                        .filter(move => !world.people[move.key] || moveFits(world.people[move.key], move.where, reach));
+                    // A move the road trip does not fit in the time since they were placed, or since they left their last known place, is left out,
+                    // as is one with no road towards the party's place, town or region; one with no road elsewhere keeps that last known place (`from`).
+                    // Someone on a journey towards the party is not moved (their landing time is the trip's from where they set out).
+                    const reach = { party: frame.party, to: due.to, travel: roadsOf(frame.query), placed: placedOf(world) };
+                    const moves = result.moves.map(move => ({ ...move, where: frame.cast.places.match(move.where) ?? move.where })).flatMap(move => {
+                        const person = world.people[move.key];
+                        if (!person) return [move];
+                        const fit = slotOf(person.coming) ? null : moveReach(person, move.where, reach);
+                        return fit ? [fit.from ? { ...move, from: fit.from } : move] : [];
+                    });
                     const payload = { from: due.from, to: due.to, ...(at !== null ? { at } : {}), ...(moves.length ? { moves } : {}), ...(died.length ? { died } : {}) };
                     commands.push({ type: 'cast.advance', payload });
                     applyAdvance(world, payload, { rev });
@@ -324,14 +330,15 @@ export function createCastHooks({ plans }) {
             const sought = await soughtFor(view, frame, world, print, normalizeType(info?.type), Math.max(0, HOLD_MS - (Date.now() - startedAt)));
             // (The hook as a whole has HOOK_MS: the planner's batch and the sought answer share the one wait, so a slow connection cannot time the step out.)
             // A goal pulls only with a real link and only from within reach; from far it is a journey (landing after the real trip), not an arrival.
-            const sorted = sortComes(world, frame.cast, { comes, party: frame.party, now: frame.now, travel: travelOf(frame.query), links: linksOf(frame.query, view?.state), present: frame.present, pinned: frame.pinned });
+            const roads = roadsOf(frame.query);
+            const sorted = sortComes(world, frame.cast, { comes, party: frame.party, now: frame.now, travel: roads, links: linksOf(frame.query, view?.state), present: frame.present, pinned: frame.pinned });
             if (sorted.start.length || sorted.stop.length || sorted.land.length) {
                 const payload = { ...(sorted.start.length ? { start: sorted.start } : {}), ...(sorted.stop.length ? { stop: sorted.stop } : {}), ...(sorted.land.length ? { land: sorted.land } : {}) };
                 commands.push({ type: 'cast.journey', payload });
                 applyJourney(world, payload, { now: frame.now, rev });
             }
             const picks = chooseMeetings(world, frame.cast, {
-                now: frame.now, party: frame.party, comes: sorted.meet, sought, fight, pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned,
+                now: frame.now, party: frame.party, comes: sorted.meet, sought, fight, pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned, travel: roads,
             });
             // Someone sought who is elsewhere is heard of, with no name (no meeting in this reply to share the cue with).
             const rumor = chooseRumor(world, frame.cast, { party: frame.party, sought, fight, met: picks, present: frame.present, pinned: frame.pinned });

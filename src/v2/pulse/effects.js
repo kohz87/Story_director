@@ -29,7 +29,7 @@
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { slotValue, toSlot } from '../slot.js';
-import { castOf, fightOn, foesLeftover, foesSignature, partyPlace, pinnedKeys, presentKeys, travelOf } from '../cast/entries.js';
+import { castOf, fightOn, foesLeftover, foesSignature, partyPlace, pinnedKeys, presentKeys, roadsOf, travelOf } from '../cast/entries.js';
 import { chanceCandidates } from '../cast/world.js';
 import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
@@ -281,7 +281,7 @@ function offscreenAgendas(director, scene) {
 }
 
 // The roll's entry for this reply: the kind from the table (stepping past what cannot happen), its effect applied, its line.
-function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = false }) {
+function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = 0 }) {
     const here = ask(query, 'atlas.here', {}, null);
     const place = cutPoints(here?.name || scene.place, NAME_MAX);
     const group = placeGroupOf(here?.placeKind ?? here?.kind ?? '');
@@ -289,8 +289,8 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const calendar = calendarFrom(query);
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
-    // Reach (every new reply): only people already at the party's place (the place-meeting rule) can cross its path by chance.
-    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: travelOf(query), present: presentKeys(query, state), pinned: pinnedKeys(query) }) : null;
+    // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2 (new steps): road trips only, the party's place or town, from the last known place too (cast/world.js).
+    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: reach === 2 ? roadsOf(query) : travelOf(query), strict: reach === 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }) : null;
     const unmet = Object.values(isRecord(people) ? people : {}).filter(person => isRecord(person) && person.alive !== false && !person.met);
     const open = ask(query, 'chronicle.events', { open: true }, []);
     // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
@@ -385,7 +385,7 @@ export function pulseCommand(ctx, payload = {}) {
     });
     // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
     if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
-    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: payload?.reach === 1 });
+    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2].includes(payload?.reach) ? payload.reach : 0 });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
@@ -408,7 +408,7 @@ export function pulseHook(view, info = {}) {
     const length = view?.chat?.length;
     if (info?.commit === false || !['normal', 'swipe', 'regenerate'].includes(type) || !isInt(length)) return undefined;
     // The chat holds the reply being swiped, so the reply's place is one below its length.
-    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 1 } }] };
+    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 2 } }] };
 }
 
 // A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.

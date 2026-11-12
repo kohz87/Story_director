@@ -156,6 +156,9 @@ export function applyAdvance(cast, payload, env) {
         if (move.where) person.where = cutPoints(move.where, MAX_PLACE);
         if (move.doing) person.doing = cutWords(move.doing, MAX_DOING);
         person.since = to;
+        // The last place the atlas had a road for (a move with no road keeps it; a move with one ends it). Old payloads have no `from`.
+        if (move.where && isRecord(move.from)) person.known = [{ where: cutPoints(move.from.where, MAX_PLACE), since: isInt(move.from.since) ? move.from.since : null }];
+        else if (move.where && person.known) person.known = null;
         if (isMet(person)) {
             // A slot, written whole (../slot.js): a later reply never changes inside what an earlier one wrote.
             person.heard = [{ on: to, text: cutWords(move.doing || move.where, MAX_DOING) }];
@@ -276,6 +279,7 @@ export function applyJourney(cast, payload, env) {
         person.doing = cutWords(item.doing || person.doing, MAX_DOING);
         person.since = trip.arrive;
         person.coming = null;
+        if (person.known) person.known = null;
         done.landed += 1;
     }
     for (const item of payload.start ?? []) {

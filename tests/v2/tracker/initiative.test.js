@@ -310,8 +310,8 @@ test('pulse: skipped (and the reason recorded) in a fight, in a quiet scene, wit
 test('pulse: the hook asks for one step per reply written; a swipe is one below the chat length; a Continue, off and mode off ask for none', () => {
     const state = clocked();
     const view = (extra = {}) => ({ state, settings: {}, chat: { length: 5, lastUser: '' }, ...extra });
-    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 1 } }] });
-    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 1 } }] });
+    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 2 } }] });
+    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 2 } }] });
     assert.ok(pulseHook(view(), { type: 'regenerate' }));
     assert.equal(pulseHook(view(), { type: 'continue', commit: false }), undefined);
     assert.equal(pulseHook(view({ feature: id => id !== 'story-director.pulse' })), undefined);
