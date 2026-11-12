@@ -55,6 +55,8 @@ const unfolded = (host, lines) => {
     const keys = Object.values(host.head().domains.director.folded ?? {}).flatMap(bucket => bucket.items.map(item => item.key));
     return keys.length ? lines.filter(line => !keys.some(key => line.includes(key))) : lines;
 };
+// Folding needs digests whose day entries are gone (digest.js keeps them for the whole days only): from EXTRAS_FROM on, even seeds keep few whole days.
+const foldSeed = seed => seed >= 4 && seed % 2 === 0;
 const SEEDS = seedsOf([1, 2, 3, 4, 5, 6, 7, 8, 24, 25, 26, 27, 28, 29, 30, 31, 32, 108]);
 // Seeds from EXTRAS_FROM carry the last days' lines (dayLines, the quiet switch); seeds 1-3 keep the stories the aggregate checks below were set on.
 const EXTRAS_FROM = 4;
@@ -435,7 +437,7 @@ for (const seed of SEEDS) {
         let host = null;
         const delta = Object.fromEntries(KEY_BASE.map(name => [name, {}]));
         const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), callModel: request => host.sdk.callModel(request), chat: () => host.ctx.chat } });
-        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc, rs) }), settings: { features: { 'story-director.names': true }, modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5) } } } });
+        host = await createHost({ modules: [fakeFightRunner(), fakeDelta(delta), module], callModel: createFakeModel([], { fallback: castAnswer(rc, rs) }), settings: { features: { 'story-director.names': true }, modules: { 'story-director': { 'cast.faces': 'day2', 'cast.unmetDie': rc.chance(0.5), ...(foldSeed(seed) ? { 'chronicle.digestDays': 2, 'chronicle.digestKeep': 4 } : {}) } } } });
         // The cast is a real pack, installed (and switched on or off) as the fuzz edits it.
         const installCast = async () => {
             const pack = { id: 'ersveil', version: source.version, name: 'Ersveil', requires: { storyBlock: '^2' }, ripples: RIPPLES, content: { cast: source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) })) } };
@@ -473,7 +475,7 @@ for (const seed of SEEDS) {
                     swipes += 1;
                     await host.swipe(replyText);
                 }
-                if (seed >= EXTRAS_FROM && rf.chance(0.3) && (await foldNow(host)).ok) folds += 1;
+                if (foldSeed(seed) && rf.chance(0.3) && (await foldNow(host)).ok) folds += 1;
                 if (day.passer && !wrenMet && host.head().domains.cast.people['ersveil:wren']?.met) { passersMet += 1; wrenMet = true; }
                 if (!host.head().domains.cast.people['ersveil:wren']?.met) wrenMet = false;
                 if (host.head().domains.cast.people['ersveil:ylva']?.met?.why === 'sought') soughtMeetings += 1;
@@ -604,7 +606,7 @@ for (const seed of SEEDS) {
             t.diagnostic(`seed ${seed}: key people receipts ${keyDone.length} (away ${keyDone.filter(text => / is away/.test(text)).length}, back ${keyDone.filter(text => / is back/.test(text)).length}, steps ${keyDone.filter(text => /^Key person: \w+, /.test(text)).length}, died ${keyDone.filter(text => /died/.test(text)).length}, archived in Delta ${keyDone.filter(text => /archived in NPC State Delta/.test(text)).length}), lines told ${Object.values(host.head().domains.keypeople.notes).filter(note => note.key !== undefined).length}, pinned now ${Object.keys(host.head().domains.keypeople.pins).length}`);
             t.diagnostic(`seed ${seed}: faction lines ${factionLines}, quiet flips ${quietFlips}, passers-by ${passersBy}, pulse steps ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').length}, passers met ${passersMet}, swipes ${swipes}, pulse kinds ${JSON.stringify(Object.fromEntries(host.sdk.receipts().filter(entry => entry.receipt.type === 'director.pulse').map(entry => entry.receipt.data?.kind).reduce((map, kind) => map.set(kind, (map.get(kind) ?? 0) + 1), new Map())))}, rumour events ${Object.values(host.head().domains.chronicle.events).filter(event => event.rumour !== undefined).length}, new factions ${host.sdk.receipts().filter(entry => /New factions?:/.test(entry.receipt.summary ?? '')).length}, places with a parent ${Object.values(host.head().domains.atlas?.places ?? {}).filter(place => place.parent).length}, sway ${JSON.stringify((host.sdk.query('ripples.sway') ?? []).map(power => power.sway))}`);
             assert.ok(!source.enabled || host.sdk.query('ripples.sway')?.length === 2, `seed ${seed}: the pack's ripples table is read`);
-            t.diagnostic(`seed ${seed}: folds ${folds}, folded records ${Object.values(host.head().domains.director.folded ?? {}).reduce((sum, bucket) => sum + bucket.items.length, 0)}`);
+            t.diagnostic(`seed ${seed}: folds ${folds}, ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.fold').length} fold receipts left, folded records ${Object.values(host.head().domains.director.folded ?? {}).reduce((sum, bucket) => sum + bucket.items.length, 0)}`);
             t.diagnostic(`seed ${seed}: trips set out ${tripsMade}, delayed ${summaries.filter(text => /is delayed/.test(text)).length}, stopped ${summaries.filter(text => /^The trip to .* ends/.test(text)).length}`);
             t.diagnostic(`seed ${seed}: pack events that fired: ${[...new Set(host.sdk.receipts().filter(entry => entry.receipt.type === 'events.fire').map(entry => entry.receipt.data?.event?.split('/')[1]))].join(', ')}`);
             undatedLapsed += host.sdk.receipts().filter(entry => entry.receipt.type === 'time.settle')

@@ -153,7 +153,7 @@ for (const seed of SEEDS) {
                 assert.deepEqual(validatorErrors(host), [], where);
             }
             assert.ok(edits >= 3 && rewinds >= 1, `seed ${seed}: ${edits} edits, ${rewinds} of them back`);
-            t.diagnostic(`seed ${seed}: clock edits ${edits}, back ${rewinds}`);
+            t.diagnostic(`seed ${seed}: clock edits ${edits}, back ${rewinds}, ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.fold').length} fold receipts left`);
             await host.send('And then?', said('Quiet.', ['! time +1d']));
             await host.send('Rest.', 'Quiet.');
             assert.deepEqual(validatorErrors(host), [], `seed ${seed}: the head state`);

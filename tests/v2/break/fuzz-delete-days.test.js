@@ -222,7 +222,7 @@ for (const seed of SEEDS) {
             }
             if (whole) assert.ok(gone > 0, `seed ${seed}: no delete took a written day away`);
             digestsFollow(host, `seed ${seed}: the head`);
-            t.diagnostic(`seed ${seed}: ${insideDeletes} deletes inside a digested day`);
+            t.diagnostic(`seed ${seed}: ${insideDeletes} deletes inside a digested day, ${host.sdk.receipts().filter(entry => entry.receipt.type === 'director.fold').length} fold receipts left`);
             await host.send('And then?', said('Quiet.', ['! time +1d']));
             await host.send('Rest.', 'Quiet.');
             assert.ok(host.sdk.receipts().some(entry => entry.receipt.type === DIGEST), `seed ${seed}: days were written`);
