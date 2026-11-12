@@ -41,13 +41,16 @@ export function mergeHook(name, entries, shared) {
         if (name === 'beforeGenerate' || name === 'afterCapture') {
             const lines = [];
             const commands = [];
+            const problems = [];
             for (const [ns, fn] of entries) {
                 if (rest[0]?.always === true && fn?.always !== true) continue;
                 const out = await fn(partView_(ns, view), ...rest);
                 lines.push(...cueLinesOf(Array.isArray(out) ? out : out?.lines));
                 if (Array.isArray(out?.commands)) commands.push(...out.commands);
+                // A part's problems (`{ code, message }`) go on to Story Block's Problems list.
+                if (Array.isArray(out?.problems)) problems.push(...out.problems);
             }
-            return { lines, commands };
+            return problems.length ? { lines, commands, problems } : { lines, commands };
         }
         let answer;
         for (const [ns, fn] of entries) {

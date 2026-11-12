@@ -214,3 +214,54 @@ test('a plan not asked for after the last reply (a reload): a named connection i
         }
     }
 });
+
+test('a planner call that fails in transport is made once more: 500 then ok applies the plan, nobody is lost', async t => {
+    quiet(t);
+    const model = createFakeModel([new Error('Internal Server Error'), '> cast sera | the fight at the weir reached her']);
+    const host = await started({ source: castSource([FENNA, SERA]), model });
+    try {
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await settle();
+        assert.equal(model.calls.length, 2, 'one extra call, only after the failure');
+        await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
+        assert.equal(model.calls.length, 2, 'the plan is kept, not asked again');
+        assert.deepEqual([people(host)['ersveil:sera'].met.why, people(host)['ersveil:sera'].met.reason], ['goal', 'the fight at the weir reached her.']);
+        assert.equal(host.turn.problems().some(item => item.code === 'CAST_PLAN_FAILED'), false);
+    } finally {
+        host.close();
+    }
+});
+
+test('a planner call that fails twice: nobody is drawn in and the reply carries a "cast planner failed" problem; a batch failure still counts the day', async t => {
+    quiet(t);
+    for (const [name, send, next] of [['judge', ['Fight.', said('You beat the man you fought at the weir, and the weir runs red.')], ['Rest.', said('Sera rests by the man you fought at the weir.')]], ['batch', ['Sleep.', said('Morning.', DAY2)], ['Next.', said('Quiet.')]]]) {
+        const model = createFakeModel([new Error('Internal Server Error'), new Error('Internal Server Error')]);
+        const host = await started({ source: castSource([FENNA, SERA]), model });
+        try {
+            await host.send(...send);
+            await settle();
+            assert.equal(model.calls.length, 2, `${name}: asked, then once more, no further`);
+            await host.send(...next);
+            assert.equal(model.calls.length, 2, `${name}: not asked a third time`);
+            assert.equal(people(host)['ersveil:sera'].met, null, `${name}: nobody drawn in`);
+            assert.equal(host.turn.problems().filter(item => item.message === 'cast planner failed for this reply').length >= 1, true, `${name}: a visible problem`);
+        } finally {
+            host.close();
+        }
+    }
+});
+
+test('an answer that does not parse is no transport failure: one call, no retry, no problem', async t => {
+    quiet(t);
+    const model = createFakeModel(['I cannot help with that.']);
+    const host = await started({ source: castSource([FENNA, SERA]), model });
+    try {
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await settle();
+        await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
+        assert.equal(model.calls.length, 1);
+        assert.equal(host.turn.problems().some(item => item.code === 'CAST_PLAN_FAILED'), false);
+    } finally {
+        host.close();
+    }
+});
