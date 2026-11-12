@@ -6,8 +6,9 @@
 // person and to bring them in are read, cut to size; the entry itself goes to other modules whole, and only after the meeting.
 
 import { hashJson } from '../hash.js';
-import { DAY, MAX_ALIASES, MAX_NAME, MAX_PEOPLE, MAX_PLACE, cutPoints, flat, isInt, isRecord, keyOf, personKey } from './domain.js';
+import { DAY, MAX_ALIASES, MAX_NAME, MAX_PEOPLE, MAX_PLACE, cutPoints, flat, isInt, isRecord, keyOf, keysOfPerson, personKey } from './domain.js';
 import { slotValue } from '../slot.js';
+import { orderedThreads } from '../tracker/convert.js';
 
 const MIN_NAME = 3;
 
@@ -148,6 +149,31 @@ export function partyPlace(query, state) {
 
 /** Whether someone at `where` is at the party's place (or in its region). */
 export const atParty = (where, party) => Boolean(where) && (samePlace(where, party?.place) || samePlace(where, party?.region));
+
+/** The keys of the people the reader pinned as Key people (never moved, never met by the cast). */
+export function pinnedKeys(query) {
+    const pinned = new Set();
+    const list = ask(query, 'director.keyPeople', {}, null);
+    for (const entry of Array.isArray(list) ? list : []) {
+        if (entry && typeof entry === 'object' && !entry.removed) for (const key of keysOfPerson(entry)) pinned.add(key);
+    }
+    return pinned;
+}
+
+/** `(from, to)` → days of travel by the atlas's trip (`atlas.travel`), or null when nothing says. */
+export const travelOf = query => (from, to) => {
+    const trip = ask(query, 'atlas.travel', { from, to }, null);
+    return Number.isFinite(trip?.days) ? trip.days : null;
+};
+
+/** What can really link a goal to the party (world.js `linkOf`): the open threads (a secret never counts) and the names of what the party carries. */
+export function linksOf(query, state) {
+    const rows = ask(query, 'inventory.items', { owner: 'party' }, []);
+    return {
+        threads: orderedThreads(state?.domains?.director).filter(thread => thread.status === 'active' && thread.kind !== 'secret').map(thread => ({ key: thread.key, fields: thread.fields ?? {} })),
+        items: (Array.isArray(rows) ? rows : []).map(row => flat(row?.name)).filter(Boolean),
+    };
+}
 
 /** The names of the people in the scene now (Story Block's present list, NPC State Delta's), as keys. */
 export function presentKeys(query, state) {

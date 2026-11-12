@@ -84,6 +84,8 @@ export function viewQuery(state, _args, tools) {
     }
     const near = nearCount(slice, cast, { party, present, pinned });
     const minutes = state?.domains?.director?.time?.minutes;
+    // Journeys towards the party (no names: unmet cast stays hidden): how many, and the soonest landing as "in about n days".
+    const trips = peopleOf(slice).filter(person => !isMet(person) && person.alive !== false).map(person => slotOf(person.coming)).filter(Boolean);
     const day = timeOfDay(isInt(minutes) ? minutes : null);
     const packs = [...new Set(peopleOf(slice).map(person => person.pack))];
     const packLabel = packs.length === 1 ? `${cast.packs?.[packs[0]]?.name || packs[0]} cast` : 'cast';
@@ -93,6 +95,7 @@ export function viewQuery(state, _args, tools) {
     return deepFreeze({
         on: true, total, met, near, heading: [party.place, day].filter(Boolean).join(' · '),
         place: party.place || '', day: day || '', dayText: day ? (party.place ? `· ${day}` : day) : '', packLabel,
+        coming: trips.length, hasComing: trips.length > 0, comingText: trips.length ? `${trips.length === 1 ? 'Someone is' : `${trips.length} people are`} on the road towards ${party.place || 'you'}, due in about ${Math.max(1, Math.round((Math.min(...trips.map(trip => trip.arrive)) - (isInt(minutes) ? minutes : 0)) / 1440))} day(s).` : '',
         hasNear: near > 0, hasMet: metList.length > 0, metList,
         note: 'Unmet cast stays hidden. Anyone else you meet is made up by the story as today; if they matter, NPC State Delta keeps a dossier. No meetings during a fight.',
     });

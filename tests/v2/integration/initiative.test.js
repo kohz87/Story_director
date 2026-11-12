@@ -159,17 +159,19 @@ test('pulse: a regenerate, a swipe or a delete of the reply takes its roll and e
 });
 
 test('pulse: a chance meeting reaches the narrator with the cast cue, names the person, and survives the reply that shows them', async () => {
-    const { castHost, castSource, entry, said, sent: sentTo } = await import('../cast/helpers.js');
-    const host = await castHost({ source: castSource([entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother', routine: '' } })]), features: { 'story-director.pulse': true } });
+    const { castHost, castSource, entry, said, sent: sentTo, withRoads } = await import('../cast/helpers.js');
+    // Gwenmar is two hours from Harrow by the pack's road: by 10:30 (2.5 hours after the cast's first minute) she can be here.
+    const host = await castHost({ source: withRoads(castSource([entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother', routine: '' } })])), features: { 'story-director.pulse': true } });
     try {
         await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement', '+ present Elula', '+ present Bram', '+ present Orsa', '+ agenda Courier — rides in | now: far north | on: June 3, 1200, 06:00 pm', '+ world Plague — coughing in the fold | state: ongoing']));
+        await host.send('Wait.', said('Time passes.', ['~ time June 3, 1200, 10:30 am']));
         // This reply rolls too: if its own roll meets her (about one in ten), it must show her as well, or the cast withdraws the meeting
         // (an unshown person is unmet again) and the check below sees no meeting.
-        await host.send('Go.', said('Sera steps out of the crowd.', ['~ time June 3, 1200, 08:10 am']));
+        await host.send('Go.', said('Sera steps out of the crowd.', ['~ time June 3, 1200, 10:30 am']));
         const last = () => host.head().domains.director.pulse[0].results.at(-1);
         // Every swipe's reply shows Sera (the reply is written before the roll is known), so a roll that meets her must keep the meeting.
         let tries = 0;
-        while (last().kind !== 'CHANCE_MEETING' && tries < 80) { await host.swipe(said('Sera steps out of the crowd.', ['~ time June 3, 1200, 08:10 am'])); tries += 1; }
+        while (last().kind !== 'CHANCE_MEETING' && tries < 80) { await host.swipe(said('Sera steps out of the crowd.', ['~ time June 3, 1200, 10:30 am'])); tries += 1; }
         assert.equal(last().kind, 'CHANCE_MEETING', 'a swipe rolled the chance meeting');
         const tail = sentTo(host, TAIL_KEY).at(-1) ?? '';
         assert.match(tail, /World this reply: Sera crosses your path in Harrow/, 'the pulse line names the person');
@@ -181,6 +183,24 @@ test('pulse: a chance meeting reaches the narrator with the cast cue, names the 
         assert.ok(!host.sdk.receipts().some(item => item.receipt.type === 'cast.withdraw'), 'nothing was taken back');
     } finally {
         host.close();
+    }
+});
+
+test('pulse: nobody who is too far away is chanced upon (no road known, or the time since they were placed is short): the roll steps down and nobody is moved', async () => {
+    const { castHost, castSource, entry, said, withRoads } = await import('../cast/helpers.js');
+    for (const [label, source, time] of [['no road', castSource([entry('rika', { start: { place: 'Auvoth / Pale Market', goal: 'a licence', routine: '' } })]), '10:30 am'], ['road, too little time', withRoads(castSource([entry('rika', { start: { place: 'Gwenmar', goal: 'a licence', routine: '' } })])), '08:30 am']]) {
+        const host = await castHost({ source, features: { 'story-director.pulse': true } });
+        try {
+            await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: settlement']));
+            await host.send('Go.', said('Nothing happens.', [`~ time June 3, 1200, ${time}`]));
+            for (let tries = 0; tries < 60; tries += 1) await host.swipe(said('Nothing happens.', [`~ time June 3, 1200, ${time}`]));
+            const kinds = new Set(host.head().domains.director.pulse[0].results.map(result => result.kind));
+            assert.ok(!kinds.has('CHANCE_MEETING'), `${label}: no chance meeting`);
+            const rika = host.head().domains.cast.people['ersveil:rika'];
+            assert.deepEqual([rika.met, rika.where], [null, source.entries[0].start.place], `${label}: unmet and where she was`);
+        } finally {
+            host.close();
+        }
     }
 });
 

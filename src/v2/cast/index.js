@@ -16,7 +16,7 @@
 // * Reader: the reply's card (the status card's notes), World -> Now -> Around here, Settings -> Modules -> Story Director -> The cast.
 // Works without NPC State Delta, and without a model (nobody moves, meetings by place still happen).
 
-import { advance, meet, rumor, sync, withdraw } from './capture.js';
+import { advance, journey, meet, rumor, sync, withdraw } from './capture.js';
 import { FEATURE, initialCast, validateCast } from './domain.js';
 import { createCastHooks } from './hooks.js';
 import { createPlans } from './plan.js';
@@ -45,6 +45,7 @@ export const part = {
         'cast.sync': tagged((ctx, payload) => sync(ctx, payload)),
         'cast.advance': tagged((ctx, payload) => advance(ctx, payload)),
         'cast.meet': tagged((ctx, payload) => meet(ctx, payload)),
+        'cast.journey': tagged((ctx, payload) => journey(ctx, payload)),
         'cast.rumor': tagged((ctx, payload) => rumor(ctx, payload)),
         'cast.withdraw': tagged((ctx, payload) => withdraw(ctx, payload)),
     },

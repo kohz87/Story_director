@@ -5,10 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { castPlans } from '../../../src/v2/cast/index.js';
-import { OPENING, castCue, castHost, castSource, createFakeModel, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
+import { OPENING, castCue, castHost, castSource, createFakeModel, withRoads, entry, people, receipts, said, sent, settle, slice, validatorErrors, TAIL_KEY } from './helpers.js';
 
 const FENNA = entry('fenna', { start: { place: 'Bluewatch docks', goal: 'keep the night ferry running', routine: 'works the night ferry' } });
-const SERA = entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother\'s killer', routine: '' }, drawnTo: ['the man you fought at the weir'] });
+const SERA = entry('sera', { start: { place: 'Gwenmar', goal: 'find her brother\'s killer', routine: '' }, drawnTo: ['the man you fought at the weir', 'Harrow'] });
 const BROM = entry('brom', { start: { place: 'Kesh', goal: 'forge', routine: 'at the forge' } });
 
 const quiet = t => t.mock.method(console, 'warn', () => {});
@@ -24,7 +24,6 @@ async function started(options = {}) {
 
 const ANSWER = [
     '~ cast fenna | Ashford | took the ferry upriver to Ashford for the guild',
-    '~ cast sera | Bluewatch | hunting the man who beat her quarry',
     '> cast sera | her hunt for her brother\'s killer led her to the man you fought at the weir',
     '! cast brom | fell from the quarry',
     '~ cast ghost | Nowhere | not in the cast',
@@ -33,7 +32,7 @@ const ANSWER = [
 test('a day passes: one planner call after the reply that moved the clock, applied before the next reply; unmet moves stay hidden; a goal brings her, with the reason', async t => {
     quiet(t);
     const model = createFakeModel([ANSWER]);
-    const host = await started({ source: castSource([FENNA, SERA, BROM]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA, BROM])), model });
     try {
         assert.equal(model.calls.length, 0, 'no call while the day is the same');
         await host.send('Sleep.', said('Morning.', DAY2));
@@ -42,7 +41,7 @@ test('a day passes: one planner call after the reply that moved the clock, appli
         // What the planner is told: the cast with goals and routines, the time passed, what the party is near; the story so far.
         const call = model.calls[0];
         assert.match(call.prompt, /- fenna \| Fenna \| goal: keep the night ferry running \| routine: works the night ferry \| now at: Bluewatch docks/);
-        assert.match(call.prompt, /- sera \| Sera \| goal: find her brother's killer \| now at: Gwenmar \| .*drawn to: the man you fought at the weir \| has not met them/);
+        assert.match(call.prompt, /- sera \| Sera \| goal: find her brother's killer \| now at: Gwenmar \| .*drawn to: the man you fought at the weir; Harrow \| has not met them/);
         assert.match(call.prompt, /1 day since the cast last moved/);
         assert.match(call.prompt, /Recent story:\n[\s\S]*Morning\./);
         assert.doesNotMatch(call.prompt, /Hidden thing|Never said|weathered/, 'secrets and looks are not the planner\'s business');
@@ -61,12 +60,12 @@ test('a day passes: one planner call after the reply that moved the clock, appli
         const notes = Object.values(slice(host).notes);
         const moved = notes.find(note => note.kind === 'moved');
         assert.deepEqual([moved.head, moved.tag, moved.line], ['While time passed', '1 day', 'The cast moved on']);
-        assert.match(moved.rest, /^2 cast members moved on off-screen \(one short line each, only where something changed\)\. You have not met them, so who and where stays hidden\.$/);
+        assert.match(moved.rest, /^1 cast member moved on off-screen \(one short line each, only where something changed\)\. You have not met them, so who and where stays hidden\.$/);
         const met = notes.find(note => note.kind === 'met');
         assert.match(met.rest, /^Why: her hunt for her brother's killer led her to the man you fought at the weir\. Their own goal pulls them to you, so they arrive; no roll\./i);
         // No unmet person is in anything the narrator was sent.
         const everything = [...sent(host, 'story_suite_static'), ...sent(host, TAIL_KEY)].join('\n');
-        assert.doesNotMatch(everything, /Fenna|Ashford|Bluewatch|Gwenmar/);
+        assert.doesNotMatch(everything, /Fenna|Ashford|Bluewatch/, "(Gwenmar is on the map the pack gives, so the route line names it)");
         assert.deepEqual(validatorErrors(host), []);
         assert.deepEqual(host.store.problems(), []);
     } finally {
@@ -77,7 +76,7 @@ test('a day passes: one planner call after the reply that moved the clock, appli
 test('a swipe and a Re-read of the reply that used the answer give the same world, and the planner is not asked again; a rebuild agrees', async t => {
     quiet(t);
     const model = createFakeModel([ANSWER, '~ cast fenna | Elsewhere | a different answer']);
-    const host = await started({ source: castSource([FENNA, SERA]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA])), model });
     try {
         await host.send('Sleep.', said('Morning.', DAY2));
         await settle();
@@ -108,7 +107,7 @@ test('a swipe and a Re-read of the reply that used the answer give the same worl
 test('a death off-screen only where the setting or the entry allows it; the dead are not moved or met again', async t => {
     quiet(t);
     const doomed = entry('brom', { start: { place: 'Kesh', goal: 'forge', routine: 'at the forge' }, canDieUnmet: true });
-    for (const [label, source, settings] of [['the entry', castSource([doomed, FENNA]), {}], ['the setting', castSource([BROM, FENNA]), { 'cast.unmetDie': true }]]) {
+    for (const [label, source, settings] of [['the entry', withRoads(castSource([doomed, FENNA])), {}], ['the setting', withRoads(castSource([BROM, FENNA])), { 'cast.unmetDie': true }]]) {
         const model = createFakeModel(['! cast brom | fell from the quarry\n! cast fenna | slipped on the ice']);
         const host = await started({ source, model, settings });
         try {
@@ -135,7 +134,7 @@ test('a death off-screen only where the setting or the entry allows it; the dead
 test('a failed or empty planner call moves no one, but the day is still counted; with no planner at all the world still meets by place', async t => {
     quiet(t);
     for (const script of [[new Error('rate limited')], ['nothing changed'], []]) {
-        const host = await started({ source: castSource([FENNA, SERA]), model: createFakeModel(script) });
+        const host = await started({ source: withRoads(castSource([FENNA, SERA])), model: createFakeModel(script) });
         try {
             await host.send('Sleep.', said('Morning.', DAY2));
             await settle();
@@ -153,9 +152,9 @@ test('a failed or empty planner call moves no one, but the day is still counted;
 test('a goal the story touches between two days is judged at once: the planner is asked about that person only, once a day, and her reason is on the card', async t => {
     quiet(t);
     const model = createFakeModel(['> cast sera | the fight at the weir reached her']);
-    const host = await started({ source: castSource([FENNA, SERA]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA])), model });
     try {
-        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.', ['~ time June 3, 1200, 12:30 pm']));
         await settle();
         assert.equal(model.calls.length, 1);
         assert.match(model.calls[0].prompt, /for the people whose drawn-to phrase the recent story touches/);
@@ -175,7 +174,7 @@ test('a goal the story touches between two days is judged at once: the planner i
 test('a person who is in the scene, or pinned as a key person, is not moved by the planner', async t => {
     quiet(t);
     const model = createFakeModel(['~ cast sera | Elsewhere | gone']);
-    const host = await started({ source: castSource([FENNA, SERA, BROM]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA, BROM])), model });
     try {
         await host.sdk.command('keypeople.pin', { name: 'Fenna' });
         await host.send('Sleep.', said('Morning.', [...DAY2, '+ present Sera']));
@@ -193,7 +192,7 @@ test('a plan not asked for after the last reply (a reload): a named connection i
     quiet(t);
     for (const profile of ['Planner', '']) {
         const model = createFakeModel(['~ cast fenna | Elsewhere | the first answer is not used', '~ cast fenna | Ashford | upriver for the guild']);
-        const host = await started({ source: castSource([FENNA, SERA]), model, settings: { 'cast.profile': profile } });
+        const host = await started({ source: withRoads(castSource([FENNA, SERA])), model, settings: { 'cast.profile': profile } });
         try {
             await host.send('Sleep.', said('Morning.', DAY2));
             await settle();
@@ -218,9 +217,9 @@ test('a plan not asked for after the last reply (a reload): a named connection i
 test('a planner call that fails in transport is made once more: 500 then ok applies the plan, nobody is lost', async t => {
     quiet(t);
     const model = createFakeModel([new Error('Internal Server Error'), '> cast sera | the fight at the weir reached her']);
-    const host = await started({ source: castSource([FENNA, SERA]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA])), model });
     try {
-        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.', ['~ time June 3, 1200, 12:30 pm']));
         await settle();
         assert.equal(model.calls.length, 2, 'one extra call, only after the failure');
         await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
@@ -236,7 +235,7 @@ test('a planner call that fails twice: nobody is drawn in and the reply carries 
     quiet(t);
     for (const [name, send, next] of [['judge', ['Fight.', said('You beat the man you fought at the weir, and the weir runs red.')], ['Rest.', said('Sera rests by the man you fought at the weir.')]], ['batch', ['Sleep.', said('Morning.', DAY2)], ['Next.', said('Quiet.')]]]) {
         const model = createFakeModel([new Error('Internal Server Error'), new Error('Internal Server Error')]);
-        const host = await started({ source: castSource([FENNA, SERA]), model });
+        const host = await started({ source: withRoads(castSource([FENNA, SERA])), model });
         try {
             await host.send(...send);
             await settle();
@@ -259,9 +258,9 @@ test('a planner call that fails twice: nobody is drawn in and the reply carries 
 test('an answer that does not parse is no transport failure: one call, no retry, no problem', async t => {
     quiet(t);
     const model = createFakeModel(['I cannot help with that.']);
-    const host = await started({ source: castSource([FENNA, SERA]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA])), model });
     try {
-        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.', ['~ time June 3, 1200, 12:30 pm']));
         await settle();
         await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
         assert.equal(model.calls.length, 1);
@@ -274,10 +273,10 @@ test('an answer that does not parse is no transport failure: one call, no retry,
 test('a failure is told again on a swipe of the reply it was for, not on later replies', async t => {
     quiet(t);
     const model = createFakeModel([new Error('Internal Server Error'), new Error('Internal Server Error')]);
-    const host = await started({ source: castSource([FENNA, SERA]), model });
+    const host = await started({ source: withRoads(castSource([FENNA, SERA])), model });
     try {
         const told = () => host.turn.problems().filter(item => item.code === 'CAST_PLAN_FAILED').length;
-        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.', ['~ time June 3, 1200, 12:30 pm']));
         await settle();
         await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
         assert.equal(told(), 1);
@@ -294,7 +293,7 @@ test('a failure is told again on a swipe of the reply it was for, not on later r
 test('an empty answer is not asked again (one call), and a failure that came back after the wait is not either', async t => {
     quiet(t);
     const empty = createFakeModel(['']);
-    const one = await started({ source: castSource([FENNA, SERA]), model: empty });
+    const one = await started({ source: withRoads(castSource([FENNA, SERA])), model: empty });
     try {
         await one.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
         await settle();
@@ -306,7 +305,7 @@ test('an empty answer is not asked again (one call), and a failure that came bac
     let skew = 0;
     t.mock.method(Date, 'now', () => realNow() + skew);
     const slow = createFakeModel([() => { skew += 20000; throw new Error('Internal Server Error'); }, 'late']);
-    const two = await started({ source: castSource([FENNA, SERA]), model: slow });
+    const two = await started({ source: withRoads(castSource([FENNA, SERA])), model: slow });
     try {
         await two.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
         await settle();

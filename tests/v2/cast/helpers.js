@@ -29,12 +29,24 @@ export function castSource(entries = [], { name = 'Ersveil', version = '1.1.0' }
     return { entries, places: null, packs: [{ id: 'ersveil', name, version, enabled: true }] };
 }
 
+/**
+ * The pack's map for a goal that has to travel: every place the entries start at (and Harrow, the party's) is a pack place, and `roads`
+ * (`[from, to, km]`) join them (5 km, 2 hours). No road: no route, so far.
+ */
+export function withRoads(source, roads = [['Gwenmar', 'Harrow', 5]]) {
+    const names = [...new Set([...source.entries.map(item => item.start.place), 'Harrow', ...roads.flat().filter(item => typeof item === 'string')])];
+    const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    source.places = names.map(name => ({ name, slug: slug(name), aliases: [], x: 1, y: 1 }));
+    source.routes = roads.map(([from, to, km]) => ({ from: slug(from), to: slug(to), kind: 'road', km, hours: 2 }));
+    return source;
+}
+
 /** The pack `source` describes, as the file a person would import. */
 export function packOf(source) {
     const [meta] = source.packs;
     // What the packs part adds itself (`pack`, `packVersion`) is not written; an empty routine is a routine left out.
     const cast = source.entries.map(({ pack: _pack, packVersion: _version, ...own }) => ({ ...own, start: Object.fromEntries(Object.entries(own.start).filter(([key, value]) => key !== 'routine' || value)) }));
-    return { id: meta.id, version: meta.version, name: meta.name, requires: { storyBlock: '^2' }, content: { ...(source.places ? { places: source.places } : {}), cast } };
+    return { id: meta.id, version: meta.version, name: meta.name, requires: { storyBlock: '^2' }, content: { ...(source.places ? { places: source.places } : {}), ...(source.routes ? { routes: source.routes } : {}), cast } };
 }
 
 /** Installs (or updates) `source`'s pack in the host and switches it on or off, as the reader would. A pack that is refused is an error. */
