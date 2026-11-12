@@ -249,8 +249,46 @@ import { rumor } from '../../../src/v2/chronicle/capture/world.js';
 import { QUIET_FALLBACK, TABLES, d20Of, resolveKind, tableFor } from '../../../src/v2/pulse/tables.js';
 
 const seededPulse = seed => (ctx, payload) => pulseCommand({ ...ctx, rng: rng(seed) }, payload);
-const pulseAt = (state, seed, { at = 5, settings = {}, call = null, queries = {} } = {}) => runCommand(state, seededPulse(seed), { at }, { settings, call, queries });
+const pulseAt = (state, seed, { at = 5, settings = {}, call = null, queries = {}, payload = {} } = {}) => runCommand(state, seededPulse(seed), { at, ...payload }, { settings, call, queries });
 const clocked = () => withScene(story(WORLD, makeState()), { present: ['Elula', 'Bram'] });
+
+const pulseTexts = (state, seeds = 150, payload = {}) => {
+    const out = [];
+    for (let seed = 1; seed <= seeds; seed += 1) {
+        const result = pulseAt(state, seed, { payload });
+        assert.equal(result.ok, true, result.message);
+        out.push(...resultsOf(result.state.domains.director));
+    }
+    return out;
+};
+
+test("pulse: a step that carries the persona never makes {{user}} the subject of an event: not a mood, not a memory, not a chance meeting; alone, those events step down", () => {
+    const withAstra = withScene(story(WORLD, makeState()), { present: ['Astra', 'Elula'] });
+    // Without the persona told, the old reading: Astra is picked (proves the scene would offer her).
+    assert.ok(pulseTexts(withAstra).some(entry => /^Astra /.test(entry.text)), 'Astra is a candidate when nobody says she is the player');
+    const told = { persona: 'Astra', age: 1, reach: 2 };
+    const mixed = pulseTexts(withAstra, 150, told);
+    assert.ok(mixed.every(entry => !entry.text.includes('Astra') && entry.who !== 'Astra'));
+    assert.ok(mixed.some(entry => entry.who === 'Elula'), 'the NPC still gets the mood');
+    const alone = pulseTexts(withScene(story(WORLD, makeState()), { present: ['Astra'] }), 150, told);
+    assert.ok(alone.every(entry => !entry.text.includes('Astra') && entry.kind !== 'MOOD_SWING' && entry.kind !== 'MEMORY_TRIGGER'));
+    // A cast person who is the persona is never met by chance; another still is.
+    const cast = { people: { astra: { name: 'Astra', alive: true, met: null }, rika: { name: 'Rika', alive: true, met: null } } };
+    for (const unit of [0, 0.4, 0.9]) assert.equal(meetEntry({ cast, at: 4, place: 'Bluewatch Village', draw: { actor: unit }, persona: 'Astra' }).receipt.who, 'rika');
+    assert.equal(meetEntry({ cast: { people: { astra: cast.people.astra } }, at: 4, place: 'Bluewatch Village', persona: 'Astra' }), null);
+    assert.equal(meetEntry({ cast, at: 4, place: 'Bluewatch Village', draw: { actor: 0 } }).receipt.who, 'astra', 'no persona told: the old pick');
+});
+
+test('pulse: a step recorded before the persona rule (no `persona`) replays byte-identical, whatever the reader says now; the hook stores the persona on new steps', () => {
+    const scenes = [['Astra', 'Elula', 'Bram'], ['Astra']].map(present => withScene(story(WORLD, makeState()), { present }));
+    const before = scenes.map(state => JSON.stringify(pulseTexts(state, 200, { age: 1, reach: 2 })));
+    setPersonaReader(() => 'Astra');
+    try {
+        assert.deepEqual(scenes.map(state => JSON.stringify(pulseTexts(state, 200, { age: 1, reach: 2 }))), before, 'an old reply read again rolls as written');
+        const step = pulseHook({ state: clocked(), settings: {}, chat: { length: 5, lastUser: '' } });
+        assert.equal(step.commands[0].payload.persona, 'Astra');
+    } finally { setPersonaReader(null); }
+});
 
 test('pulse: the roll is a system step drawn with its seed: same seed same result, a click is refused, a swipe (new seed) rolls again', () => {
     const state = clocked();
@@ -310,8 +348,8 @@ test('pulse: skipped (and the reason recorded) in a fight, in a quiet scene, wit
 test('pulse: the hook asks for one step per reply written; a swipe is one below the chat length; a Continue, off and mode off ask for none', () => {
     const state = clocked();
     const view = (extra = {}) => ({ state, settings: {}, chat: { length: 5, lastUser: '' }, ...extra });
-    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3 } }] });
-    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3 } }] });
+    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3, persona: '' } }] });
+    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3, persona: '' } }] });
     assert.ok(pulseHook(view(), { type: 'regenerate' }));
     assert.equal(pulseHook(view(), { type: 'continue', commit: false }), undefined);
     assert.equal(pulseHook(view({ feature: id => id !== 'story-director.pulse' })), undefined);

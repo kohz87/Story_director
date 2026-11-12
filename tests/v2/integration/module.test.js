@@ -498,8 +498,8 @@ test('pulse: a step without the `age` flag (a reply written before the rule, re-
 
 test('pulse: the hook adds the flag to every new step', () => {
     const view = { state: { domains: { director: {} } }, chat: { length: 6 }, feature: () => true, settings: {} };
-    assert.deepEqual(pulseHook(view, {}).commands[0].payload, { at: 6, age: 1, reach: 3 });
-    assert.deepEqual(pulseHook(view, { type: 'swipe' }).commands[0].payload, { at: 5, age: 1, reach: 3 });
+    assert.deepEqual(pulseHook(view, {}).commands[0].payload, { at: 6, age: 1, reach: 3, persona: '' });
+    assert.deepEqual(pulseHook(view, { type: 'swipe' }).commands[0].payload, { at: 5, age: 1, reach: 3, persona: '' });
 });
 
 test('names is on by default like the pulse: a chat that never touched the switch teaches the person line and checks a new named person (LIVERUN1 item 11)', async () => {

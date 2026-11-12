@@ -14,6 +14,7 @@
 
 import { applyAdvance, applyJourney, applyMeet, applyRumor, applySync, planSync, syncEmpty, syncPayload } from './apply.js';
 import { sha256 } from '../hash.js';
+import { personaName } from '../tracker/initiative.js';
 import { cueLines, pinned } from './note.js';
 import { cutPoints, isInt, keysOfPerson, slotOf } from './domain.js';
 import { castOf, fightOn, foesLeftover, linksOf, packName, pulseResults, partyPlace, presentKeys, roadsOf, seenKeys, ask } from './entries.js';
@@ -338,12 +339,12 @@ export function createCastHooks({ plans }) {
                 applyJourney(world, payload, { now: frame.now, rev });
             }
             const picks = chooseMeetings(world, frame.cast, {
-                now: frame.now, party: frame.party, comes: sorted.meet, sought, fight, pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned, travel: roads,
+                now: frame.now, party: frame.party, comes: sorted.meet, sought, fight, pace: paceOf(frame.settings), present: frame.present, pinned: frame.pinned, travel: roads, persona: personaName(),
             });
             // Someone sought who is elsewhere is heard of, with no name (no meeting in this reply to share the cue with).
             const rumor = chooseRumor(world, frame.cast, { party: frame.party, sought, fight, met: picks, present: frame.present, pinned: frame.pinned });
             // Someone the story already has in the scene is met at once, as they are (no cue, no pace).
-            picks.push(...metInTheStory(world, frame.cast, { present: frame.present, party: frame.party }));
+            picks.push(...metInTheStory(world, frame.cast, { present: frame.present, party: frame.party, persona: personaName() }));
             if (picks.length) {
                 const payload = { at, who: picks, names };
                 commands.push({ type: 'cast.meet', payload });

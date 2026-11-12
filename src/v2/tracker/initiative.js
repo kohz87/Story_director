@@ -55,6 +55,21 @@ function personaKey(given) {
     return text === '{{user}}' ? '' : lineKey(cutPoints(text, 80));
 }
 
+/** {{user}}'s name as the host tells it now ('' when unknown): a pulse step stores it, so a Re-read of an older step (none stored) keeps its rule. */
+export function personaName() {
+    let name = '';
+    try { name = personaReader(); } catch { name = ''; }
+    const text = typeof name === 'string' ? name.trim() : '';
+    return text === '{{user}}' ? '' : cutPoints(text, 80);
+}
+
+/** Whether `person` ({ key, name?, names? }) is {{user}}, the player's persona (`persona`: its name, else the host's reader). Never a subject for the Director. */
+export function isPersona(person, persona = null) {
+    const me = personaKey(persona);
+    if (!me || !person) return false;
+    return [person.key, person.name, ...(person.names ?? [])].some(word => typeof word === 'string' && lineKey(word) === me);
+}
+
 /** A number in [0, 1) from `text` (FNV-1a, 32 bits): the same text always gives the same number. */
 export function hashUnit(text) {
     let hash = 0x811c9dc5;
@@ -140,9 +155,7 @@ export function initiativeCandidates({ director: given, state = null, query = nu
         .filter(({ record }) => record.status === 'active' && KINDS.has(record.kind));
     if (!open.length) return [];
     // The player's persona is in the scene's people but never takes the initiative (matched by the same line keys as the people).
-    const me = personaKey(persona);
-    const people = [...seen.people, ...nearbyPeople(query, seen)]
-        .filter(person => !me || (person.key !== me && !(person.names ?? []).some(word => lineKey(word) === me)));
+    const people = [...seen.people, ...nearbyPeople(query, seen)].filter(person => !isPersona(person, persona));
     const out = [];
     for (const person of people) {
         let best = null;
