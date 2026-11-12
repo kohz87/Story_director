@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fix: a cast planner call that failed in the connection is made once more, and a plan that still fails shows a Problems line.** One extra request at most, only after a connection error that came back within 15 s; a refusal, an empty answer or a timeout is not asked again. The line "cast planner failed for this reply" appears once, on the reply the plan was for (not on the later replies of that story day). Needs a Story Block that lists a hook's problems. Replies already written replay and Re-read as before.
+
 ## 2.14.1
 
 Update Story Block, Story Director and NPC State Delta together. Replies already written replay and Re-read exactly as before. For the harder foes, start a new chat (or re-add the Foes block).

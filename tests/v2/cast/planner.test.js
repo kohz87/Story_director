@@ -244,7 +244,12 @@ test('a planner call that fails twice: nobody is drawn in and the reply carries 
             await host.send(...next);
             assert.equal(model.calls.length, 2, `${name}: not asked a third time`);
             assert.equal(people(host)['ersveil:sera'].met, null, `${name}: nobody drawn in`);
-            assert.equal(host.turn.problems().filter(item => item.message === 'cast planner failed for this reply').length >= 1, true, `${name}: a visible problem`);
+            const told = () => host.turn.problems().filter(item => item.code === 'CAST_PLAN_FAILED').length;
+            assert.equal(told(), 1, `${name}: told once, on the reply it was for`);
+            await host.send('Again.', said('Still quiet.'));
+            await host.send('And again.', said('Nothing more.'));
+            assert.equal(told(), 1, `${name}: later replies of the day are not told again`);
+            assert.equal(model.calls.length, 2, `${name}: and still no further call`);
         } finally {
             host.close();
         }
@@ -263,5 +268,50 @@ test('an answer that does not parse is no transport failure: one call, no retry,
         assert.equal(host.turn.problems().some(item => item.code === 'CAST_PLAN_FAILED'), false);
     } finally {
         host.close();
+    }
+});
+
+test('a failure is told again on a swipe of the reply it was for, not on later replies', async t => {
+    quiet(t);
+    const model = createFakeModel([new Error('Internal Server Error'), new Error('Internal Server Error')]);
+    const host = await started({ source: castSource([FENNA, SERA]), model });
+    try {
+        const told = () => host.turn.problems().filter(item => item.code === 'CAST_PLAN_FAILED').length;
+        await host.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await settle();
+        await host.send('Rest.', said('Sera rests by the man you fought at the weir.'));
+        assert.equal(told(), 1);
+        await host.swipe(said('Sera sits by the man you fought at the weir.'));
+        assert.equal(told(), 2, 'the swiped reply is the one it was for');
+        await host.send('On.', said('Quiet.'));
+        assert.equal(told(), 2);
+        assert.equal(model.calls.length, 2);
+    } finally {
+        host.close();
+    }
+});
+
+test('an empty answer is not asked again (one call), and a failure that came back after the wait is not either', async t => {
+    quiet(t);
+    const empty = createFakeModel(['']);
+    const one = await started({ source: castSource([FENNA, SERA]), model: empty });
+    try {
+        await one.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await settle();
+        assert.equal(empty.calls.length, 1, 'no retry of an empty answer');
+    } finally {
+        one.close();
+    }
+    const realNow = Date.now.bind(Date);
+    let skew = 0;
+    t.mock.method(Date, 'now', () => realNow() + skew);
+    const slow = createFakeModel([() => { skew += 20000; throw new Error('Internal Server Error'); }, 'late']);
+    const two = await started({ source: castSource([FENNA, SERA]), model: slow });
+    try {
+        await two.send('Fight.', said('You beat the man you fought at the weir, and the weir runs red.'));
+        await settle();
+        assert.equal(slow.calls.length, 1, 'the reply\'s wait had run out: no second call');
+    } finally {
+        two.close();
     }
 });
