@@ -77,7 +77,7 @@ function placeDetail(world, ref, map, hereRef = '') {
     if (!place) return null;
     const here = hereRef ? world.find(hereRef) : null;
     const routes = world.routes.filter(route => route.from === place.id || route.to === place.id).map(route => routeOut(world, route, { map, from: place.id }));
-    return { ...placeOut(place), aliases: [...(place.aliases ?? [])], here: Boolean(here && here.id === place.id), trip: tripFrom(world, here, place, map), routes };
+    return { ...placeOut(place), aliases: [...(place.aliases ?? [])], parent: place.parent ?? null, here: Boolean(here && here.id === place.id), trip: tripFrom(world, here, place, map), routes };
 }
 
 export const queries = {
@@ -106,8 +106,8 @@ export const queries = {
     /** The place line ("Town · Spot") of a scene's place name, whether or not the atlas has the place yet; '' for no name. */
     'atlas.line': (state, { name = '' } = {}, tools) => (keyOf(parseLocation(name).name) ? lineOf(worldFrom(state, tools), name) : ''),
     /**
-     * One place with its routes, by `id` (or node id) or `name`; null when unknown. Also `aliases`,
-     * `here` (it is the scene's place) and `trip`: from the scene's place by known routes
+     * One place with its routes, by `id` (or node id) or `name`; null when unknown. Also `aliases`, `parent` (the atlas id of the
+     * place it sits in as the atlas saved it, parent.js; null for none and for a pack's place), `here` (it is the scene's place) and `trip`: from the scene's place by known routes
      * `{ fromId, fromName, km, days, unit, mode, hops, by, text }`, or null.
      */
     'atlas.place': (state, { id = null, name = null } = {}, tools) => placeDetail(worldFrom(state, tools), id ?? name, mapOf(tools), hereOf(state, tools)),

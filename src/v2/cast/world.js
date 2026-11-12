@@ -188,7 +188,7 @@ export function chanceCandidates(slice, cast, { party = {}, now = null, travel =
 // first answer, a straight-line estimate too: "Drowned Bell taproom", a place the map placed itself with no road, was half a day from
 // Auvoth at the reader's map scale (one km a unit) though the road is 3.5 days, so Rika was met there 1.2 days after the start.
 // Rule 2 as merged (`party.old`: the steps with `reach: 2`; a party with no atlas reader, `locate`) read a town as a name one place's name
-// holds; the rest reads places by the atlas's ids and parent links (`party.locate`, entries.js `locator`).
+// holds; the rest reads places by the atlas's ids and saved parent links (`party.locate`, entries.js `locator`), never a region.
 
 const townPart = name => (String(name ?? '').includes('/') ? heads(name)[1] : '');
 const merged = party => party.old || typeof party.locate !== 'function';
@@ -208,9 +208,10 @@ function townOf(spot) {
 
 /**
  * Whether someone at `where` is where the party is: the same place, or (the party not on a road or in a wilderness) someone not on one either in
- * the town the party's place stands in, by the atlas's ids and parent links: "Bluewatch Village / Guild Office" and "Bluewatch Village"; "Drowned
- * Bell taproom" whose region "bluewatch" the atlas finds as Bluewatch Village (an alias). A road or wilderness (`party.open`) is only itself and the
- * places in it. One name holding another is nothing ("Shornmarch" is not "Shorn"). `party.old` or no `party.locate`: rule 2 as merged.
+ * the town the party's place stands in, by the atlas's ids and saved parent links (else the written "Town / Spot", else the party's place line):
+ * "Bluewatch Village / Guild Office" and "Bluewatch Village". A region is no town ("Drowned Bell taproom", region "bluewatch", no parent: only
+ * itself); a road or wilderness (`party.open`) is only itself and the places in it; one name holding another is nothing. `party.old` or no
+ * `party.locate`: rule 2 as merged.
  */
 export function atPlace(where, party) {
     if (!where || !party?.place) return false;

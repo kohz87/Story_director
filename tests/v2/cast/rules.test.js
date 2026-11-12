@@ -622,7 +622,7 @@ test('planner moves, rule 2: no hop through a place with no road beats the road 
     assert.deepEqual(keysOf(chooseMeetings(slice, cast, { now: START + DAY, party: TAPROOM, pace: paceOf({}), travel: roadTrip })), [], 'there, but not by any road in a day');
 });
 
-// ---- reach 3: the party's place and town by the atlas's ids and parent links, never one name holding another (castfix3 and its review) ----------
+// ---- reach 3: the party's place and town by the atlas's ids and saved parent links, never names or regions (castfix3 and its reviews) ----------
 
 // Ersveil 2.9.6's places as the pack writes them, aliases too ("Bluewatch" is Bluewatch Village's), read through the atlas's own queries.
 const RUN_PACK = { ...ERSVEIL, places: ERSVEIL.places.map(place => (place.name === 'Bluewatch Village' ? { ...place, aliases: ['Bluewatch'] } : place)) };
@@ -640,6 +640,12 @@ const RUN_QUERY = queryOver(RUN_ATLAS, RUN_PACK);
 const located = (party, query = RUN_QUERY) => ({ ...party, locate: locator(query) });
 const LOCATED_TAPROOM = located(TAPROOM);
 const LOCATED_GUILD = located(GUILD);
+// The run's own places as if the atlas had saved them a parent, the village (atlas `parent`, as parent.js saves it); in the run it saved none.
+const LINKED = ['pl_yo7o67fj', 'pl_yz6zp4i3', 'pl_llyj22ck'];
+const LINKED_ATLAS = { ...structuredClone(RUN_ATLAS), places: Object.fromEntries(Object.entries(RUN_ATLAS.places).map(([id, place]) => [id, LINKED.includes(id) ? { ...place, parent: 'pl_c57qz36z' } : place])) };
+const LINKED_QUERY = queryOver(LINKED_ATLAS, RUN_PACK);
+const linked = party => located(party, LINKED_QUERY);
+const LINKED_TAPROOM = linked(TAPROOM);
 
 test('reach 3 (review BLOCK): a region whose name holds a town\'s is not that town ("Shornmarch" holds "Shorn"); nobody there is met faster than the road', () => {
     const pack = {
@@ -664,56 +670,115 @@ test('reach 3 (review BLOCK): a region whose name holds a town\'s is not that to
         assert.equal(reachDays(where, party, () => null), null, 'no road says how far');
         assert.equal(canReach({ where, since: START }, party, { now: START + 1, travel: () => null }), false, 'a minute after they were placed: far');
     }
-    // The run's regions name Bluewatch Village by its alias ("bluewatch", and a pack-style "River Confederacy: Bluewatch" by its last part).
+    // A region names no town even when the atlas finds a place by it ("bluewatch" is Bluewatch Village's alias; castfix3c, REV-castfix3b): with no
+    // parent saved, the taproom and a quay in "River Confederacy: Bluewatch" sit in no town, as in castfix2; a saved parent puts them in it.
     const quay = queryOver(atlasOf([{ name: 'Lantern quay', region: 'River Confederacy: Bluewatch', kind: 'quay' }], RUN_ATLAS), RUN_PACK);
-    assert.equal(atPlace('Bluewatch Village', LOCATED_TAPROOM), true, 'region "bluewatch": the atlas finds Bluewatch Village by its alias');
-    assert.equal(atPlace('Bluewatch Village', located({ place: 'Lantern quay', region: 'River Confederacy: Bluewatch', town: '', open: false }, quay)), true);
-    // Without the alias the atlas has no place called "bluewatch": the taproom sits in no town (the name "Bluewatch Village" holding it is nothing).
+    assert.equal(atPlace('Bluewatch Village', LOCATED_TAPROOM), false, 'region "bluewatch", no parent: not the village');
+    assert.equal(atPlace('Bluewatch Village', located({ place: 'Lantern quay', region: 'River Confederacy: Bluewatch', town: '', open: false }, quay)), false);
     assert.equal(atPlace('Bluewatch Village', located(TAPROOM, queryOver(RUN_ATLAS, ERSVEIL))), false);
+    assert.equal(atPlace('Bluewatch Village', LINKED_TAPROOM), true, 'the atlas\'s saved parent');
+});
+
+// Ersveil 2.9.6's own places and roads for REV-castfix3b's four cases: towns, a fort and a dungeon whose region has a pack place's name.
+const VALEGARD_PACK = {
+    places: [
+        { name: 'Valegard', region: 'Valegard', kind: 'capital', x: 22, y: 56 },
+        { name: 'Highmeadow', region: 'Valegard', kind: 'town', x: 27, y: 59 },
+        { name: 'Rosefen', region: 'Valegard', kind: 'town', x: 15, y: 53 },
+        { name: 'Shackles City', aliases: ['Shackles', 'Free City of Shackles'], region: 'Shackles', kind: 'city', x: -55, y: -5 },
+        { name: 'Shackles City / Veil Market', aliases: ['Veil Market'], region: 'Shackles', kind: 'district', x: -54.9, y: -4.9 },
+        { name: 'Dustbell', region: 'Shackles', kind: 'town', x: -56.2, y: -4.5 },
+        { name: 'Westchain Hold', region: 'Shackles', kind: 'fort', x: -56.5, y: -5.2 },
+        { name: 'Atlantis', region: 'Atlantis', kind: 'capital', x: 210, y: -40 },
+        { name: 'Atlantis / Abyssal Gate', aliases: ['Abyssal Gate'], region: 'Atlantis', kind: 'district', x: 210.6, y: -40.5 },
+        { name: 'Drowned Archive', region: 'Atlantis', kind: 'dungeon', x: 218, y: -48 },
+    ],
+    routes: [
+        { from: 'Highmeadow', to: 'Valegard', kind: 'local road', km: 70 },
+        { from: 'Rosefen', to: 'Valegard', kind: 'local road', km: 90 },
+        { from: 'Dustbell', to: 'Shackles City', kind: 'caravan road', km: 15 },
+        { from: 'Westchain Hold', to: 'Shackles City', kind: 'caravan road', km: 16 },
+        { from: 'Shackles City / Veil Market', to: 'Shackles City', kind: 'street', km: 2 },
+        { from: 'Atlantis / Abyssal Gate', to: 'Atlantis', kind: 'street', km: 9 },
+        { from: 'Atlantis / Abyssal Gate', to: 'Drowned Archive', kind: 'dungeon access', km: 120 },
+    ],
+};
+
+test('reach 3 (REV-castfix3b BLOCK): a pack place is never in the pack place its region names; days apart by road stay days apart', () => {
+    const atlas = { places: {}, keys: {}, routes: {}, tripRest: true, focus: null };
+    const query = queryOver(atlas, VALEGARD_PACK);
+    const world = worldOf(structuredClone(atlas), packWorld((name, { kind } = {}) => (name === 'packs.content' ? structuredClone(VALEGARD_PACK[kind] ?? []) : undefined)));
+    const road = (from, to) => { const trip = travelTime(world, from, to); return trip?.source === 'routes' ? trip.days : null; };
+    const cases = [['Rosefen', 'Highmeadow'], ['Valegard', 'Highmeadow'], ['Westchain Hold', 'Dustbell'], ['Shackles City / Veil Market', 'Dustbell'], ['Drowned Archive', 'Atlantis']];
+    for (const [where, place] of cases) {
+        const party = located({ place, region: query('atlas.place', { name: place }).region, town: '', open: false }, query);
+        assert.deepEqual(party.locate(place).up, [], `${place}: no saved parent, so in nothing (its region "${query('atlas.place', { name: place }).region}" is no link)`);
+        assert.equal(atPlace(where, party), false, `${where} is not at ${place}`);
+        const days = reachDays(where, party, road);
+        assert.ok(days > 0, `${where} → ${place}: the road (${days} days)`);
+        assert.equal(days, road(where, place) ?? road(party.locate(where).up[0]?.name, place), 'the road, nothing shorter');
+        assert.equal(canReach({ where, since: START }, party, { now: START + 1, travel: road }), false, 'a minute after they were placed: far');
+        assert.equal(canReach({ where, since: START }, party, { now: START + Math.ceil(days * DAY), travel: road }), true, 'at the road\'s time');
+        assert.equal(moveReach({ where, since: START }, place, { party: located({ place: 'Elsewhere', region: '', town: '' }, query), to: START + 1, travel: road }), null, `a planner move ${where} → ${place} a minute in`);
+    }
+    assert.ok(reachDays('Rosefen', located({ place: 'Highmeadow', region: 'Valegard', town: '' }, query), road) >= 8, 'Rosefen–Valegard–Highmeadow');
+    // A district written "Town / Spot" is still in its town (rule 2 as merged read it so), and the party in the town meets it.
+    assert.equal(atPlace('Shackles City / Veil Market', located({ place: 'Shackles City', region: 'Shackles', town: '' }, query)), true);
+    // A place the narrator made with region "Valegard" and no parent saved: in no town, as in castfix2; with the atlas's parent: in Valegard.
+    const made = (parent) => queryOver(atlasOf([{ name: 'Valegard', region: 'Valegard', kind: 'capital' }, { name: 'Wayside inn', region: 'Valegard', kind: 'inn', ...parent }]), VALEGARD_PACK);
+    assert.equal(atPlace('Valegard', located({ place: 'Wayside inn', region: 'Valegard', town: '' }, made({}))), false);
+    assert.equal(atPlace('Valegard', located({ place: 'Wayside inn', region: 'Valegard', town: '' }, made({ parent: 'pl_t0' }))), true);
 });
 
 test('reach 3 (review 6): a place whose name holds a town\'s is that town only when the atlas parents it there; rule 2 as merged replays as it was', () => {
     const pack = { places: [{ name: 'Shorn', region: 'Shornmarch', kind: 'capital', x: 0, y: 0 }, { name: 'Bluewatch Village', aliases: ['Bluewatch'], region: 'bluewatch', kind: 'village', x: 50, y: 0 }], routes: [] };
-    const query = queryOver(atlasOf([{ name: 'Shornmarch Outpost', region: 'Shornmarch', kind: 'outpost' }, { name: 'Bluewatch gatehouse', region: 'bluewatch', kind: 'gatehouse' }]), pack);
+    const query = queryOver(atlasOf([{ name: 'Shornmarch Outpost', region: 'Shornmarch', kind: 'outpost' }, { name: 'Bluewatch gatehouse', region: 'bluewatch', kind: 'gatehouse', parent: 'pl_t2' }, { name: 'Bluewatch Village', region: 'bluewatch', kind: 'village' }]), pack);
+    const unsaved = queryOver(atlasOf([{ name: 'Bluewatch gatehouse', region: 'bluewatch', kind: 'gatehouse' }]), pack);
     const OUTPOST = { place: 'Shornmarch Outpost', region: 'Shornmarch', town: '' };
     assert.equal(atPlace('Shorn', located(OUTPOST, query)), false);
     assert.equal(atPlace('Shorn', { ...OUTPOST, old: true }), true, 'the merged rule took the name holding the town (steps with reach: 2 replay so)');
-    assert.equal(atPlace('Bluewatch Village', located({ place: 'Bluewatch gatehouse', region: 'bluewatch', town: '' }, query)), true, 'the atlas reads the gatehouse as in "Bluewatch" (a whole word of a known name)');
+    assert.equal(atPlace('Bluewatch Village', located({ place: 'Bluewatch gatehouse', region: 'bluewatch', town: '' }, query)), true, 'the atlas saved the village as its parent');
+    assert.equal(atPlace('Bluewatch gatehouse', located({ place: 'Bluewatch Village', region: 'bluewatch', town: '' }, unsaved)), false, 'no parent saved: a name starting with the town\'s is nothing');
 });
 
-test('town meetings, run5cast (reach 3): the taproom, the smithy and the guild back room are in Bluewatch Village by the atlas; Rika still waits for the road', () => {
+test('town meetings, run5cast (reach 3): the taproom, the smithy and the guild back room are in Bluewatch Village when the atlas saved that parent; Rika still waits for the road', () => {
     const { slice, cast } = runCast();
     const now = START + 2 * DAY;
     const meet = party => keysOf(chooseMeetings(slice, cast, { now, party, pace: paceOf({}), travel: roadTrip }));
     for (const place of ['Drowned Bell taproom', 'Wharf smithy', 'Adventurers\' Guild back room']) {
-        assert.deepEqual(meet(located({ place, region: 'bluewatch', town: '', open: false })), ['torka'], `${place}: Torka, of the village, is met`);
+        assert.deepEqual(meet(linked({ place, region: 'bluewatch', town: '', open: false })), ['torka'], `${place}: Torka, of the village, is met`);
+        assert.deepEqual(meet(located({ place, region: 'bluewatch', town: '', open: false })), [], `${place}, as the run's atlas has it (no parent): nobody, as in castfix2`);
     }
-    assert.equal(atPlace('Auvoth / Pale Market', LOCATED_TAPROOM), false, 'another town is not');
-    assert.deepEqual(meet(located({ place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true })), [], 'the road outside town is not the town');
+    assert.equal(atPlace('Auvoth / Pale Market', LINKED_TAPROOM), false, 'another town is not');
+    assert.deepEqual(meet(linked({ place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true })), [], 'the road outside town is not the town');
     // Reply 14 (castfix2's case): she is not chanced upon in the taproom 1730 minutes in; Torka, in his town, can be.
-    for (const at of [REPLY14, START + 3 * DAY]) assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: LOCATED_TAPROOM, now: at, travel: roadTrip, strict: true })), ['torka']);
-    assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: { ...LOCATED_TAPROOM, open: true }, now, travel: roadTrip, strict: true })), []);
+    for (const at of [REPLY14, START + 3 * DAY]) assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: LINKED_TAPROOM, now: at, travel: roadTrip, strict: true })), ['torka']);
+    for (const at of [REPLY14, START + 3 * DAY]) assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: LOCATED_TAPROOM, now: at, travel: roadTrip, strict: true })), []);
+    assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: { ...LINKED_TAPROOM, open: true }, now, travel: roadTrip, strict: true })), []);
 });
 
 test('reach 3 (review 3): someone from another town reaches a place in town by the road to that town, and not sooner', () => {
     const { slice } = runCast();
     const rika = slice.people['ersveil:rika'];
-    const days = reachDays(rika.where, LOCATED_TAPROOM, roadTrip);
+    const days = reachDays(rika.where, LINKED_TAPROOM, roadTrip);
     assert.equal(days, reachDays(rika.where, GUILD, roadTrip), 'the frontier road to Bluewatch Village');
     assert.ok(days >= 3.5, `${days}`);
-    assert.equal(canReach(rika, LOCATED_TAPROOM, { now: REPLY14, travel: roadTrip }), false);
-    assert.equal(canReach(rika, LOCATED_TAPROOM, { now: START + 3 * DAY, travel: roadTrip }), false, 'not at 3 days');
-    assert.equal(canReach(rika, LOCATED_TAPROOM, { now: START + Math.ceil(days * DAY), travel: roadTrip }), true, 'at the road\'s time');
-    assert.equal(reachDays(rika.where, located({ place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true }), roadTrip), null, 'a road or wilderness: only its own roads');
+    assert.equal(canReach(rika, LINKED_TAPROOM, { now: REPLY14, travel: roadTrip }), false);
+    assert.equal(canReach(rika, LINKED_TAPROOM, { now: START + 3 * DAY, travel: roadTrip }), false, 'not at 3 days');
+    assert.equal(canReach(rika, LINKED_TAPROOM, { now: START + Math.ceil(days * DAY), travel: roadTrip }), true, 'at the road\'s time');
+    assert.equal(reachDays(rika.where, LOCATED_TAPROOM, roadTrip), null, 'no parent saved: no road to the taproom, as in castfix2');
+    assert.equal(canReach(rika, LOCATED_TAPROOM, { now: START + 30 * DAY, travel: roadTrip }), false);
+    assert.equal(reachDays(rika.where, linked({ place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true }), roadTrip), null, 'a road or wilderness: only its own roads');
 });
 
 test('planner moves (reach 3, review 2): a move within the town is no trip; a roadless move onto a place in the party\'s town is refused', () => {
     const { slice } = runCast();
     const torka = slice.people['ersveil:torka'];
     const rika = slice.people['ersveil:rika'];
-    const BACK_ROOM = located({ place: 'Adventurers\' Guild back room', region: 'bluewatch', town: '', open: false });
-    const WHARF = located({ place: 'Wharf smithy', region: 'bluewatch', town: '', open: false });
-    assert.deepEqual(moveReach(torka, 'Wharf smithy', { party: LOCATED_GUILD, to: START + DAY, travel: roadTrip }), {}, 'Bluewatch Village to its smithy: no last known place to keep');
+    const BACK_ROOM = linked({ place: 'Adventurers\' Guild back room', region: 'bluewatch', town: '', open: false });
+    const WHARF = linked({ place: 'Wharf smithy', region: 'bluewatch', town: '', open: false });
+    assert.deepEqual(moveReach(torka, 'Wharf smithy', { party: linked(GUILD), to: START + DAY, travel: roadTrip }), {}, 'Bluewatch Village to its smithy: no last known place to keep');
+    assert.deepEqual(moveReach(torka, 'Wharf smithy', { party: LOCATED_GUILD, to: START + DAY, travel: roadTrip }), { from: { where: 'Bluewatch Village', since: START } }, 'no parent saved: a roadless move, as in castfix2');
     applyAdvance(slice, { from: START, to: START + DAY, moves: [{ key: 'ersveil:torka', where: 'Wharf smithy', doing: 'works' }] }, { rev: 2 });
     assert.equal(canReach(torka, WHARF, { now: START + DAY + 1, travel: roadTrip }), true);
     torka.known = [{ where: 'Bluewatch Village', since: START }];
@@ -722,7 +787,7 @@ test('planner moves (reach 3, review 2): a move within the town is no trip; a ro
     assert.equal(moveReach(rika, 'Drowned Bell taproom', { party: BACK_ROOM, to: START + DAY, travel: roadTrip }), null);
     assert.deepEqual(moveReach(rika, 'Drowned Bell taproom', { party: BACK_ROOM, to: START + 4 * DAY, travel: roadTrip }), {}, 'the road fits');
     assert.equal(moveReach(rika, 'Drowned Bell taproom', { party: BACK_ROOM, to: START + DAY, travel: () => null }), null);
-    assert.equal(moveReach(rika, 'Drowned Bell taproom', { party: located({ place: 'Glassdock', region: 'glassdock', town: '' }), to: START + DAY, travel: () => null }).from.where, 'Auvoth / Pale Market', 'away from the party: kept, with her last known place');
+    assert.equal(moveReach(rika, 'Drowned Bell taproom', { party: linked({ place: 'Glassdock', region: 'glassdock', town: '' }), to: START + DAY, travel: () => null }).from.where, 'Auvoth / Pale Market', 'away from the party: kept, with her last known place');
 });
 
 test('reach 3 (review 5): a road or wilderness meets the places in it, and its name with or without "the"; a road is not the town it leaves', () => {
@@ -759,7 +824,8 @@ test('partyPlace reads the map\'s own kind: a road or wilderness is open; a kind
 test('reach 2 replays as it was: `old` (and a party with no atlas reader) reads the merged rule; reach 3 the atlas', () => {
     assert.equal(atPlace('Bluewatch Village', { ...LOCATED_TAPROOM, old: true }), false, 'rule 2 as merged: a region alone is not the town');
     assert.equal(atPlace('Bluewatch Village', TAPROOM), false, 'no atlas reader: the merged rule');
-    assert.equal(atPlace('Bluewatch Village', LOCATED_TAPROOM), true);
+    assert.equal(atPlace('Bluewatch Village', LOCATED_TAPROOM), false, 'reach 3, no parent saved: as merged');
+    assert.equal(atPlace('Bluewatch Village', LINKED_TAPROOM), true, 'reach 3, the atlas\'s saved parent');
     const wild = { place: 'River Bluff (Auvoth)', region: 'auvoth', town: 'Auvoth' };
     assert.equal(atPlace('Auvoth / Pale Market', { ...wild, old: true }), true, 'a parented wild place counted as the town');
     assert.equal(atPlace('Auvoth / Pale Market', located({ ...wild, open: true })), false);

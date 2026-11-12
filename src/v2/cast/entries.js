@@ -151,7 +151,7 @@ const townOfLine = (line, place) => {
     return town && normalize(town) !== normalize(place) ? town : '';
 };
 
-// ---- the reach rule's places (world.js `atPlace`, `reach: 3`): the atlas's ids and parent links, never one name holding another ------------
+// ---- the reach rule's places (world.js `atPlace`, `reach: 3`): the atlas's ids and saved parent links, never names or regions ------------
 
 const ARTICLE = /^the\s+/i;
 const UP_MAX = 3;
@@ -159,28 +159,31 @@ const UP_MAX = 3;
 /**
  * `locate(name)` for a party: a place's spot `{ key, name, open, up }`. `key`: the atlas's id for it (`id:<id>`), else its whole name (`name:<name>`,
  * a leading "the" dropped); `open`: a road or wilderness by its map kind; `up`: the places it sits in, nearest first (`{ key, name, open }`, three at
- * most): the town of its place line (the atlas's saved parent, else the parent the atlas reads from the name, "X / Y"), else, for a place the atlas
- * has with no parent, the place the atlas finds by its region's last part by whole name or alias ("bluewatch": the pack's alias of Bluewatch
- * Village; "Shornmarch" is no place, so a place there sits in nothing). Answers are kept for the party's life (one reply's frame or step).
+ * most), by the parent the atlas saved for it (`atlas.place` `parent`, an id), else, as rule 2 as merged read it, the town a name writes first
+ * ("Auvoth / Pale Market": Auvoth); else nothing. A region never names a town, and one name holding another, or starting with it, is nothing:
+ * "Drowned Bell taproom" (region "bluewatch", no parent saved) sits in no town, and "Rosefen" (region "Valegard") not in Valegard.
+ * Answers are kept for the party's life (one reply's frame or step).
  */
 export function locator(query) {
     const memo = new Map();
     const find = name => (name ? ask(query, 'atlas.place', { name }, null) ?? (ARTICLE.test(name) ? ask(query, 'atlas.place', { name: name.replace(ARTICLE, '') }, null) : null) : null);
-    const locate = raw => {
-        const name = cutPoints(flat(raw), MAX_PLACE);
-        if (!name) return null;
-        if (memo.has(name)) return memo.get(name);
-        memo.set(name, null);
-        const found = find(name);
+    const spotOf = (name, found, chain) => {
         const spot = { key: found?.id ? `id:${found.id}` : `name:${normalize(name).replace(ARTICLE, '')}`, name: cutPoints(flat(found?.name), MAX_PLACE) || name, open: isOpen(found?.kind), up: [] };
-        const line = townOfLine(ask(query, 'atlas.line', { name }, ''), name);
-        const region = !line && found && !spot.open ? find(cutPoints(flat(String(found.region ?? '').split(':').pop()), MAX_PLACE)) : null;
-        const parent = line ? locate(line) : region ? locate(region.name) : null;
+        if (chain.has(spot.key)) return spot;
+        chain.add(spot.key);
+        const saved = found?.parent ? ask(query, 'atlas.place', { id: found.parent }, null) : null;
+        const written = !found?.parent && name.includes('/') ? cutPoints(flat(name.split('/')[0]), MAX_PLACE) : '';
+        const parent = saved ? spotOf(cutPoints(flat(saved.name), MAX_PLACE), saved, chain) : written ? locate(written, chain) : null;
         if (parent && parent.key !== spot.key) spot.up = [{ key: parent.key, name: parent.name, open: parent.open }, ...parent.up.filter(up => up.key !== spot.key)].slice(0, UP_MAX);
-        memo.set(name, spot);
         return spot;
     };
-    return locate;
+    const locate = (raw, chain = new Set()) => {
+        const name = cutPoints(flat(raw), MAX_PLACE);
+        if (!name) return null;
+        if (!memo.has(name)) memo.set(name, spotOf(name, find(name), chain));
+        return memo.get(name);
+    };
+    return name => locate(name);
 }
 
 /**
