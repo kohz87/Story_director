@@ -181,13 +181,14 @@ test('pulse.quiet: the header switch\'s state ({ on }) under the pulse feature, 
 
 test('director.older and the Behind view count the older finished threads the fold summarised (CX item 5)', () => {
     const base = makeState({ threads: [wolves({ rev: 5 })] });
-    const record = (n, kind, key) => ({ id: `th_old0000${n}`, kind, key, outcome: 'done', order: n });
-    const folded = { 7: { rev: 7, items: [record(1, 'quest', 'Old Rats'), record(2, 'hook', 'Old Hook'), record(3, 'secret', 'Old Vault'), record(4, 'agenda', 'Old Walk')] } };
+    const record = (n, kind, key, goal) => ({ id: `th_old0000${n}`, kind, key, outcome: 'done', order: n, ...(goal ? { goal: true } : {}) });
+    const folded = { 7: { rev: 7, items: [record(1, 'quest', 'Old Rats'), record(2, 'hook', 'Old Hook'), record(3, 'secret', 'Old Vault'), record(4, 'agenda', 'Old Walk'), record(5, 'event', 'Old Feast', true)] } };
     const state = { ...base, domains: { ...base.domains, director: { ...base.domains.director, folded } } };
-    assert.deepEqual(run(state, 'director.older'), { quests: 2, total: 4 });
+    // The Quests footer counts what the screen drew as cards (a quest, or any thread with a goal: here the quest and the goal event); the Director footer the rest.
+    assert.deepEqual(run(state, 'director.older'), { quests: 2, other: 3, total: 5 });
     assert.equal(run(state, 'director.behind').older, 2);
     // A key a live thread has again is read from that thread, not counted as older.
     const remade = { ...state, domains: { ...state.domains, director: { ...state.domains.director, keys: { ...state.domains.director.keys, 'old rats': 'th_new00001' } } } };
-    assert.deepEqual(run(remade, 'director.older'), { quests: 1, total: 3 });
-    assert.deepEqual(run(makeState({ threads: [wolves({ rev: 5 })] }), 'director.older'), { quests: 0, total: 0 });
+    assert.deepEqual(run(remade, 'director.older'), { quests: 1, other: 3, total: 4 });
+    assert.deepEqual(run(makeState({ threads: [wolves({ rev: 5 })] }), 'director.older'), { quests: 0, other: 0, total: 0 });
 });

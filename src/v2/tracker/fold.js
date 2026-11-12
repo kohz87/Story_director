@@ -41,7 +41,7 @@ const SCORED = new Set(['done', 'failed', 'abandoned']);
 const HIDE_ROOM = 12;
 // `giver` and `people` are as long as the thread fields allow (600): a cut name would change what Ripples matches.
 const LIMITS = Object.freeze({ key: 120, summary: 600, names: 80, giver: 600 });
-const RECORD_FIELDS = ['id', 'kind', 'key', 'outcome', 'order', 'giver', 'people', 'summary', 'difficulty', 'hide', 'secret', 'at'];
+const RECORD_FIELDS = ['id', 'kind', 'key', 'outcome', 'order', 'giver', 'people', 'summary', 'difficulty', 'hide', 'secret', 'goal', 'at'];
 const THREAD_ID = /^th_[0-9a-z]{8}$/;
 const BUCKET_KEY = /^\d+$/;
 
@@ -129,6 +129,8 @@ export function foldRecord(thread, aliases = []) {
         record.hide = [...new Set([own, ...aliases])].slice(0, HIDE_ROOM).map(name => cut(name, LIMITS.key));
     }
     if (thread.kind === 'secret') record.secret = true;
+    // The Quests screen draws any thread with a goal as a card (quest-cards.js `isQuestThread`): its "Older" footer counts these.
+    if (thread.kind !== 'quest' && fields.goal != null) record.goal = true;
     return record;
 }
 
@@ -172,6 +174,22 @@ export function foldedItems(director) {
 /** The folded records no live thread has the key of again (a key made again is read from its live thread, not from the old record). */
 export function olderItems(director) {
     return foldedItems(director).filter(item => !director?.threads?.[item.id] && !director?.keys?.[keyOf(item)]);
+}
+
+/** Whether a folded record was a Quests card (a quest, or a thread with a goal). */
+export const isCardRecord = item => item.kind === 'quest' || item.goal === true;
+
+/**
+ * Story Block's `legendEarned` asks `director.threads { kind: 'quest' }` for a done quest. While none is live (the witnesses kept by the
+ * fold were reopened) but an older done quest was folded, that answer gets one read-only stand-in, so reopening what the fold kept cannot
+ * take the earned legendary away (the fold cannot depend on how many reopen). `[]` or `[thread]`.
+ */
+export function legendWitness(director) {
+    const live = Object.values(director?.threads ?? {}).some(thread => thread?.kind === 'quest' && thread.ended?.outcome === 'done');
+    const item = live ? null : olderItems(director).filter(entry => entry.kind === 'quest' && entry.outcome === 'done').pop();
+    if (!item) return [];
+    return [{ id: item.id, kind: 'quest', key: item.key, summary: item.summary ?? '', fields: {}, status: 'resolved', offer: false, taken: null,
+        ended: { rev: 0, reason: 'folded', outcome: 'done' }, target: null, reward: null, rev: 0, folded: true }];
 }
 
 /** The names folded threads still hide: `behind` (every name a behind-the-scenes thread reached) and `words` (secrets' keys and aliases), from every record. */
@@ -272,6 +290,7 @@ function recordErrors(at, item) {
     if (item.hide !== undefined && !(Array.isArray(item.hide) && item.hide.length <= HIDE_ROOM && item.hide.every(name => text(name, LIMITS.key)))) {
         errors.push(`${at}.hide must be at most ${HIDE_ROOM} names.`);
     }
+    if (item.goal !== undefined && item.goal !== true) errors.push(`${at}.goal must be true.`);
     if (item.secret !== undefined && item.secret !== true) errors.push(`${at}.secret must be true.`);
     return errors;
 }

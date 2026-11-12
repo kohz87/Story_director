@@ -19,7 +19,7 @@ import { PRESETS, makeCalendar, normalizeCalendar } from '../../calendar.js';
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { problemList } from '../tracker/domain.js';
-import { olderItems } from '../tracker/fold.js';
+import { isCardRecord, olderItems } from '../tracker/fold.js';
 import { heroDate } from '../tracker/clock-set.js';
 import { BEHIND, BEHIND_KINDS } from './reveal.js';
 import { THREADS_FEATURE, threadsOn } from '../threads.js';
@@ -425,8 +425,8 @@ export function screenQueries({ settings = null } = {}) {
         // `{ on: true }` while the feature is on, null while it is off: the Director screen's World card and the World screen's News and Factions read it.
         // The Director screen's cards (planView).
         'director.plan': (state, args, tools) => planView(state, args, tools, { settings }),
-        // The older finished quests and hooks the fold summarised (the Quests screen's footer): `{ quests, total }`.
-        'director.older': state => ({ quests: olderCount(state, item => item.kind === 'quest' || item.kind === 'hook'), total: olderCount(state) }),
+        // The older finished threads the fold summarised: `quests` (those the Quests screen drew as cards), `other` (the rest: the Director screen's footer), `total`.
+        'director.older': state => ({ quests: olderCount(state, isCardRecord), other: olderCount(state, item => !isCardRecord(item)), total: olderCount(state) }),
         'director.threads.on': Object.assign(() => ({ on: true }), { feature: THREADS_FEATURE }),
         'director.goal': (state, args, tools) => currentGoal(state, args, tools),
         'quest.board': (state, args, tools) => questBoard(state, args, tools),

@@ -44,7 +44,7 @@ import { OUTCOMES, THREAD_KINDS, orderedThreads } from './convert.js';
 import { calendarConfig, calendarOf, packCalendarOf, settingsFrom } from './time.js';
 import { initiativeErrors } from './initiative.js';
 import { quietThreads } from './quiet.js';
-import { foldedErrors, olderItems } from './fold.js';
+import { foldedErrors, legendWitness, olderItems } from './fold.js';
 
 export const PROBLEM_LIMIT = 50;
 /** How many problems are kept; the newest PROBLEM_LIMIT are shown. */
@@ -255,12 +255,21 @@ export function validateDirector(slice) {
         for (const [name, id] of Object.entries(slice.keys)) {
             if (!Object.hasOwn(slice.threads ?? {}, id)) errors.push(`director.keys["${name}"] points at no thread.`);
         }
+        // No two threads of ANY status share a key: a fold that a later edit (a Re-read, a rebuild) skipped would bring an old thread, resolved
+        // or active, back beside the one made again under its key; that state is refused here, so no path can reach it.
+        const owners = new Map();
+        for (const thread of Object.values(slice.threads ?? {})) {
+            if (!thread?.key || typeof thread.key !== 'string') continue;
+            const name = lineKey(thread.key);
+            if (owners.has(name) && owners.get(name) !== thread.id) errors.push(`"${thread.key}" is the key of two threads.`);
+            else owners.set(name, thread.id);
+        }
         for (const thread of Object.values(slice.threads ?? {})) {
             if (!thread?.key || thread.status !== 'active') continue;
             const holder = slice.keys[lineKey(thread.key)];
             // Two live threads never share a key (a fold a later edit skipped would leave the old one beside a newer one: that edit is refused).
             if (holder === undefined) errors.push(`"${thread.key}" is missing from director.keys.`);
-            else if (holder !== thread.id) errors.push(`"${thread.key}" is the key of two threads (director.keys names ${holder}).`);
+            else if (holder !== thread.id) errors.push(`"${thread.key}" is the key of two threads.`);
         }
     }
     if (slice.writes !== undefined && (!map(slice.writes) || Object.entries(slice.writes).some(([id, entry]) => !recordId(id)
@@ -353,7 +362,8 @@ export const queries = {
         const quiet = open === true ? quietThreads(director, { state, query: typeof tools?.query === 'function' ? (name, args) => tools.query(name, args) : null }) : null;
         return orderedThreads(director)
             .filter(thread => (!kind || thread.kind === kind) && (!status || thread.status === status) && (offer === null || thread.offer === offer) && !quiet?.has(thread.id))
-            .map(plain);
+            .map(plain)
+            .concat(kind === 'quest' && !status && offer === null && open !== true ? legendWitness(director) : []);
     },
     /** The folded older finished threads (fold.js): `{ items: [record], counts: { <kind>: { <outcome>: n } } }`, the records in tracker order. */
     'director.folded': state => {

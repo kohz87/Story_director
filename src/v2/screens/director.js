@@ -110,6 +110,7 @@ const TEMPLATE = `
   <p class="sd-empty sd-wide" data-if="!q.plan.any">Nothing planned yet.</p>
   <ss-widget class="sd-wide" name="${PLAN_WIDGET}" data-props='{"bind":"q.plan"}' data-if="q.plan.any"></ss-widget>
   <ss-widget class="sd-wide" name="${RIPPLES_WIDGET}" data-props='{"bind":"q.ripples"}' data-if="len(q.ripples)"></ss-widget>
+  <p class="sd-older sd-wide" data-if="q.older.other > 0">Older finished threads summarised, no longer listed: {{ q.older.other }}</p>
 </div>
 `;
 
@@ -143,6 +144,7 @@ const CSS = `${BASE_CSS}
 .sd-director { display: grid; gap: 14px; padding: 4px 0; min-width: 0; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .sd-director > * { min-width: 0; }
 .sd-director > ss-widget { display: block; }
+.sd-older { margin: 0; font-size: 12px; color: var(--sd-muted); overflow-wrap: anywhere; }
 .sd-empty, .sd-wide { grid-column: 1 / -1; }
 .sd-dir-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
 .sd-dir-title { margin: 0; font-size: 1.1em; font-weight: 700; }
@@ -193,6 +195,8 @@ const data = {
     ripples: { query: 'ripples.sway' },
     // The World pulse card, the recent rolls and the quiet switch (feature `story-director.pulse`; null while it is off, so none is drawn).
     pulse: { query: 'pulse.view' },
+    // The footer for the older finished threads the fold summarised (the Quests screen counts its own cards).
+    older: { query: 'director.older' },
 };
 
 export const directorScreen = Object.freeze({

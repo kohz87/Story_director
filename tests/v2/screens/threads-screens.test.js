@@ -218,3 +218,11 @@ test('the Behind view and the Quests screen say how many older finished threads 
     assert.match(quests(4), /Older finished quests summarised, no longer listed: 4/);
     assert.doesNotMatch(quests(0), /Older/);
 });
+
+test('the real Director screen says how many older finished threads were summarised, and only when some were (CX item 3)', { skip }, () => {
+    const older = other => ({ quests: 0, other, total: other });
+    const text = other => squash(draw(directorScreen, null, { q: { arc: null, plan: { any: false }, ripples: [], pulse: null, older: older(other) } }).el.textContent);
+    assert.match(text(2), /Older finished threads summarised, no longer listed: 2/);
+    assert.doesNotMatch(text(0), /Older finished/);
+    assert.deepEqual(directorScreen.data.older, { query: 'director.older' });
+});

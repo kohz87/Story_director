@@ -495,3 +495,124 @@ test('a giver longer than 80 characters folds whole: Ripples sway keeps the pack
     assert.equal(record?.giver, giver);
     assert.deepEqual(h.sdk.query('ripples.sway', {}), before);
 });
+
+// ---- FOLD-F: one key, one thread (any status); the kept witnesses; the footers' sets -------------------------------------------
+test('a Re-read that would bring a RESOLVED folded quest back beside a live event of its key is refused, and nothing is corrupted later (CX3 item 1; cx-resolved-collision, -digest-off)', async t => {
+    t.mock.method(console, 'warn', () => {});
+    for (const settings of [{}, { modules: { 'story-director': { 'chronicle.digestDays': 1, 'chronicle.digestKeep': 120 } } }]) {
+        const h = await createHost({ modules: [createModule()], settings });
+        t.after(() => h.close());
+        await story(h, 30);
+        ok(await fold(h));
+        await h.send('Again', wrap('Again.', ['+ event Q3 — a completely different event']));
+        const at = carrierOf(h, '- quest Q3 — done');
+        const head = JSON.stringify(h.head());
+        await h.st.editMessage(at, h.ctx.chat[at].mes.replace('\n- quest Q3 — done', '\n- quest Q3 — failed'));
+        const out = await h.turn.reread(at);
+        assert.equal(out.ok, false, 'refused: the old resolved quest would sit beside the event');
+        assert.equal(out.code, 'CONFLICT');
+        assert.equal(JSON.stringify(h.head()), head);
+        await h.send('Unrelated', wrap('Unrelated.', ['+ event Something Else — a side event']));
+        const held = Object.values(dir(h).threads).filter(thread => thread.key === 'Q3');
+        assert.equal(held.length, 1);
+        assert.equal(held[0].kind, 'event');
+        assert.equal(held[0].status, 'active');
+        assert.deepEqual(validateDirector(dir(h)), []);
+        const live = JSON.stringify(h.head());
+        h.store.rebuild();
+        assert.equal(JSON.stringify(h.head()), live);
+    }
+});
+
+test('the validator refuses any two threads with one key, whatever their status (the whole class)', () => {
+    const base = { time: { minutes: null }, keys: {}, turn: { n: 0, now: null }, problems: {}, writes: {} };
+    const thread = (id, status, key = 'Q3') => ({ id, kind: 'quest', key, summary: '', fields: {}, status, offer: false, taken: null, rev: 1, target: null, reward: null,
+        ended: status === 'resolved' ? { rev: 1, reason: 'done', outcome: 'done' } : null });
+    for (const [a, b] of [['resolved', 'resolved'], ['resolved', 'active'], ['active', 'resolved']]) {
+        const slice = { ...base, threads: { th_aaaaaaa1: thread('th_aaaaaaa1', a), th_aaaaaaa2: thread('th_aaaaaaa2', b) }, keys: { q3: a === 'active' ? 'th_aaaaaaa1' : 'th_aaaaaaa2' } };
+        assert.ok(validateDirector(slice).some(error => /key of two threads/.test(error)), `${a} + ${b}`);
+    }
+    const one = { ...base, threads: { th_aaaaaaa1: thread('th_aaaaaaa1', 'resolved'), th_aaaaaaa2: thread('th_aaaaaaa2', 'active', 'Q4') }, keys: { q4: 'th_aaaaaaa2' } };
+    assert.deepEqual(validateDirector(one), []);
+});
+
+test('reopening the kept done quests after a fold keeps legendEarned true (CX3 item 2; cx-witness-reopen)', async t => {
+    const h = await createHost({ modules: [createModule()] });
+    t.after(() => h.close());
+    await story(h, 30);
+    ok(await fold(h));
+    const done = () => Object.values(dir(h).threads).filter(thread => thread.kind === 'quest' && thread.ended?.outcome === 'done').map(thread => thread.key);
+    const kept = done();
+    assert.ok(kept.includes('Q1') && kept.includes('Q29'), 'the fold kept the oldest and the newest done quest');
+    assert.ok(dir(h).folded && h.sdk.query('director.folded', {}).items.some(item => item.outcome === 'done'), 'a done quest was folded');
+    for (const key of kept) {
+        await h.send(`Reopen ${key}`, wrap('Again.', [`+ quest ${key} — work renewed | giver: Fenna | goal: new task`]));
+        assert.equal(earned(h), true, `after reopening ${key}`);
+    }
+    assert.deepEqual(done(), [], 'no live done quest is left');
+    assert.equal(earned(h), true, 'legendEarned still true: an older done quest was folded');
+    assert.deepEqual(validateDirector(dir(h)), []);
+    const live = JSON.stringify(h.head());
+    h.store.rebuild();
+    assert.equal(JSON.stringify(h.head()), live);
+    assert.equal(earned(h), true);
+    // Without a fold, no done quest ever: no stand-in.
+    const none = await createHost({ modules: [createModule()] });
+    t.after(() => none.close());
+    assert.equal(earned(none), false);
+    assert.deepEqual(none.sdk.query('director.threads', { kind: 'quest' }), []);
+});
+
+test('the footers count the right sets after a real fold: goal events are Quests cards, goal-less hooks are not (CX3 item 4; cx-footer-count, -hooks, -events)', async t => {
+    const h = await createHost({ modules: [createModule()], settings: { modules: { 'story-director': { 'chronicle.digestDays': 1, 'chronicle.digestKeep': 1 } } } });
+    t.after(() => h.close());
+    for (let n = 1; n <= 25; n++) {
+        const lines = [`~ time June ${n}, 1200, 08:00 am`];
+        if (n <= 5) lines.push(`+ hook H${n} — a rumour with no goal`, `+ event E${n} — a goal event | goal: Watch it`);
+        if (n > 1 && n <= 6) lines.push(`- hook H${n - 1} — done`, `- event E${n - 1} — done`);
+        await h.send(`Go ${n}`, wrap(`Day ${n}`, lines));
+    }
+    await h.send('Wait', 'Quiet');
+    ok(await fold(h, { after: 3, keep: 1 }));
+    const folded = h.sdk.query('director.folded', {}).items;
+    const hooks = folded.filter(item => item.kind === 'hook').length;
+    const events = folded.filter(item => item.kind === 'event').length;
+    assert.ok(hooks >= 2 && events >= 2, JSON.stringify(folded.map(item => item.key)));
+    const older = h.sdk.query('director.older', {});
+    assert.deepEqual(older, { quests: events, other: hooks, total: hooks + events });
+    assert.equal(folded.filter(item => item.goal === true).length, events);
+});
+
+// Another folded thread's finish is taken away (REV-folde F1/F2; probes rv-resolved-shadow, rv-delete-collide): the fold is skipped, and the old resolved Q3 would come back beside the newer Q3.
+for (const mode of ['reread', 'delete']) for (const again of ['+ event Q3 — a completely different event', '+ quest Q3 — other work | giver: Nobody | goal: other']) {
+    test(`${mode} of another folded thread's finish never leaves two Q3 threads (${again.slice(2, 7)}), and later lines write one record`, async t => {
+        t.mock.method(console, 'warn', () => {});
+        const h = await createHost({ modules: [createModule()] });
+        t.after(() => h.close());
+        await story(h, 30);
+        ok(await fold(h));
+        await h.send('Again', wrap('Again.', [again]));
+        const at = carrierOf(h, '- quest Q4 — done');
+        const head = JSON.stringify(h.head());
+        if (mode === 'reread') {
+            await h.st.editMessage(at, h.ctx.chat[at].mes.replace('\n- quest Q4 — done', ''));
+            const out = await h.turn.reread(at);
+            assert.equal(out.ok, false);
+            assert.equal(out.code, 'CONFLICT');
+            assert.match(out.message ?? '', /key of two threads/);
+            assert.doesNotMatch(out.message ?? '', /th_[0-9a-z]{8}/, 'no internal id in the refusal');
+            assert.equal(JSON.stringify(h.head()), head);
+        } else {
+            await dropPair(h, at);
+        }
+        const same = () => Object.values(dir(h).threads).filter(thread => thread.key === 'Q3');
+        for (const line of ['+ quest Q99 — unrelated', '~ event Q3 | now: at the gate', '- quest Q3 — done', '+ quest Q98 — another']) {
+            await h.send('Next', wrap('Next.', [line]));
+            assert.equal(same().length, 1, `one Q3 thread after "${line}"`);
+            assert.deepEqual(validateDirector(dir(h)), []);
+        }
+        const live = JSON.stringify(h.head());
+        h.store.rebuild();
+        assert.equal(JSON.stringify(h.head()), live);
+    });
+}
