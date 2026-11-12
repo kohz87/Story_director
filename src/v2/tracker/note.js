@@ -76,7 +76,7 @@ export const GRAMMAR = Object.freeze({
     clock: '',
     beat: '',
     secret: '',
-    hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type. Write a hook when someone mentions a job, rumour or trouble {{user}} could follow, e.g. + hook Missing boatman — Person A says he vanished near Place X | giver: Person A|Missing boatman — Person A says he vanished near Place X | giver: Person A | goal: ask at the docks; once {{user}} agrees: + quest Pest job — clear a cellar | giver: Person B|Pest job — clear a cellar | giver: Person B | reward: 20 copper',
+    hook: '+ hook|quest Name — a hook is an open thread or lead (a job only offered stays in the story; + quest once {{user}} accepts it); a quest is a job {{user}} accepted, not an errand (done or failed: - it) | goal | giver | reward | step | due | difficulty | type. Write a hook when someone mentions a job, rumour or trouble {{user}} could follow, e.g. + hook Missing boatman — Person A says he vanished near Place X | giver: Person A | goal: ask at the docks; once {{user}} agrees: + quest Pest job — clear a cellar | giver: Person B | reward: 20 copper',
     quest: '',
     time: '~ time <date, clock time such as 9:30 am> (the scene\'s time) or ! time +2h (time passes), never both for one stretch',
 });
