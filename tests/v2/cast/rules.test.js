@@ -7,7 +7,7 @@ import { applyAdvance, applyJourney, applyMeet, applySync, planSync, syncEmpty, 
 import { cutWords, initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
 import { atParty, castOf, fightOn, leanFight, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
 import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/v2/cast/plan.js';
-import { canBeHere, chanceCandidates, chooseMeetings, daysBetween, dueMove, linkOf, moveFits, movable, paceOf, roomLeft, sortComes } from '../../../src/v2/cast/world.js';
+import { atPlace, canBeHere, canReach, chanceCandidates, chooseMeetings, daysBetween, dueMove, linkOf, moveFits, moveReach, movable, paceOf, reachDays, roomLeft, sortComes } from '../../../src/v2/cast/world.js';
 import { packWorld, worldOf } from '../../../src/v2/atlas/world.js';
 import { travelTime } from '../../../src/v2/atlas/travel.js';
 import { entry } from './helpers.js';
@@ -496,4 +496,126 @@ test('planner moves: a trip that does not fit the time since they were placed is
     assert.equal(fit('Marsh Road', START + DAY), true, 'no route, not the party\'s place');
     assert.equal(fit('Bluewatch Village / Guild Office', START + DAY), false);
     assert.equal(moveFits({ where: '' }, 'Bluewatch Village', { party: BLUEWATCH, to: START, travel }), true, 'unplaced');
+});
+
+// ---- reach, rule 2: run5cast reply 14 (Director 2.15.1): Rika chanced upon in Drowned Bell taproom 1.2 days in; Torka met on the road ------
+
+// The run's world at reply 14 as stored (night/run5cast/out/chat.jsonl up to message 27): Ersveil 2.9.6's places and road this needs, as the
+// pack writes them, and the atlas's own places ("Drowned Bell taproom" the map placed itself: no road, no parent).
+const ERSVEIL = {
+    places: [
+        { name: 'Bluewatch Village', region: 'River Confederacy: Bluewatch', kind: 'village', x: 64, y: 110 },
+        { name: 'Bluewatch Village / Guild Office', region: 'River Confederacy: Bluewatch', kind: 'guild office', x: 64, y: 110 },
+        { name: 'Auvoth', region: 'Auvoth Compact', kind: 'city', x: 59, y: 110 },
+        { name: 'Auvoth / Pale Market', region: 'Auvoth Compact', kind: 'district', x: 59.4, y: 109.6 },
+    ],
+    routes: [{ from: 'Auvoth', to: 'Bluewatch Village', kind: 'frontier road', km: 70 }],
+};
+const RUN_ATLAS = {
+    places: {
+        pl_dmu7s0ab: { id: 'pl_dmu7s0ab', name: 'Bluewatch Village / Guild Office', region: 'River Confederacy: Bluewatch', kind: 'guild office', layer: '', discovered: true, rev: 10 },
+        pl_55i67iir: { id: 'pl_55i67iir', name: 'The Drowned Bell', region: 'bluewatch', kind: 'tavern', layer: '', discovered: true, rev: 22, made: 'sw_f43e3206a119' },
+        pl_c57qz36z: { id: 'pl_c57qz36z', name: 'Bluewatch Village', region: 'River Confederacy: Bluewatch', kind: 'settlement', layer: '', discovered: true, rev: 37 },
+        pl_yo7o67fj: { id: 'pl_yo7o67fj', name: 'Adventurers\' Guild back room', region: 'bluewatch', kind: 'settlement', layer: '', discovered: true, rev: 53, x: 64.266, y: 109.576, auto: true },
+        pl_yz6zp4i3: { id: 'pl_yz6zp4i3', name: 'Wharf smithy', region: 'bluewatch', kind: 'settlement', layer: '', discovered: true, rev: 124, x: 63.972, y: 109.516, auto: true },
+        pl_llyj22ck: { id: 'pl_llyj22ck', name: 'Drowned Bell taproom', region: 'bluewatch', kind: 'settlement', layer: '', discovered: true, rev: 140, x: 63.759, y: 109.371, auto: true },
+    },
+    keys: { 'bluewatch village / guild office': 'pl_dmu7s0ab', 'the drowned bell': 'pl_55i67iir', 'bluewatch village': 'pl_c57qz36z', 'adventurers guild back room': 'pl_yo7o67fj', 'wharf smithy': 'pl_yz6zp4i3', 'drowned bell taproom': 'pl_llyj22ck' },
+    placeRefs: { pl_dmu7s0ab: 'pack.ersveil/bluewatch-village-guild-office', pl_55i67iir: 'pl_55i67iir', pl_c57qz36z: 'pack.ersveil/bluewatch-village', pl_yo7o67fj: 'pl_yo7o67fj', pl_yz6zp4i3: 'pl_yz6zp4i3', pl_llyj22ck: 'pl_llyj22ck' },
+    routes: {}, tripRest: true, focus: null,
+};
+const runWorld = worldOf(structuredClone(RUN_ATLAS), packWorld((name, { kind } = {}) => (name === 'packs.content' ? structuredClone(ERSVEIL[kind] ?? []) : undefined)));
+const runTrip = (from, to) => travelTime(runWorld, from, to);
+// What rule 1 read (entries.js travelOf: the atlas's days, whatever their source) and what rule 2 reads (roadsOf: road trips only).
+const anyTrip = (from, to) => runTrip(from, to)?.days ?? null;
+const roadTrip = (from, to) => (runTrip(from, to)?.source === 'routes' ? runTrip(from, to).days : null);
+// Reply 14: the clock 1730 minutes after the first reply, the party in the taproom (atlas.here: the place, region "bluewatch", no town).
+const REPLY14 = 316933170;
+const TAPROOM = { place: 'Drowned Bell taproom', region: 'bluewatch', town: '' };
+const GUILD = { place: 'Bluewatch Village / Guild Office', region: 'River Confederacy: Bluewatch', town: 'Bluewatch Village' };
+
+function runCast() {
+    const cast = castFor(
+        entry('rika', { start: { place: 'Auvoth / Pale Market', goal: 'A Guild licence and a crew.', routine: '' }, drawnTo: ['Master Albrecht Somner'] }),
+        entry('torka', { start: { place: 'Bluewatch Village', goal: 'a good fight', routine: '' }, drawnTo: ['a good fight'] }),
+        entry('ysmeth', { start: { place: 'Shackles City / Chainmarket', goal: 'Pay off the debt.', routine: '' }, drawnTo: ['the Broken Chain'] }),
+    );
+    const slice = initialCast();
+    applySync(slice, syncPayload(planSync(slice, cast, { now: START })), { now: START, rev: 1 });
+    // As stored at reply 14: everyone placed at the first minute, the cast's day moved to the clock with the first minute kept.
+    for (const person of Object.values(slice.people)) person.since = START;
+    slice.day = [{ at: REPLY14, rev: 158, first: START }];
+    return { slice, cast };
+}
+
+test('reach, rule 2: run5cast reply 14, Rika (Auvoth / Pale Market) is not chanced upon in Drowned Bell taproom 1730 minutes in; rule 1 took her by a straight-line estimate', () => {
+    const { slice, cast } = runCast();
+    const rika = slice.people['ersveil:rika'];
+    // Why rule 1 passed: the taproom has no road and no town, so the atlas estimated the trip from map coordinates at one km a unit.
+    const estimate = runTrip('Auvoth / Pale Market', 'Drowned Bell taproom');
+    assert.equal(estimate.source, 'map');
+    assert.ok(estimate.days * DAY <= REPLY14 - START, `half a day by the straight line (${estimate.days} days) fits the 1730 minutes`);
+    assert.equal(canBeHere(rika, TAPROOM, { now: REPLY14, travel: anyTrip }), true, 'rule 1 (steps with reach: 1 replay as they were)');
+    assert.ok(keysOf(chanceCandidates(slice, cast, { party: TAPROOM, now: REPLY14, travel: anyTrip })).includes('rika'), 'rule 1 would chance on her');
+    // Rule 2: road trips only; the taproom has none, so she is far.
+    assert.equal(reachDays(rika.where, TAPROOM, roadTrip), null);
+    assert.equal(canReach(rika, TAPROOM, { now: REPLY14, travel: roadTrip }), false);
+    for (const now of [REPLY14, START + 400 * DAY]) assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: TAPROOM, now, travel: roadTrip, strict: true })), [], 'nobody far is chanced upon, nor Torka (no road to the taproom, and it is not his village by name)');
+    // The frontier road: 70 km, 3.5 days; at the guild office she can be there only once the road's time has passed since she was placed.
+    const days = reachDays(rika.where, GUILD, roadTrip);
+    assert.ok(days >= 3.5, `the road is at least 3.5 days (${days})`);
+    assert.equal(canReach(rika, GUILD, { now: REPLY14, travel: roadTrip }), false, 'reply 14 at the guild office: still too soon');
+    assert.equal(canReach(rika, GUILD, { now: START + Math.ceil(days * DAY) - 1, travel: roadTrip }), false);
+    assert.equal(canReach(rika, GUILD, { now: START + Math.ceil(days * DAY), travel: roadTrip }), true);
+    assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: GUILD, now: REPLY14, travel: roadTrip, strict: true })), ['torka'], 'Torka, in the village, can be');
+    // A goal pull that is linked sets out instead, landing after the road's time.
+    const sorted = sortComes(slice, cast, { comes: [{ key: 'ersveil:rika', reason: 'her licence' }], party: TAPROOM, now: REPLY14, travel: roadTrip, links: named('Rika') });
+    assert.deepEqual([sorted.meet, sorted.start], [[], []], 'to the taproom no road says how long: no meeting, no journey');
+    const toGuild = sortComes(slice, cast, { comes: [{ key: 'ersveil:rika', reason: 'her licence' }], party: GUILD, now: REPLY14, travel: roadTrip, links: named('Rika') });
+    assert.deepEqual([toGuild.meet.length, toGuild.start.length], [0, 1]);
+    assert.ok(toGuild.start[0].arrive >= REPLY14 + Math.ceil(days * DAY));
+});
+
+test('a place meeting needs the party at the place or its town, not in its region (run5cast reply 17: Torka met while the party was on the Old Rut-Line)', () => {
+    const { slice, cast } = runCast();
+    const ROAD = { place: 'Old Rut-Line', region: 'bluewatch', town: '' };
+    const meet = party => keysOf(chooseMeetings(slice, cast, { now: START + 2 * DAY, party, pace: paceOf({}), travel: roadTrip }));
+    assert.equal(atParty('Bluewatch Village', ROAD), true, 'rule 1 took the region for the place');
+    assert.equal(atPlace('Bluewatch Village', ROAD), false);
+    assert.deepEqual(meet(ROAD), [], 'on the road outside Bluewatch: not met');
+    assert.deepEqual(meet(GUILD), ['torka'], 'in the village (its guild office)');
+    assert.deepEqual(meet({ place: 'Bluewatch gatehouse', region: 'bluewatch', town: 'Bluewatch Village' }), ['torka'], 'a place the atlas has in the village');
+    assert.deepEqual(meet({ place: 'Bluewatch Village', region: 'bluewatch', town: '' }), ['torka']);
+    assert.equal(atPlace('Auvoth / Pale Market', { place: 'Auvoth outskirts', region: 'auvoth', town: '' }), true, 'the same town (run5cast reply 21: Rika met in Auvoth)');
+    assert.equal(atPlace('Bluewatch Village / Guild Office', { place: 'Glassdock / Guild Office', region: '', town: '' }), false, 'a guild office of another town');
+    assert.equal(canReach(slice.people['ersveil:torka'], ROAD, { now: START + 2 * DAY, travel: roadTrip }), false, 'and not chanced upon there (no road says how far)');
+});
+
+test('planner moves, rule 2: no hop through a place with no road beats the road from the last known place; a road move ends that', () => {
+    const { slice } = runCast();
+    const rika = slice.people['ersveil:rika'];
+    const reach = to => ({ party: GUILD, to, travel: roadTrip });
+    const LAST = { where: 'Auvoth / Pale Market', since: START };
+    assert.equal(moveReach(rika, 'Bluewatch Village', reach(START + DAY)), null, 'the road is 3.5 days');
+    assert.equal(moveReach(rika, 'Bluewatch Village / Market', reach(START + DAY)), null, 'the party\'s town by its road, too soon');
+    assert.equal(moveReach(rika, 'the river road north', reach(START + 6 * HOUR)).from.where, 'Auvoth / Pale Market', 'no road: kept, with her last known place');
+    assert.equal(moveReach(rika, 'Bluewatch Village / Guild Office', { ...reach(START + 6 * HOUR), travel: () => null }), null, 'no road at all: never onto the party\'s place');
+    // The two hops the review found: an unknown road first, then the party's town 12 hours after leaving a 3.5-day trip.
+    const first = moveReach(rika, 'the river road north', reach(START + 6 * HOUR));
+    applyAdvance(slice, { from: START, to: START + 6 * HOUR, moves: [{ key: 'ersveil:rika', where: 'the river road north', doing: 'walks', from: first.from }] }, { rev: 2 });
+    assert.deepEqual([rika.where, rika.since, rika.known], ['the river road north', START + 6 * HOUR, [LAST]]);
+    assert.deepEqual(validateCast(slice), []);
+    assert.equal(moveReach(rika, 'Bluewatch Village / Market', reach(START + 12 * HOUR)), null, 'from her last known place it is still 3.5 days');
+    assert.deepEqual(moveReach(rika, 'Wharf smithy', reach(START + 12 * HOUR)), { from: LAST }, 'another place with no road keeps the same last known place');
+    assert.equal(canReach(rika, GUILD, { now: START + 12 * HOUR, travel: roadTrip }), false, 'not chanced upon either');
+    assert.equal(canReach(rika, GUILD, { now: START + 4 * DAY, travel: roadTrip }), true, 'once the road from Auvoth could be walked');
+    assert.deepEqual(moveReach(rika, 'Bluewatch Village', reach(START + 4 * DAY)), {}, 'the road fits: no last known place to keep');
+    applyAdvance(slice, { from: START + 6 * HOUR, to: START + 4 * DAY, moves: [{ key: 'ersveil:rika', where: 'Bluewatch Village', doing: 'arrives' }] }, { rev: 3 });
+    assert.deepEqual([rika.where, rika.known], ['Bluewatch Village', null]);
+    assert.deepEqual(validateCast(slice), []);
+    // At a place with no road, a place meeting waits for the road from her last known place too.
+    slice.people['ersveil:rika'].known = [LAST];
+    slice.people['ersveil:rika'].where = 'Drowned Bell taproom';
+    const cast = runCast().cast;
+    assert.deepEqual(keysOf(chooseMeetings(slice, cast, { now: START + DAY, party: TAPROOM, pace: paceOf({}), travel: roadTrip })), [], 'there, but not by any road in a day');
 });

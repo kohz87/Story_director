@@ -2,7 +2,7 @@
 // asks for them before a reply): the story's change lines never write the cast, and the reader has no button for it.
 //
 // - `cast.sync { add?, update?, drop?, updated?, init? }`: the packs' cast joined, changed or left (apply.js).
-// - `cast.advance { from, to, moves?, died? }`: the planner's batch after a day change or a time skip.
+// - `cast.advance { from, to, moves?, died? }`: the planner's batch after a day change or a time skip (a move: `{ key, where, doing, from? }`).
 // - `cast.meet { at, who: [{ key, why, reason }] }`: the party meets someone for the first time (no dice).
 // - `cast.rumor { at, who: [{ key, where, text }] }`: the reader sought a kind of person who is elsewhere: the narrator is told of them without the name.
 // - `cast.journey { start?, stop?, land? }`: a goal pulls someone who is too far: they set out, or the link went (stop), or the trip is over (land).
@@ -107,6 +107,8 @@ function checkAdvance(payload) {
     if (!(payload.moves === undefined || (Array.isArray(payload.moves) && payload.moves.length <= MAX_PEOPLE)) || !(payload.died === undefined || (Array.isArray(payload.died) && payload.died.length <= MAX_PEOPLE))) return 'cast.advance: moves and died are lists.';
     for (const item of payload.moves ?? []) {
         if (!isRecord(item) || !keyOk(item.key) || !textOk(item.where ?? '', MAX_PLACE) || !textOk(item.doing ?? '', MAX_DOING)) return 'cast.advance: each of moves is { key, where, doing }.';
+        // `from` (new replies): the last place the atlas had a road for and the minute they left it, kept over a move with no road (world.js `moveReach`).
+        if (item.from !== undefined && !(isRecord(item.from) && textOk(item.from.where, MAX_PLACE) && (item.from.since === null || isInt(item.from.since)))) return 'cast.advance: a move\'s from is { where, since }.';
     }
     for (const item of payload.died ?? []) {
         if (!isRecord(item) || !keyOk(item.key)) return 'cast.advance: each of died is { key }.';

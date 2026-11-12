@@ -204,6 +204,46 @@ test('pulse: nobody who is too far away is chanced upon (no road known, or the t
     }
 });
 
+test('pulse, rule 2: run5cast reply 14, Rika (Auvoth / Pale Market, 3.5 days by the frontier road) is never chanced upon in Drowned Bell taproom 1730 minutes in, though the map\'s straight line makes it half a day', async () => {
+    const { castHost, castSource, entry, said } = await import('../cast/helpers.js');
+    // Ersveil 2.9.6's places and road as the pack writes them; the taproom is the story's, placed on the map by the atlas with no road.
+    const source = castSource([entry('rika', { start: { place: 'Auvoth / Pale Market', goal: 'A Guild licence and a crew.', routine: '' } })]);
+    source.places = [
+        { name: 'Bluewatch Village', region: 'River Confederacy: Bluewatch', kind: 'village', x: 64, y: 110 },
+        { name: 'Bluewatch Village / Guild Office', region: 'River Confederacy: Bluewatch', kind: 'guild office', x: 64, y: 110 },
+        { name: 'Auvoth', region: 'Auvoth Compact', kind: 'city', x: 59, y: 110 },
+        { name: 'Auvoth / Pale Market', region: 'Auvoth Compact', kind: 'district', x: 59.4, y: 109.6 },
+    ];
+    source.routes = [{ from: 'Auvoth', to: 'Bluewatch Village', kind: 'frontier road', km: 70 }];
+    const host = await castHost({ source, features: { 'story-director.pulse': true } });
+    try {
+        // The cast joins at the first minute (the clock is set first); the party goes into the taproom with three named people (the Standard
+        // table, as in the run) and 1730 minutes pass; the next reply sits at that clock (no jump to skip on), and the one after rolls as reply 14 did.
+        await host.send('Hello.', said('Start.', ['~ time June 3, 1200, 08:00 am', '~ place Bluewatch Village | kind: settlement | region: bluewatch', '+ agenda Courier — rides in | now: far north | on: June 9, 1200, 06:00 pm']));
+        await host.send('Look.', said('The village.', ['~ time June 3, 1200, 08:00 am']));
+        await host.send('A drink.', said('The taproom.', ['~ place Drowned Bell taproom | kind: settlement | region: bluewatch', '+ present Hal', '+ present Temiwa', '+ present Karn', '~ time June 4, 1200, 12:50 pm']));
+        await host.send('Sit.', said('Nothing happens.', ['~ time June 4, 1200, 12:50 pm']));
+        await host.send('Wait.', said('Nothing happens.', ['~ time June 4, 1200, 12:50 pm']));
+        const trip = host.sdk.query('atlas.travel', { from: 'Auvoth / Pale Market', to: 'Drowned Bell taproom' });
+        assert.equal(trip?.source, 'map', `the trap is there: no road to the taproom, only the straight line (${JSON.stringify(trip)})`);
+        assert.ok(trip.days * 1440 <= 1730, `the straight line fits the time (${trip.days} days)`);
+        // Under rule 1 these 60 swipes roll her chance meeting 16 times (checked when this test was written); under rule 2 never.
+        const rolled = [];
+        for (let tries = 0; tries < 60; tries += 1) {
+            await host.swipe(said('Nothing happens.', ['~ time June 4, 1200, 12:50 pm']));
+            const last = host.head().domains.director.pulse[0].results.at(-1);
+            rolled.push(last.kind);
+            assert.equal(last.table, 'std', 'the Standard table, which has the chance meeting');
+        }
+        assert.ok(!rolled.includes('CHANCE_MEETING'), `no chance meeting (${[...new Set(rolled)].join(', ')})`);
+        const rika = host.head().domains.cast.people['ersveil:rika'];
+        assert.deepEqual([rika.met, rika.where], [null, 'Auvoth / Pale Market'], 'unmet and where she was');
+        assert.ok(host.sdk.receipts().filter(item => item.receipt.type === 'director.pulse').every(item => item.receipt.replan?.payload?.reach === 2), 'every new step carries rule 2');
+    } finally {
+        host.close();
+    }
+});
+
 // ---- Kept lines: the Initiative line and the world pulse line survive a tight, crowded tail (tailBudget 550) ----
 
 const CROWD = Array.from({ length: 14 }, (_, n) => `+ hook Crowd ${n} — a long errand number ${n} in the busy lanes of Harrow | giver: Elula | goal: Do thing ${n} for the people of the town | reward: ${n + 4} gold`);

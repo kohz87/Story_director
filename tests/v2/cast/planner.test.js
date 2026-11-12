@@ -90,6 +90,8 @@ test('a swipe and a Re-read of the reply that used the answer give the same worl
         assert.equal(plain(), before, 'the same world (the steps ran again on the rewritten reply)');
         assert.equal(people(host)['ersveil:sera'].met.why, 'goal');
         assert.equal(people(host)['ersveil:fenna'].where, 'Ashford');
+        // No road from the docks to Ashford: the step keeps her last known place (reach rule 2), and so does every replay of it.
+        assert.equal(people(host)['ersveil:fenna'].known[0].where, 'Bluewatch docks');
         assert.equal(castCue(host), cue);
         const afterSwipe = JSON.stringify(host.head());
         assert.equal((await host.sdk.reread(host.ctx.chat.length - 1)).ok, true);
@@ -312,5 +314,29 @@ test('an empty answer is not asked again (one call), and a failure that came bac
         assert.equal(slow.calls.length, 1, 'the reply\'s wait had run out: no second call');
     } finally {
         two.close();
+    }
+});
+
+test('reach rule 2: a goal pull from three days away sets out on a journey, and the planner does not move a traveller while on the road', async t => {
+    quiet(t);
+    const source = withRoads(castSource([FENNA, SERA]));
+    source.routes = [{ from: 'gwenmar', to: 'harrow', kind: 'road', km: 60, hours: 72 }];
+    const model = createFakeModel(['> cast sera | her hunt for her brother\'s killer led her to Harrow', '~ cast sera | Kesh | went to Kesh instead']);
+    const host = await started({ source, model });
+    try {
+        await host.send('Sleep.', said('Morning.', DAY2));
+        await settle();
+        await host.send('Wait.', said(`Nothing. ${host.everyone()}`));
+        const trip = people(host)['ersveil:sera'].coming?.[0];
+        assert.ok(trip, 'linked by the place (Harrow) but three days away: a journey, not a meeting');
+        assert.equal(people(host)['ersveil:sera'].met, null);
+        await host.send('Sleep again.', said('Morning.', ['~ time June 5, 1200, 08:00 am']));
+        await settle();
+        await host.send('Wait.', said(`Nothing. ${host.everyone()}`));
+        assert.equal(model.calls.length, 2, 'the planner was asked for the second day');
+        assert.deepEqual([people(host)['ersveil:sera'].where, people(host)['ersveil:sera'].coming?.[0]?.arrive], ['Gwenmar', trip.arrive], 'not moved: still on the trip from Gwenmar');
+        assert.deepEqual(validatorErrors(host), []);
+    } finally {
+        host.close();
     }
 });

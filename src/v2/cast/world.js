@@ -4,7 +4,7 @@
 // * The cast moves only when the story day changes or a stretch of time passes (`dueMove`): one batch, from the story minute the
 //   cast was last moved to the clock now.
 // * A first meeting (`chooseMeetings`), at most one a reply, never during a fight, within the "new faces at most" pace:
-//   - by place: the party is at the person's place while their routine has them there (their entry's `routine` names a time of
+//   - by place: the party is at the person's place (its place or the town it stands in, `atPlace`; a region alone is not) while their routine has them there (their entry's `routine` names a time of
 //     day; one that names none holds at any hour; a person who has moved away from their start has no routine to keep);
 //   - by goal: the planner judged that a phrase of their `drawnTo` is touched by the story and cites the reason.
 //   - sought: the reader's message looked for a kind of person and the planner named this one, citing words that stand in the message (or
@@ -13,9 +13,10 @@
 //   Goal meetings come first (they carry a reason the story gave), then sought, then place meetings in the order people joined the world.
 // * A goal pulls someone only with a real link (`linkOf`: the party's place is a place their goal names, an open thread names them or
 //   their faction as giver or people, or the party carries what their goal needs); a word the goal and the scene share is none. And
-//   someone can arrive only if they are in the party's area or the story time since they were placed covers the atlas trip (`canBeHere`,
-//   no known route = far). A linked person who is too far sets out instead (`sortComes`: a journey, `person.coming`, landing after the
-//   real trip time, dropped when the link goes). The pulse's chance meeting and the planner's moves follow the same reach rule.
+//   someone can arrive only if they are at the party's place or town or the story time since they were placed covers the atlas's road
+//   trip, and the trip from their last known place too after a hop with no road (`canReach`; a straight-line estimate or no road = far).
+//   A linked person who is too far sets out instead (`sortComes`: a journey, `person.coming`, landing after the real trip time, dropped
+//   when the link goes). The pulse's chance meeting (`reach: 2`) and the planner's moves (`moveReach`) follow the same reach rule.
 // * A meeting counts only if the reply shows the person (`unshown`, after the reply: `cast.withdraw`): the narration (not its hidden
 //   comments) names them (name or alias, whole word) or a `+ present` line does; else they stay unmet, the pace is not used up and
 //   they may come again later. Someone met in the story is no planned meeting and is never withdrawn.
@@ -156,10 +157,14 @@ export function sortComes(slice, cast, { comes = [], party = {}, now = null, tra
     for (const come of comes) {
         const item = all.find(candidate => candidate.key === come.key);
         if (!item || !item.entry.drawnTo.length || !linkOf(item, party, links) || out.meet.some(pick => pick.key === come.key) || out.start.some(pick => pick.key === come.key)) continue;
-        if (canBeHere(item.person, party, { now, travel, placed: placedOf(slice) })) { out.meet.push(come); continue; }
-        const days = daysBetween(item.person.where, party, travel);
-        if (days === null || slotOf(item.person.coming) || !isInt(now)) continue;
-        out.start.push({ key: item.key, to: party.place, arrive: now + Math.max(1, Math.ceil(days * DAY)), reason: come.reason });
+        if (canReach(item.person, party, { now, travel, placed: placedOf(slice) })) { out.meet.push(come); continue; }
+        // The trip from where they are, or (after a hop with no road) from their last known place, and never before that place allows.
+        const known = slotOf(item.person.known);
+        const back = known ? reachDays(known.where, party, travel) : null;
+        const days = reachDays(item.person.where, party, travel) ?? back;
+        if (days === null || (known && back === null) || slotOf(item.person.coming) || !isInt(now)) continue;
+        const arrive = Math.max(now + Math.max(1, Math.ceil(days * DAY)), known && isInt(known.since) ? known.since + Math.ceil(back * DAY) : -Infinity);
+        out.start.push({ key: item.key, to: party.place, arrive, reason: come.reason });
     }
     return out;
 }
@@ -169,11 +174,88 @@ export function sortComes(slice, cast, { comes = [], party = {}, now = null, tra
  * party's area, or the time since they were placed covers the atlas trip; no route = far); someone at their start keeps their routine, as for a
  * place meeting. Each is `{ ...movable item, here }`, `here`: already at the party's place (met by place; anyone else is met by their way there).
  */
-export function chanceCandidates(slice, cast, { party = {}, now = null, travel = null, present = new Set(), pinned = new Set(), pace = paceOf({}) } = {}) {
+export function chanceCandidates(slice, cast, { party = {}, now = null, travel = null, present = new Set(), pinned = new Set(), pace = paceOf({}), strict = false } = {}) {
     if (roomLeft(slice, now, pace) <= 0) return [];
-    return movable(slice, cast, { present, pinned }).filter(item => !item.met && canBeHere(item.person, party, { now, travel, placed: placedOf(slice) })
-        && !(atParty(item.person.where, party) && samePlace(item.person.where, item.entry.place) && !routineHolds(item.entry.routine, now)))
-        .map(item => ({ ...item, here: atParty(item.person.where, party) }));
+    // `strict` (rule 2, `reach: 2`): `canReach` and `atPlace` with road trips only; rule 1 as it was for the steps that carry it.
+    const [reach, at] = strict ? [canReach, atPlace] : [canBeHere, atParty];
+    return movable(slice, cast, { present, pinned }).filter(item => !item.met && reach(item.person, party, { now, travel, placed: placedOf(slice) })
+        && !(at(item.person.where, party) && samePlace(item.person.where, item.entry.place) && !routineHolds(item.entry.routine, now)))
+        .map(item => ({ ...item, here: at(item.person.where, party) }));
+}
+
+// ---- reach, rule 2 (pulse steps with `reach: 2`; every hook choice, which is stored as the reply's payload) ---------------------------
+// Rule 1 (pulse steps with `reach: 1`, replayed as they were) took a place in the party's region for the party's place and the atlas's
+// first answer, a straight-line estimate too: "Drowned Bell taproom", a place the map placed itself with no road, was half a day from
+// Auvoth at the reader's map scale (one km a unit) though the road is 3.5 days, so Rika was met there 1.2 days after the start.
+
+const townPart = name => (String(name ?? '').includes('/') ? heads(name)[1] : '');
+
+/** Whether someone at `where` is where the party is: its place, or the town it stands in ("X / Y", or the atlas's `party.town`); a region alone is not (a road outside town is not the town). */
+export function atPlace(where, party) {
+    if (!where || !party?.place) return false;
+    const mine = townPart(where) || where;
+    return samePlace(where, party.place) || samePlace(mine, party.place) || [townPart(party.place), party.town].some(town => town && samePlace(mine, town));
+}
+
+/**
+ * Days from `where` to the party by known roads: 0 at its place (`atPlace`), else the longest road trip between the place (or its town) and
+ * the party's place (or its town); null when no road says. `travel(from, to)` gives road trips only (entries.js `roadsOf`): a straight-line
+ * estimate is no answer, its scale is the reader's map setting and not the world's roads.
+ */
+export function reachDays(where, party, travel) {
+    if (!where || !party?.place) return null;
+    if (atPlace(where, party)) return 0;
+    if (typeof travel !== 'function') return null;
+    let most = null;
+    for (const from of new Set([where, townPart(where)].filter(Boolean))) {
+        for (const to of new Set([party.place, townPart(party.place), party.town].filter(Boolean))) {
+            let days = null;
+            try { days = travel(from, to); } catch { days = null; }
+            if (Number.isFinite(days) && days >= 0) most = Math.max(most ?? 0, days);
+        }
+    }
+    return most;
+}
+
+/**
+ * Rule 2: whether the person can be at the party's place at `now`. From their place now (since `since`, else `placed`) and, after a move the
+ * atlas had no road for, from the last place it had one for (`known`: `[{ where, since }]`, since they left it), both by `reachDays`; no road
+ * from where they are and no known place, or no road from the known place: far. So nobody reaches the party faster than the atlas's road trip
+ * from their own last known place, by any number of hops through places with no road.
+ */
+export function canReach(person, party, { now = null, travel = null, placed = null } = {}) {
+    const known = slotOf(person?.known);
+    const legs = [];
+    const days = reachDays(person?.where, party, travel);
+    if (days !== null) legs.push([days, isInt(person?.since) ? person.since : placed]);
+    else if (!known) return false;
+    if (known) {
+        const back = reachDays(known.where, party, travel);
+        if (back === null) return false;
+        legs.push([back, known.since]);
+    }
+    return legs.every(([need, since]) => need === 0 || (isInt(since) && isInt(now) && now - since >= Math.ceil(need * DAY)));
+}
+
+/**
+ * Rule 2 for a planner move of `person` to `where` at story minute `to`: null when it does not fit, else `{ from? }`. The trip from where they
+ * are and from their last known place (`known`) must fit the time since each; with no road from the last known place the move is kept
+ * only away from the party's place, town and region, and `from` keeps that last known place (and the minute they left it) for the reach
+ * rule. A move that has a road from it clears `known`. Someone unplaced, or a move with no place, has nothing to check.
+ */
+export function moveReach(person, where, { party = {}, to = null, travel = null, placed = null } = {}) {
+    if (!person?.where || !where) return {};
+    const since = isInt(person.since) ? person.since : placed;
+    const base = slotOf(person.known) ?? { where: person.where, since };
+    const dest = { place: where };
+    const fits = (from, start) => {
+        const days = reachDays(from, dest, travel);
+        return days === null ? null : days === 0 || !isInt(start) || !isInt(to) || to - start >= Math.ceil(days * DAY);
+    };
+    if (fits(person.where, since) === false || fits(base.where, base.since) === false) return null;
+    if (fits(base.where, base.since) !== null) return {};
+    if (atPlace(where, party) || atParty(where, party)) return null;
+    return { from: { where: base.where, since: isInt(base.since) ? base.since : null } };
 }
 
 /** Whether a planner move of `person` (not an unplaced one) to `where` at story minute `to` is possible: the trip fits the time since they were placed; no route is allowed except onto the party's place. */
@@ -210,11 +292,13 @@ export function roomLeft(slice, now, pace) {
  * The people who meet the party in the reply about to be written, `[{ key, why: 'place' | 'goal', reason }]` (at most PER_REPLY, none
  * during a fight or when the pace allows no more). `comes`: the planner's `[{ key, reason }]`; `sought`: its checked `[{ key, words }]`.
  */
-export function chooseMeetings(slice, cast, { now = null, party = {}, comes = [], sought = [], fight = false, pace, present = new Set(), pinned = new Set() } = {}) {
+export function chooseMeetings(slice, cast, { now = null, party = {}, comes = [], sought = [], fight = false, pace, present = new Set(), pinned = new Set(), travel = null } = {}) {
     if (fight) return [];
     const place = party?.place ?? '';
     let room = Math.min(PER_REPLY, roomLeft(slice, now, pace));
     if (room <= 0) return [];
+    // At the party's place (rule 2: its place or town, not its region alone); someone whose last hop had no road also within reach of their last known place.
+    const here = item => atPlace(item.person.where, party) && (!slotOf(item.person.known) || canReach(item.person, party, { now, travel, placed: placedOf(slice) }));
     const eligible = movable(slice, cast, { present, pinned }).filter(item => !item.met);
     const picks = [];
     for (const come of comes) {
@@ -228,7 +312,7 @@ export function chooseMeetings(slice, cast, { now = null, party = {}, comes = []
     for (const ask of sought) {
         if (room <= 0) break;
         const item = eligible.find(candidate => candidate.key === ask.key);
-        if (!item || picks.some(pick => pick.key === item.key) || !atParty(item.person.where, party)) continue;
+        if (!item || picks.some(pick => pick.key === item.key) || !here(item)) continue;
         if (samePlace(item.person.where, item.entry.place) && !routineHolds(item.entry.routine, now)) continue;
         picks.push({ key: item.key, why: 'sought', reason: ask.words, place });
         room -= 1;
@@ -236,7 +320,7 @@ export function chooseMeetings(slice, cast, { now = null, party = {}, comes = []
     const byJoin = [...eligible].sort((a, b) => (a.person.joined ?? -Infinity) - (b.person.joined ?? -Infinity) || (a.key < b.key ? -1 : 1));
     for (const item of byJoin) {
         if (room <= 0) break;
-        if (picks.some(pick => pick.key === item.key) || !atParty(item.person.where, party)) continue;
+        if (picks.some(pick => pick.key === item.key) || !here(item)) continue;
         // Their routine only binds them at their start: someone who has moved on is where they are now.
         const home = samePlace(item.person.where, item.entry.place);
         if (home && !routineHolds(item.entry.routine, now)) continue;
@@ -257,7 +341,7 @@ export function chooseRumor(slice, cast, { party = {}, sought = [], fight = fals
     const eligible = movable(slice, cast, { present, pinned }).filter(item => !item.met);
     for (const ask of sought) {
         const item = eligible.find(candidate => candidate.key === ask.key);
-        if (!item || !item.person.where || atParty(item.person.where, party)) continue;
+        if (!item || !item.person.where || atPlace(item.person.where, party)) continue;
         const told = slotOf(item.person.rumored);
         if (told && told.where === item.person.where) continue;
         const text = rumorText(item.entry, { where: item.person.where, home: samePlace(item.person.where, item.entry.place) });
