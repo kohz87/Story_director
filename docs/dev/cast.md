@@ -103,7 +103,10 @@ Read strictly (`readCast`): only those labels, only refs it named, each part cut
 A death only where the setting "Unmet cast can die off-screen" is on or the entry has `canDieUnmet` (default off), and never for a met person.
 People in the scene and pinned key people are not asked about. Between two moves, a cheap check in code (`touches`: the telling words of a
 `drawnTo` phrase are in the last messages) asks the same planner for the `>` lines alone, once a story day. Failure (or no model) moves no
-one, but the day is counted; meetings by place still happen.
+one, but the day is counted; meetings by place still happen. A call that fails in the connection (error FAILED) is made once more, only if
+it came back within `HOLD_MS` (15 s; a timeout, a refusal and an empty answer are not asked again): at most one extra request. A plan that
+still fails is told once, as the Problems line `CAST_PLAN_FAILED` ("cast planner failed for this reply"), on the reply it was for (a swipe of
+that reply is told again; later replies of the day plan normally).
 
 ## Query for other modules
 

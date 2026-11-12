@@ -122,6 +122,27 @@ const elapsedText = (from, to) => {
     return `${hours} hour${hours === 1 ? '' : 's'}`;
 };
 
+// A planner call whose connection failed (error FAILED) is made once more, but only while the reply's own wait (HOLD_MS) has not run out;
+// a refusal or an empty answer is not asked again, an answer that does not parse is no failure at all, and a timeout (CALL_MS is longer
+// than HOLD_MS) has already used up the wait, so it is not asked again either. One extra request at most, only after such a failure.
+const RETRY_ON = new Set(['FAILED']);
+async function callOnce(model, request) {
+    const startedAt = Date.now();
+    const first = await model.callModel(request);
+    if (first?.ok || !RETRY_ON.has(first?.error) || Date.now() - startedAt >= HOLD_MS) return first;
+    return model.callModel(request);
+}
+
+/** The line the reply a planner call failed for is told (through the problem channel of the hook's answer). */
+export const PLAN_FAILED = Object.freeze({ code: 'CAST_PLAN_FAILED', message: 'cast planner failed for this reply' });
+const failedPlan = entry => entry?.status === 'failed' || (entry?.status === 'done' && entry.result?.ok === false);
+// A failure belongs to the reply it was first told on (a swipe of that reply has the same `at` and is told again); later replies plan normally.
+const toldHere = (entry, at) => {
+    if (!failedPlan(entry)) return false;
+    entry.toldAt ??= at ?? -1;
+    return entry.toldAt === (at ?? -1);
+};
+
 /** The plans the hooks share (in memory), and the counters tests read. */
 export function createCastHooks({ plans }) {
     // Asks the planner for `mode` over `people`, keeping the answer under `key`.
@@ -142,7 +163,7 @@ export function createCastHooks({ plans }) {
         });
         const profile = frame.settings.profile;
         return plans.start(key, async () => {
-            const result = await model.callModel({ profile, system: request.system, prompt: request.prompt, maxTokens: MAX_TOKENS, feature: FEATURE, timeoutMs: CALL_MS });
+            const result = await callOnce(model, { profile, system: request.system, prompt: request.prompt, maxTokens: MAX_TOKENS, feature: FEATURE, timeoutMs: CALL_MS });
             if (!result?.ok) return { ok: false };
             const read = readCast(result.text, { refs, allow });
             return mode === 'judge' ? { ok: true, moves: [], comes: read.comes, died: [] } : { ok: true, ...read };
@@ -256,6 +277,7 @@ export function createCastHooks({ plans }) {
 
         // 2. A day change or a time skip: the planner's answer (or only the clock, when it went back).
         let comes = [];
+        let planFailed = false;
         const due = dueMove(world, frame.now);
         if (due?.reset) {
             commands.push({ type: 'cast.advance', payload: { from: due.from, to: due.to, ...(at !== null ? { at } : {}) } });
@@ -271,6 +293,7 @@ export function createCastHooks({ plans }) {
                 if (!entry) entry = askPlanner(view, frame, key, 'batch', list, due);
                 entry = entry && (!fresh || frame.settings.profile) ? await plans.settled(key, HOLD_MS) : null;
                 if (entry && entry.status !== 'pending') {
+                    planFailed = toldHere(entry, at);
                     const result = entry.status === 'done' && entry.result?.ok ? entry.result : { moves: [], comes: [], died: [] };
                     const allowedDeaths = new Set(list.filter(item => item.mayDie).map(item => item.key));
                     const died = result.died.filter(item => allowedDeaths.has(item.key)).map(item => ({ key: item.key }));
@@ -286,6 +309,7 @@ export function createCastHooks({ plans }) {
             let entry = plans.peek(judgeKey(print, frame.now));
             if (entry?.status === 'pending') entry = await plans.settled(judgeKey(print, frame.now), HOLD_MS);
             if (entry?.status === 'done' && entry.result?.ok) comes = entry.result.comes ?? [];
+            planFailed = toldHere(entry, at);
         }
 
         // 3. Paths cross.
@@ -315,7 +339,8 @@ export function createCastHooks({ plans }) {
         }
         // The cue and the rumor go as pinned lines of this reply (Story Block keeps a `keep` cue whatever the tail budget says).
         const lines = pinned(cueLines(world, frame.cast, isInt(view?.chat?.length) ? view.chat.length : null));
-        return commands.length || lines.length ? { ...(commands.length ? { commands } : {}), ...(lines.length ? { lines } : {}) } : undefined;
+        const problems = planFailed ? [PLAN_FAILED] : [];
+        return commands.length || lines.length || problems.length ? { ...(commands.length ? { commands } : {}), ...(lines.length ? { lines } : {}), ...(problems.length ? { problems } : {}) } : undefined;
     }
 
     /**
