@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { part } from '../../../src/v2/tracker/index.js';
 import {
-    FEATURE, INITIATIVE, cooldownOf, initiativeCandidates, initiativeHook, initiativeLine, initiativeTail, nextPick, pickOf, weightedPick,
+    FEATURE, INITIATIVE, cooldownOf, setPersonaReader, initiativeCandidates, initiativeHook, initiativeLine, initiativeTail, nextPick, pickOf, weightedPick,
 } from '../../../src/v2/tracker/initiative.js';
 import { makeState, runCommand, story } from './helpers/fake-ctx.js';
 import { rng } from '../../vendor/story-block/src/v2/rng.js';
@@ -77,6 +77,33 @@ test('with NPC State Delta: trust weighs the pick, aliases name people, and some
     // Orsa elsewhere: not nearby.
     const far = nsd({ location: { Orsa: 'Kesh' } });
     assert.deepEqual(people(initiativeCandidates({ director: state.domains.director, state, query: queryOf(far, state) })).map(([name]) => name), ['Bram', 'Elula']);
+});
+
+test("the player's persona never takes the initiative; an NPC with a thread still does", () => {
+    const world = [{ lines: [
+        '~ time March 3, 2026, 08:00 am',
+        '+ hook Astra Debt — what Astra owes | giver: Astra | people: Astra',
+        '+ quest Lost Ring — find it | giver: astra',
+        '+ hook Wolf Contract — wolves at the fold | giver: Elula',
+    ].join('\n') }];
+    const state = withScene(story(world, makeState()), { present: ['Astra', 'Elula'] });
+    const director = state.domains.director;
+    // Without a persona told, the old reading: Astra is a candidate.
+    assert.deepEqual(initiativeCandidates({ director, state }).map(entry => entry.name), ['Astra', 'Elula']);
+    // Told directly (any case): only the NPC.
+    for (const persona of ['Astra', 'ASTRA ']) {
+        const list = initiativeCandidates({ director, state, persona });
+        assert.deepEqual(list.map(entry => entry.name), ['Elula']);
+        assert.ok(!initiativeLine(list[0]).includes('Astra'));
+    }
+    // Through the host's reader (index.js: sdk.substitute('{{user}}')), by the tail too.
+    setPersonaReader(() => 'Astra');
+    try {
+        assert.deepEqual(initiativeCandidates({ director, state }).map(entry => entry.name), ['Elula']);
+        const line = initiativeTail({ state, chat: { length: 3 }, settings: {}, feature: () => true });
+        assert.ok(line === '' || !line.includes('Astra'));
+        assert.match(line, /Elula/);
+    } finally { setPersonaReader(null); }
 });
 
 test('the weighted pick: by key order, in proportion to the weights, the same draw the same person', () => {

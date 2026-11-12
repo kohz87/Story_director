@@ -10,6 +10,7 @@
 
 import { MODULE_ID, MODULE_NAME, VERSION, storyDirectorModule } from './src/v2/module.js';
 import { arcController } from './src/v2/arc/index.js';
+import { setPersonaReader } from './src/v2/tracker/initiative.js';
 
 export const NEEDS_HOST = 'Story Director 2 needs Story Block v2: install or update Story Block, then reload.';
 const NOTICE_ID = 'story_director_needs_host';
@@ -54,6 +55,7 @@ export async function start({ root = globalThis, doc = globalThis.document, wait
         return { registered: false, reason: NEEDS_HOST };
     }
     const sdk = await host.ready;
+    setPersonaReader(() => sdk.substitute?.('{{user}}') ?? '');
     if (sdk.modules?.().some(entry => entry.id === MODULE_ID)) return { registered: true, sdk };
     try {
         // A host without the header slot does not know the field (it would log it as ignored): the module goes without it, and the Director tab keeps the switch.
