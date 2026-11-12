@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fix: a World pulse event and a cast meeting never name the player's persona.** A mood or memory in the pulse, a chance meeting, and the cast part's own meetings skip {{user}}'s persona (alone with it, the roll steps down). Matching is by exact name, as the Initiative line already does ("Astra" does not match "Astra Vale"). Replies already written replay and Re-read exactly as before: only replies written after this update use the rule.
+
 ## 2.15.1
 
 Update Story Director. Cast members no longer appear from far away: the World pulse's chance meetings, goal pulls and the planner's moves respect travel time between places; a far-away person with a real reason travels toward you instead. New replies only; old replies replay unchanged.

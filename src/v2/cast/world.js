@@ -24,6 +24,7 @@
 //   is not enabled now are left alone.
 
 import { sha256 } from '../hash.js';
+import { isPersona } from '../tracker/initiative.js';
 import { atParty, routineHolds, samePlace } from './entries.js';
 import { kindTouches, rumorText } from './sought.js';
 import { DAY, FACES, DEFAULT_FACES, dayAt, dayOf, isAlive, isInt, isMet, isRecord, keysOfPerson, peopleOf, slotOf, tables } from './domain.js';
@@ -292,14 +293,15 @@ export function roomLeft(slice, now, pace) {
  * The people who meet the party in the reply about to be written, `[{ key, why: 'place' | 'goal', reason }]` (at most PER_REPLY, none
  * during a fight or when the pace allows no more). `comes`: the planner's `[{ key, reason }]`; `sought`: its checked `[{ key, words }]`.
  */
-export function chooseMeetings(slice, cast, { now = null, party = {}, comes = [], sought = [], fight = false, pace, present = new Set(), pinned = new Set(), travel = null } = {}) {
+export function chooseMeetings(slice, cast, { now = null, party = {}, comes = [], sought = [], fight = false, pace, present = new Set(), pinned = new Set(), travel = null, persona = '' } = {}) {
     if (fight) return [];
     const place = party?.place ?? '';
     let room = Math.min(PER_REPLY, roomLeft(slice, now, pace));
     if (room <= 0) return [];
     // At the party's place (rule 2: its place or town, not its region alone); someone whose last hop had no road also within reach of their last known place.
     const here = item => atPlace(item.person.where, party) && (!slotOf(item.person.known) || canReach(item.person, party, { now, travel, placed: placedOf(slice) }));
-    const eligible = movable(slice, cast, { present, pinned }).filter(item => !item.met);
+    // {{user}} (`persona`, the name) is never met: the cast part would announce the player's own character as a newcomer.
+    const eligible = movable(slice, cast, { present, pinned }).filter(item => !item.met && !isPersona({ key: item.key, name: item.person?.name, names: item.person?.aliases }, persona));
     const picks = [];
     for (const come of comes) {
         const item = eligible.find(candidate => candidate.key === come.key);
@@ -362,9 +364,9 @@ const bare = key => key.replace(/^(?:the|a|an)\s+/, '');
  * The unmet people of the packs' cast the story already has in the scene under their name or an alias (`present`: keys): they are met at
  * that moment, "met in the story", as `{ key, why: 'story', reason: '', place }` (no cue: the narrator has them already).
  */
-export function metInTheStory(slice, cast, { present = new Set(), party = {} } = {}) {
+export function metInTheStory(slice, cast, { present = new Set(), party = {}, persona = '' } = {}) {
     return peopleOf(slice)
-        .filter(person => !isMet(person) && isAlive(person) && cast.byKey.has(person.key) && keysOfPerson(person).some(key => present.has(key) || present.has(bare(key))))
+        .filter(person => !isMet(person) && !isPersona({ key: person.key, name: person.name, names: person.aliases }, persona) && isAlive(person) && cast.byKey.has(person.key) && keysOfPerson(person).some(key => present.has(key) || present.has(bare(key))))
         .map(person => ({ key: person.key, why: 'story', reason: '', place: party?.place ?? '' }));
 }
 
