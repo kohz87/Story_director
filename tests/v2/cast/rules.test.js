@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { applyAdvance, applyJourney, applyMeet, applySync, planSync, syncEmpty, syncPayload, whyNarrator, whyText } from '../../../src/v2/cast/apply.js';
 import { cutWords, initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
-import { atParty, castOf, fightOn, leanFight, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
+import { atParty, castOf, fightOn, leanFight, partyPlace, placeInfo, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
 import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/v2/cast/plan.js';
 import { atPlace, canBeHere, canReach, chanceCandidates, chooseMeetings, daysBetween, dueMove, linkOf, moveFits, moveReach, movable, paceOf, reachDays, roomLeft, sortComes } from '../../../src/v2/cast/world.js';
 import { packWorld, worldOf } from '../../../src/v2/atlas/world.js';
@@ -560,7 +560,7 @@ test('reach, rule 2: run5cast reply 14, Rika (Auvoth / Pale Market) is not chanc
     // Rule 2: road trips only; the taproom has none, so she is far.
     assert.equal(reachDays(rika.where, TAPROOM, roadTrip), null);
     assert.equal(canReach(rika, TAPROOM, { now: REPLY14, travel: roadTrip }), false);
-    for (const now of [REPLY14, START + 400 * DAY]) assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: TAPROOM, now, travel: roadTrip, strict: true })), [], 'nobody far is chanced upon, nor Torka (no road to the taproom, and it is not his village by name)');
+    for (const now of [REPLY14, START + 400 * DAY]) assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: TAPROOM, now, travel: roadTrip, strict: true })), ['torka'], 'nobody far is chanced upon (Torka is: the taproom is in his town, the map\'s region "bluewatch")');
     // The frontier road: 70 km, 3.5 days; at the guild office she can be there only once the road's time has passed since she was placed.
     const days = reachDays(rika.where, GUILD, roadTrip);
     assert.ok(days >= 3.5, `the road is at least 3.5 days (${days})`);
@@ -578,7 +578,7 @@ test('reach, rule 2: run5cast reply 14, Rika (Auvoth / Pale Market) is not chanc
 
 test('a place meeting needs the party at the place or its town, not in its region (run5cast reply 17: Torka met while the party was on the Old Rut-Line)', () => {
     const { slice, cast } = runCast();
-    const ROAD = { place: 'Old Rut-Line', region: 'bluewatch', town: '' };
+    const ROAD = { place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true };
     const meet = party => keysOf(chooseMeetings(slice, cast, { now: START + 2 * DAY, party, pace: paceOf({}), travel: roadTrip }));
     assert.equal(atParty('Bluewatch Village', ROAD), true, 'rule 1 took the region for the place');
     assert.equal(atPlace('Bluewatch Village', ROAD), false);
@@ -617,5 +617,69 @@ test('planner moves, rule 2: no hop through a place with no road beats the road 
     slice.people['ersveil:rika'].known = [LAST];
     slice.people['ersveil:rika'].where = 'Drowned Bell taproom';
     const cast = runCast().cast;
-    assert.deepEqual(keysOf(chooseMeetings(slice, cast, { now: START + DAY, party: TAPROOM, pace: paceOf({}), travel: roadTrip })), [], 'there, but not by any road in a day');
+    assert.deepEqual(keysOf(chooseMeetings(slice, cast, { now: START + DAY, party: TAPROOM, pace: paceOf({}), travel: roadTrip })), ['torka'], 'there, but she waits for the road in a day (the village\'s Torka is in this town)');
+});
+
+test('town meetings, run5cast: a place the map placed itself (no road, no parent) is in the town its region names; a road or wilderness is not (reply 6-30: the cast went quiet in town)', () => {
+    const { slice, cast } = runCast();
+    const now = START + 2 * DAY;
+    const meet = party => keysOf(chooseMeetings(slice, cast, { now, party, pace: paceOf({}), travel: roadTrip }));
+    for (const place of ['Drowned Bell taproom', 'Wharf smithy', 'Adventurers\' Guild back room']) {
+        assert.deepEqual(meet({ place, region: 'bluewatch', town: '', open: false }), ['torka'], `${place}: Torka, of the village, is met`);
+    }
+    assert.equal(atPlace('Bluewatch Village', { place: 'Wharf smithy', region: 'River Confederacy: Bluewatch', town: '' }), true, 'a pack-style region reads by its last part');
+    assert.equal(atPlace('Auvoth / Pale Market', TAPROOM), false, 'another town is not');
+    assert.deepEqual(meet({ place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true }), []);
+    assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: TAPROOM, now, travel: roadTrip, strict: true })), ['torka']);
+    assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: { ...TAPROOM, open: true }, now, travel: roadTrip, strict: true })), []);
+});
+
+test('planner moves, rule 2 (review): a roadless hop in town can be met at; a roadless hop onto a place in the party\'s town is refused', () => {
+    const { slice } = runCast();
+    const torka = slice.people['ersveil:torka'];
+    const rika = slice.people['ersveil:rika'];
+    const dest = { region: 'bluewatch', town: '', open: false };
+    const WHARF = { place: 'Wharf smithy', region: 'bluewatch', town: '', open: false };
+    // Torka (Bluewatch Village) goes to the smithy the map placed itself: the same town, no distance, so nothing to keep; the party at the smithy meets him (rule 2 once kept
+    // his village as a last known place with no road to the smithy, and he could never be met there).
+    assert.deepEqual(moveReach(torka, 'Wharf smithy', { party: GUILD, dest, to: START + DAY, travel: roadTrip }), {});
+    applyAdvance(slice, { from: START, to: START + DAY, moves: [{ key: 'ersveil:torka', where: 'Wharf smithy', doing: 'works' }] }, { rev: 2 });
+    assert.equal(canReach(torka, WHARF, { now: START + DAY + 1, travel: roadTrip }), true);
+    // A hop that began elsewhere keeps its last known place, and that place is in the party's town: still reachable, as it is the same town.
+    torka.known = [{ where: 'Bluewatch Village', since: START }];
+    assert.equal(canReach(torka, WHARF, { now: START + DAY + 1, travel: roadTrip }), true);
+    // Rika (Auvoth) cannot be moved to the taproom while the party is in the guild office (it is in that town).
+    assert.equal(moveReach(rika, 'Drowned Bell taproom', { party: GUILD, dest, to: START + DAY, travel: roadTrip }), null);
+    assert.equal(moveReach(rika, 'Drowned Bell taproom', { party: { place: 'Glassdock', region: 'glassdock', town: '' }, dest, to: START + DAY, travel: roadTrip }).from.where, 'Auvoth / Pale Market');
+});
+
+test('town by name, run5cast: a wild place the atlas parents to a town, or a road whose name holds the town, is not the town', () => {
+    const wild = { place: 'River Bluff (Auvoth)', region: 'auvoth', town: 'Auvoth', open: true };
+    assert.equal(atPlace('Auvoth / Pale Market', wild), false);
+    assert.equal(atPlace('River Bluff (Auvoth)', wild), true, 'the place itself');
+    assert.equal(atPlace('Bluewatch Village', { place: 'Bluewatch Village Road', region: 'bluewatch', town: '', open: true }), false);
+    assert.equal(atPlace('Bluewatch Village', { place: 'Bluewatch Village Road', region: 'bluewatch', town: '', open: false }), true, 'a road the map has no kind for is read as before');
+    assert.equal(reachDays('Auvoth / Pale Market', wild, () => 1), 1, 'its own road only');
+    assert.equal(reachDays('Auvoth / Pale Market', wild, (from, to) => (to === 'Auvoth' ? 1 : null)), null, 'not the road to its parent town');
+});
+
+test('partyPlace and placeInfo read a place\'s map kind: a road or wilderness is open, a settlement is not', () => {
+    const query = (name, args) => {
+        if (name === 'atlas.here') return { name: 'Old Rut-Line', line: 'Old Rut-Line', kind: 'tavern', placeKind: 'wild', region: 'bluewatch' };
+        if (name === 'atlas.place') return { 'River Bluff (Auvoth)': { region: 'auvoth', kind: 'Forest' }, 'Wharf smithy': { region: 'bluewatch', kind: 'settlement' } }[args.name] ?? null;
+        if (name === 'atlas.line') return args.name.startsWith('River') ? 'Auvoth · River Bluff' : args.name;
+        return undefined;
+    };
+    assert.deepEqual(partyPlace(query, {}), { place: 'Old Rut-Line', region: 'bluewatch', town: '', open: true }, 'the map\'s own kind, not the scene\'s');
+    assert.deepEqual(placeInfo(query, 'River Bluff (Auvoth)'), { place: 'River Bluff (Auvoth)', region: 'auvoth', town: 'Auvoth', open: true });
+    assert.deepEqual(placeInfo(query, 'Wharf smithy'), { place: 'Wharf smithy', region: 'bluewatch', town: '', open: false });
+    assert.deepEqual(placeInfo(query, 'Nowhere'), { place: 'Nowhere', region: '', town: '', open: false });
+});
+
+test('reach 2 replays as it was: `old` switches the town-by-region and the road-is-not-town rules off (pulse steps stored with reach: 2)', () => {
+    assert.equal(atPlace('Bluewatch Village', { ...TAPROOM, old: true }), false, 'rule 2 as merged: a region alone is not the town');
+    assert.equal(atPlace('Bluewatch Village', TAPROOM), true);
+    const wild = { place: 'River Bluff (Auvoth)', region: 'auvoth', town: 'Auvoth', open: false, old: true };
+    assert.equal(atPlace('Auvoth / Pale Market', wild), true, 'a parented wild place counted as the town');
+    assert.equal(atPlace('Auvoth / Pale Market', { ...wild, open: true }), false);
 });

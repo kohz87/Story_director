@@ -238,7 +238,7 @@ test('pulse, rule 2: run5cast reply 14, Rika (Auvoth / Pale Market, 3.5 days by 
         assert.ok(!rolled.includes('CHANCE_MEETING'), `no chance meeting (${[...new Set(rolled)].join(', ')})`);
         const rika = host.head().domains.cast.people['ersveil:rika'];
         assert.deepEqual([rika.met, rika.where], [null, 'Auvoth / Pale Market'], 'unmet and where she was');
-        assert.ok(host.sdk.receipts().filter(item => item.receipt.type === 'director.pulse').every(item => item.receipt.replan?.payload?.reach === 2), 'every new step carries rule 2');
+        assert.ok(host.sdk.receipts().filter(item => item.receipt.type === 'director.pulse').every(item => item.receipt.replan?.payload?.reach === 3), 'every new step carries rule 2 with the town rules');
     } finally {
         host.close();
     }

@@ -24,7 +24,7 @@
 //   is not enabled now are left alone.
 
 import { sha256 } from '../hash.js';
-import { atParty, routineHolds, samePlace } from './entries.js';
+import { atParty, routineHolds, sameName, samePlace } from './entries.js';
 import { kindTouches, rumorText } from './sought.js';
 import { DAY, FACES, DEFAULT_FACES, dayAt, dayOf, isAlive, isInt, isMet, isRecord, keysOfPerson, peopleOf, slotOf, tables } from './domain.js';
 
@@ -183,18 +183,24 @@ export function chanceCandidates(slice, cast, { party = {}, now = null, travel =
         .map(item => ({ ...item, here: at(item.person.where, party) }));
 }
 
-// ---- reach, rule 2 (pulse steps with `reach: 2`; every hook choice, which is stored as the reply's payload) ---------------------------
+// ---- reach, rule 2 (pulse steps with `reach: 2`, and `reach: 3` with the town rules; every hook choice, which is stored as the reply's payload) ---------------------------
 // Rule 1 (pulse steps with `reach: 1`, replayed as they were) took a place in the party's region for the party's place and the atlas's
 // first answer, a straight-line estimate too: "Drowned Bell taproom", a place the map placed itself with no road, was half a day from
 // Auvoth at the reader's map scale (one km a unit) though the road is 3.5 days, so Rika was met there 1.2 days after the start.
 
 const townPart = name => (String(name ?? '').includes('/') ? heads(name)[1] : '');
 
-/** Whether someone at `where` is where the party is: its place, or the town it stands in ("X / Y", or the atlas's `party.town`); a region alone is not (a road outside town is not the town). */
+/**
+ * Whether someone at `where` is where the party is: its place, or the town it stands in ("X / Y", or the atlas's `party.town`); a region alone
+ * is not, except for a place with no town of its own whose region names the town ("bluewatch": a place the map placed itself in town). A road or
+ * wilderness place (`party.open`) is only itself: not its parent's town, not a name that holds the town's. `party.old`: neither rule (the steps with `reach: 2`).
+ */
 export function atPlace(where, party) {
     if (!where || !party?.place) return false;
+    if (party.open) return sameName(where, party.place);
     const mine = townPart(where) || where;
-    return samePlace(where, party.place) || samePlace(mine, party.place) || [townPart(party.place), party.town].some(town => town && samePlace(mine, town));
+    const byRegion = !party.old && !party.town && !townPart(party.place) && samePlace(String(party.region ?? '').split(':').pop(), mine);
+    return samePlace(where, party.place) || samePlace(mine, party.place) || byRegion || [townPart(party.place), party.town].some(town => town && samePlace(mine, town));
 }
 
 /**
@@ -208,7 +214,7 @@ export function reachDays(where, party, travel) {
     if (typeof travel !== 'function') return null;
     let most = null;
     for (const from of new Set([where, townPart(where)].filter(Boolean))) {
-        for (const to of new Set([party.place, townPart(party.place), party.town].filter(Boolean))) {
+        for (const to of new Set((party.open ? [party.place] : [party.place, townPart(party.place), party.town]).filter(Boolean))) {
             let days = null;
             try { days = travel(from, to); } catch { days = null; }
             if (Number.isFinite(days) && days >= 0) most = Math.max(most ?? 0, days);
@@ -238,23 +244,24 @@ export function canReach(person, party, { now = null, travel = null, placed = nu
 }
 
 /**
- * Rule 2 for a planner move of `person` to `where` at story minute `to`: null when it does not fit, else `{ from? }`. The trip from where they
- * are and from their last known place (`known`) must fit the time since each; with no road from the last known place the move is kept
- * only away from the party's place, town and region, and `from` keeps that last known place (and the minute they left it) for the reach
- * rule. A move that has a road from it clears `known`. Someone unplaced, or a move with no place, has nothing to check.
+ * Rule 2 for a planner move of `person` to `where` at story minute `to`: null when it does not fit, else `{ from? }`. `dest`: what the atlas says of
+ * `where` (`{ region, town, open }`, entries.js `placeInfo`). The trip from where they are and from their last known place (`known`) must fit the
+ * time since each; with no road from the last known place the move is kept only away from the party (not onto its place, town or region, nor
+ * onto a place in the party's town by `dest`), and `from` keeps that last known place (and the minute they left it) for the reach rule. A move
+ * that has a road from it clears `known`. Someone unplaced, or a move with no place, has nothing to check.
  */
-export function moveReach(person, where, { party = {}, to = null, travel = null, placed = null } = {}) {
+export function moveReach(person, where, { party = {}, dest = {}, to = null, travel = null, placed = null } = {}) {
     if (!person?.where || !where) return {};
     const since = isInt(person.since) ? person.since : placed;
     const base = slotOf(person.known) ?? { where: person.where, since };
-    const dest = { place: where };
+    const target = { ...dest, place: where };
     const fits = (from, start) => {
-        const days = reachDays(from, dest, travel);
+        const days = reachDays(from, target, travel);
         return days === null ? null : days === 0 || !isInt(start) || !isInt(to) || to - start >= Math.ceil(days * DAY);
     };
     if (fits(person.where, since) === false || fits(base.where, base.since) === false) return null;
     if (fits(base.where, base.since) !== null) return {};
-    if (atPlace(where, party) || atParty(where, party)) return null;
+    if (atPlace(where, party) || atPlace(party.place, target) || atParty(where, party)) return null;
     return { from: { where: base.where, since: isInt(base.since) ? base.since : null } };
 }
 

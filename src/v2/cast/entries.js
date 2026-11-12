@@ -137,13 +137,32 @@ export function samePlace(a, b) {
     return one === two || one.includes(two) || two.includes(one);
 }
 
-/** The place and region the party is in: `{ place, region, town }` (the atlas's, else Story Block's scene), '' for none. `town`: the town the atlas has the place in (its place line "Town · Spot"). */
+/** Whether two place names are the same by their whole name (one holding the other does not count). */
+export const sameName = (a, b) => Boolean(flat(a)) && normalize(a) === normalize(b);
+
+// Map kinds where no town stands: a road, a wilderness ("Old Rut-Line", kind wild); it is never "in" a town, whatever its parent. (Not the pulse's
+// place groups: those fold a gate, a dock or a port, which stand in towns, into road and water.)
+const OPEN_WORDS = new Set(['wild', 'wilderness', 'road', 'trail', 'track', 'path', 'forest', 'wood', 'woods', 'mountain', 'mountains', 'hill', 'hills', 'moor', 'marsh', 'swamp', 'plain', 'plains', 'valley', 'grove', 'pass', 'ford', 'bluff', 'desert', 'wasteland']);
+const isOpen = kind => String(kind ?? '').toLowerCase().split(/[\s/,;|-]+/).some(word => OPEN_WORDS.has(word));
+const townOfLine = (line, place) => {
+    const town = typeof line === 'string' && line.includes(' · ') ? cutPoints(flat(line.split(' · ')[0]), MAX_PLACE) : '';
+    return town && normalize(town) !== normalize(place) ? town : '';
+};
+
+/** What the atlas says of a place name for the reach rule: `{ place, region, town, open }` (`open`: a road or wilderness, by its kind). */
+export function placeInfo(query, name) {
+    const place = cutPoints(flat(name), MAX_PLACE);
+    const detail = place ? ask(query, 'atlas.place', { name: place }, null) : null;
+    return { place, region: cutPoints(flat(detail?.region), MAX_PLACE), town: townOfLine(place ? ask(query, 'atlas.line', { name: place }, '') : '', place), open: isOpen(detail?.kind) };
+}
+
+/** The place and region the party is in: `{ place, region, town, open }` (the atlas's, else Story Block's scene), '' for none. `town`: the town the atlas has the place in (its place line "Town · Spot"); `open`: it is a road or wilderness (its own map kind). */
 export function partyPlace(query, state) {
     const atlas = ask(query, 'atlas.here', {}, null);
     const scene = ask(query, 'scene.place', {}, null) ?? state?.domains?.scene?.place ?? null;
     const place = cutPoints(flat(atlas?.name) || flat(scene?.name), MAX_PLACE);
-    const town = typeof atlas?.line === 'string' && atlas.line.includes(' · ') ? cutPoints(flat(atlas.line.split(' · ')[0]), MAX_PLACE) : '';
-    return { place, region: cutPoints(flat(atlas?.region) || flat(scene?.region), MAX_PLACE), town: town && normalize(town) !== normalize(place) ? town : '' };
+    const kind = atlas ? atlas.placeKind || atlas.kind : scene?.kind;
+    return { place, region: cutPoints(flat(atlas?.region) || flat(scene?.region), MAX_PLACE), town: townOfLine(atlas?.line, place), open: isOpen(kind) };
 }
 
 /** Whether someone at `where` is at the party's place (or in its region). */
