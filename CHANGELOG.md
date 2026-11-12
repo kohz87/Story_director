@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.15.1
+
+Update Story Director. Cast members no longer appear from far away: the World pulse's chance meetings, goal pulls and the planner's moves respect travel time between places; a far-away person with a real reason travels toward you instead. New replies only; old replies replay unchanged.
+
+- **Fix: cast members no longer appear from far away.** A chance meeting, a goal pull or a planner move now needs a real link (not a shared word) and that the person is nearby or had the atlas travel time since their last place; otherwise a far-away person with a real reason travels toward you. New replies only; replies already written replay as before. No fixed-prompt change.
+
 ## 2.15.0
 
 Update Story Block, Story Director, NPC State Delta (and Story Studio for pack authors) together. Replies already written replay and Re-read exactly as before; start a new chat to see the new dossier, mood, ties and drives behaviour.
