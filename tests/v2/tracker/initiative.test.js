@@ -106,6 +106,37 @@ test("the player's persona never takes the initiative; an NPC with a thread stil
     } finally { setPersonaReader(null); }
 });
 
+test('a group giver or group named on a thread matches a present member of it (role or faction tag); no thread, no initiative', () => {
+    const world = [{ lines: [
+        '~ time March 3, 2026, 08:00 am',
+        '+ quest Old Tannery Clearance | goal: Clear the vats | giver: South Gate wardens | reward: 30 copper',
+        '+ hook Grain Crisis — carts are held | people: Highmark clerks',
+    ].join('\n') }];
+    const state = withScene(story(world, makeState()), { present: ['Brant', 'Marl', 'Sela', 'Tor'] });
+    const dossiers = {
+        Brant: { name: 'Brant', aliases: [], role: 'Gate warden' },
+        Marl: { name: 'Marl', aliases: [], role: 'baker', customFields: { faction: 'Highmark clerk' } },
+        Sela: { name: 'Sela', aliases: [], role: 'South Gate warden captain', faction: '' },
+        Tor: { name: 'Tor', aliases: [], role: 'ferryman' },
+    };
+    const queries = {
+        'npc.known': () => Object.keys(dossiers),
+        'npc.present': () => [],
+        'npc.dossier': (_state, { name }) => dossiers[name] ?? null,
+    };
+    const list = initiativeCandidates({ director: state.domains.director, state, query: queryOf(queries, state) });
+    // Brant and Sela (role holds the group's words, plural folded) and Marl (faction tag) match; Tor has no tie to either group.
+    assert.deepEqual(people(list), [['Brant', 200, 'Old Tannery Clearance'], ['Marl', 200, 'Grain Crisis'], ['Sela', 200, 'Old Tannery Clearance']]);
+    assert.equal(initiativeLine(list[0]), 'Initiative: Brant may approach {{user}} about Old Tannery Clearance.');
+    // Without NPC State Delta (no role to read) nobody matches a group; with no thread at all nobody takes the initiative.
+    assert.deepEqual(initiativeCandidates({ director: state.domains.director, state }), []);
+    const bare = withScene(makeState(), { present: ['Brant'] });
+    assert.deepEqual(initiativeCandidates({ director: bare.domains.director, state: bare, query: queryOf(queries, bare) }), []);
+    // A thread's own key is no group: "Gate warden watch" names Brant by role only through a giver or people field.
+    const keyed = withScene(story([{ lines: '+ hook Gate warden watch — the watch doubles' }], makeState()), { present: ['Brant'] });
+    assert.deepEqual(initiativeCandidates({ director: keyed.domains.director, state: keyed, query: queryOf(queries, keyed) }), []);
+});
+
 test('the weighted pick: by key order, in proportion to the weights, the same draw the same person', () => {
     const list = [{ key: 'a', weight: 100 }, { key: 'b', weight: 300 }];
     const counts = { a: 0, b: 0 };

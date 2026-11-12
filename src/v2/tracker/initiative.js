@@ -147,7 +147,7 @@ export function initiativeCandidates({ director: given, state = null, query = nu
     for (const person of people) {
         let best = null;
         for (const entry of open) {
-            if (!namesPerson(entry.record, person, { strict: true })) continue;
+            if (!namesPerson(entry.record, person, { strict: true, group: true })) continue;
             const dueNow = isDue(entry.record, { calendar, now });
             const urgency = dueNow ? 4
                 : (entry.thread?.ready || waitsForPay(entry.record) || dueWithin(entry.record, { calendar, now, days: own.dueSoonDays })) ? 3 : 2;
