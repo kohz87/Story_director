@@ -256,7 +256,11 @@ export function validateDirector(slice) {
             if (!Object.hasOwn(slice.threads ?? {}, id)) errors.push(`director.keys["${name}"] points at no thread.`);
         }
         for (const thread of Object.values(slice.threads ?? {})) {
-            if (thread?.key && thread.status === 'active' && slice.keys[lineKey(thread.key)] === undefined) errors.push(`"${thread.key}" is missing from director.keys.`);
+            if (!thread?.key || thread.status !== 'active') continue;
+            const holder = slice.keys[lineKey(thread.key)];
+            // Two live threads never share a key (a fold a later edit skipped would leave the old one beside a newer one: that edit is refused).
+            if (holder === undefined) errors.push(`"${thread.key}" is missing from director.keys.`);
+            else if (holder !== thread.id) errors.push(`"${thread.key}" is the key of two threads (director.keys names ${holder}).`);
         }
     }
     if (slice.writes !== undefined && (!map(slice.writes) || Object.entries(slice.writes).some(([id, entry]) => !recordId(id)

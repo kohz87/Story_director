@@ -422,7 +422,12 @@ test('a delete that takes the digest operation away skips the fold: the quest st
     assert.equal(JSON.stringify(h.head()), live);
 });
 
-test('a skipped fold never overwrites a quest that became unresolved: a thread made again under a folded key gets its own id (CX item 2)', async t => {
+// A key made again after its thread folded (CX item 2, then F1/CX 1): an edit that would bring the old thread back beside the
+// newer one (two live threads with one key) is refused whole, and the next replies leave the newer thread alone. Probe: cx-fold-probes/cx-default-collision.mjs.
+for (const [name, again, next] of [
+    ['an event', '+ event Q3 — a completely different event', ['+ quest Q99 — unrelated', '- quest Q3 — done', '~ event Q3 | now: at the gate']],
+    ['a quest', '+ quest Q3 — other work | giver: Nobody | goal: other', ['+ event Something Else — a side event', '- quest Q3 — done', '~ quest Q3 | progress: half']],
+]) test(`a Re-read that would bring a folded quest back beside ${name} of the same key is refused, and later replies keep the newer thread (CX item 2, F1)`, async t => {
     t.mock.method(console, 'warn', () => {});
     const h = await createHost({ modules: [createModule()] });
     t.after(() => h.close());
@@ -430,18 +435,29 @@ test('a skipped fold never overwrites a quest that became unresolved: a thread m
     const q3 = Object.values(dir(h).threads).find(thread => thread.key === 'Q3');
     ok(await fold(h));
     assert.equal(dir(h).threads[q3.id], undefined, 'Q3 folded');
-    await h.send('Again', wrap('Again.', ['+ event Q3 — a completely different event']));
-    const event = Object.values(dir(h).threads).find(thread => thread.key === 'Q3');
-    assert.ok(event && event.id !== q3.id && event.kind === 'event', 'the new thread has its own id');
+    await h.send('Again', wrap('Again.', [again]));
+    const made = Object.values(dir(h).threads).find(thread => thread.key === 'Q3');
+    assert.ok(made && made.id !== q3.id, 'the new thread has its own id');
     const at = carrierOf(h, '- quest Q3 —');
+    const head = JSON.stringify(h.head());
     await h.st.editMessage(at, h.ctx.chat[at].mes.replace('\n- quest Q3 — done', ''));
-    ok(await h.turn.reread(at));
-    const back = dir(h).threads[q3.id];
-    assert.equal(back?.kind, 'quest', 'the quest is still there, with its giver and goal');
-    assert.equal(back.status, 'active');
-    assert.equal(back.fields.giver, 'Sir Lothar');
-    assert.equal(dir(h).threads[event.id]?.kind, 'event', 'and so is the event');
-    assert.deepEqual(validateDirector(dir(h)), []);
+    const out = await h.turn.reread(at);
+    assert.equal(out.ok, false, 'refused: it would leave two live threads with the key Q3');
+    assert.equal(out.code, 'CONFLICT');
+    assert.equal(JSON.stringify(h.head()), head, 'the story is as it was');
+    const same = () => Object.values(dir(h).threads).filter(thread => thread.key === 'Q3');
+    for (const line of next) {
+        await h.send('Next', wrap('Next.', [line]));
+        assert.equal(same().length, 1, `one thread has the key after "${line}"`);
+        assert.deepEqual(validateDirector(dir(h)), []);
+    }
+    const kept = same()[0];
+    assert.equal(kept.id, made.id);
+    assert.equal(kept.fields.giver, again.includes('Nobody') ? 'Nobody' : undefined, 'the old quest\'s giver did not move onto it');
+    assert.notEqual(kept.fields.goal, 'bring 3');
+    assert.equal(kept.summary, made.summary, 'its own text is still there');
+    await h.send('Last', wrap('Last.', ['+ quest Q100 — one more']));
+    assert.equal(same()[0].fields.giver, kept.fields.giver);
     const live = JSON.stringify(h.head());
     h.store.rebuild();
     assert.equal(JSON.stringify(h.head()), live);
