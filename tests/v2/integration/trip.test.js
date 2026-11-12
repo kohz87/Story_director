@@ -303,3 +303,19 @@ test('deleting the reply that carried the mark: no problem, the stored legs stay
         host.close();
     }
 });
+
+test('a trip from the pack\'s compound start place "Bluewatch Village / Guild Office" is planned, not refused "No known route" (E2ESIM)', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const host = await newHost();
+    try {
+        await host.send('Hello.', reply('The Guild Office.', ['~ place Bluewatch Village / Guild Office', '~ time Goldwane 12, 8:00 am']));
+        await host.send('To Auvoth.', reply('The road.', ['~ trip Auvoth | by: foot']));
+        assert.deepEqual(host.turn.problems().filter(problem => /No known route/.test(problem.message)), []);
+        const legs = goRecord(host)?.legs ?? [];
+        assert.ok(legs.length >= 1, 'a trip was planned');
+        assert.equal(legs.at(-1).to, 'Auvoth');
+        assert.ok(legs.some(leg => leg.from === 'Bluewatch Village' && leg.to === 'Auvoth' && leg.km === 70), 'by the frontier road from the town');
+    } finally {
+        host.close();
+    }
+});
