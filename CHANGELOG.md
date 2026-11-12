@@ -1,8 +1,12 @@
-# Changelog
-
 ## Unreleased
 
+## 2.15.2
+
+Update Story Director. Completes the 2.15.1 cast fix: a chance meeting can no longer bring someone from farther away than the story time allows (a real run showed one path still did), while people placed in a town can still be met there; places match by the map's own links, not by similar names. New replies only.
+
 - **Fix: a World pulse event and a cast meeting never name the player's persona.** A mood or memory in the pulse, a chance meeting, and the cast part's own meetings skip {{user}}'s persona (alone with it, the roll steps down). Matching is by exact name, as the Initiative line already does ("Astra" does not match "Astra Vale"). Replies already written replay and Re-read exactly as before: only replies written after this update use the rule.
+- **Fix: town meetings still happen under the travel rule.** A person placed in a town can still be met there by a chance meeting; places match by the map's own links, not by similar names. New replies only; replies already written replay as before.
+- **Fix: no path brings someone faster than travel.** The last path that could bring a far-away person to you sooner than the story time allows now respects travel time too. New replies only; replies already written replay as before.
 
 ## 2.15.1
 
