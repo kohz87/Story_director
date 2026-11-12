@@ -16,7 +16,7 @@ import { part as screens } from '../screens/index.js';
 
 export const MODULE_ID = 'story-director';
 export const MODULE_NAME = 'Story Director';
-export const VERSION = '2.14.1';
+export const VERSION = '2.15.0';
 
 /** The Story Block versions this module runs on (`requires.storyBlock`). */
 // 2.19.0 reads a kind spec's `heads` (stray change lines of a kind with no grammar line of its own); 2.25.0 is the least this release runs on.
