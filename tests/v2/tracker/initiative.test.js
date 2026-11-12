@@ -252,6 +252,34 @@ const seededPulse = seed => (ctx, payload) => pulseCommand({ ...ctx, rng: rng(se
 const pulseAt = (state, seed, { at = 5, settings = {}, call = null, queries = {} } = {}) => runCommand(state, seededPulse(seed), { at }, { settings, call, queries });
 const clocked = () => withScene(story(WORLD, makeState()), { present: ['Elula', 'Bram'] });
 
+const pulseTexts = (state, seeds = 150) => {
+    const out = [];
+    for (let seed = 1; seed <= seeds; seed += 1) {
+        const result = pulseAt(state, seed);
+        assert.equal(result.ok, true, result.message);
+        out.push(...resultsOf(result.state.domains.director));
+    }
+    return out;
+};
+
+test("pulse: {{user}} is never the subject of an event: not a mood, not a memory, not a chance meeting; alone, those events step down", () => {
+    const withAstra = withScene(story(WORLD, makeState()), { present: ['Astra', 'Elula'] });
+    // Without the persona told, the old reading: Astra is picked (proves the scene would offer her).
+    assert.ok(pulseTexts(withAstra).some(entry => /^Astra /.test(entry.text)), 'Astra is a candidate when nobody says she is the player');
+    setPersonaReader(() => 'Astra');
+    try {
+        const mixed = pulseTexts(withAstra);
+        assert.ok(mixed.every(entry => !entry.text.includes('Astra') && entry.who !== 'Astra'));
+        assert.ok(mixed.some(entry => entry.who === 'Elula'), 'the NPC still gets the mood');
+        const alone = pulseTexts(withScene(story(WORLD, makeState()), { present: ['Astra'] }));
+        assert.ok(alone.every(entry => !entry.text.includes('Astra') && entry.kind !== 'MOOD_SWING' && entry.kind !== 'MEMORY_TRIGGER'));
+        // A cast person who is the persona is never met by chance; another still is.
+        const cast = { people: { astra: { name: 'Astra', alive: true, met: null }, rika: { name: 'Rika', alive: true, met: null } } };
+        for (const unit of [0, 0.4, 0.9]) assert.equal(meetEntry({ cast, at: 4, place: 'Bluewatch Village', draw: { actor: unit } }).receipt.who, 'rika');
+        assert.equal(meetEntry({ cast: { people: { astra: cast.people.astra } }, at: 4, place: 'Bluewatch Village' }), null);
+    } finally { setPersonaReader(null); }
+});
+
 test('pulse: the roll is a system step drawn with its seed: same seed same result, a click is refused, a swipe (new seed) rolls again', () => {
     const state = clocked();
     const one = pulseAt(state, 42);

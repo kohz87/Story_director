@@ -34,6 +34,7 @@ import { chanceCandidates } from '../cast/world.js';
 import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
+import { isPersona } from '../tracker/initiative.js';
 import { orderedThreads } from '../tracker/convert.js';
 import { ask, cutPoints, namesPerson, sceneOf } from '../tracker/scene.js';
 import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plainSlot, resolveKind, tableFor, QUIET_FALLBACK } from './tables.js';
@@ -125,7 +126,7 @@ export function meetEntry({ cast = null, at = null, place = '', draw = {}, here 
     if (!isInt(at) || !where || !isRecord(cast?.people)) return null;
     const people = Object.keys(cast.people).sort()
         .map(key => ({ key, person: cast.people[key] }))
-        .filter(({ person }) => isRecord(person) && person.alive !== false && !person.met && plainSlot(person.name, NAME_MAX));
+        .filter(({ key, person }) => isRecord(person) && person.alive !== false && !person.met && plainSlot(person.name, NAME_MAX) && !isPersona({ key, name: person.name }));
     const pick = people[pickIndex(people.length, unit(draw.actor))];
     if (!pick) return null;
     return {
@@ -290,8 +291,10 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
     // Reach (every new reply): only people who can be at the party's place now cross its path by chance; 2 (new steps): road trips only, the party's place or town, from the last known place too (cast/world.js).
-    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: reach === 2 ? roadsOf(query) : travelOf(query), strict: reach === 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }) : null;
-    const unmet = Object.values(isRecord(people) ? people : {}).filter(person => isRecord(person) && person.alive !== false && !person.met);
+    // {{user}} is never the subject of an event (the narrator would be ordered to write the player's actions): not a mood, not a chance meeting.
+    const others = scene.people.filter(person => !isPersona(person));
+    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: reach === 2 ? roadsOf(query) : travelOf(query), strict: reach === 2, present: presentKeys(query, state), pinned: pinnedKeys(query) }).filter(item => !isPersona({ key: item.key, name: item.person?.name })) : null;
+    const unmet = Object.entries(isRecord(people) ? people : {}).filter(([key, person]) => isRecord(person) && person.alive !== false && !person.met && !isPersona({ key, name: person.name })).map(([, person]) => person);
     const open = ask(query, 'chronicle.events', { open: true }, []);
     // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
     if (open.some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the roll goes on */ } }
@@ -310,7 +313,7 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const names = new Set(scene.people.map(person => person.key));
     for (const name of [...ask(query, 'npc.known', {}, []), ...Object.values(isRecord(people) ? people : {}).map(person => person?.name)]) if (lineKey(name)) names.add(lineKey(name));
     const lively = mode === 'lively';
-    const counts = { present: scene.people.length, offscreen: lively ? agendas.length + away + unmet.length : 1, known: lively ? known.length : 1, cast: lively ? (near ? near.length : unmet.length) : 1 };
+    const counts = { present: others.length, offscreen: lively ? agendas.length + away + unmet.length : 1, known: lively ? known.length : 1, cast: lively ? (near ? near.length : unmet.length) : 1 };
     const table = tableFor({ named: names.size, offscreen: agendas.length + away + unmet.length });
     const d20 = d20Of(draw.d20);
     const blocked = new Set();
@@ -320,7 +323,7 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
         if (!lively && QUIET_FALLBACK[rolled.kind]) rolled.kind = QUIET_FALLBACK[rolled.kind];
         const base = { d20, table, kind: rolled.kind, ...(place ? { place } : {}) };
         if (!EFFECTS.has(rolled.kind)) {
-            const who = scene.people.length ? scene.people[pickIndex(scene.people.length, draw.actor)]?.name : '';
+            const who = others.length ? others[pickIndex(others.length, draw.actor)]?.name : '';
             const text = rolled.kind === 'CALM' ? '' : fillSlots(flavourFor(rolled.kind, draw.line, { group, weather }), { name: who, place });
             return { ...base, ...(who && text.includes(who) ? { who } : {}), text: cutWord(text, TAIL_CHARS) };
         }
