@@ -244,7 +244,7 @@ test('the validator takes the slot and refuses a malformed one', () => {
 
 // ---- World pulse (pulse/effects.js): the same shape as the initiative: a seeded step before the reply, a slot, one tail line ----
 
-import { PULSE, QUIET, agendaProgress, modeOf, part as pulsePart, pulseCommand, pulseHook, quietCommand, resultsOf, shiftEntry, weatherFrom, worldLine } from '../../../src/v2/pulse/effects.js';
+import { PULSE, QUIET, agendaProgress, meetEntry, modeOf, part as pulsePart, pulseCommand, pulseHook, quietCommand, resultsOf, shiftEntry, weatherFrom, worldLine } from '../../../src/v2/pulse/effects.js';
 import { rumor } from '../../../src/v2/chronicle/capture/world.js';
 import { QUIET_FALLBACK, TABLES, d20Of, resolveKind, tableFor } from '../../../src/v2/pulse/tables.js';
 
@@ -310,8 +310,8 @@ test('pulse: skipped (and the reason recorded) in a fight, in a quiet scene, wit
 test('pulse: the hook asks for one step per reply written; a swipe is one below the chat length; a Continue, off and mode off ask for none', () => {
     const state = clocked();
     const view = (extra = {}) => ({ state, settings: {}, chat: { length: 5, lastUser: '' }, ...extra });
-    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1 } }] });
-    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1 } }] });
+    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 1 } }] });
+    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 1 } }] });
     assert.ok(pulseHook(view(), { type: 'regenerate' }));
     assert.equal(pulseHook(view(), { type: 'continue', commit: false }), undefined);
     assert.equal(pulseHook(view({ feature: id => id !== 'story-director.pulse' })), undefined);
@@ -460,4 +460,12 @@ test('pulse: in quiet mode an effect entry reads as its flavour fallback and kee
         if (QUIET_FALLBACK[band]) assert.equal(entry.kind, QUIET_FALLBACK[band], `${seed} d20 ${entry.d20}`);
         else if (entry.table === 'std') assert.equal(entry.kind, band, `${seed} d20 ${entry.d20}`);
     }
+});
+
+test('chance meeting: a step recorded before the reach rule (no `reach`) replays as the goal meeting it was; a new one met by place when already there', () => {
+    const cast = { people: { 'ersveil:rika': { name: 'Rika', alive: true, met: null } } };
+    const old = meetEntry({ cast, at: 4, place: 'Bluewatch Village', draw: { actor: 0.1 } });
+    assert.deepEqual(old.payload.who, [{ key: 'ersveil:rika', why: 'goal', reason: 'chance meeting', place: 'Bluewatch Village' }]);
+    assert.deepEqual(meetEntry({ cast, at: 4, place: 'Bluewatch Village', draw: { actor: 0.1 }, here: new Set(['ersveil:rika']) }).payload.who, [{ key: 'ersveil:rika', why: 'place', reason: '' }]);
+    assert.equal(meetEntry({ cast: { people: {} }, at: 4, place: 'Bluewatch Village', here: new Set() }), null, 'nobody who can be here: the roll steps down');
 });

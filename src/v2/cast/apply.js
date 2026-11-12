@@ -84,7 +84,7 @@ export const syncPayload = plan => ({
     ...(plan.update.length ? { update: plan.update } : {}),
     ...(plan.drop.length ? { drop: plan.drop } : {}),
     ...(plan.updated.length ? { updated: plan.updated.map(item => ({ pack: item.pack, n: item.n, changed: item.changed, from: item.from, to: item.to })) } : {}),
-    ...(plan.init ? { init: true } : {}),
+    ...(plan.init ? { init: true, first: true } : {}),
 });
 
 /** Applies a `cast.sync` payload to `cast` (a draft or a copy). Returns `{ added, updated, dropped }`. */
@@ -116,7 +116,8 @@ export function applySync(cast, payload, env) {
         delete cast.people[key];
         done.dropped += 1;
     }
-    if (payload.init && !slotOf(cast.day) && isInt(now)) cast.day = [{ at: now, rev }];
+    // `first` (every new chat): the story's first minute the cast knew, kept as the day moves, for people whose own `since` was never set (world.js `placedOf`).
+    if (payload.init && !slotOf(cast.day) && isInt(now)) cast.day = [{ at: now, rev, ...(payload.first === true ? { first: now } : {}) }];
     if (typeof note === 'function') {
         for (const item of payload.updated ?? []) {
             if (!(item.n > 0)) continue;
@@ -170,7 +171,7 @@ export function applyAdvance(cast, payload, env) {
         person.doing = '';
         done.died += 1;
     }
-    if (isInt(to)) cast.day = [{ at: to, rev }];
+    if (isInt(to)) cast.day = [{ at: to, rev, ...(isInt(slotOf(cast.day)?.first) ? { first: slotOf(cast.day).first } : {}) }];
     if (typeof note === 'function' && (done.moved > 0 || done.died > 0)) {
         const news = done.news.slice(0, 2).map(entry => ` ${entry.name}, met: ${entry.text}.`).join('');
         const span = hoursText(isInt(payload.from) && isInt(to) ? to - payload.from : 0);
@@ -242,6 +243,49 @@ export function applyMeet(cast, payload, env) {
     }
     if (cued.length && isInt(payload.at)) cast.meeting = [{ at: payload.at, keys: cued.slice(0, 4), rev, seen: 1 }];   // `seen`: judged by who the reply had in the scene at any point (older meetings: at its end)
     return met;
+}
+
+// ---- journey -------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Applies a `cast.journey` payload (`{ at?, start?: [{ key, to, arrive, reason }], stop?: [key], land?: [{ key, where, doing }] }`): an unmet person
+ * whose goal leads to the party but who is too far sets out (`coming`, a slot written whole, kept only while the link lasts), a journey whose link
+ * went is dropped (they stay where they are), and one whose time is up lands: they are at the place the party was, from the minute they arrived.
+ * Nobody is met here: a landed person meets the party by place like anyone else. Returns `{ started, stopped, landed }`.
+ */
+export function applyJourney(cast, payload, env) {
+    const { now = null, rev = 0, touch = noop } = env;
+    const done = { started: 0, stopped: 0, landed: 0 };
+    const unmet = key => {
+        const person = Object.hasOwn(cast.people, key) && isRecord(cast.people[key]) ? cast.people[key] : null;
+        return person && isAlive(person) && !isMet(person) ? person : null;
+    };
+    for (const key of payload.stop ?? []) {
+        const person = unmet(key);
+        if (!person || !person.coming) continue;
+        touch(key);
+        person.coming = null;
+        done.stopped += 1;
+    }
+    for (const item of payload.land ?? []) {
+        const person = unmet(item.key);
+        const trip = person ? slotOf(person.coming) : null;
+        if (!trip) continue;
+        touch(item.key);
+        person.where = cutPoints(item.where || trip.to, MAX_PLACE);
+        person.doing = cutWords(item.doing || person.doing, MAX_DOING);
+        person.since = trip.arrive;
+        person.coming = null;
+        done.landed += 1;
+    }
+    for (const item of payload.start ?? []) {
+        const person = unmet(item.key);
+        if (!person || slotOf(person.coming)) continue;
+        touch(item.key);
+        person.coming = [{ from: person.where, to: cutPoints(item.to, MAX_PLACE), start: isInt(now) ? now : null, arrive: item.arrive, reason: cutPoints(item.reason, MAX_REASON), rev }];
+        done.started += 1;
+    }
+    return done;
 }
 
 // ---- withdraw ------------------------------------------------------------------------------------------------------------------

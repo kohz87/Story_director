@@ -17,6 +17,8 @@
 //   heard:  the last news of a met person: null | [{ on, text }] (a slot: written whole each time)
 //   rumored: an unmet person the reader sought who is elsewhere: null | [{ on, where, at, rev }] (a slot: written whole; the rumor, which never
 //           names them, was told in the reply at `at` and is not told again until met or until `where` is no longer where they are)
+//   coming: an unmet person whose goal leads to the party but who is far: null | [{ from, to, start, arrive, reason, rev }] (a slot: the trip
+//           towards the place `to`, landing at story minute `arrive`; dropped when the link goes, `cast.journey`)
 // The pack entry itself (look, voice, history, secrets...) is never copied here: it is read from the pack when needed,
 // and only for a person who has been met. Nothing stored here is read by a reader before the person is met.
 //
@@ -148,12 +150,14 @@ function personProblems(key, person) {
         || !textOk(person.ver, MAX_NAME) || !(person.sig === undefined || textOk(person.sig, 24)) || !timeOk(person.joined) || !textOk(person.where, MAX_PLACE) || !textOk(person.doing, MAX_DOING) || !timeOk(person.since)
         || typeof person.alive !== 'boolean' || !isInt(person.rev)) return [`${at} is not { pack, eid, name, ver, joined, where, doing, since, alive, met, heard, rev }.`];
     if (person.aliases !== undefined && (!Array.isArray(person.aliases) || person.aliases.length > MAX_ALIASES || person.aliases.some(alias => !textOk(alias, MAX_NAME)))) return [`${at}.aliases is a list of at most ${MAX_ALIASES} names.`];
-    const { met, heard, rumored } = person;
+    const { met, heard, rumored, coming } = person;
     if (met !== null && !(isRecord(met) && timeOk(met.on) && textOk(met.where, MAX_PLACE) && WHYS.includes(met.why) && textOk(met.reason, MAX_REASON) && isInt(met.rev) && (met.was === undefined || textOk(met.was, MAX_PLACE)))) return [`${at}.met is null or { on, where, why, reason, rev, was? }.`];
     const news = slotOf(heard);
     if (heard !== null && !(news && Array.isArray(heard) && timeOk(news.on) && textOk(news.text, MAX_DOING))) return [`${at}.heard is null or [{ on, text }].`];
     const rumor = slotOf(rumored);
     if (rumored !== undefined && rumored !== null && !(rumor && Array.isArray(rumored) && timeOk(rumor.on) && textOk(rumor.where, MAX_PLACE) && isInt(rumor.at) && rumor.at >= 0 && isInt(rumor.rev))) return [`${at}.rumored is null or [{ on, where, at, rev }].`];
+    const trip = slotOf(coming);
+    if (coming !== undefined && coming !== null && !(trip && Array.isArray(coming) && textOk(trip.from, MAX_PLACE) && textOk(trip.to, MAX_PLACE) && timeOk(trip.start) && isInt(trip.arrive) && textOk(trip.reason, MAX_REASON) && isInt(trip.rev))) return [`${at}.coming is null or [{ from, to, start, arrive, reason, rev }].`];
     return [];
 }
 

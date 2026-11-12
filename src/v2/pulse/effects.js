@@ -29,7 +29,8 @@
 import { lineKey } from '../../changes.js';
 import { dateOf } from '../../relevance.js';
 import { slotValue, toSlot } from '../slot.js';
-import { castOf, fightOn, foesLeftover, foesSignature } from '../cast/entries.js';
+import { castOf, fightOn, foesLeftover, foesSignature, partyPlace, pinnedKeys, presentKeys, travelOf } from '../cast/entries.js';
+import { chanceCandidates } from '../cast/world.js';
 import { cueOf } from '../cast/note.js';
 import { hiddenNames } from '../world/known.js';
 import { calendarFrom } from '../keypeople/time.js';
@@ -119,7 +120,7 @@ export function rumourEntry(kind, { known = [], behind = new Set(), at = null, p
  * CHANCE_MEETING: one unmet, living cast person (`cast`: the cast domain) comes across the party at `place` (required: a place
  * the reader is at). Met by the pulse, so the person is met now; the line names them (the cast's own cue rides with it, see `rollEntry`).
  */
-export function meetEntry({ cast = null, at = null, place = '', draw = {} } = {}) {
+export function meetEntry({ cast = null, at = null, place = '', draw = {}, here = null } = {}) {
     const where = plainSlot(place, NAME_MAX);
     if (!isInt(at) || !where || !isRecord(cast?.people)) return null;
     const people = Object.keys(cast.people).sort()
@@ -130,7 +131,8 @@ export function meetEntry({ cast = null, at = null, place = '', draw = {} } = {}
     return {
         kind: 'CHANCE_MEETING',
         type: 'cast.meet',
-        payload: { at, who: [{ key: pick.key, why: 'goal', reason: 'chance meeting', place: where }] },
+        // `here` (every new reply: the keys of candidates already at the place): met by place, nobody is moved; the rest come by their way there.
+        payload: { at, who: [here?.has(pick.key) ? { key: pick.key, why: 'place', reason: '' } : { key: pick.key, why: 'goal', reason: 'chance meeting', place: where }] },
         // The person is met in this reply, so the line may name them; the cast's cue (who they are, how to bring them in) goes with it.
         tail: `${plainSlot(pick.person.name, NAME_MAX)} crosses your path in ${where}, by chance.`,
         receipt: { who: pick.key },
@@ -279,7 +281,7 @@ function offscreenAgendas(director, scene) {
 }
 
 // The roll's entry for this reply: the kind from the table (stepping past what cannot happen), its effect applied, its line.
-function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }) {
+function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = false }) {
     const here = ask(query, 'atlas.here', {}, null);
     const place = cutPoints(here?.name || scene.place, NAME_MAX);
     const group = placeGroupOf(here?.placeKind ?? here?.kind ?? '');
@@ -287,6 +289,8 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
     const calendar = calendarFrom(query);
     const agendas = offscreenAgendas(director, scene);
     const people = state.domains.cast?.people;
+    // Reach (every new reply): only people already at the party's place (the place-meeting rule) can cross its path by chance.
+    const near = reach ? chanceCandidates(state.domains.cast, castOf(query), { party: partyPlace(query, state), now: clock, travel: travelOf(query), present: presentKeys(query, state), pinned: pinnedKeys(query) }) : null;
     const unmet = Object.values(isRecord(people) ? people : {}).filter(person => isRecord(person) && person.alive !== false && !person.met);
     const open = ask(query, 'chronicle.events', { open: true }, []);
     // Old pulse rumours are closed first (their time is up, or the event they were about ended). Only the pulse's own are candidates for the facts, never its rumours.
@@ -306,7 +310,7 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
     const names = new Set(scene.people.map(person => person.key));
     for (const name of [...ask(query, 'npc.known', {}, []), ...Object.values(isRecord(people) ? people : {}).map(person => person?.name)]) if (lineKey(name)) names.add(lineKey(name));
     const lively = mode === 'lively';
-    const counts = { present: scene.people.length, offscreen: lively ? agendas.length + away + unmet.length : 1, known: lively ? known.length : 1, cast: lively ? unmet.length : 1 };
+    const counts = { present: scene.people.length, offscreen: lively ? agendas.length + away + unmet.length : 1, known: lively ? known.length : 1, cast: lively ? (near ? near.length : unmet.length) : 1 };
     const table = tableFor({ named: names.size, offscreen: agendas.length + away + unmet.length });
     const d20 = d20Of(draw.d20);
     const blocked = new Set();
@@ -321,7 +325,7 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode }
             return { ...base, ...(who && text.includes(who) ? { who } : {}), text: cutWord(text, TAIL_CHARS) };
         }
         const made = effectFor(rolled.kind, {
-            known, behind, at, place, draw, cast: state.domains.cast, now: clock, format: minutes => calendar.format(minutes),
+            known, behind, at, place, draw, cast: near ? { people: Object.fromEntries(near.map(item => [item.key, item.person])) } : state.domains.cast, here: near ? new Set(near.filter(item => item.here).map(item => item.key)) : null, now: clock, format: minutes => calendar.format(minutes),
             agendas: agendas.filter(rolled.kind === 'ENTER_CHECK' ? converge : () => true).map(thread => ({ id: thread.id, name: thread.key, named: false, arrive: thread.fields?.arrive, text: thread.fields?.on, abs: dateOf(thread, 'on', { calendar, reference: clock })?.abs })),
         });
         if (made && applyEffect(ctx, director, made)) {
@@ -381,7 +385,7 @@ export function pulseCommand(ctx, payload = {}) {
     });
     // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
     if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
-    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode });
+    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: payload?.reach === 1 });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
@@ -404,7 +408,7 @@ export function pulseHook(view, info = {}) {
     const length = view?.chat?.length;
     if (info?.commit === false || !['normal', 'swipe', 'regenerate'].includes(type) || !isInt(length)) return undefined;
     // The chat holds the reply being swiped, so the reply's place is one below its length.
-    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1 } }] };
+    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 1 } }] };
 }
 
 // A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.

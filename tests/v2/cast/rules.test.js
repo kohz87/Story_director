@@ -3,11 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyAdvance, applyMeet, applySync, planSync, syncEmpty, syncPayload, whyNarrator, whyText } from '../../../src/v2/cast/apply.js';
+import { applyAdvance, applyJourney, applyMeet, applySync, planSync, syncEmpty, syncPayload, whyNarrator, whyText } from '../../../src/v2/cast/apply.js';
 import { cutWords, initialCast, timeOfDay, validateCast } from '../../../src/v2/cast/domain.js';
 import { atParty, castOf, fightOn, leanFight, readEntry, routineHolds, samePlace, shortName } from '../../../src/v2/cast/entries.js';
 import { CAPS, castRequest, createPlans, readCast, touches } from '../../../src/v2/cast/plan.js';
-import { chooseMeetings, dueMove, movable, paceOf, roomLeft } from '../../../src/v2/cast/world.js';
+import { canBeHere, chanceCandidates, chooseMeetings, daysBetween, dueMove, linkOf, moveFits, movable, paceOf, roomLeft, sortComes } from '../../../src/v2/cast/world.js';
+import { packWorld, worldOf } from '../../../src/v2/atlas/world.js';
+import { travelTime } from '../../../src/v2/atlas/travel.js';
 import { entry } from './helpers.js';
 
 const castFor = (...entries) => castOf((name, args) => (name === 'packs.content' ? (args?.kind === 'cast' ? entries.map(item => structuredClone(item)) : []) : name === 'packs.list' ? [{ id: 'ersveil', name: 'Ersveil', version: '1.1.0', enabled: true }] : null));
@@ -97,7 +99,7 @@ test('sync: new entries join at the current minute at their start; a second look
     assert.match(slice.people['ersveil:fenna'].sig, /^[0-9a-f]{12}$/, 'a fingerprint of what the entry says');
     assert.deepEqual({ ...slice.people['ersveil:fenna'], sig: undefined }, { sig: undefined, pack: 'ersveil', eid: 'fenna', name: 'Fenna', ver: '1.1.0', joined: SYNC_NOW, where: 'Bluewatch docks', doing: 'works the night ferry', since: SYNC_NOW, alive: true, met: null, heard: null, rev: 1 });
     assert.equal(slice.people['ersveil:sera'].doing, 'x', 'no routine: the goal');
-    assert.deepEqual(slice.day, [{ at: SYNC_NOW, rev: 1 }]);
+    assert.deepEqual(slice.day, [{ at: SYNC_NOW, rev: 1, first: SYNC_NOW }], 'the first minute the cast knew is kept (for people with no since of their own)');
     assert.ok(syncEmpty(planSync(slice, cast, { now: SYNC_NOW })));
     assert.deepEqual(validateCast(slice), []);
 });
@@ -151,7 +153,7 @@ test('advance: a move sets where and what; the dead and the unknown are passed o
     assert.deepEqual([slice.people['ersveil:fenna'].where, slice.people['ersveil:fenna'].doing, slice.people['ersveil:fenna'].since, slice.people['ersveil:fenna'].alive], ['Ashford', '', to, false], 'moved, then died: nothing left to do');
     assert.deepEqual([slice.people['ersveil:sera'].alive, slice.people['ersveil:sera'].heard], [true, [{ on: to, text: 'at the fair' }]]);
     assert.equal(slice.people['ersveil:brom'].where, 'Harrow');
-    assert.deepEqual(slice.day, [{ at: to, rev: 4 }]);
+    assert.deepEqual(slice.day, [{ at: to, rev: 4, first: SYNC_NOW }]);
     assert.deepEqual(validateCast(slice), []);
 });
 
@@ -396,4 +398,102 @@ test('"doing" is cut at a word, not in the middle of one', () => {
     const { slice } = synced([entry('tansy', { start: { place: 'Bluewatch Village', goal: 'g', routine } })]);
     assert.doesNotMatch(slice.people['ersveil:tansy'].doing, /\bthen t…$/);
     assert.ok(slice.people['ersveil:tansy'].doing.endsWith('Stray Oar, then…'));
+});
+
+// ---- distance and a real link: the export's Rika (Auvoth -> Bluewatch at reply 4), Ysmeth, a neighbour ------------------------------------
+
+const MAP = {
+    places: [{ name: 'Auvoth', region: 'North', kind: 'city', x: 0, y: 0 }, { name: 'Bluewatch Village', region: 'North', kind: 'town', x: 50, y: 0 }, { name: 'Shackles City', region: 'South', kind: 'city' }],
+    routes: [{ from: 'Auvoth', to: 'Bluewatch Village', km: 400, kind: 'river' }],
+};
+const mapWorld = worldOf({ places: {}, routes: {}, keys: {}, focus: null }, packWorld((name, { kind } = {}) => (name === 'packs.content' ? structuredClone(MAP[kind] ?? []) : undefined)));
+// The atlas's trip in days (Shackles City has no route: unknown).
+const travel = (from, to) => travelTime(mapWorld, from, to)?.days ?? null;
+const BLUEWATCH = { place: 'Bluewatch Village / Guild Office', region: '' };
+const START = 316931440;
+
+function farWorld() {
+    const entries = [
+        entry('rika', { start: { place: 'Auvoth / Pale Market', goal: 'A Guild licence and a crew.', routine: '' }, drawnTo: ['Master Albrecht Somner', 'Church Inquest agents'] }),
+        entry('ysmeth', { start: { place: 'Shackles City / Chainmarket', goal: 'Pay off the debt the Ledger holds her on.', routine: '' }, drawnTo: ['the Broken Chain', 'the River Council'] }),
+        entry('temiwa', { start: { place: 'Bluewatch Village', goal: 'tend the dying', routine: '' }, drawnTo: ['the Ashen Veil'] }),
+    ];
+    const cast = castFor(...entries);
+    const slice = initialCast();
+    applySync(slice, syncPayload(planSync(slice, cast, { now: START })), { now: START, rev: 1 });
+    for (const person of Object.values(slice.people)) person.since = START;
+    return { slice, cast };
+}
+const named = giver => ({ threads: [{ key: 'Errand', fields: { giver } }], items: [] });
+const keysOf = list => list.map(item => item.key.split(':')[1]);
+
+test('reach: the same area is no distance; a route needs the story time since they were placed; no route is far', () => {
+    const { slice } = farWorld();
+    const rika = slice.people['ersveil:rika'];
+    const days = daysBetween(rika.where, BLUEWATCH, travel);
+    assert.ok(days > 10, `Auvoth to Bluewatch is a long trip (${days} days)`);
+    assert.equal(daysBetween('Bluewatch Village', BLUEWATCH, travel), 0);
+    assert.equal(daysBetween('Shackles City / Chainmarket', BLUEWATCH, travel), null, 'no route: unknown');
+    assert.equal(canBeHere(rika, BLUEWATCH, { now: START, travel }), false, 'reply 4: nothing has passed');
+    assert.equal(canBeHere(rika, BLUEWATCH, { now: START + Math.ceil(days * DAY) - 1, travel }), false);
+    assert.equal(canBeHere(rika, BLUEWATCH, { now: START + Math.ceil(days * DAY), travel }), true, 'enough time has passed');
+    assert.equal(canBeHere({ where: 'Shackles City', since: START }, BLUEWATCH, { now: START + 400 * DAY, travel }), false, 'unknown distance is far however long');
+});
+
+test('chance meeting: only people who can be here (the export: Rika at reply 4 is not chanced upon; a neighbour is; time lets her)', () => {
+    const { slice, cast } = farWorld();
+    const at = now => keysOf(chanceCandidates(slice, cast, { party: BLUEWATCH, now, travel }));
+    assert.deepEqual(at(START), ['temiwa'], 'the neighbour only');
+    assert.equal(chanceCandidates(slice, cast, { party: BLUEWATCH, now: START, travel })[0].here, true);
+    assert.deepEqual(at(START + 30 * DAY), ['rika', 'temiwa'], 'thirty days later Rika can be here; Ysmeth (no route) never');
+    assert.deepEqual(keysOf(chanceCandidates(slice, cast, { party: BLUEWATCH, now: START + 30 * DAY, travel, pace: { count: 0, days: 1 } })), [], 'the pace is full');
+});
+
+test('a goal: a real link (the place, a thread naming them or what they follow, something carried) and never a shared word; far means a journey, near a meeting', () => {
+    const { slice, cast } = farWorld();
+    const item = key => movable(slice, cast).find(entryItem => entryItem.key === key);
+    assert.equal(linkOf(item('ersveil:ysmeth'), BLUEWATCH, { threads: [{ key: 'The Grey Ledger audit', fields: { giver: 'Grey Ledger clerk', people: 'Ledger men' } }], items: ['Ledger of debts'] }), '', 'the owner\'s Ysmeth: "Ledger" in her goal and in the story is no link');
+    assert.equal(linkOf(item('ersveil:rika'), BLUEWATCH, { threads: [{ key: 'Guild contract', fields: { giver: 'Guild Office' } }], items: [] }), '', 'a bare "Guild" is none either');
+    assert.equal(linkOf(item('ersveil:rika'), BLUEWATCH, named('Rika')), 'thread');
+    assert.equal(linkOf(item('ersveil:ysmeth'), BLUEWATCH, named('the River Council')), 'thread', 'their faction as giver');
+    assert.equal(linkOf(item('ersveil:ysmeth'), { place: 'The Broken Chain', region: '' }, {}), 'place', 'the place is their goal\'s');
+    assert.equal(linkOf(item('ersveil:rika'), BLUEWATCH, { items: ['Church Inquest agents'] }), 'carried');
+    const comes = key => [{ key, reason: 'it pulls her' }];
+    const run = (key, links, now = START) => sortComes(slice, cast, { comes: comes(key), party: BLUEWATCH, now, travel, links });
+    // The export's case: reply 4, Rika far, no meeting; a journey instead (landing after the real trip).
+    const far = run('ersveil:rika', named('Rika'));
+    assert.deepEqual([far.meet.length, far.start.length], [0, 1]);
+    assert.equal(far.start[0].arrive, START + Math.ceil(daysBetween('Auvoth / Pale Market', BLUEWATCH, travel) * DAY));
+    assert.deepEqual(run('ersveil:rika', named('Guild Office')), { meet: [], start: [], stop: [], land: [] }, 'no link: nothing, not even a journey');
+    assert.deepEqual(run('ersveil:ysmeth', named('Ysmeth')), { meet: [], start: [], stop: [], land: [] }, 'Ysmeth: linked but no route: far, no time to give');
+    assert.equal(run('ersveil:rika', named('Rika'), START + 30 * DAY).meet.length, 1, 'enough time: she arrives');
+    assert.equal(sortComes(slice, cast, { comes: comes('ersveil:temiwa'), party: BLUEWATCH, now: START, travel, links: { items: ['the Ashen Veil'] } }).meet.length, 1, 'a neighbour still meets');
+});
+
+test('a journey: set out, landing after the trip at the place the party was, dropped when the link goes; the slot is valid', () => {
+    const { slice, cast } = farWorld();
+    const sorted = sortComes(slice, cast, { comes: [{ key: 'ersveil:rika', reason: 'her licence' }], party: BLUEWATCH, now: START, travel, links: named('Rika') });
+    assert.deepEqual(applyJourney(slice, { start: sorted.start }, { now: START, rev: 2 }), { started: 1, stopped: 0, landed: 0 });
+    assert.deepEqual(validateCast(slice), []);
+    assert.equal(slice.people['ersveil:rika'].where, 'Auvoth / Pale Market', 'still where she was while on the road');
+    const trip = slice.people['ersveil:rika'].coming[0];
+    const again = sortComes(slice, cast, { comes: [], party: BLUEWATCH, now: trip.arrive - 1, travel, links: named('Rika') });
+    assert.deepEqual([again.stop, again.land], [[], []], 'on the road');
+    assert.deepEqual(sortComes(slice, cast, { comes: [], party: BLUEWATCH, now: trip.arrive - 1, travel, links: {} }).stop, ['ersveil:rika'], 'the reason went away: cancelled');
+    const landed = sortComes(slice, cast, { comes: [], party: BLUEWATCH, now: trip.arrive, travel, links: named('Rika') });
+    applyJourney(slice, { land: landed.land }, { now: trip.arrive, rev: 3 });
+    assert.deepEqual([slice.people['ersveil:rika'].where, slice.people['ersveil:rika'].since, slice.people['ersveil:rika'].coming], [BLUEWATCH.place, trip.arrive, null]);
+    assert.equal(atParty(slice.people['ersveil:rika'].where, BLUEWATCH), true, 'now she meets the party by place');
+    assert.deepEqual(validateCast(slice), []);
+});
+
+test('planner moves: a trip that does not fit the time since they were placed is refused; no route is refused only onto the party\'s place', () => {
+    const { slice } = farWorld();
+    const rika = slice.people['ersveil:rika'];
+    const fit = (where, to) => moveFits(rika, where, { party: BLUEWATCH, to, travel });
+    assert.equal(fit('Bluewatch Village', START + DAY), false, 'an 18-day trip in a day');
+    assert.equal(fit('Bluewatch Village', START + 40 * DAY), true);
+    assert.equal(fit('Marsh Road', START + DAY), true, 'no route, not the party\'s place');
+    assert.equal(fit('Bluewatch Village / Guild Office', START + DAY), false);
+    assert.equal(moveFits({ where: '' }, 'Bluewatch Village', { party: BLUEWATCH, to: START, travel }), true, 'unplaced');
 });

@@ -9,7 +9,7 @@ import { presetValue } from '../../vendor/story-block/src/v2/features.js';
 import { cueOf, tail, meetingFresh } from '../../../src/v2/cast/note.js';
 import { FEATURE } from '../../../src/v2/cast/domain.js';
 import { TAIL_BUDGET } from '../../../src/v2/cast/settings.js';
-import { OPENING, STATIC_KEY, TAIL_KEY, castCue, castHost, castSource, entry, people, receipts, said, sent, settle, syncCast } from './helpers.js';
+import { OPENING, STATIC_KEY, TAIL_KEY, castCue, castHost, castSource, entry, people, receipts, said, sent, settle, syncCast, withRoads } from './helpers.js';
 
 const quiet = t => t.mock.method(console, 'warn', () => {});
 
@@ -138,7 +138,7 @@ test('on the host: Siebert comes by his goal with the story\'s reason, Tansy by 
     const { createFakeModel } = await import('./helpers.js');
     const pick = ids => REAL.filter(item => ids.includes(item.id)).map(({ pack: _pack, packVersion: _version, ...own }) => own);
     const host = await castHost({
-        source: castSource(pick(['siebert-maas', 'tansy-millrace'])),
+        source: withRoads(castSource(pick(['siebert-maas', 'tansy-millrace'])), [['Old Lantern Post', 'Bluewatch Village', 5]]),
         settings: { 'cast.faces': 'day2' },
         model: createFakeModel(['> cast siebert-maas | someone is asking about Master Somner at the inn and the news reached him on the north road']),
     });
@@ -149,7 +149,7 @@ test('on the host: Siebert comes by his goal with the story\'s reason, Tansy by 
         const tansy = castCue(host);
         assert.match(tansy, /^\[Cast\] Tansy Millrace/);
         assert.match(tansy, /Why now: They are at Bluewatch Village, the place of this scene\. Bring them in naturally; do not treat them as known to You yet\.$/);
-        await host.send('Next day.', said('Morning, and talk of someone asking about Master Somner.', ['~ time June 4, 1200, 08:00 am']));
+        await host.send('Next day.', said('Morning, and talk of someone asking about Master Somner.', ['~ time June 4, 1200, 08:00 am', '+ hook Somner\'s questions — someone is asking about Master Somner at the inn | giver: Siebert Maas | goal: find out who']));
         await settle();
         await host.send('Look.', said(`Smoke. ${host.everyone()}`));
         const cue = castCue(host);

@@ -11,6 +11,11 @@
 //     the story's last reply) as whole words (plan.js, sought.js): met at once when they are at the party's place, else a RUMOR (no meeting:
 //     `chooseRumor`, one line that describes them and never names them, told once until they move).
 //   Goal meetings come first (they carry a reason the story gave), then sought, then place meetings in the order people joined the world.
+// * A goal pulls someone only with a real link (`linkOf`: the party's place is a place their goal names, an open thread names them or
+//   their faction as giver or people, or the party carries what their goal needs); a word the goal and the scene share is none. And
+//   someone can arrive only if they are in the party's area or the story time since they were placed covers the atlas trip (`canBeHere`,
+//   no known route = far). A linked person who is too far sets out instead (`sortComes`: a journey, `person.coming`, landing after the
+//   real trip time, dropped when the link goes). The pulse's chance meeting and the planner's moves follow the same reach rule.
 // * A meeting counts only if the reply shows the person (`unshown`, after the reply: `cast.withdraw`): the narration (not its hidden
 //   comments) names them (name or alias, whole word) or a `+ present` line does; else they stay unmet, the pace is not used up and
 //   they may come again later. Someone met in the story is no planned meeting and is never withdrawn.
@@ -73,6 +78,112 @@ export const askedAbout = item => ({
 
 /** `refs` (ref → key) of a list of movable people. */
 export const refsOf = list => new Map(list.map(item => [item.ref, item.key]));
+
+// ---- who can be here, and who is really drawn ----------------------------------------------------------------------------------
+
+const fold = text => String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const noArticle = text => fold(text).replace(/^(?:the|a|an)\s+/, '');
+/** Whether `text` holds `phrase` as whole words (an article in front of the phrase is left out; under four letters never). */
+export const holds = (text, phrase) => {
+    const want = noArticle(phrase);
+    return want.length >= 4 && ` ${fold(text)} `.includes(` ${want} `);
+};
+const heads = text => [...new Set([String(text ?? '').trim(), ...String(text ?? '').split(/\s*\/\s*/).map(part => part.trim())])].filter(Boolean);
+
+/**
+ * Days of travel from the place `where` to the party's place: 0 when they are in one area (the party's place or region, or the same
+ * town before a "/"), null when nothing says how far it is. `travel(from, to)` → days or null (the atlas's trip, atlas.travel).
+ */
+export function daysBetween(where, party, travel) {
+    if (!where || !party?.place) return null;
+    if (atParty(where, party) || samePlace(heads(where)[1] ?? where, heads(party.place)[1] ?? party.place)) return 0;
+    if (typeof travel !== 'function') return null;
+    for (const from of heads(where)) {
+        for (const to of heads(party.place)) {
+            let days = null;
+            try { days = travel(from, to); } catch { days = null; }
+            if (Number.isFinite(days) && days >= 0) return days;
+        }
+    }
+    return null;
+}
+
+/** The story minute a person with no `since` of their own has been placed since: the first the cast knew (`day.first`, new chats), else its current day (so far people stay far). */
+export const placedOf = slice => (isInt(slotOf(slice?.day)?.first) ? slotOf(slice.day).first : dayAt(slice));
+
+/** Whether the person can be at the party's place now: they are in its area, or the story time since they were last placed (`since`, else `placed`: the cast's own day) covers the trip. No route: far. */
+export function canBeHere(person, party, { now = null, travel = null, placed = null } = {}) {
+    const days = daysBetween(person?.where, party, travel);
+    if (days === null) return false;
+    if (days === 0) return true;
+    const since = isInt(person?.since) ? person.since : placed;
+    return isInt(since) && isInt(now) && now - since >= Math.ceil(days * DAY);
+}
+
+/**
+ * Why their goal really leads to the party, or '' (a word the goal or a drawn-to phrase shares with the scene is no link). `place`: the party's
+ * place or region is a place their drawn-to phrases name; `thread`: an open thread (a secret never counts) names them, or one of their
+ * phrases (their faction, a person they follow), in its key, giver or people; `carried`: a phrase is something the party carries.
+ * `links`: `{ threads: [{ key, fields }], items: [name] }`.
+ */
+export function linkOf(item, party, { threads = [], items = [] } = {}) {
+    const phrases = item.entry?.drawnTo ?? [];
+    if (phrases.some(phrase => atParty(phrase, party))) return 'place';
+    const own = [item.person.name, ...(Array.isArray(item.person.aliases) ? item.person.aliases : [])];
+    for (const thread of threads) {
+        const said = [thread.key, ...String(thread.fields?.giver ?? '').split(','), ...String(thread.fields?.people ?? '').split(',')];
+        if (said.some(text => own.some(name => holds(text, name)) || phrases.some(phrase => holds(text, phrase)))) return 'thread';
+    }
+    if (items.some(name => phrases.some(phrase => noArticle(phrase) === noArticle(name) && noArticle(name).length >= 4))) return 'carried';
+    return '';
+}
+
+/**
+ * What a goal pull comes to now. `comes`: the planner's `[{ key, reason }]`. Returns `{ meet, start, stop, land }`: `meet`, the comes of people
+ * who may arrive (linked and here or in time); `start`, `[{ key, to, arrive, reason }]` for the linked who are too far (not for no route:
+ * unknown is far and has no time to give); `stop`, the keys whose journey has lost its link; `land`, `[{ key, where, doing }]` for journeys
+ * whose time is up. `links`/`travel` as above; a person already on a journey does not start another.
+ */
+export function sortComes(slice, cast, { comes = [], party = {}, now = null, travel = null, links = {}, present = new Set(), pinned = new Set() } = {}) {
+    const out = { meet: [], start: [], stop: [], land: [] };
+    const all = movable(slice, cast, { present, pinned }).filter(item => !item.met);
+    for (const item of all) {
+        const trip = slotOf(item.person.coming);
+        if (!trip) continue;
+        if (!linkOf(item, party, links)) out.stop.push(item.key);
+        else if (isInt(now) && now >= trip.arrive) out.land.push({ key: item.key, where: trip.to, doing: 'came looking for you' });
+    }
+    for (const come of comes) {
+        const item = all.find(candidate => candidate.key === come.key);
+        if (!item || !item.entry.drawnTo.length || !linkOf(item, party, links) || out.meet.some(pick => pick.key === come.key) || out.start.some(pick => pick.key === come.key)) continue;
+        if (canBeHere(item.person, party, { now, travel, placed: placedOf(slice) })) { out.meet.push(come); continue; }
+        const days = daysBetween(item.person.where, party, travel);
+        if (days === null || slotOf(item.person.coming) || !isInt(now)) continue;
+        out.start.push({ key: item.key, to: party.place, arrive: now + Math.max(1, Math.ceil(days * DAY)), reason: come.reason });
+    }
+    return out;
+}
+
+/**
+ * The unmet people a chance meeting may bring (the pulse): not present, not pinned, the pace has room, and they can be here (`canBeHere`: in the
+ * party's area, or the time since they were placed covers the atlas trip; no route = far); someone at their start keeps their routine, as for a
+ * place meeting. Each is `{ ...movable item, here }`, `here`: already at the party's place (met by place; anyone else is met by their way there).
+ */
+export function chanceCandidates(slice, cast, { party = {}, now = null, travel = null, present = new Set(), pinned = new Set(), pace = paceOf({}) } = {}) {
+    if (roomLeft(slice, now, pace) <= 0) return [];
+    return movable(slice, cast, { present, pinned }).filter(item => !item.met && canBeHere(item.person, party, { now, travel, placed: placedOf(slice) })
+        && !(atParty(item.person.where, party) && samePlace(item.person.where, item.entry.place) && !routineHolds(item.entry.routine, now)))
+        .map(item => ({ ...item, here: atParty(item.person.where, party) }));
+}
+
+/** Whether a planner move of `person` (not an unplaced one) to `where` at story minute `to` is possible: the trip fits the time since they were placed; no route is allowed except onto the party's place. */
+export function moveFits(person, where, { party = {}, to = null, travel = null, placed = null } = {}) {
+    if (!person?.where) return true;   // unplaced: nowhere to travel from
+    const days = daysBetween(person?.where, { place: where, region: '' }, travel);
+    if (days === null) return !atParty(where, party);
+    const since = isInt(person?.since) ? person.since : placed;
+    return days === 0 || !isInt(since) || !isInt(to) || to - since >= Math.ceil(days * DAY);
+}
 
 // ---- the pace --------------------------------------------------------------------------------------------------------------------
 
