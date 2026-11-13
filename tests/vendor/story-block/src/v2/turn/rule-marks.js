@@ -51,6 +51,8 @@ export const RULE_LINES = Object.freeze({
     assistPlace: () => false,
     // A safety-net `+/~ faction` line never sets the stance of a faction the Chronicle already keeps (Story Director chronicle/capture/faction.js, read from `ctx.carrier.assist`). Only new replies; an older reply keeps what its Re-read did.
     assistFaction: () => false,
+    // A faction first made during this assist answer may take its stated stance; older replies retain the earlier guard.
+    assistFactionFresh: () => false,
 });
 
 /** A narrator's set-slot line, using normalized labels and the same omitted-kind inference as the handler. */

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { CORE_FEATURE } from '../../vendor/story-block/src/v2/features.js';
+import { assistSections } from '../../vendor/story-block/src/v2/capture.js';
 import { createModule } from '../../../src/v2/module.js';
 import { THREADS_FEATURE } from '../../../src/v2/threads.js';
 
@@ -115,11 +116,11 @@ test('assist: + world and + faction lines apply like the main block\'s (real chr
 });
 
 // Through the real host path (vendored Story Block with the `assistFaction` rule mark): a safety-net faction line never moves the stance of a known faction.
-async function worldHost(answer) {
+async function worldHost(answer, { maxChangeLines } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
     const kinds = '~ weather, + world, ~ world, + faction, ~ faction';
-    host = await createHost({ modules: [module], settings: { modules: { 'story-block': { assistExtractorKinds: kinds } } }, callModel: async () => answer() });
+    host = await createHost({ modules: [module], settings: { modules: { 'story-block': { assistExtractorKinds: kinds, ...(maxChangeLines ? { maxChangeLines } : {}) } } }, callModel: async () => answer() });
     host.features.set(THREADS_FEATURE, true);
     return host;
 }
@@ -148,37 +149,105 @@ test('assist: a safety-net faction line never resets the stance of a known facti
     }
 });
 
-test('assist: world/faction lines that arrive while a restore barrier holds Story Director wait and apply once it is released (real chronicle)', async () => {
+test('assist: held Story Director lines are visibly refused; release and Re-read leave a low-cap reply unchanged (real chronicle)', async () => {
     const { announceModules } = await import('../../vendor/story-block/src/v2/sdk/lifecycle.js');
     let release;
     const gate = new Promise(resolve => { release = resolve; });
     let calls = 0;
-    const host = await worldHost(async () => { calls += 1; await gate; return `<Changes>\n${WORLD_LINES.join('\n')}\n</Changes>`; });
+    const host = await worldHost(async () => { calls += 1; await gate; return `<Changes>\n${WORLD_LINES.join('\n')}\n</Changes>`; }, { maxChangeLines: 10 });
     try {
+        // Keep the Director's independent weather hook off here: the barrier suppresses that hook live,
+        // but it would otherwise add a weather key when it runs again on Re-read after the barrier lifts.
+        host.features.set('story-director.weather', false);
         await host.send('Hello.', reply('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am']));
         host.features.set(CORE_FEATURE.extractor, true);
-        await host.send('We watch the pier.', 'The Red Cords lock down the salt barges while wolves press the timber track.');
+        const main = Array.from({ length: 9 }, (_, i) => `+ faction Existing ${i} | stance: neutral`);
+        const sent = await host.send('We watch the pier.', reply('The Red Cords lock down the salt barges while wolves press the timber track.', main));
         host.registry.setRestore('pending', 'Restoring a save point.');
         announceModules(host.registry, host.events);
         release();
         await settle();
         assert.equal(calls, 1);
-        assert.deepEqual(host.turn.problems().filter(item => /UNKNOWN_KIND|MODULE_HELD/.test(item.code)), [], 'neither unknown nor dropped');
-        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather'], 'Story Block\'s own kind ran; Story Director\'s wait');
+        const refused = host.turn.problems().filter(item => item.index === sent.index && item.code === 'MODULE_HELD');
+        assert.deepEqual(refused.map(item => item.line), WORLD_LINES.slice(1));
+        assert.ok(refused.every(item => /Story Director was held back \(Restoring a save point\.\); this line was not used\./.test(item.message)));
+        assert.equal(host.turn.problems().some(item => item.index === sent.index && item.code === 'UNKNOWN_KIND'), false);
+        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather']);
+        assert.deepEqual(assistSections(host.ctx.chat[sent.index].mes).now, [WORLD_LINES[0]]);
         host.registry.setRestore('idle');
         announceModules(host.registry, host.events);
         await settle();
-        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather', 'capture.faction', 'capture.world', 'capture.world']);
-        assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 2);
-        assert.equal(stanceOf(host, 'Red Cords'), 'neutral');
-        // Replay == live: Re-read gives the same receipts in the same order from the stored sections, with no new model call.
-        const types = () => host.ctx.chat.at(-1).extra.storySuite.receipts.map(receipt => [receipt.type, receipt.assist]);
-        const before = JSON.stringify(types());
-        assert.equal((await host.sdk.reread(host.ctx.chat.length - 1)).ok, true);
+        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather']);
+        assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 0);
+        assert.equal(stanceOf(host, 'Red Cords'), undefined);
+        // The refused lines consume no cap and are absent from stored assist sections, so Re-read matches live.
+        const types = () => host.ctx.chat[sent.index].extra.storySuite.receipts.filter(receipt => receipt.type.startsWith('capture.')).map(receipt => [receipt.type, receipt.assist]);
+        const before = JSON.stringify(types()), chronicle = JSON.stringify(host.head().domains.chronicle), scene = JSON.stringify(host.head().domains.scene);
+        const again = await host.sdk.reread(sent.index);
+        assert.equal(again.ok, true);
+        assert.equal(again.problems.some(item => item.code === 'TOO_MANY'), false);
         assert.equal(JSON.stringify(types()), before);
+        assert.equal(JSON.stringify(host.head().domains.chronicle), chronicle);
+        assert.equal(JSON.stringify(host.head().domains.scene), scene);
         assert.equal(calls, 1);
-        assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 2);
+        assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 0);
     } finally {
         host.close();
     }
+});
+
+for (const worldFirst of [true, false]) {
+    test(`assist: new faction stance survives ${worldFirst ? 'world-first' : 'faction-first'} order, known factions stay protected, Re-read matches`, async () => {
+        const event = '+ world Pier Lockdown — barges held | place: Bluewatch | factions: Red Cords, Old Guard';
+        const faction = '+ faction Red Cords — pier crew | stance: hostile';
+        const lines = [...(worldFirst ? [event, faction] : [faction, event]), '~ faction Old Guard | stance: hostile', '~ faction Main Made | stance: hostile'];
+        const host = await worldHost(() => lines.join('\n'));
+        try {
+            await host.send('Hello.', reply('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am', '+ faction Old Guard | stance: neutral']));
+            host.features.set(CORE_FEATURE.extractor, true);
+            const sent = await host.send('We watch.', reply('A crew blocks the pier.', ['+ world Earlier News | factions: Main Made']));
+            await settle();
+            assert.ok(host.ctx.chat[sent.index].extra.storySuite.rules.includes('assistFactionFresh'));
+            assert.equal(stanceOf(host, 'Red Cords'), 'hostile');
+            assert.equal(stanceOf(host, 'Old Guard'), 'neutral');
+            assert.equal(stanceOf(host, 'Main Made'), '', 'created by the main block, before the assist answer');
+            const live = JSON.stringify(host.head().domains.chronicle);
+            const receipts = JSON.stringify(host.ctx.chat[sent.index].extra.storySuite.receipts.map(r => [r.type, r.assist]));
+            const again = await host.sdk.reread(sent.index);
+            assert.equal(again.ok, true, JSON.stringify(again));
+            assert.equal(JSON.stringify(host.head().domains.chronicle), live);
+            assert.equal(JSON.stringify(host.ctx.chat[sent.index].extra.storySuite.receipts.map(r => [r.type, r.assist])), receipts);
+        } finally { host.close(); }
+    });
+}
+
+test('assist: replies without the new rule mark keep the earlier stance behavior on Re-read', async () => {
+    let answer = '+ world Pier Lockdown | factions: Red Cords\n+ faction Red Cords | stance: hostile';
+    const host = await worldHost(() => answer);
+    try {
+        await host.send('Hello.', reply('The harbour.', ['+ faction Old Guard | stance: neutral']));
+        host.features.set(CORE_FEATURE.extractor, true);
+        const setter = host.store.setRuleMarks;
+        host.store.setRuleMarks = (index, names) => setter(index, names.filter(name => name !== 'assistFactionFresh'));
+        const old = await host.send('Look.', 'The crew block the pier.');
+        await settle();
+        host.store.setRuleMarks = setter;
+        assert.ok(host.ctx.chat[old.index].extra.storySuite.rules.includes('assistFaction'));
+        assert.ok(!host.ctx.chat[old.index].extra.storySuite.rules.includes('assistFactionFresh'));
+        assert.equal(stanceOf(host, 'Red Cords'), '');
+        const before = JSON.stringify(host.head().domains.chronicle);
+        assert.equal((await host.sdk.reread(old.index)).ok, true);
+        assert.equal(JSON.stringify(host.head().domains.chronicle), before);
+
+        // An even older reply without assistFaction keeps allowing its known faction's stance change.
+        answer = '~ faction Old Guard | stance: hostile';
+        host.store.setRuleMarks = (index, names) => setter(index, names.filter(name => !['assistFaction', 'assistFactionFresh'].includes(name)));
+        const older = await host.send('Again.', 'The guard turns hostile.');
+        await settle();
+        host.store.setRuleMarks = setter;
+        assert.equal(stanceOf(host, 'Old Guard'), 'hostile');
+        const earlier = JSON.stringify(host.head().domains.chronicle);
+        assert.equal((await host.sdk.reread(older.index)).ok, true);
+        assert.equal(JSON.stringify(host.head().domains.chronicle), earlier);
+    } finally { host.close(); }
 });

@@ -241,19 +241,28 @@ export function createEvents(s, deps) {
         const own = [...blockLines, ...lateLines(index, []).map(line => line.raw)];
         const parsed = parseChanges(String(text ?? '')).lines;
         const fresh = new Set(notWritten(parsed.map(line => line.raw), own, { scene: blockLines }));
-        const allKept = parsed.filter(line => fresh.has(line.raw) && !refusedWhy(line, null, { late: Boolean(s.session || s.replyBusy) }));
-        // A kind whose module is held back now (dormant, or a restore barrier after an edit, Re-read, delete) waits and runs once released.
-        const waits = line => (registry.heldModules?.() ?? []).includes(registry.captureOwner?.(line.kind));
-        const kept = allKept.filter(line => !waits(line));
-        if (allKept.length > kept.length) s.assistHeld = [...(s.assistHeld ?? []), { index, swipe, lines: allKept.filter(waits).map(line => line.raw) }];
+        // Refuse held modules before the late wall, so even a + line arriving during a send gets a visible reason.
+        const kept = parsed.filter(line => {
+            if (!fresh.has(line.raw)) return false;
+            const owner = registry.captureOwner?.(line.kind);
+            if (owner && registry.held?.(owner)) {
+                const name = registry.module?.(owner)?.name || owner;
+                const reason = registry.lifecycle?.(owner)?.reason || 'temporarily unavailable';
+                refusals.push(problem({ module: owner, index, line: line.raw, code: 'MODULE_HELD', assist: 'now', message: `"${line.raw}" was not used: ${name} was held back (${reason}); this line was not used.` }));
+                return false;
+            }
+            return !refusedWhy(line, null, { late: Boolean(s.session || s.replyBusy) });
+        });
+        const tellRefusals = () => { if (refusals.length) events?.emit('turn', { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] }); };
         const store1 = mes2 => { message.mes = mes2; if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = mes2; };
         if (s.session || s.replyBusy) {
+            tellRefusals();
             if (!kept.length) return { receipts: [], problems: refusals, deferred: true };   // (else saved with the next reply: its own save writes the chat)
             store1(withAssist(mes, kept.map(line => line.raw), { next: true }));
             redraw(index, message);
             return { receipts: [], problems: refusals, deferred: true, lines: kept.map(line => line.raw) };
         }
-        if (!kept.length) return { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] };
+        if (!kept.length) { tellRefusals(); return { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] }; }
         const used = block === null ? 0 : readBlock(index, block).lines.length;
         const result = await captureLines(index, [], mes, 'late', { assist: kept, used });
         store1(withCaps(markOff(withAssist(mes, kept.map(line => line.raw)), result.off, mes.trimEnd().length), mes.trimEnd().length));
@@ -266,18 +275,10 @@ export function createEvents(s, deps) {
         return turn;
     }
 
-    // A module released (ready again): the safety net's lines parked for it run now, on the reply they belong to (captureAssist checks it is still the head).
-    function releaseAssist() {
-        const waiting = s.assistHeld ?? [];
-        s.assistHeld = [];   // (parked again by captureAssist when still held)
-        return waiting.reduce((done, item) => done.then(() => captureAssist(item, item.lines.join('\n'), ctx?.chat?.[item.index])).catch(error => problem({ index: item.index, code: 'FAILED', message: `The safety net's waiting lines failed: ${error?.message ?? error}` })), Promise.resolve());
-    }
-
     /** CHAT_CHANGED: a new chat (or the same one reloaded). */
     async function onChatChanged() {
         // The old chat's session and prompts go at once, before anything is awaited: a generation started while the RPG's code loads is the new chat's.
         s.session = null;
-        s.assistHeld = [];
         s.boardCapture = null;
         s.heldBoard = null;
         s.quiets = [];
@@ -407,7 +408,6 @@ export function createEvents(s, deps) {
         const barrierOnly = changes => Array.isArray(changes) && changes.length > 0 && changes.every(c => c?.status === 'restore-pending' || (c?.from === 'restore-pending' && c?.status === 'ready'));
         s.offModules = events?.on?.('modules', info => {
             if (store.lifecycleChanged?.({ barrier: barrierOnly(info?.changes) })) events?.emit('head', { index: store.headIndex(), reason: 'module' });
-            if (s.assistHeld?.length) releaseAssist();
         }) ?? null;
         for (const off of s.offBoard) off();
         s.offBoard = ['committed', 'head'].flatMap(name => [events?.on?.(name, stopChangedBoard), events?.on?.(name, resumeHeldBoard)]).filter(Boolean);

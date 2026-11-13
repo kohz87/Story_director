@@ -34,14 +34,14 @@ export function problemReason(item) {
     const line = typeof item?.line === 'string' ? item.line : null;
     if (line) {
         const prefix = `"${line}" was not used: `;
-        if (message.startsWith(prefix)) return message.slice(prefix.length);
+        if (message.startsWith(prefix)) return message.slice(prefix.length) || 'This line was not used.';
     }
     if (item?.code === 'UNKNOWN_KIND') {
         const kind = /^No module keeps "([^"]*)"/.exec(message)?.[1];
         if (kind !== undefined) return fill(STRINGS.card.unknownKind, { kind });
     }
-    if (!line || !message.includes(`"${line}"`)) return message;
-    return message.split(`"${line}"`).join('').replace(/\s+/g, ' ').replace(/^\s*(?:was not used\s*[:,.]?\s*)/i, '').replace(/^[\s,:;.—-]+/, '').trim();
+    if (!line || !message.includes(`"${line}"`)) return message || 'This line was not used.';
+    return message.split(`"${line}"`).join('').replace(/\s+/g, ' ').replace(/^\s*(?:was not used\s*[:,.]?\s*)/i, '').replace(/^[\s,:;.—-]+/, '').trim() || 'This line was not used.';
 }
 
 /**

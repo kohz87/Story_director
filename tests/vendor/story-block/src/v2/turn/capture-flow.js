@@ -299,7 +299,7 @@ export function createCaptureFlow(s, deps) {
         const marks = ruleMarksOf(readRecord(message)?.rules), fresh = base === null ? (blocked.first ? allRuleNames() : ruleMarksFor(lines)).filter(name => !marks.includes(name) && !blocked.rules.includes(name)) : [];
         if (fresh.length && typeof store.setRuleMarks === 'function') { try { store.setRuleMarks(index, fresh); marks.push(...fresh); } catch { /* an unmarked reply keeps the old rule */ } }
         if (marks.length) carrier.rules = marks;
-        if (assist && (marks.includes('assistPlace') || marks.includes('assistFaction'))) { carrier.assist = assist; carrier.assistLeft = []; }
+        if (assist && (marks.includes('assistPlace') || marks.includes('assistFaction'))) { carrier.assist = assist; carrier.assistLeft = []; const start = state; carrier.assistHas = (domain, table, id) => Object.hasOwn(start.domains?.[domain]?.[table] ?? {}, id); }
         const prior = carrier.assist && base === null && assist === NOW ? (readRecord(message)?.receipts ?? []) : [];
         const own = carrier.assist ? readBlock(index, extractBlock(String(message?.mes ?? ''), 'Changes', null, { heads: changeHeads() }) ?? '').lines : [];
         // The message right before the reply (system messages aside), and only when it is the reader's: a reply that
