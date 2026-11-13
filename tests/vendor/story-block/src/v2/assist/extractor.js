@@ -187,7 +187,7 @@ export function createExtractor({ callModel, settings, grammar, capture, chatId,
             // The story as capture reads it: closed reasoning (<think>…</think>) is not story.
             const story = stripBlock(withoutReasoning(mes)).trim();
             if (!story) return null;
-            const key = `${chatId() ?? ''}|${index}|${swipe}`;
+            const key = `${chatId() ?? ''}|${index}|${swipe}|${reply.sid ?? ''}`;   // (a replacement reply reuses index and swipe, not its record ID)
             if (done.has(key)) return null;
             done.add(key);
             const at = { index, swipe };

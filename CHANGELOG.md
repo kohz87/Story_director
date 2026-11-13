@@ -1,5 +1,6 @@
 ## Unreleased
 
+- **While Story Director is held back, the safety net's lines are refused with a visible reason** (its weather hook would otherwise change the reply on a later Re-read); answers for a replaced reply are dropped; the line cap counts the same live and on Re-read. Story Block's side (vendored copy re-synced); the real-host test covers it with Director's weather on.
 - **The safety net no longer resets a faction's stance.** A faction line from Assist's safety net updates a known faction's summary and area but never its stance; a new faction takes the stated stance even when an earlier world line in the same answer named it. New replies use Story Block's `assistFactionFresh` mark and older replies keep their former behavior. Safety-net lines arriving while the module is held back are refused with a visible reason.
 - **World news is easier to record.** The prompt now asks for a world line when a scene reports or shows changes beyond it, and for a new faction when an unknown group acts, an update when a faction's stance or aims change, and an end when it is gone; news can also be a hook. This changes the prompt only, and written replies replay as before.
 

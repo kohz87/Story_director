@@ -9,7 +9,7 @@ import {
 import { cutAt } from '../../text.js';
 import { readRecord, swipeLoading } from '../persist.js';
 import { notWritten } from '../assist/extractor.js';
-import { refusedWhy } from '../assist/safety.js';
+import { heldWhy, refusedWhy } from '../assist/safety.js';
 import { within } from './text.js';
 import { ensureModules } from '../sdk.js';
 import { boardStep, heldForMessage, rememberHeld, pruneMissingBoard } from './held-board.js';
@@ -166,10 +166,11 @@ export function createEvents(s, deps) {
     // waits for these runs briefly (assistPending, ASSIST_WAIT_MS).
     function afterReply(index, type, message, lines = []) {
         const swipe = Number.isInteger(message?.swipe_id) ? message.swipe_id : 0;
+        const sid = store.carrierSid?.(index) ?? null;   // the reply's identity for a late answer (captureAssist)
         const runs = [];
         for (const { moduleId, fn } of registry.hookEntries('afterReply')) {
             runs.push(Promise.resolve()
-                .then(() => fn({ index, swipe, type, lines: [...lines], mes: String(message?.mes ?? ''), capture: (text, at = { index, swipe }, opts = {}) => captureLate(at, text, opts) }))
+                .then(() => fn({ index, swipe, sid, type, lines: [...lines], mes: String(message?.mes ?? ''), capture: (text, at = { index, swipe }, opts = {}) => captureLate({ ...at, sid, message }, text, opts) }))
                 .catch(error => problem({ module: moduleId, index, code: 'FAILED', message: `afterReply failed: ${error?.message ?? error}` }))
                 // C2-ext: what the hook made of the reply (the extractor read it, or failed to) can change
                 // the reply's note, so the notes are drawn again.
@@ -191,9 +192,9 @@ export function createEvents(s, deps) {
     }
 
     /** Change lines found after the reply (afterReply): captured on it and kept in its hidden block. */
-    async function captureLate({ index, swipe } = {}, text = '', { assist = false, refused = [] } = {}) {
+    async function captureLate({ index, swipe, sid, message: from } = {}, text = '', { assist = false, refused = [] } = {}) {
         const message = ctx?.chat?.[index];
-        if (assist) return captureAssist({ index, swipe }, text, message, refused);
+        if (assist) return captureAssist({ index, swipe, sid, from }, text, message, refused);
         if (!isCarrier(message) || store.headIndex() !== index || (Number.isInteger(message.swipe_id) ? message.swipe_id : 0) !== swipe || s.session) {
             return { receipts: [], problems: ['The reply changed before its late change lines arrived; they were not used.'] };
         }
@@ -226,32 +227,29 @@ export function createEvents(s, deps) {
      * <Changes-assist-next>, through the stricter wall, for the next reply to apply after its own lines;
      * nothing changes now. Anything else (swiped, deleted, the next reply already in): not used.
      */
-    async function captureAssist({ index, swipe }, text, message, refused = []) {
-        const same = isCarrier(message) && store.headIndex() === index && (Number.isInteger(message.swipe_id) ? message.swipe_id : 0) === swipe;
-        if (!same) return { receipts: [], problems: ['The reply changed before the safety net\'s lines arrived; they were not used.'], dropped: true };
-        // Lines the safety net wrote that code refused (an unknown name for a place the map has, a time with no clock time): a
-        // Problems line each, so the reader sees what was left out and why; they are not applied and not kept on the reply.
+    async function captureAssist({ index, swipe, sid, from }, text, message, refused = []) {
+        // The same reply the answer was asked for (its record ID, else the message itself): an index and swipe are reused by a replacement.
+        const same = isCarrier(message) && store.headIndex() === index && (Number.isInteger(message.swipe_id) ? message.swipe_id : 0) === swipe
+            && (sid ? store.carrierSid?.(index) === sid : !from || message === from);
+        if (!same) {
+            problem({ code: 'REPLY_CHANGED', quiet: true, message: `The safety net's answer for reply ${index} arrived after that reply was changed or replaced; its lines were not used.` });
+            return { receipts: [], problems: ['The reply changed before the safety net\'s lines arrived; they were not used.'], dropped: true };
+        }
+        // Lines code refused (an invented place name, a time with no clock time): a Problem each; not applied, not kept on the reply.
         const refusals = (Array.isArray(refused) ? refused : []).filter(item => typeof item?.line === 'string' && item.line)
             .map(item => problem({ index, line: item.line, code: 'REFUSED', message: `"${item.line}" was not used: ${String(item.why ?? '').slice(0, 240)}.` }));
-        const heads = changeHeads();
         const mes = String(message.mes ?? '');
-        const block = extractBlock(mes, 'Changes', null, { heads });
-        // Read the way the reply was captured (its caretWords mark), so a preset's ^ block gives the lines it gave live and on Re-read.
+        const block = extractBlock(mes, 'Changes', null, { heads: changeHeads() });
+        // Read as the reply was captured (its caretWords mark): a preset's ^ block gives the same lines live and on Re-read.
         const blockLines = block === null ? [] : parseChanges(block, { caret: ruleMarksOf(readRecord(message)?.rules).includes('caretWords') }).lines.map(line => line.raw);
         const own = [...blockLines, ...lateLines(index, []).map(line => line.raw)];
         const parsed = parseChanges(String(text ?? '')).lines;
         const fresh = new Set(notWritten(parsed.map(line => line.raw), own, { scene: blockLines }));
-        // Refuse held modules before the late wall, so even a + line arriving during a send gets a visible reason.
+        // Refuse held modules before the late wall, so even a + line arriving during a send gets a visible reason, and before any hook runs.
         const kept = parsed.filter(line => {
-            if (!fresh.has(line.raw)) return false;
-            const owner = registry.captureOwner?.(line.kind);
-            if (owner && registry.held?.(owner)) {
-                const name = registry.module?.(owner)?.name || owner;
-                const reason = registry.lifecycle?.(owner)?.reason || 'temporarily unavailable';
-                refusals.push(problem({ module: owner, index, line: line.raw, code: 'MODULE_HELD', assist: 'now', message: `"${line.raw}" was not used: ${name} was held back (${reason}); this line was not used.` }));
-                return false;
-            }
-            return !refusedWhy(line, null, { late: Boolean(s.session || s.replyBusy) });
+            const held = fresh.has(line.raw) ? heldWhy(registry, line) : null;
+            if (held) refusals.push(problem({ module: held.module, index, line: line.raw, code: 'MODULE_HELD', assist: 'now', message: held.message }));
+            return fresh.has(line.raw) && !held && !refusedWhy(line, null, { late: Boolean(s.session || s.replyBusy) });
         });
         const tellRefusals = () => { if (refusals.length) events?.emit('turn', { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] }); };
         const store1 = mes2 => { message.mes = mes2; if (Array.isArray(message.swipes) && Number.isInteger(message.swipe_id)) message.swipes[message.swipe_id] = mes2; };
@@ -263,7 +261,8 @@ export function createEvents(s, deps) {
             return { receipts: [], problems: refusals, deferred: true, lines: kept.map(line => line.raw) };
         }
         if (!kept.length) { tellRefusals(); return { index, type: 'late', receipts: [], steps: [], problems: refusals, told: [] }; }
-        const used = block === null ? 0 : readBlock(index, block).lines.length;
+        const main = block === null ? [] : readBlock(index, block).lines;   // the cap counts block + previous late lines first, as a Re-read does
+        const used = main.length + lateLines(index, main.map(line => line.raw)).length;
         const result = await captureLines(index, [], mes, 'late', { assist: kept, used });
         store1(withCaps(markOff(withAssist(mes, kept.map(line => line.raw)), result.off, mes.trimEnd().length), mes.trimEnd().length));
         if (store.dirty()) {
@@ -298,8 +297,7 @@ export function createEvents(s, deps) {
         timeline?.settle();
         // A1-2: read-backs of a write that timed out before a reload of the page go on.
         try { store.resume?.(); } catch { /* only a guard */ }
-        // A cue left for the reply's save (runCues) whose reply will not come here: saved now (into its
-        // own chat's file when this is another chat, the store's rescue).
+        // A cue left for the reply's save (runCues) whose reply will not come here: saved now (the store's rescue, into its own chat's file).
         if (s.deferred) {
             s.deferred = false;
             if (store.dirty?.()) store.scheduleSave?.();

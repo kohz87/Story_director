@@ -120,7 +120,8 @@ async function worldHost(answer, { maxChangeLines } = {}) {
     let host = null;
     const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
     const kinds = '~ weather, + world, ~ world, + faction, ~ faction';
-    host = await createHost({ modules: [module], settings: { modules: { 'story-block': { assistExtractorKinds: kinds, ...(maxChangeLines ? { maxChangeLines } : {}) } } }, callModel: async () => answer() });
+    host = await createHost({ modules: [module], settings: { modules: { 'story-block': { assistExtractorKinds: kinds } } }, callModel: async () => answer() });
+    if (maxChangeLines) host.settings.set(null, 'maxChangeLines', maxChangeLines);   // (the host's own bucket, not the module's)
     host.features.set(THREADS_FEATURE, true);
     return host;
 }
@@ -149,16 +150,13 @@ test('assist: a safety-net faction line never resets the stance of a known facti
     }
 });
 
-test('assist: held Story Director lines are visibly refused; release and Re-read leave a low-cap reply unchanged (real chronicle)', async () => {
+test('assist: with Story Director held every safety-net line (its weather hook included) is visibly refused before any hook runs; release and Re-read leave a cap-10 reply unchanged (real chronicle)', async () => {
     const { announceModules } = await import('../../vendor/story-block/src/v2/sdk/lifecycle.js');
     let release;
     const gate = new Promise(resolve => { release = resolve; });
     let calls = 0;
     const host = await worldHost(async () => { calls += 1; await gate; return `<Changes>\n${WORLD_LINES.join('\n')}\n</Changes>`; }, { maxChangeLines: 10 });
     try {
-        // Keep the Director's independent weather hook off here: the barrier suppresses that hook live,
-        // but it would otherwise add a weather key when it runs again on Re-read after the barrier lifts.
-        host.features.set('story-director.weather', false);
         await host.send('Hello.', reply('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am']));
         host.features.set(CORE_FEATURE.extractor, true);
         const main = Array.from({ length: 9 }, (_, i) => `+ faction Existing ${i} | stance: neutral`);
@@ -169,15 +167,15 @@ test('assist: held Story Director lines are visibly refused; release and Re-read
         await settle();
         assert.equal(calls, 1);
         const refused = host.turn.problems().filter(item => item.index === sent.index && item.code === 'MODULE_HELD');
-        assert.deepEqual(refused.map(item => item.line), WORLD_LINES.slice(1));
+        assert.deepEqual(refused.map(item => item.line), WORLD_LINES, 'weather too: the held Director\'s afterCapture hook would have run after it');
         assert.ok(refused.every(item => /Story Director was held back \(Restoring a save point\.\); this line was not used\./.test(item.message)));
         assert.equal(host.turn.problems().some(item => item.index === sent.index && item.code === 'UNKNOWN_KIND'), false);
-        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather']);
-        assert.deepEqual(assistSections(host.ctx.chat[sent.index].mes).now, [WORLD_LINES[0]]);
+        assert.deepEqual(assisted(host).map(receipt => receipt.type), []);
+        assert.deepEqual(assistSections(host.ctx.chat[sent.index].mes).now, []);
         host.registry.setRestore('idle');
         announceModules(host.registry, host.events);
         await settle();
-        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather']);
+        assert.deepEqual(assisted(host).map(receipt => receipt.type), []);
         assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 0);
         assert.equal(stanceOf(host, 'Red Cords'), undefined);
         // The refused lines consume no cap and are absent from stored assist sections, so Re-read matches live.

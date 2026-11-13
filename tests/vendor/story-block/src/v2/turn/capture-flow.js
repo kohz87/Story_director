@@ -426,11 +426,11 @@ export function createCaptureFlow(s, deps) {
      */
     // The first module held back (registry.heldModules) that the reply carries lines, receipts or ops of, as
     // { code, name, reason }, else null. `lines`: the change lines about to be read again.
-    function heldInReply(message, lines) {
+    function heldInReply(message, lines, assist = []) {
         const held = new Set(registry.heldModules?.() ?? []);
         if (!held.size) return null;
         const record = readRecord(message);
-        const found = new Set();
+        const found = new Set(assist.map(line => heldWhy(registry, line)?.module).filter(Boolean));   // (the safety net's lines, refused live under the same rule)
         for (const line of lines) {
             const owner = registry.captureOwner?.(line?.kind);
             if (owner) found.add(owner);

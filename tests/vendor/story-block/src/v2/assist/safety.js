@@ -72,6 +72,21 @@ export function refusedWhy(line, allow, { late = false } = {}) {
     return '';
 }
 
+/**
+ * The module (held back: dormant, or a restore is pending) that keeps a safety-net `line` from running, as { module, name, reason, message },
+ * else null: the owner of the line's kind, or one whose afterCapture hook would have run after it (a hook skipped while held runs on
+ * a later Re-read, so the line would replay differently). Live and Re-read ask the same.
+ */
+export function heldWhy(registry, line) {
+    const held = registry.heldModules?.() ?? [];
+    if (!held.length) return null;
+    const owner = registry.captureOwner?.(line?.kind);
+    const id = held.includes(owner) ? owner : held.find(item => typeof registry.module?.(item)?.hooks?.afterCapture === 'function');
+    if (!id) return null;
+    const name = registry.module?.(id)?.name || id, reason = registry.lifecycle?.(id)?.reason || 'temporarily unavailable';
+    return { module: id, name, reason, message: `"${line?.raw}" was not used: ${name} was held back (${reason}); this line was not used.` };
+}
+
 /** The raw lines of `text` the wall lets through: { lines: raw[], refused: [{ line, why }] }. */
 export function safeLines(text, allow, options = {}) {
     const { lines } = parseChanges(String(text ?? ''));

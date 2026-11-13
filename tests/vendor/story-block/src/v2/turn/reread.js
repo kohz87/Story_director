@@ -42,7 +42,7 @@ export function createReread(s, deps) {
         const extra = assistRoom(index, [...late.map(line => ({ line, mark: LATE })), ...nowLines(mes, [...own, ...late.map(line => line.raw)], own).map(line => ({ line, mark: NOW }))], lines.length, problems);
         // A module held back (dormant, or a restore is pending) cannot read its lines again, and replacing the
         // reply's story without them would lose what it stored: nothing is replaced while one is involved.
-        const waiting = heldInReply(message, [...lines, ...extra.map(item => item.line)]);
+        const waiting = heldInReply(message, [...lines, ...extra.map(item => item.line)], extra.map(item => item.line));
         if (waiting) return refusal(waiting.code, `Re-read is waiting for ${waiting.name}: ${waiting.reason} Nothing was changed.`);
         // Keep just enough to distinguish changed scene captures from a display refresh; never fail a Re-read for a diagnostic.
         let sceneBefore = null;
