@@ -123,6 +123,7 @@ test('on the host: more than three under way — one pick per reply, kept on a s
     assert.doesNotMatch(statics[0], /Events under \[World\]/);
     assert.equal(new Set(statics.slice(1)).size, 1);
     assert.match(statics.at(-1), /\+ world Name — what is changing in the wider world/);
+    assert.match(statics.at(-1), /\+ faction Name — who they are/);
     assert.match(statics.at(-1), /Events under \[World\] are under way/);
     const head = JSON.stringify(host.head());
     host.store.rebuild();

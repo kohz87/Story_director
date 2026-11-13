@@ -18,12 +18,12 @@ const MAX_ITEM = 130;
 export const TAIL_HEADER = '[World] Under way off-screen:';
 
 /**
- * The chronicle kinds' grammar: the world line carries the faction's (one line for the family), always taught, so the narrator can record the first world event
- * (the two World paragraphs, STATIC_TEXT, only while the story keeps a world event or a faction: the lean diet, 3 Nov).
+ * Each kind has its own always-taught grammar so the first event or faction can be recorded and
+ * the safety net can select either. The World paragraphs are taught only once the story keeps one.
  */
 export const GRAMMAR = Object.freeze({
-    world: '+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place | factions (~ world Name — what changed; - world Name — how it ended); + faction Name — who they are, what they want | area | stance: toward {{user}} (~ faction Name to change it; - faction Name when gone)',
-    faction: '',
+    world: '+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place | factions (~ world Name — what changed; - world Name — how it ended). Write + world when anyone reports or shows news from beyond the scene (war, raids, monsters moving, trade cut off, disaster, law or price change); ~ world when news moves an existing event on. A hook is a lead to follow; news can be both.',
+    faction: '+ faction Name — who they are, what they want | area | stance: toward {{user}} (~ faction Name to change it; - faction Name when gone). Write + faction when a group with its own aims acts or is named as acting and is not yet known; ~ faction when its stance toward {{user}} changes after what {{user}} did, or its aims or area change; - faction when it is gone or broken up.',
 });
 
 /** The chronicle's part of the static prompt (only while the story keeps world events or factions): no names, counts, times or dice. */

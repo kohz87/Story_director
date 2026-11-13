@@ -1,4 +1,4 @@
-// The Director's prompt diet (3 Nov): one grammar line per family, the rare kinds taught only while the story uses them, the check rule
+// The Director's prompt diet (3 Nov): short grammar lines, the rare kinds taught only while the story uses them, the check rule
 // said once, and not while Story Block's RPG is on without a fight module. The lines the parser reads are the same as before: every kind is still written, kept and replayed.
 
 import { test } from 'node:test';
@@ -26,7 +26,7 @@ const EVERY_KIND = ['~ time June 3, 1200, 08:00 am', '~ place Harrow | kind: set
     '+ world Plague — coughing in the docks | state: ongoing | place: Harrow', '+ faction Guild — the guild | area: docks | stance: wary',
     '+ route Harrow — Old Weir | hours: 2 | kind: road', '+ landmark Old Weir | region: the river | kind: ruin'];
 
-test('a quiet story: the Director prompt is one line per family and well under the old 3,100 characters', async () => {
+test('a quiet story: the Director prompt is short and teaches world and faction separately', async () => {
     for (const modules of [[], [fakeFightRunner()]]) {
         const host = await newHost(modules);
         try {
@@ -36,14 +36,16 @@ test('a quiet story: the Director prompt is one line per family and well under t
             // 2,100: the World pulse's one static sentence (feature `story-director.pulse`, on by default) and the names part's `+ person` line
             // (feature `story-director.names`, on by default since the first real run) are in it.
             // 2,750: one example line for each thread kind and when to write it (about 570 characters, 12 Nov; generic placeholders): flash never wrote them without one.
-            assert.ok(text.length < 2750, `${text.length} characters`);
+            // 3,200 (measured 3,138 and 3,173 with the fight runner, 13 Nov): explicit world-news and faction triggers (create, update, end), with separate grammar lines for Assist.
+            assert.ok(text.length < 3200, `${text.length} characters`);
             assert.match(text, /^\+ agenda\|event\|clock\|beat\|secret Name — summary/m);
             assert.match(text, /^\+ hook\|quest Name — /m);
             assert.match(text, /^~ time <date, clock time/m);
             // The rare kinds are not taught to a story that uses none of them.
             assert.doesNotMatch(text, /\+ route|\+ landmark|~ trip|World lines|\[World\]/);
-            // The world and faction line is always taught, one line, so the first world event can be recorded.
-            assert.match(text, /^\+ world Name — .*; \+ faction Name — /m);
+            // Each kind is always taught on its own line, so the first of either can be recorded.
+            assert.match(text, /^\+ world Name — /m);
+            assert.match(text, /^\+ faction Name — /m);
             // The statics of the replies are the same bytes (the cache keeps its prefix).
             assert.equal(new Set(sent(host, STATIC_KEY)).size, 1);
         } finally {

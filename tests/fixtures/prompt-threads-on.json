@@ -35,7 +35,7 @@
     },
     {
       "kind": "faction",
-      "grammar": "",
+      "grammar": "+ faction Name — who they are, what they want | area | stance: toward {{user}} (~ faction Name to change it; - faction Name when gone). Write + faction when a group with its own aims acts or is named as acting and is not yet known; ~ faction when its stance toward {{user}} changes after what {{user}} did, or its aims or area change; - faction when it is gone or broken up.",
       "heads": [
         "+ faction",
         "~ faction",
@@ -88,7 +88,7 @@
     },
     {
       "kind": "world",
-      "grammar": "+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place | factions (~ world Name — what changed; - world Name — how it ended); + faction Name — who they are, what they want | area | stance: toward {{user}} (~ faction Name to change it; - faction Name when gone)"
+      "grammar": "+ world Name — what is changing in the wider world | state: looming|ongoing|resolved | place | factions (~ world Name — what changed; - world Name — how it ended). Write + world when anyone reports or shows news from beyond the scene (war, raids, monsters moving, trade cut off, disaster, law or price change); ~ world when news moves an existing event on. A hook is a lead to follow; news can be both."
     }
   ]
 }
