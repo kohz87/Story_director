@@ -37,7 +37,8 @@ test('a quiet story: the Director prompt is short and teaches world and faction 
             // (feature `story-director.names`, on by default since the first real run) are in it.
             // 2,750: one example line for each thread kind and when to write it (about 570 characters, 12 Nov; generic placeholders): flash never wrote them without one.
             // 3,200 (measured 3,138 and 3,173 with the fight runner, 13 Nov): explicit world-news and faction triggers (create, update, end), with separate grammar lines for Assist.
-            assert.ok(text.length < 3200, `${text.length} characters`);
+            // 3,350 (measured 3,280, 13 Nov): the hook / quest line says when to close a job or lead and that + quest keeps the hook's name.
+            assert.ok(text.length < 3350, `${text.length} characters`);
             assert.match(text, /^\+ agenda\|event\|clock\|beat\|secret Name — summary/m);
             assert.match(text, /^\+ hook\|quest Name — /m);
             assert.match(text, /^~ time <date, clock time/m);
