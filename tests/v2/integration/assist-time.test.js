@@ -171,6 +171,13 @@ test('assist: world/faction lines that arrive while a restore barrier holds Stor
         assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather', 'capture.faction', 'capture.world', 'capture.world']);
         assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 2);
         assert.equal(stanceOf(host, 'Red Cords'), 'neutral');
+        // Replay == live: Re-read gives the same receipts in the same order from the stored sections, with no new model call.
+        const types = () => host.ctx.chat.at(-1).extra.storySuite.receipts.map(receipt => [receipt.type, receipt.assist]);
+        const before = JSON.stringify(types());
+        assert.equal((await host.sdk.reread(host.ctx.chat.length - 1)).ok, true);
+        assert.equal(JSON.stringify(types()), before);
+        assert.equal(calls, 1);
+        assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 2);
     } finally {
         host.close();
     }
