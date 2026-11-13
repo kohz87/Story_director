@@ -395,3 +395,16 @@ test('quest close: a v1 op with no lineKind behaves as before (two near matches 
     assert.deepEqual(problems[0].candidates.slice().sort(), ['Storehouse No. 2 Cellar-Rats', 'Storehouse No. 2 Rats']);
     assert.deepEqual(tracker.records.map(record => record.status), ['active', 'active']);
 });
+
+test('closing a job: the same name closes it whether the line says quest or hook; + quest turns the hook into the quest', () => {
+    const hook = '+ hook Boar Sounder Cull — two hunters dead | giver: Guild clerk | reward: 3 gold';
+    // `+ quest` with the hook's exact name: the hook becomes the quest (one thread, same id).
+    const taken = story([{ lines: hook }, { lines: '+ quest Boar Sounder Cull — kill the boars' }]);
+    assert.equal(threads(taken).filter(entry => entry.key === 'Boar Sounder Cull').length, 1);
+    assert.equal(thread(taken, 'Boar Sounder Cull').kind, 'quest');
+    // `- quest Name` closes the still-open hook of that name; `- hook Name` closes a quest.
+    const viaQuest = story([{ lines: hook }, { lines: '- quest Boar Sounder Cull — paid 3 gold by Watch-Clerk Dries' }]);
+    assert.equal(thread(viaQuest, 'Boar Sounder Cull').status, 'resolved');
+    const viaHook = story([{ lines: hook }, { lines: '+ quest Boar Sounder Cull — kill the boars' }, { lines: '- hook Boar Sounder Cull — paid 3 gold' }]);
+    assert.equal(thread(viaHook, 'Boar Sounder Cull').status, 'resolved');
+});
