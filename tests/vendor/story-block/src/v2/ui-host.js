@@ -52,6 +52,7 @@ import { createUiNavigation } from './ui-host/navigation.js';
 import { createUiSettings } from './ui-host/settings.js';
 import { installUiEvents, createHold } from './ui-host/events.js';
 import { createUiPanel } from './ui-host/panel.js';
+import { createSendNote } from './ui-host/send-note.js';
 import { createHostSetup } from './ui-host/setup.js';
 import { createScreenSync } from './ui-host/screens.js';
 import { IDS, el, iconButton, S, isGameViewKey, hasReplyRecord, hudOn } from './ui-host/shared.js';
@@ -264,6 +265,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
         else if (!bar.parentNode) doc.body.appendChild(bar);
     };
     placeBar();
+    const sendNote = createSendNote({ doc, ctx, enabled: () => settings().sendPending !== false, busy: () => runtime.turn?.replyBusy?.() === true, held: () => rpg?.sendHeld?.() === true, openBoard: () => rpg?.openHeldFight?.() === true });
 
     // ---- the Extensions drawer and the wand menu -------------------------------------------
     const drawerStatus = el(doc, 'p', 'story-suite-muted');
@@ -440,6 +442,7 @@ export function mountUi({ runtime, ctx, doc = globalThis.document, version = '',
             doc.removeEventListener?.('keydown', onKey);
             offs.splice(0).forEach(off => off?.());
             notes.destroy();
+            sendNote.destroy();
             extras.destroy();
         },
     };

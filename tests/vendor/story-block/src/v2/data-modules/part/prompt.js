@@ -90,7 +90,14 @@ export function summaryOf(state, module, { rpg = true } = {}) {
     // The host estimates tokens from UTF-16 length; cut on a character boundary within that budget.
     return cutAt(`${definition.name} — ${body}.${waiting}`, limit);
 };
-const tailLines = (state, rpg) => Object.keys(state?.domains?.dataModules?.active ?? {}).map(module => summaryOf(state, module, { rpg }));
+// The character sheets and the Foes block go first (with the RPG on): the tail is cut from its end when the context is tight, and what the narrator
+// must keep true after a fight (a character's Health, the foes standing) must outlast the pack's zero-valued counters. Pin order otherwise.
+const FIRST_ROLES = new Set(['character', 'foes']);
+const tailLines = (state, rpg) => {
+    const modules = Object.keys(state?.domains?.dataModules?.active ?? {});
+    const first = rpg ? modules.filter(module => FIRST_ROLES.has(activeDefinition(state, module)?.role)) : [];
+    return [...first, ...modules.filter(module => !first.includes(module))].map(module => summaryOf(state, module, { rpg }));
+};
 
 // --- Cards under the head reply -------------------------------------------------------------------------------------------------
 // A block's `cards` are derived from the head reply's state each time the cards are asked for, never stored. They reach the reply-cards

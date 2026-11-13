@@ -85,7 +85,11 @@ export const labelLine = line => {
     const changes = [line.damage ? barMovement(line.damage) : '', line.cost ? barMovement(line.cost, true) : ''].filter(Boolean);
     const skill = line.skill ? ` (${line.skill})` : '';
     const verdict = `${line.kind === 'foe' ? `${pc.who}'s defence${skill}: ` : ''}${line.kind === 'foe' && Number.isInteger(line.soaked) && line.soaked >= 0 ? 'GLANCED OFF' : String(line.outcome).toUpperCase()}`;
-    return `${who}${line.kind === 'foe' ? '' : skill}: d20 ${pc.die} ${signed(bonus)} = ${pc.total} vs ${foe.total ?? line.dc} — ${verdict}${line.decisive ? ', DECISIVE' : ''}${changes.length ? ` · ${changes.join(' · ')}` : ''}`;
+    // (a foe's attack: the foe's own roll first, then the defender's: "raider attacks Astra: raider d20 10 +4 = 14 vs Astra's defence d20 3 +5 = 8 — Astra's defence: FAIL" is a hit)
+    const rolls = line.kind === 'foe' && Number.isFinite(foe.total) && Number.isFinite(foe.die)
+        ? `${foe.name} d20 ${foe.die} ${signed(foe.total - foe.die)} = ${foe.total} vs ${pc.who}'s defence d20 ${pc.die} ${signed(bonus)} = ${pc.total}`
+        : `d20 ${pc.die} ${signed(bonus)} = ${pc.total} vs ${foe.total ?? line.dc}`;
+    return `${who}${line.kind === 'foe' ? '' : skill}: ${rolls} — ${verdict}${line.decisive ? ', DECISIVE' : ''}${changes.length ? ` · ${changes.join(' · ')}` : ''}`;
 };
 export const labelAreaGroup = group => {
     const line = group[0], name = line.aoeName || line.foe?.name || '';

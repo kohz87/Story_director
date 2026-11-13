@@ -206,7 +206,7 @@ export function createTimeline({ store, registry, metadata, chat = () => [], bar
     const block = createBlock(s, { archive, registry, problem, raise, again: recoverOnce });
     const { selectionPlan, withWholePrefixes, nativeSelectionProblem, selectionNeeded, selectHead, finishSelection, prefixKey, publishRestore, finishNative, pin, nativeEvent, register, attach, guard, contract, makeCommand } = createNative(s, { store, registry, activeHistory, activeLine: () => activeLine(), archive, ask, block, availability: modules => availability(modules), brokenProblem, callParticipant, durable, exclusive, guarded, head: () => head(), headNow: () => headNow(), here, problem, makeNow: (input, options) => makeNow(input, options), participants, pendingNow, point, pointsOf, raise, release: id => release(id), session, stillHere, unmaterializedMarkers: () => unmaterializedMarkers() });
     // The reading half (coordinator-read.js), wired once everything it calls is defined (the native half, above, is the last it needs).
-    const { settle, release, reconcile, minuteOf, sceneOf, headNow, head, listNow, list, status, activeLine, syncHidden, history } = createRead(s, { block, store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise, nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes });
+    const { settle, release, reconcile, carryBoundaries, minuteOf, sceneOf, headNow, head, listNow, list, status, activeLine, syncHidden, history } = createRead(s, { block, store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise, nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes, prefixKey });
     // The making and preparing half (coordinator-prepare.js), wired once everything it calls is defined: `headNow`, `minuteOf` and `sceneOf` are the
     // reading half's (just above). `complete` is the restoring half's, wired next; `finish` calls it only when it runs, so it is given as a function.
     const { makeNow, forget, availability, abortEntry, prepare, finish } = createPrepare(s, { store, registry, settings, announce, archive, participants, ask, block, brokenProblem, callParticipant, complete: entry => complete(entry), durable, headNow, here, minuteOf, owe, pendingNow, point, pointsOf, quietly, sceneOf, selectionPlan, session, stillHere });
@@ -278,6 +278,8 @@ export function createTimeline({ store, registry, metadata, chat = () => [], bar
         recover: recoverOnce,
         /** A chat was opened: what belongs to the one before it is dropped (the host calls it before it recovers). */
         settle,
+        /** Before a reconcile: the function that follows the native mappings over the stamps it writes anew (coordinator-read.js). */
+        carryBoundaries,
         available: hash => archive.hasPayload(hash),
         /** Internal turn hint: unchanged roots must keep Sources once native checkpoints depend on their prefixes. */
         hasNativeChanges: () => archive.entries().some(entry => ['native-event', 'native-mutation'].includes(entry.kind)),

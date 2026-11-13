@@ -16,7 +16,7 @@
 import { OPS, extractBlock, parseChanges, sameChangeLine, stripBlock, withoutReasoning } from '../capture.js';
 import { BACKGROUND, SETTING, TIMEOUT_MS, clip, estimateTokens, normalizeType, withTimeout } from './common.js';
 import { DEFAULT_KINDS, allowedKinds, refusedWhy } from './safety.js';
-import { mapPlaces, whereLines, whereNow, whereWhy } from './where.js';
+import { mapPlaces, whereLines, whereNow, whereWhy, worldKnown } from './where.js';
 
 export const REPLY_LIMIT = 6000;
 export const MAX_LINES = 24;
@@ -30,11 +30,22 @@ export const EXTRACTOR_HEAD = [
     'op: + new or gained, - gone or lost, ~ changed, ! happened, ? asks code to decide (a check the reply stopped at).',
     'Use only these kinds:',
 ].join('\n');
-export const EXTRACTOR_FOOT = [
+const FOOT_LINES = [
     'Write a line only for what the reply clearly tells and its own lines (below) do not already say, with numbers only where it gives them. If nothing is missing, answer: none',
+    'Write a place line only when the reply moves the scene. Name where the reply ENDS, the last place the story is at, never a stop on the way. If the scene ends at the place it is at now, write no place line.',
     'A place line uses the exact name of a known place whenever the reply is at one the map has (known places are listed below). A time line needs a clock time like the story date and time below (~ time <date>, 9:30 am sets it; ! time +2h moves it on): "midday" and "mid-morning" are not times, so write no time line unless the reply gives a clock time or a stretch. A line with an unknown name for a known place, or a time without a clock time, is refused.',
-    'Answer with the lines only, between <Changes> and </Changes>.',
-].join('\n');
+];
+const FOOT_LAST = 'Answer with the lines only, between <Changes> and </Changes>.';
+// The two lines added only when a world or faction kind is allowed (other readers' prompts stay as they were).
+export const WORLD_FOOT = [
+    'Parts after the first | are always written label: value (place: Dragonfang, factions: Ashen Court, area: the north, state: ongoing).',
+    'World news and faction lines: when an open world event or a faction is listed below as already kept, reuse its exact name with ~ to update it; write + only for something new. Never change a stance the reply does not show changing, and never make a faction out of a place or a city name.',
+];
+export const EXTRACTOR_FOOT = [...FOOT_LINES, FOOT_LAST].join('\n');
+/** The foot for the kinds' grammar lines: EXTRACTOR_FOOT, with WORLD_FOOT before its last line when a world or faction kind is among them. */
+export function footFor(grammar = []) {
+    return grammar.some(line => ['world', 'faction'].includes(grammarKind(line))) ? [...FOOT_LINES, ...WORLD_FOOT, FOOT_LAST].join('\n') : EXTRACTOR_FOOT;
+}
 export const WHERE_HEAD = 'Where and when the scene is:';
 export const WRITTEN_HEAD = 'The reply\'s own lines:';
 export const REPLY_HEAD = 'The reply:';
@@ -56,7 +67,7 @@ export function extractorPrompt(reply, grammar, written = [], around = null) {
     const kinds = grammar.map(line => `- ${String(line).trim()}`).join('\n');
     const own = written.length ? written.map(line => clip(line, 200)).join('\n') : 'none';
     const where = whereLines(around);
-    return `${EXTRACTOR_HEAD}\n${kinds}\n${EXTRACTOR_FOOT}\n\n${where.length ? `${WHERE_HEAD}\n${where.join('\n')}\n\n` : ''}${WRITTEN_HEAD}\n${own}\n\n${REPLY_HEAD}\n"""\n${clip(reply, REPLY_LIMIT)}\n"""`;
+    return `${EXTRACTOR_HEAD}\n${kinds}\n${footFor(grammar)}\n\n${where.length ? `${WHERE_HEAD}\n${where.join('\n')}\n\n` : ''}${WRITTEN_HEAD}\n${own}\n\n${REPLY_HEAD}\n"""\n${clip(reply, REPLY_LIMIT)}\n"""`;
 }
 
 // Two lines are one change when C-1 calls them the same line, or when they share op, kind and name
@@ -139,7 +150,7 @@ export function allowedGrammar(lines, allow) {
  * The extractor. `deps`: { callModel(prompt, { maxTokens, profile }) → text, settings() → the module's
  * settings, grammar() → the kinds' one-line grammars (module-id order), capture(text, { index, swipe })
  * → the host's capture of extra change lines for that carrier, chatId(), log, warn, timeoutMs, timer,
- * where() → { here: { name, kind, region }, places: [{ name, aliases?, region?, x?, y? }], time: text }: the scene's
+ * where() → { here: { name, kind, region }, places: [{ name, aliases?, region?, x?, y? }], time: text, world?: { events, factions } }: the scene's
  * place, the map's places and the story's date and time; each part may be missing, and a throwing where is none }.
  * Returns { afterReply(reply) }.
  */
@@ -176,7 +187,7 @@ export function createExtractor({ callModel, settings, grammar, capture, chatId,
             // The story as capture reads it: closed reasoning (<think>…</think>) is not story.
             const story = stripBlock(withoutReasoning(mes)).trim();
             if (!story) return null;
-            const key = `${chatId() ?? ''}|${index}|${swipe}`;
+            const key = `${chatId() ?? ''}|${index}|${swipe}|${reply.sid ?? ''}`;   // (a replacement reply reuses index and swipe, not its record ID)
             if (done.has(key)) return null;
             done.add(key);
             const at = { index, swipe };
@@ -198,6 +209,8 @@ export function createExtractor({ callModel, settings, grammar, capture, chatId,
             try { seen = typeof where === 'function' ? where() : null; } catch { seen = null; }
             const places = mapPlaces(seen?.places);
             const around = whereNow({ here: seen?.here, places, time: seen?.time });
+            // What the Chronicle holds, told only when a world or faction kind is among the allowed ones.
+            if (lines.some(line => ['world', 'faction'].includes(grammarKind(line)))) Object.assign(around, worldKnown(seen?.world));
             const check = { places, here: around.here?.name ?? '' };
             const prompt = extractorPrompt(story, lines, written, around);
             const profile = String(values?.[SETTING.extractorProfile] ?? '').trim() || String(values?.[SETTING.profile] ?? '');

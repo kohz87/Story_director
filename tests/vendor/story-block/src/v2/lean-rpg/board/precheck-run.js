@@ -29,7 +29,7 @@ export async function runPrecheck({ callModel, message, previous = '', sheet, va
 }
 
 /** The opening to record: the groups only, no acts and no foes' turns (the board plays the fight). `lv` lets resolve settle a level the pre-check left out. */
-export function openingPayload({ groups, key, rules, anchor, values = {} }) {
+export function openingPayload({ groups, key, rules, anchor, values = {}, stale = [] }) {
     return { key, plan: { formula: 'standard', pace: 'normal', open: groups, acts: [], foes: [], checks: [] }, rules, dice: DICE_VERSION, flow: FLOW_VERSION, fix: FIX_VERSION, lv: LV_VERSION,
-        practice: practiceOf(values[PRACTICE_SETTING]) ?? PRACTICE.perUse, start: anchor };
+        practice: practiceOf(values[PRACTICE_SETTING]) ?? PRACTICE.perUse, start: anchor, ...(stale.length ? { stale } : {}) };
 }

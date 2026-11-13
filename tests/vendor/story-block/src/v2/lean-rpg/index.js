@@ -10,7 +10,7 @@
 // names.js, the plan in plan.js, the sheet reader in read.js, the pre-call in precall.js, the roll in resolve.js
 // (its header documents the `data.v2.result` record the battle log draws from) and the cue text in cue.js.
 import { stChat } from '../assist/st-adapter.js';
-import { AUTO_CAP, AUTO_CAP_SETTING, BOARD_SKILL, CHECKS_SETTING, CHECK_STEP, DICE, FIGHT, LEAN_RPG_FEATURE, LEVEL, LEVEL_CAP_SETTING, NOROLL, PRACTICE, PRACTICE_SETTING, PRACTICE_STEP, PRECHECK_LIMIT_MS, PRECHECK_SETTING, RESOLVE, ROLLS, ROLLS_SETTING } from './names.js';
+import { AUTO_CAP, AUTO_CAP_SETTING, BOARD_SKILL, CHECKS_SETTING, CHECK_STEP, DICE, FIGHT, LEAN_RPG_FEATURE, LEVEL, LEVEL_CAP_SETTING, NOROLL, PRACTICE, PRACTICE_SETTING, PRACTICE_STEP, PRECHECK_LIMIT_MS, PRECHECK_SETTING, RESOLVE, ROLLS, ROLLS_QUERY, ROLLS_SETTING } from './names.js';
 import { noRoll } from './noroll.js';
 import { fightHook, fightXp } from './fight.js';
 import { RANK_QUERY, SETTINGS_SCHEMA, XP_RATE, XP_RATE_SETTING, rankQuery } from './levels.js';
@@ -20,6 +20,8 @@ export { parseCheckLine } from './checks/line.js';
 import { JOIN_NO, joinCard, joinOffers, partyOf } from './join.js';
 import { fold } from './read.js';
 import { createPrecall } from './precall.js';
+import { FOES_TOUCH_QUERY } from './names.js';
+import { lastFoeTouch } from './board/offers.js';
 import { leanRpgGuard, resolve, rollsOf } from './resolve.js';
 import { skipOf } from './start.js';
 import { levelsQuery, rosterQueries } from './roster.js';
@@ -55,9 +57,6 @@ export const DEFAULT_SETTINGS = Object.freeze({ [ROLLS_SETTING]: ROLLS[0], [PRAC
 
 /** The offers a reply's `+ party` lines made under Ask (the card under the reply reads them): `rpg.joins { index? }` → [{ name, about, soul, best }] on the head reply (or the reply `index`). */
 export const JOINS_QUERY = 'rpg.joins';
-
-/** The query B reads a reply's rolls through: `rpg.rolls { index? }` → { receipt, result, summary } | null (the head reply by default). */
-export const ROLLS_QUERY = 'rpg.rolls';
 
 /**
  * The part merged into Story Block's core module (domains/index.js). `deps` (all optional):
@@ -105,6 +104,8 @@ export function createLeanRpgPart({ chat = stChat, metadata = () => null, module
             [JOINS_QUERY]: Object.assign((state, args, tools) => joinOffers(tools?.receipts?.() ?? [], Number.isInteger(args?.index) ? args.index : tools?.reply?.index, partyOf(state)), { feature: LEAN_RPG_FEATURE }),
             // The rank a level falls in, by the story's pack (levels.js): { level } → { name } | null.
             [RANK_QUERY]: Object.assign(rankQuery, { feature: LEAN_RPG_FEATURE }),
+            // The chat index of the latest reply that touched the Foes block, -1 when none (board/offers.js lastFoeTouch): the stale-foes rule reads it.
+            [FOES_TOUCH_QUERY]: Object.assign((_state, _args, tools) => lastFoeTouch(tools?.receipts?.() ?? []), { feature: LEAN_RPG_FEATURE }),
             [ROLLS_QUERY]: Object.assign((_state, args, tools) => rollsOf(tools?.receipts?.() ?? [], Number.isInteger(args?.index) ? args.index : tools?.reply?.index), { feature: LEAN_RPG_FEATURE }),
             // The party's members and the reader's own Character, from the Character blocks (roster.js; fallbacks: a module that answers them itself is asked instead).
             ...rosterQueries({ persona, on: rosterOn }),
@@ -113,7 +114,7 @@ export function createLeanRpgPart({ chat = stChat, metadata = () => null, module
         hooks: {
             canGenerate: Object.assign((view, info) => precall.canGenerate(view, info), { feature: LEAN_RPG_FEATURE }),
             // The foe pre-check may call the model once (PRECHECK_LIMIT_MS, or `timeoutMs`): the hook may take that long and a little more.
-            beforeGenerate: Object.defineProperty((view, info) => precall.beforeGenerate(view, info), 'timeoutMs', { enumerable: true, get: () => (timeoutMs ?? PRECHECK_LIMIT_MS) + 2000 }),
+            beforeGenerate: Object.defineProperty((view, info) => view?.feature?.(LEAN_RPG_FEATURE) === true ? precall.beforeGenerate(view, info) : null, 'timeoutMs', { enumerable: true, get: () => (timeoutMs ?? PRECHECK_LIMIT_MS) + 2000 }),
             afterCapture: (view, info) => {
                 precall.afterCapture(view);
                 // The fight's XP, then the rolled skills' practice: two steps after the reply's lines.

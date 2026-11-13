@@ -7,6 +7,8 @@
 import { deriveId, hashJson, isRecordId } from '../replay.js';
 import { cutAt } from '../../text.js';
 import { HOST_DOMAIN, epochOf } from './gate.js';
+import { stateHash } from './host-block.js';
+import { boundaryMatches } from './selection-fallback.js';
 import { crashing, fail, isObject, isStaleChat, makeId } from './util.js';
 
 // How many times a head is planned again, one pass after the other, before it is called moving (the barrier stays up then).
@@ -16,7 +18,7 @@ const ordered = (a, b) => (a.target.rev - b.target.rev) || (a.target.op - b.targ
 export function createRead(s, deps) {
     const {
         block, store, registry, chat, barrier, problem, redraw, archive, participants, durable, here, ask, pointsOf, pendingEntry, pendingNow, raise,
-        nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes,
+        nativeSelectionProblem, selectionNeeded, selectHead, withWholePrefixes, prefixKey,
     } = deps;
 
     // What belongs to a chat that is not the open one is dropped: announcements owed, and a barrier raised for it (its own journal
@@ -91,6 +93,41 @@ export function createRead(s, deps) {
             if (crashing(error)) throw error;
             if (isStaleChat(error)) settle();
         }
+    }
+
+    // A swipe's or a delete's reconcile plans the guarded steps again, and each one's stored boundary (a prefix hash that follows what is before it,
+    // the text and the prefix as they are now) is stamped anew. The hash a native mapping was made on takes those stamps in with the records, so
+    // a stamp that moved, with nothing else changed, would leave every mapping after that reply unmatched and the head would settle on the oldest
+    // one that still matches. `carryBoundaries()` is asked before the reconcile and returns the function to run after it: a mapping that matched
+    // before, whose prefix (`bare`: records, text and steps, without the stamps) and replayed state are the same now, takes the new prefix hash.
+    // A mapping that did not match, or whose records, text or state changed, is left as it is, and the selection rule stays exact.
+    // (a state's hash is worked out once per frozen state object, in the memo the selection plan shares)
+    function hashOf(state) {
+        if (!state || typeof state !== 'object' || !Object.isFrozen(state) || !s.witnessHashes) return stateHash(state);
+        let hash = s.witnessHashes.get(state);
+        if (hash === undefined) s.witnessHashes.set(state, hash = stateHash(state));
+        return hash;
+    }
+    function carryBoundaries() {
+        if (!archive.exists() || registry.hypothetical?.() || !Number.isInteger(store.replansFrom?.())) return () => 0;
+        const scoped = fn => withWholePrefixes(() => (store.witnessScope ?? (read => read()))(fn));
+        const kept = scoped(() => participants.modules().flatMap(module => archive.prefixes(module).flatMap(mapping => {
+            const witness = mapping.boundary && mapping.after ? store.prefixWitness(mapping.boundary.cursor) : null;
+            return witness?.bare && boundaryMatches(mapping, witness, { stateHashOf: hashOf }) ? [{ module, key: mapping.key, boundary: mapping.boundary, bare: witness.bare }] : [];
+        })));
+        return () => {
+            let moved = 0;
+            scoped(() => {
+                for (const { module, key, boundary, bare } of kept) {
+                    const witness = store.prefixWitness(boundary.cursor);
+                    const stored = archive.prefix(module, key);
+                    if (!stored || !witness || witness.bare !== bare || witness.prefixHash === boundary.prefixHash || hashOf(witness.state) !== boundary.stateHash) continue;
+                    archive.rekeyPrefix(module, key, prefixKey(boundary.cursor, witness.prefixHash), { ...stored, boundary: { ...stored.boundary, prefixHash: witness.prefixHash } });
+                    moved += 1;
+                }
+            });
+            return moved;
+        };
     }
 
     function minuteOf(state) {
@@ -304,5 +341,5 @@ export function createRead(s, deps) {
         return { ok: true, messages: out, faded };
     }
 
-    return { settle, release, reconcile, minuteOf, sceneOf, headNow, head, listNow, list, status, activeLine, syncHidden, history };
+    return { settle, release, reconcile, carryBoundaries, minuteOf, sceneOf, headNow, head, listNow, list, status, activeLine, syncHidden, history };
 }

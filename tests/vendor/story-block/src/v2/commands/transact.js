@@ -225,7 +225,8 @@ export function createTransact({ store, registry, resolve, internal, internalMes
         if (!isRecord(carrier) || !Number.isInteger(carrier.index)) return null;
         const swipe = Number.isInteger(carrier.swipe) ? carrier.swipe : 0;
         const key = `${carrier.index}:${swipe}`;
-        const out = { index: carrier.index, swipe, sid: typeof carrier.sid === 'string' ? carrier.sid : null, key, ...(carrier.practiceRule === 'rolls' ? { practiceRule: 'rolls' } : {}), ...(carrier.foeCap === 20 ? { foeCap: 20 } : {}), ...(ruleMarksOf(carrier.rules).length ? { rules: Object.freeze(ruleMarksOf(carrier.rules)) } : {}) };
+        const out = { index: carrier.index, swipe, sid: typeof carrier.sid === 'string' ? carrier.sid : null, key, ...(carrier.practiceRule === 'rolls' ? { practiceRule: 'rolls' } : {}), ...(carrier.foeCap === 20 ? { foeCap: 20 } : {}), ...(ruleMarksOf(carrier.rules).length ? { rules: Object.freeze(ruleMarksOf(carrier.rules)) } : {}), ...(['now', 'late'].includes(carrier.assist) ? { assist: carrier.assist, assistLeft: Object.freeze((Array.isArray(carrier.assistLeft) ? carrier.assistLeft : []).filter(name => typeof name === 'string')), ...(typeof carrier.assistCheck === 'function' ? { assistCheck: carrier.assistCheck } : {}) } : {}) };
+        if (out.assist && typeof carrier.assistHas === 'function') out.assistHas = carrier.assistHas;
         Object.defineProperty(out, 'toString', { value: () => key });
         return Object.freeze(out);
     }

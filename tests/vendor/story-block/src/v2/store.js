@@ -131,6 +131,8 @@ export function createStore({
         idIndex: null,  // { arr, chat, swipeKeys: Map<sw_ id, stored sid>, evidences: Map<ev_ id, stored sid>, logicals: Map<sr_ id, Set<message>> }
         bodies: new WeakMap(),
         links: new WeakMap(),
+        bareBodies: new WeakMap(),
+        bareLinks: new WeakMap(),
         staged: null,  // index → the record a Re-read / reconcile has worked out and not stored yet: prefix hashes follow it
         tail: null,  // { arr, upTo, length, hash }
         spineDigests: new WeakMap(),
@@ -185,6 +187,9 @@ export function createStore({
             for (const [message, entry] of s.unsaved) {
                 if (entry.chatId !== change.chatId) continue;
                 if (arr.includes(message)) left = true;
+                // A write the open chat took after this one (a message of the same place with a later entry) is newer than the old
+                // object's copy: carrying the old record over it would drop that write (a receipt on no carrier), so the old entry goes.
+                else if (s.unsaved.get(arr[entry.index])?.n > entry.n) { s.unsaved.delete(message); left = true; }
                 // The same chat read again (a reload, or opened again before the save): the change goes
                 // onto the same message as read back, when it still is that message.
                 else if (carryRecord(message, arr[entry.index])) {
@@ -220,6 +225,9 @@ export function createStore({
                     .map(where => where?.[KEY]).filter(record => isObject(record) && record.sid === token.sid);
                 if (held.some(record => record.rev === token.rev)) return '';
                 if (held.length) rev = held[0].rev;
+                // The swipe the token wrote was deleted while the save ran (the other swipe is shown now): its record is nowhere on the
+                // message, so nothing of it is left to check; the save stands (the shown record's own write marked it unsaved).
+                else return '';
             }
             if (rev === token.rev) return '';
             if (s.lastWrite === token) s.lastWrite = null;
@@ -279,7 +287,7 @@ export function createStore({
         return record.receipts.filter(receipt => revs.has(receipt?.rev));
     };
 
-    const { chainHash, spineBefore, spineStep, windowHash } = createChains(s, { blockParts: (...args) => blockParts(...args) });
+    const { chainHash, bareHash, spineBefore, spineStep, windowHash } = createChains(s, { blockParts: (...args) => blockParts(...args) });
 
     const arr0 = index => list()[index];
 
@@ -329,7 +337,7 @@ export function createStore({
     // results and is wired after them, where `sameKey` exists. `api` is only used for `api.sourceAt(...)`, which is looked up when it runs.
     const { spineRun, stateAfterPrefix } = createPrefixMemo(s, { chain, chatId, markNow, marked, replay, replayEnv, replayRecord, spineStep });
     const { current, retain, markFlipped, carrierAt, memoAt, frozenReceipts, forgetMemos, witnessKeyOf, markSeen, witnessGeneration, lineOf, baseFor, stateBefore, take, sidFor, carriedTo, spansOf, spansFor, blockParts, receiptsOf, asOps, prefixWitnessUncached } = createMemo(s, {
-        KEPT_ASIDE, WHY, api: { sourceAt: (...args) => api.sourceAt(...args) }, appliedOf, archive, blocksBefore, chain, chainHash, chatId, checkpointBytes,
+        KEPT_ASIDE, WHY, api: { sourceAt: (...args) => api.sourceAt(...args) }, appliedOf, archive, blocksBefore, chain, chainHash, bareHash, chatId, checkpointBytes,
         checkpointEvery, checkpointState, headKey, list, markNow, marked, metadata, packOwners, packProblems, preservedAt, proofBefore, proofsBefore,
         rawKind, rawSidAt, recordId, replay, replayEnv, replayRecord, sameKey, settleBehind, sourceFor, spineBefore, stateAfterPrefix, stillHolds, windowHash,
     });

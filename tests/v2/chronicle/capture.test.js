@@ -377,3 +377,22 @@ test('factionTags: the receipt lists the factions made on a `- world` line that 
     assert.ok(factionNamed(run.state, 'Ferry Guild'));
     assert.match(run.result.summary, / New faction: Ferry Guild\.$/);
 });
+
+// ---- the safety net never sets an existing faction's stance (Story Block's `assistFaction` mark) ----
+
+const NET = { carrier: { assist: 'now', rules: ['assistFaction'] } };
+
+test('assistFaction: a safety-net + or ~ faction line on a known faction keeps its stance (summary and area still update); a new faction takes its stance; an unmarked reply is as before', () => {
+    const state = line(makeState({ minutes: DAY }), '+ faction Red Cords — pier crew | area: the pier | stance: wary of {{user}}').state;
+    const plus = line(state, '+ faction Red Cords — pier crew locking down the salt barges | Bluewatch Village | stance: neutral', NET);
+    assert.equal(plus.ok, true, plus.message);
+    assert.equal(factionNamed(plus.state, 'Red Cords').stance, 'wary of {{user}}', 'the stance stays');
+    assert.match(factionNamed(plus.state, 'Red Cords').summary, /^pier crew locking down the salt barges/, 'an unlabelled part is more summary text (why the net is told to label parts)');
+    const edit = line(state, '~ faction Red Cords | area: the quay | stance: hostile', NET);
+    assert.deepEqual([factionNamed(edit.state, 'Red Cords').stance, factionNamed(edit.state, 'Red Cords').area], ['wary of {{user}}', 'the quay']);
+    const fresh = line(state, '+ faction Shackles — collectors | stance: hostile', NET);
+    assert.equal(factionNamed(fresh.state, 'Shackles').stance, 'hostile', 'a new faction is written whole');
+    // Not the net's (no assist), or a reply without the mark: the stance moves as it always did.
+    assert.equal(factionNamed(line(state, '~ faction Red Cords | stance: hostile', { carrier: { rules: ['assistFaction'] } }).state, 'Red Cords').stance, 'hostile');
+    assert.equal(factionNamed(line(state, '~ faction Red Cords | stance: hostile', { carrier: { assist: 'now', rules: [] } }).state, 'Red Cords').stance, 'hostile');
+});

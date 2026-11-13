@@ -8,7 +8,7 @@ import { applyGear, earnedLegend, gearMatches, gearValid, wearGear } from '../ge
 import { LV_VERSION, PRACTICE, RESOLVE, practiceOf } from '../names.js';
 import { readSheet } from '../read.js';
 import { hasLevels, normalizeRules } from '../rules.js';
-import { applyHurts, boardWitness, playBoard } from './engine.js';
+import { applyHurts, boardWitness, clearFoes, playBoard } from './engine.js';
 import { settledNote } from './note.js';
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -23,6 +23,7 @@ const shape = board => isObject(board) && isObject(board.setup) && Array.isArray
     && (board.setup.foesHard === undefined || (board.setup.foesHard === 1 && board.setup.members === 1 && board.setup.bars === 2))
     && (board.setup.areaAll === undefined || (board.setup.areaAll === 1 && board.setup.aoe === 1))
     && (board.setup.soak === undefined || (board.setup.soak === 1 && board.setup.bars === 2))
+    && (board.setup.foesClear === undefined || (board.setup.foesClear === 1 && board.setup.members === 1))
     && (board.setup.witness === undefined ? board.exchanges.length === 0
         : isObject(board.setup.witness) && board.setup.witness.offset === board.setup.offset && /^[0-9a-f]{64}$/u.test(board.setup.witness.hash));
 // The guard's input witness. Records made before this hashed the whole dataModules domain, other replies' `perReply` scratch included,
@@ -73,6 +74,11 @@ export function resolveBoard(ctx, payload) {
     ctx.replayGuard({ owner: ctx.module, version: 2, epoch: ctx.epoch, rulesHash: null, predicate,
         inputHash: ctx.hash({ source: ctx.source, predicate, witness: witness(state) }) }, { key, board, practice });
     if (result.hurts.length) applyHurts(ctx.draft('dataModules'), result.hurts);
+    // (a fight opened under the foe-clear mark: once it has ended its groups leave the Foes block, whatever the outcome; old records carry no mark and keep their foes)
+    if (board.setup.foesClear === 1 && result.stop !== 'open') {
+        const cleared = clearFoes(ctx.draft('dataModules'), readSheet(state).foes, board.groups);
+        if (cleared.length) result.cleared = cleared;
+    }
     return { summary: settledNote(result, board.setup), narrate: true, replan: true, data: { v2: { key: claimId, result } } };
 }
 

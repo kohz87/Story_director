@@ -9,6 +9,9 @@ import { valueByCond, handDef, statsFor, atLimit } from '../gear.js';
 import { KIND_ORDER, isCount, CARRY_MAX, condOf, COND_MAX, packCarry } from './state.js';
 import { membersOf, pcOf, slotLimits, canWear, asking } from './validate.js';
 
+// One collator for the list's name order (what `a.localeCompare(b, 'en', { numeric: true })` gives, without building one per comparison).
+const byName = new Intl.Collator('en', { numeric: true });
+
 // The most definitions one `inventory.definitions` call may ask for by ID.
 export const DEFINITIONS_MAX_IDS = 1000;
 
@@ -58,7 +61,7 @@ export function listItems(inventory, owner = null, carry = null, gear = false, n
             };
         })
         .sort((a, b) => ownerRank(a.owner) - ownerRank(b.owner) || (a.owner < b.owner ? -1 : a.owner > b.owner ? 1 : 0)
-            || kindRank(a.kind) - kindRank(b.kind) || a.name.localeCompare(b.name, 'en', { numeric: true })
+            || kindRank(a.kind) - kindRank(b.kind) || byName.compare(a.name, b.name)
             || (a.stack < b.stack ? -1 : a.stack > b.stack ? 1 : 0));
 }
 

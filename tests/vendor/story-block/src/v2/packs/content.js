@@ -7,11 +7,16 @@
 import { CONTENT_KINDS, DEFAULT_CRAFTS } from './limits.js';
 import { slugify } from './validate/core.js';
 import { foldKey } from '../../text.js';
+import { deepFreeze } from '../ops/freeze.js';
 
 // The inventory def fields (SPEC §7), in a fixed order.
 const DEF_FIELDS = ['id', 'name', 'kind', 'rarity', 'value', 'stack', 'slot', 'stats', 'effect', 'tags', 'note'];
 
 const copy = value => JSON.parse(JSON.stringify(value));
+
+// What contentOf hands out: the pack's own records, frozen all the way down (once; a frozen value is not walked again), not copies of
+// them. Nothing can change a pack through one, and a reader that wants to edit makes its own copy.
+const shared = list => Object.freeze(list.map(deepFreeze));
 
 /**
  * The item as an inventory def (SPEC §7): `{ id: 'pack.<id>/<slug>', name, kind, … }`, with its `carry`
@@ -52,21 +57,22 @@ export function itemDefsIn(packs, ids = null) {
  * each pack's ladder lowest first, so a reader takes one pack's ranks; crafts: `{ id, slug, pack, title,
  * stats, stations, note? }`, see craftsOf for the merged table; meterPresets: `{ id, slug, pack, title,
  * meters, stages? }`, ready-made NPC meter sets; cast: `{ id, pack, packVersion, name, aliases, about, look, wears?, voice?, personality?, behaviour?, mannerisms?, withYou?, history?,
- * portrait?, start: { place, goal, routine? }, drawnTo?, meters?, stages?, fields?, secrets?, canDieUnmet? }`, the hand-written people of cast.js, `id` their own
+ * portrait?, birthday?, start: { place, goal, routine? }, drawnTo?, meters?, stages?, fields?, secrets?, canDieUnmet? }`, the hand-written people of cast.js, `id` their own
  * slug in the pack),
  * `currency` (one `{ pack, name, short }` per pack that suggests one), `layouts`,
  * `screens` (each with its `pack`), or `theme` (one `{ pack, tokens }` per pack that has a
  * theme). Unknown kinds give [].
  * `pack` narrows to one pack id.
+ * The records are the packs' own, frozen (not copies): copy one before editing it.
  */
 export function contentOf(packs, kind, { pack = null } = {}) {
-    if (kind === 'currency') return copy(packs.filter(entry => entry.currency && (!pack || entry.id === pack)).map(entry => ({ pack: entry.id, ...entry.currency })));
+    if (kind === 'currency') return shared(packs.filter(entry => entry.currency && (!pack || entry.id === pack)).map(entry => ({ pack: entry.id, ...entry.currency })));
     const chosen = pack ? packs.filter(entry => entry.id === pack) : packs;
     // The cast: each person with the version of the pack that gave them (a newer version changes who is new and who changed).
-    if (kind === 'cast') return copy(chosen.flatMap(entry => (entry.content.cast ?? []).map(person => ({ ...person, packVersion: entry.version }))));
-    if (CONTENT_KINDS.includes(kind)) return copy(chosen.flatMap(entry => entry.content[kind] ?? []));
-    if (kind === 'layouts' || kind === 'screens') return copy(chosen.flatMap(entry => entry[kind]));
-    if (kind === 'theme') return copy(chosen.filter(entry => Object.keys(entry.theme).length).map(entry => ({ pack: entry.id, tokens: entry.theme })));
+    if (kind === 'cast') return shared(chosen.flatMap(entry => (entry.content.cast ?? []).map(person => ({ ...person, packVersion: entry.version }))));
+    if (CONTENT_KINDS.includes(kind)) return shared(chosen.flatMap(entry => entry.content[kind] ?? []));
+    if (kind === 'layouts' || kind === 'screens') return shared(chosen.flatMap(entry => entry[kind]));
+    if (kind === 'theme') return shared(chosen.filter(entry => Object.keys(entry.theme).length).map(entry => ({ pack: entry.id, tokens: entry.theme })));
     return [];
 }
 

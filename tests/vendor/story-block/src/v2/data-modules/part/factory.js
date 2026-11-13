@@ -96,8 +96,10 @@ export function createDataModulesPart(opts = {}) {
                     let pack = null;
                     try { pack = lib?.packRulesOf(view.query?.('packs.content', { kind: 'rpg' })); } catch { /* no pack rules */ }
                     const manual = settings()?.[ROLLS_SETTING] === 'off' || (lib && !lib.isStandard(lib.rulesFromSettings(settings(), pack)));
-                    const fight = readSheet(view.state).foes.some(foe => foe.filled);
-                    lines.push(...(lib?.boardReplyGrammar?.(view.state, { fight, ended: ['won', 'fled', 'lost'].includes(view.boardStop), manual, practice: settings()?.[ROLLS_SETTING] === 'off' }) ?? []));
+                    // (an ended board fight is still a fight for this reply: the clear emptied the Foes block, but the reply that tells its end keeps the fight tail)
+                    const ended = ['won', 'fled', 'lost'].includes(view.boardStop);
+                    const fight = ended || readSheet(view.state).foes.some(foe => foe.filled);
+                    lines.push(...(lib?.boardReplyGrammar?.(view.state, { fight, ended, manual, practice: settings()?.[ROLLS_SETTING] === 'off' }) ?? []));
                 }
                 return { lines, optional: [] };
             },

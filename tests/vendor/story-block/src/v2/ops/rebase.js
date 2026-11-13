@@ -121,16 +121,36 @@ export function rebaseOps(state, ops, { scratch = null, replayed = false } = {})
     // Paths earlier ops in the list put something at: a count under one of them stands as they left it.
     const written = [];
     const writtenAbove = path => written.some(at => path === at || path.startsWith(`${at}/`));
+    // The number an earlier counted op of this list left at a path: a second counted change of that count starts from it, not from `state`
+    // (5 → 10 then 10 → 15 on a stack now holding 10 is 15 then 20; the second one stood as made and ended at 15).
+    const ran = new Map();
     const out = [];
     for (const op of scratch ? scratchOps(state, ops, scratch) : ops) {
         // Rule (d): an op marked `within` a thing (ctx.ifThere) whose thing is gone is passed over.
         if (replayed && goneHolder(op)) continue;
         // Rule (e): an append marked `unique` of an item the list holds already is passed over.
         if (replayed && heldAlready(op)) continue;
-        if (!(replayed && goneKey(op))) out.push(replayed && newKey(op) ? { op: 'add', path: op.path, value: op.value } : fit(op));
+        if (!(replayed && goneKey(op))) {
+            const put = replayed && newKey(op) ? { op: 'add', path: op.path, value: op.value } : fit(op);
+            out.push(put);
+            const left = countLeft(op, put);
+            if (left !== undefined) ran.set(op.path, left);
+            else if (typeof put?.path === 'string' && typeof put.value === 'number' && (put.op === 'add' || put.op === 'replace')) ran.set(put.path, put.value);
+            else if (typeof put?.path === 'string') for (const at of [...ran.keys()]) if (at === put.path || at.startsWith(`${put.path}/`)) ran.delete(at);
+        }
         if ((op?.op === 'add' || op?.op === 'replace') && typeof op.path === 'string') written.push(op.path);
     }
     return { ops: out, rebased };
+
+    // What a counted change (`replace` with a numeric `was`) left at its path once it was fitted as `put`: the number itself, or the number
+    // a holder made for it carries ({ coin } added where no wallet was); undefined for anything else (a removed holder, a plain op).
+    function countLeft(op, put) {
+        if (op?.op !== 'replace' || typeof op.was !== 'number' || typeof op.value !== 'number' || typeof op.path !== 'string' || !put) return undefined;
+        if (put.path === op.path && typeof put.value === 'number' && (put.op === 'add' || put.op === 'replace')) return put.value;
+        const key = op.path.slice(op.path.lastIndexOf('/') + 1);
+        if (put.op === 'add' && op.path.startsWith(`${put.path}/`) && isPlainObject(put.value) && typeof put.value[key] === 'number') return put.value[key];
+        return undefined;
+    }
 
     // Rule (d): an op inside the thing it is marked `within` (ctx.ifThere) when that thing is not there,
     // nor put there earlier in the list: the reply that made it was deleted.
@@ -192,10 +212,11 @@ export function rebaseOps(state, ops, { scratch = null, replayed = false } = {})
 
     function fit(op) {
         // Under something an earlier op in the list put there, the op stands as it was made.
-        if (typeof op?.path === 'string' && typeof op.was === 'number' && writtenAbove(op.path)) return op;
+        const earlier = op?.op === 'replace' && typeof op.was === 'number' && typeof op.value === 'number' && typeof op.path === 'string' ? ran.get(op.path) : undefined;
+        if (typeof op?.path === 'string' && typeof op.was === 'number' && writtenAbove(op.path) && earlier === undefined) return op;
         if (op?.op === 'remove' && typeof op.was === 'number' && typeof op.count === 'string' && op.count.startsWith('/')) {
             const at = `${op.path}${op.count}`;
-            const now = valueAt(state, at);
+            const now = ran.has(at) ? ran.get(at) : valueAt(state, at);
             if (typeof now !== 'number' || now === op.was) return op;
             // Take `was` from what is there: the rest stays; less than `was` there is below zero, which
             // the domain's validator refuses (the block is skipped), as a take of more than is held is.
@@ -203,7 +224,7 @@ export function rebaseOps(state, ops, { scratch = null, replayed = false } = {})
             return { op: 'replace', path: at, value: now - op.was, was: now };
         }
         if (op?.op !== 'replace' || typeof op.was !== 'number' || typeof op.value !== 'number') return op;
-        const now = valueAt(state, op.path);
+        const now = earlier !== undefined ? earlier : valueAt(state, op.path);
         if (now === undefined) {
             // The count, or the thing holding it, is not there (the reply that made it was deleted): it
             // counts from 0, as the op's change alone. Its holder is made for it only when a holder is

@@ -136,6 +136,8 @@ const rulesOfPayload = value => (value === undefined ? EARLIER_RULES : normalize
 // A payload that says `lv: 1` rolls with levels (rules.levelDivisor, 5 if the numbers carry none); one that does not rolls with the Soul Class, as before.
 const levelledRules = (rules, lv) => (lv === LV_VERSION && !hasLevels(rules) ? { ...rules, levelDivisor: LEVEL.divisor } : rules);
 // The flow a payload asks for: FLOW_VERSION only when it says so (a roll of the earlier flow stops as it did).
+// The slots of stale groups a pre-check opening put down: a non-empty list of foe slots (1–6), else undefined.
+const staleOf = value => (Array.isArray(value) && value.length > 0 && value.length <= 6 && value.every(slot => Number.isInteger(slot) && slot >= 1 && slot <= 6) ? [...new Set(value)].sort((a, b) => a - b) : undefined);
 const flowOf = (asked, positional) => (asked === FLOW_VERSION && positional ? FLOW_VERSION : 1);
 
 const guardOf = (ctx, predicate, witness) => ({ owner: ctx.module, version: 2, epoch: ctx.epoch, rulesHash: null, predicate, inputHash: ctx.hash({ source: ctx.source, predicate, witness }) });
@@ -172,7 +174,8 @@ export function resolve(ctx, payload = {}) {
     const domain = opening ? ctx.draft('dataModules') : ctx.read('dataModules');
     const settled = opening && lv ? settleOpen(plan.open, averageLevel(partyLevels(readSheet({ domains: { dataModules: domain } }))), base) : null;
     const fix = [2, FIX_VERSION].includes(payload.fix) ? payload.fix : undefined;
-    const opened = opening ? openFoes(domain, settled ?? plan.open, { fix: fix ?? 1 }) : null;
+    const stale = staleOf(payload.stale);
+    const opened = opening ? openFoes(domain, settled ?? plan.open, { fix: fix ?? 1, stale: stale ?? [] }) : null;
     // From a roll that carries the gear mark (precall.js, while `story-block.gear` is on) the worn pieces and the load, worked out here from the state before the
     // roll (the inventory's `recorded` answers: the mark decides, not today's switch), are laid over the stats it rolls with (gear.js). The record is kept with the
     // roll, so a later change never moves it; a change before it is seen by the guard.
@@ -199,8 +202,8 @@ export function resolve(ctx, payload = {}) {
         wear = wearGear(ctx, gear, { opening: dice.opening ?? [], rounds: dice.rounds, rules, condWord });
         legend = earnedLegend(dice, sheet, lv === LV_VERSION);
     }
-    const predicate = { kind: RESOLVE, key, ...(start ? { start } : {}), plan: ctx.hash(plan), rules: ctx.hash(rules), ...(order ? { order: ctx.hash(order) } : {}), ...(drop ? { ambush: ctx.hash(drop) } : {}), ...(flow === FLOW_VERSION ? { flow } : {}), ...(fix ? { fix } : {}), ...(practice ? { practice } : {}), ...(lv ? { lv } : {}), ...(settled ? { levels: ctx.hash(levelsOf(settled)) } : {}), ...(gear ? { gear: ctx.hash(gear) } : {}) };
-    ctx.replayGuard(guardOf(ctx, predicate, prepared.witness), { key, ...(start ? { start } : {}), plan, rules, ...(order ? { order } : {}), ...(drop ? { ambush: drop } : {}), ...(flow === FLOW_VERSION ? { flow } : {}), ...(fix ? { fix } : {}), ...(practice ? { practice } : {}), ...(lv ? { lv } : {}), ...(settled ? { levels: levelsOf(settled) } : {}), ...(gear ? { gear } : {}) });
+    const predicate = { kind: RESOLVE, key, ...(start ? { start } : {}), ...(stale ? { stale } : {}), plan: ctx.hash(plan), rules: ctx.hash(rules), ...(order ? { order: ctx.hash(order) } : {}), ...(drop ? { ambush: ctx.hash(drop) } : {}), ...(flow === FLOW_VERSION ? { flow } : {}), ...(fix ? { fix } : {}), ...(practice ? { practice } : {}), ...(lv ? { lv } : {}), ...(settled ? { levels: ctx.hash(levelsOf(settled)) } : {}), ...(gear ? { gear: ctx.hash(gear) } : {}) };
+    ctx.replayGuard(guardOf(ctx, predicate, prepared.witness), { key, ...(start ? { start } : {}), ...(stale ? { stale } : {}), plan, rules, ...(order ? { order } : {}), ...(drop ? { ambush: drop } : {}), ...(flow === FLOW_VERSION ? { flow } : {}), ...(fix ? { fix } : {}), ...(practice ? { practice } : {}), ...(lv ? { lv } : {}), ...(settled ? { levels: levelsOf(settled) } : {}), ...(gear ? { gear } : {}) });
     const result = {
         v: RESULT_VERSION, key, pace: plan.pace, rules, ...(flow === FLOW_VERSION ? { flow } : {}), ...(noXp ? { noXp: true } : {}), ...(fix ? { fix } : {}), ...(practice ? { practice } : {}), ...(lv ? { lv } : {}), ...(gear ? { gear } : {}), stop: dice.stop, checks: dice.checks, rounds: dice.rounds,
         refused: prepared.refused, summary: dice.summary, ...(dice.ambush ? { ambush: dice.ambush } : {}), ...(opening ? { opened } : {}), ...(wear.length ? { wear } : {}), ...(legend ? { legend: 1 } : {}),
@@ -231,6 +234,8 @@ export function leanRpgGuard({ state, hash }, { guard, source, recorded }) {
         if (guard?.version !== 2 || guard.rulesHash !== null || !isObject(predicate) || predicate.kind !== RESOLVE) return bad('Malformed roll guard.');
         if (!isObject(recorded) || !validatePlan(recorded.plan).ok || hash(recorded.plan) !== predicate.plan || recorded.key !== predicate.key) return bad('The roll\'s plan was damaged.');
         if (recorded.start !== predicate.start || (recorded.start !== undefined && (typeof recorded.start !== 'string' || !recorded.start || recorded.start.length > 120))) return bad('The fight opening was damaged.');
+        // The slots of stale groups the opening put down (precall.js) are hashed with the roll; a roll made before has none.
+        if (JSON.stringify(recorded.stale ?? null) !== JSON.stringify(predicate.stale ?? null) || (recorded.stale !== undefined && staleOf(recorded.stale) === undefined)) return bad('The fight opening was damaged.');
         // The numbers are the ones recorded with the roll, not today's settings; damaged numbers are not guessed at.
         // A roll recorded before the numbers were kept has none: it was made with Standard's.
         const rules = rulesOfPayload(recorded.rules);
@@ -267,7 +272,7 @@ export function leanRpgGuard({ state, hash }, { guard, source, recorded }) {
         const opening = Array.isArray(recorded.plan.open) && recorded.plan.open.length > 0;
         if (opening && lv && (!levels || levels.length !== recorded.plan.open.length)) return bad('The roll\'s foe levels were damaged.');
         const domain = opening ? structuredClone(state.domains?.dataModules) : state.domains?.dataModules;
-        const opened = opening ? openFoes(domain, lv ? recorded.plan.open.map((entry, at) => ({ name: entry.name, count: entry.count, level: levels[at] })) : recorded.plan.open, { fix: recorded.fix ?? 1 }) : null;
+        const opened = opening ? openFoes(domain, lv ? recorded.plan.open.map((entry, at) => ({ name: entry.name, count: entry.count, level: levels[at] })) : recorded.plan.open, { fix: recorded.fix ?? 1, stale: recorded.stale ?? [] }) : null;
         const witness = prepare(recorded.plan, applyGear(readSheet(opening ? { domains: { dataModules: domain } } : state), gear), rules, { maxOf: fieldMax(domain), flow, lv, fix: recorded.fix >= 2, then: recorded.fix >= 3 }).witness;
         if (opening) witness.opened = opened;
         if (hash({ source, predicate, witness }) !== guard.inputHash) return bad('The sheet before this roll changed; Re-read this reply.');

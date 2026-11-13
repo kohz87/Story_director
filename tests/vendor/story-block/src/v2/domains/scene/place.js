@@ -26,18 +26,24 @@ function packPlaceKind(ctx, name) {
     return typeof place?.kind === 'string' && place.kind.trim() ? place.kind : null;
 }
 
+// The map's places (the atlas's, else none; then the packs'), for resolving names and aliases.
+function knownPlaces(ctx) {
+    const ask = (name, args) => { try { const rows = ctx.query(name, args); return Array.isArray(rows) ? rows : []; } catch { return []; } };
+    return [...ask('atlas.places', {}), ...ask('packs.content', { kind: 'places' })];
+}
+
 // A place's kind: what the line says (an explicit empty `kind:` clears it); without `kind:`, the
 // same place keeps its stored kind (a model often leaves it out), and a move to another place takes
 // the kind a pack gives a place of that name, else none (B4r2-5: never the old place's kind). The
 // region is kept unless the line says otherwise. Who was
 // present stays behind: after a move only the people named in `with` (they came along) are here, and
 // the story adds whoever it meets there (`+ present`). The same place keeps everyone; `with` adds to them.
-export function setPlace(ctx, { name, kind, region, with: along }) {
+export function setPlace(ctx, { name, kind, region, with: along }, { keepPresent = false, departed = [] } = {}) {
     const scene = ctx.draft('scene');
     const placeName = field(ctx, name, 'name');
     if (!placeName) ctx.fail('INVALID', 'A place needs a name.');
     const moved = placeName.toLowerCase() !== scene.place.name.toLowerCase();
-    const came = companions(ctx, along);
+    const came = companions(ctx, along).filter(person => !keepPresent || !departed.includes(person.toLowerCase()));
     // Whoever comes along is added once: replayed after a reply that took them out was deleted, the add is passed over.
     ctx.unique('scene', '/present');
     scene.place = {
@@ -47,8 +53,8 @@ export function setPlace(ctx, { name, kind, region, with: along }) {
     };
     const keys = list => new Set(list.map(person => person.toLowerCase()));
     const cameKeys = keys(came);
-    const left = moved ? scene.present.filter(person => !cameKeys.has(person.toLowerCase())) : [];
-    const staying = moved ? scene.present.filter(person => cameKeys.has(person.toLowerCase())) : [...scene.present];
+    const left = moved && !keepPresent ? scene.present.filter(person => !cameKeys.has(person.toLowerCase())) : [];
+    const staying = moved && !keepPresent ? scene.present.filter(person => cameKeys.has(person.toLowerCase())) : [...scene.present];
     const stayingKeys = keys(staying);
     const present = [...staying, ...came.filter(person => !stayingKeys.has(person.toLowerCase()))];
     if (present.length > MAX_PRESENT) ctx.fail('INVALID', `At most ${MAX_PRESENT} people can be listed as present.`);
@@ -66,10 +72,14 @@ export function capturePlace(ctx, line) {
     if (line?.op !== '~' && line?.op !== '+') {
         ctx.fail('INVALID', `"${line?.op} place" is not a change the scene understands; use ~ place Name.`);
     }
+    const keepPresent = ['now', 'late'].includes(ctx.carrier?.assist) && ctx.carrier?.rules?.includes('assistPlace');
+    // A safety-net place the reply's own lines contradict is refused (the carrier's check; absent on Re-read of a line already kept).
+    const why = keepPresent && typeof ctx.carrier.assistCheck === 'function' ? ctx.carrier.assistCheck(line, knownPlaces(ctx)) : '';
+    if (why) ctx.fail('REFUSED', why);
     return setPlace(ctx, {
         name: cleanName(line.name),
         kind: labelOf(line, 'kind', 'type'),
         region: labelOf(line, 'region', 'area'),
         with: labelOf(line, 'with', 'present'),
-    });
+    }, { keepPresent, departed: keepPresent ? ctx.carrier.assistLeft : [] });
 }

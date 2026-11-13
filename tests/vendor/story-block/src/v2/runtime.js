@@ -45,7 +45,7 @@ import { pageStorage, saveOnUnload, storeSaving } from './runtime/saving.js';
 export { initialWithStart, packsFor, withPackCurrency } from './runtime/start.js';
 export { SAVE_SEQ_KEY, MEMO_PREFIX, markUsed, saveOnUnload, storeSaving } from './runtime/saving.js';
 
-export const VERSION = '2.31.1';
+export const VERSION = '2.32.1';
 
 /**
  * createRuntime({ ctx, packs?, core = true, modules = [], createStore?, createCommandBus?, notify?,
@@ -173,7 +173,9 @@ export function createRuntime({
                     const ask = (name, args) => { try { return sdk?.query(name, args); } catch { return null; } };
                     const clock = ask('director.time', {});
                     return { here: ask('scene.place', {}), places: [...(ask('atlas.places', {}) ?? []), ...(ask('packs.content', { kind: 'places' }) ?? [])],
-                        time: typeof clock?.text === 'string' ? clock.text : '' };
+                        time: typeof clock?.text === 'string' ? clock.text : '',
+                        // The Chronicle's open world events and factions (Story Director), so the safety net reuses a name.
+                        world: { events: ask('chronicle.events', { open: true }) ?? [], factions: ask('chronicle.factions', {}) ?? [] } };
                 },
                 chat: () => ctx.chat,
                 chatId: () => ctx.getCurrentChatId?.() ?? ctx.chatId ?? '',

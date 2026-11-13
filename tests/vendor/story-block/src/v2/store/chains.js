@@ -49,6 +49,30 @@ export function createChains(s, { blockParts }) {
         return hash;
     }
 
+    // The same chain with each guarded block's stored boundaries left out (the prefix and text hashes stamped into it are derived from the chain and
+    // the text, and a reconcile that plans a step again stamps them anew): what the records hold, apart from what follows from them. It is only
+    // ever compared with itself, before and after a rewrite (the timeline's carry of a native mapping); no stored hash is made of it.
+    function bareHash(arr, upTo) {
+        let hash = '';
+        for (let i = 0; i < upTo && i < arr.length; i++) {
+            if (!isCarrier(arr[i])) continue;
+            const record = s.staged?.get(i) ?? readRecord(arr[i]);
+            if (!record) continue;
+            const text = hasMeta(record) ? payloadHashOf(arr[i]) : null;
+            const hit = s.bareLinks.get(record);
+            if (hit && hit.prev === hash && hit.text === text) { hash = hit.out; continue; }
+            let body = s.bareBodies.get(record);
+            if (!body) {
+                s.bareBodies.set(record, body = hashJson({ k: record.source?.swipeKey ?? record.sid ?? null,
+                    b: blockParts(record).map(({ ops, span }) => [isMetaSpan(span) ? hashJson(Object.fromEntries(Object.entries(span).filter(([key]) => key !== 'boundaries'))) : null, hashJson(ops)]) }));
+            }
+            const out = hashJson({ p: hash, d: body, t: text });
+            s.bareLinks.set(record, { prev: hash, text, out });
+            hash = out;
+        }
+        return hash;
+    }
+
     // The exact prefix a checkpoint was made over (the gate of trust, REPLAY.md "Checkpoints and covers"): a hash chained over
     // every record before it as it is shown now, from the first: all of replay.js replayInputsOf (everything replay reads
     // from a record), the text of records that hold guarded blocks, and the first record's own starting point. Each link is kept per record while its input stays, so a read costs a lookup
@@ -95,5 +119,5 @@ export function createChains(s, { blockParts }) {
         return guarded ? hashJson(entries) : undefined;
     }
 
-    return { chainHash, spineBefore, spineStep, windowHash };
+    return { chainHash, bareHash, spineBefore, spineStep, windowHash };
 }

@@ -29,7 +29,7 @@ export const SECTION_IDS = Object.freeze(SETTINGS_SECTIONS.map(section => sectio
 // The page the window opens on: Features, the one most readers come for, though Look is first in the rail.
 export const DEFAULT_SECTION = 'features';
 /** The host settings the Look section draws (and the Story Suite fold no longer does): HOST_SETTINGS_SCHEMA's keys. */
-export const LOOK_KEYS = Object.freeze(['panelStyle', 'glassStrength', 'font', 'textSize']);
+export const LOOK_KEYS = Object.freeze(['panelStyle', 'glassStrength', 'font', 'textSize', 'sendPending']);
 
 /** What the window says (plain words). */
 export const WINDOW_TEXT = Object.freeze({

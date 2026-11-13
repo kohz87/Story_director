@@ -83,6 +83,9 @@ export function createLifecycle({ defs }) {
         return base.status === 'dormant' || (barrier.state === 'pending' && id !== HOST_MODULE);
     }
 
+    // Held back for good reasons only (dormant): not the restore barrier, which lifts again by itself. What is drawn (tabs, screens) goes by this.
+    const steadyHeld = id => peerVerdicts().get(id)?.status === 'dormant';
+
     /**
      * Host-internal: switch module `id` off (dormant, with `reason`) or on again. Story Block's own
      * module cannot be switched off. → whether anything changed.
@@ -116,5 +119,5 @@ export function createLifecycle({ defs }) {
         lifeCache = null;
     }
 
-    return { lifecycle, held, setEnabled, restore, restoreEpoch, setRestore, peers, setPeers, nameOf };
+    return { lifecycle, held, steadyHeld, setEnabled, restore, restoreEpoch, setRestore, peers, setPeers, nameOf };
 }

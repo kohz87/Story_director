@@ -179,7 +179,7 @@ export function answeredReply(chat) {
 
 /**
  * The newest reply's Inner chatter (query `chatter.head`, MODULES §F115): what its strip shows, read
- * the same way (`display(mes)`, displayLines), as [{ name, text }] in reply order. The newest reply is
+ * the same way (`display(mes, message)`, displayLines; the message gives its caretWords mark), as [{ name, text }] in reply order. The newest reply is
  * the last message that is neither the reader's nor a system one, after the reader's first message
  * (the greeting has no strip). [] when there is none or it has no chatter. Story Director's World
  * screen puts each thought under the person who had it.
@@ -192,7 +192,7 @@ export function headChatter(chat, display) {
         const message = list[i];
         if (!message || message.is_user || message.is_system) continue;
         let read = {};
-        try { read = display(String(message.mes ?? '')) ?? {}; } catch { read = {}; }
+        try { read = display(String(message.mes ?? ''), message) ?? {}; } catch { read = {}; }
         return (Array.isArray(read.chatter) ? read.chatter : []).map(item => ({ name: item.name, text: item.text }));
     }
     return [];

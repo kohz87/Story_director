@@ -67,6 +67,15 @@ export function createStartController({ doc, chat, meta, state, preview, board, 
         if (pending.choice === 'plain') { send(); return; }
         tell(); show();
     };
+    // A Send held by this pause (a plain-send choice goes through): what the "Send pending" note shows and its "Open fight board" button.
+    const holds = () => { const pending = current(); return Boolean(pending) && pending.choice !== 'plain'; };
+    const openHeld = () => {
+        const pending = current();
+        if (!pending) return false;
+        if (!pending.choice && pending.mode !== 'working') begin(false);
+        tell(); show();
+        return true;
+    };
     const click = event => { if (event.target?.closest?.('#send_but')) stopSend(event); };
     const key = event => {
         if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.isComposing || doc.activeElement !== doc.getElementById?.('send_textarea')) return;
@@ -88,7 +97,7 @@ export function createStartController({ doc, chat, meta, state, preview, board, 
         return true;
     };
     return {
-        current, draw, state: sheetState, send, changed: tell, sending: () => sending,
+        current, holds, openHeld, draw, state: sheetState, send, changed: tell, sending: () => sending,
         waiting: () => current()?.choice === 'board',
         discard() { const pending = current(); if (pending?.choice === 'board') { pending.choice = null; error = ''; clearSend(meta()); persist(); } },
         listen(fn) { listeners.add(fn); return () => listeners.delete(fn); },

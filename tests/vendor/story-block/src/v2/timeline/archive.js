@@ -144,6 +144,14 @@ export function createArchive({ metadata, touch = () => {}, bound = () => null }
                 root.prefix[participant][key] = structuredClone(mapping);
             });
         },
+        /** A mapping kept under another key (a carried mapping: its prefix hash is the key's last part). */
+        rekeyPrefix(participant, key, nextKey, mapping) {
+            write(root => {
+                if (isObject(root.prefix[participant])) delete root.prefix[participant][key];
+                else root.prefix[participant] = {};
+                root.prefix[participant][nextKey] = structuredClone(mapping);
+            });
+        },
         prefix(participant, key) {
             const root = find();
             const table = root?.prefix?.[participant];

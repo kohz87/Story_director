@@ -49,8 +49,8 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
     const refusals = new Map();
     const life = createLifecycle({ defs });
     const { lifecycle, held, setEnabled, restore, restoreEpoch, setRestore, peers } = life;
-    const featureLookups = createFeatureLookups({ defs, declared, owners, fallbacks, canonical, featureValue, held, lifecycle });
-    const { featureDecl, needsOf, featureOn, withFeatures, hypothetical, off, offQuery } = featureLookups;
+    const featureLookups = createFeatureLookups({ defs, declared, owners, fallbacks, canonical, featureValue, held, steadyHeld: life.steadyHeld, lifecycle });
+    const { featureDecl, needsOf, featureOn, withFeatures, hypothetical, off, offShown, offQuery } = featureLookups;
     const commandLookups = createCommandLookups({ defs, owners, canonical, held, lifecycle, nameOf: life.nameOf, off, warn });
     const { refusal, contextOf, captureEntry, commandFeature, command, isInternal, isPrelude, commandOwner, initialState } = commandLookups;
     const { register } = createRegistration({ defs, declared, owners, fallbacks, canonical, refusals, hostVersion, warn, needsOf, setPeers: life.setPeers });
@@ -167,9 +167,9 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
         headerControls: () => sorted().filter(def => !held(def.id)).flatMap(def => (Array.isArray(def.headerControls) ? def.headerControls : []).filter(control => !off(control))
             .map(control => ({ moduleId: def.id, key: `${def.id}/${control.id}`, id: control.id, label: control.label, icon: control.icon, query: control.query, command: control.command, args: control.args ?? {}, payload: control.payload ?? {} }))),
         /** [{ moduleId, id, title, icon, render }] in module-id order, each module's in its own order. */
-        tabs: () => sorted().flatMap(def => (def.tabs ?? []).filter(tab => !off(tab)).map(tab => ({ ...tab, moduleId: def.id }))),
+        tabs: () => sorted().flatMap(def => (def.tabs ?? []).filter(tab => !offShown(tab)).map(tab => ({ ...tab, moduleId: def.id }))),
         /** [{ moduleId, ...screen }] in module-id order, each module's in its own order (§13.1). */
-        screens: () => sorted().flatMap(def => (def.screens ?? []).filter(screen => !off(screen)).map(screen => ({ ...screen, moduleId: def.id }))),
+        screens: () => sorted().flatMap(def => (def.screens ?? []).filter(screen => !offShown(screen)).map(screen => ({ ...screen, moduleId: def.id }))),
         /** [{ moduleId, name, props, render }] in module-id order, then by name (§13.5). */
         widgets: () => sorted().flatMap(def => Object.keys(def.widgets ?? {}).sort().filter(name => !off(def.widgets[name])).map(name => ({ ...def.widgets[name], name, moduleId: def.id }))),
         /** One widget by its namespaced name, or null (also while its feature is off). */
@@ -177,10 +177,10 @@ export function createRegistry({ hostVersion = null, warn = message => console.w
             const owner = owners.widget.get(name);
             return owner && !off(defs.get(owner).widgets[name]) ? { ...defs.get(owner).widgets[name], name, moduleId: owner } : null;
         },
-        /** True when a module's screen `id` is under a feature that is off (whoever restyled it). */
+        /** True when a module's screen `id` is under a feature that is off (whoever restyled it); the restore barrier does not count (the tab stays, its screen may wait). */
         screenOff(id) {
             const owner = owners.screen.get(id);
-            return Boolean(owner) && off(defs.get(owner).screens.find(screen => screen.id === id));
+            return Boolean(owner) && offShown(defs.get(owner).screens.find(screen => screen.id === id));
         },
         /** The names of the widgets whose feature is off. */
         widgetsOff: () => sorted().flatMap(def => Object.keys(def.widgets ?? {}).sort().filter(name => off(def.widgets[name]))),

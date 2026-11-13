@@ -39,7 +39,7 @@ export function openBoard(meta, state, { sid, rules, gear = null, weapons = {}, 
     const resumed = resumeMembers(records, groups, sheet.foes);
     const session = { id: `${sid}:${attempt}`, origin: sid, anchor: sid, groups, ...(resumed ? { resumed: true } : {}),
         // (`bars: 2`: the fight's rule mark for the doubled bars, set only when every character on the sheet has them; a mixed or older party plays as before; `soak: 1` goes with it: VIT soak, soak.js)
-        setup: { seed, offset: 0, rules: structuredClone(rules), members: 1, aoe: 1, areaAll: 1, foesSix: 1, ...(hardFoes(sheet) ? { foesHard: 1 } : {}), ...(doubled(sheet) ? { bars: 2, soak: 1 } : {}), ...(resumed ? { carriedMembers: resumed } : {}), ...(opened ? { opened } : {}),
+        setup: { seed, offset: 0, rules: structuredClone(rules), members: 1, aoe: 1, areaAll: 1, foesSix: 1, foesClear: 1, ...(hardFoes(sheet) ? { foesHard: 1 } : {}), ...(doubled(sheet) ? { bars: 2, soak: 1 } : {}), ...(resumed ? { carriedMembers: resumed } : {}), ...(opened ? { opened } : {}),
             flags: boardFlags(state), weapons: structuredClone(weapons), ...(gear ? { gear: structuredClone(gear) } : {}) }, exchanges: [] };
     const preview = playBoard(state, session.setup, []);
     if (preview.error) return preview;
@@ -67,6 +67,7 @@ export function discardBoard(meta) {
     if (!session) return false;
     if (!object(meta[ATTEMPTS])) meta[ATTEMPTS] = {};
     meta[ATTEMPTS][session.origin] = (Number.isSafeInteger(meta[ATTEMPTS][session.origin]) ? meta[ATTEMPTS][session.origin] : 0) + 1;
+    delete meta[SEND];
     delete meta[KEY];
     return true;
 }
@@ -89,11 +90,11 @@ export function priorBoard(message) {
     return null;
 }
 
-/** The cache also covers a regenerate that removed its old reply before generation began. */
+/** The cache covers a regenerate only when this reader message was linked to that fight. */
 export const lastBoard = (meta, anchor, message = null) => {
     const saved = meta?.[LAST];
     const linked = object(message?.extra?.[LINKS]) && message.extra[LINKS][saved?.key] === true;
-    return saved?.board && (linked || saved.board.anchor === anchor) ? structuredClone(saved) : null;
+    return saved?.board && linked ? structuredClone(saved) : null;
 };
 
 /** Link the user's message to its reply's board key for regenerate after a middle delete. */

@@ -33,6 +33,8 @@ import { levelOfClass } from './formula.js';
 import { fold, readSheet } from './read.js';
 import { boardWin } from './board/awards.js';
 
+// The claim of a board resolve (board/commit.js claim): a cleared fight's step names it.
+const CLAIM = /^rpg:resolve:[^\s]{1,450}$/u;
 /** The replies whose story is paid for (the same as the reply-end steps of the blocks: not a Continue's, nor the extractor's late lines). */
 const PAID_TYPES = Object.freeze(['normal', 'swipe', 'regenerate', 'reread']);
 /** Said once in a reply where the narrator wrote XP for a won fight (a Problems line). */
@@ -193,7 +195,7 @@ export function fightHook(view, info) {
         flat = old.xp === 2;
         rate = old.rate === undefined ? XP_RATE.default : (xpRateOf(old.rate) ?? rate);
     }
-    return { commands: [{ type: FIGHT, payload: { was, ...(groups ? { groups } : {}), ...(board?.bars ? { bars: 2, ...(flat ? { xp: 2 } : {}) } : {}), ...(rate !== XP_RATE.default ? { rate } : {}) } }] };
+    return { commands: [{ type: FIGHT, payload: { was, ...(groups ? { groups } : {}), ...(board?.bars ? { bars: 2, ...(flat ? { xp: 2 } : {}) } : {}), ...(board?.cleared && board.claim ? { gone: 1, claim: board.claim } : {}), ...(rate !== XP_RATE.default ? { rate } : {}) } }] };
 }
 
 /**
@@ -207,6 +209,10 @@ export function fightXp(ctx, payload = {}) {
     const bars = payload?.bars === 2;
     if (payload?.xp !== undefined && (payload.xp !== 2 || !bars)) ctx.fail('INVALID', 'The fight\'s XP mark was damaged.');
     const flat = payload?.xp === 2;
+    if (payload?.gone !== undefined && payload.gone !== 1) ctx.fail('INVALID', 'The fight\'s clear mark was damaged.');
+    const gone = payload?.gone === 1;
+    // (a cleared fight carries its own board resolve's claim: the clear emptied the block, so the win stands only while that resolve does)
+    if (gone !== (payload?.claim !== undefined) || (gone && !CLAIM.test(payload.claim))) ctx.fail('INVALID', 'The fight\'s clear mark was damaged.');
     const rate = payload?.rate === undefined ? XP_RATE.default : xpRateOf(payload.rate);
     if (rate === null) ctx.fail('INVALID', 'The XP rate of the fight was damaged.');
     if (!was.length) ctx.fail('INVALID', 'The XP for a fight needs the groups it was fought against.');
@@ -214,12 +220,15 @@ export function fightXp(ctx, payload = {}) {
     const sheet = readSheet({ domains: { dataModules: domain } });
     const given = payload?.groups === undefined ? null : groupsOf(payload.groups, was);
     if (payload?.groups !== undefined && !given) ctx.fail('INVALID', 'The groups of the fight were damaged.');
+    // (`gone: 1`: the claim of this reply's board resolve is held while that resolve stands, and not otherwise (a delete or a Re-read took the fight back); claiming it here would only
+    // be new if the resolve were absent, and the failure drops that)
+    if (gone && ctx.claim(payload.claim)) ctx.fail('NO_LONGER_DONE', 'The fight on the board this XP was for was taken back.');
     const fight = given ? { won: true, groups: given } : fightOf(sheet, was);
     if (!fight.won) ctx.fail('NO_LONGER_DONE', 'No won fight is left to give XP for on this story.');
     const from = fromOf(domain, ctx.source);
     const witness = fightWitness(sheet, domain, ctx.source, { was, groups: given });
-    const predicate = { kind: FIGHT, ...(bars ? { bars: 2 } : {}), ...(flat ? { xp: 2 } : {}) };
-    ctx.replayGuard({ owner: ctx.module, version: 2, epoch: ctx.epoch, rulesHash: null, predicate, inputHash: ctx.hash({ source: ctx.source, predicate, witness }) }, { was, ...(given ? { groups: given } : {}), ...(bars ? { bars: 2 } : {}), ...(flat ? { xp: 2 } : {}), ...(rate !== XP_RATE.default ? { rate } : {}) });
+    const predicate = { kind: FIGHT, ...(bars ? { bars: 2 } : {}), ...(flat ? { xp: 2 } : {}), ...(gone ? { gone: 1 } : {}) };
+    ctx.replayGuard({ owner: ctx.module, version: 2, epoch: ctx.epoch, rulesHash: null, predicate, inputHash: ctx.hash({ source: ctx.source, predicate, witness }) }, { was, ...(given ? { groups: given } : {}), ...(bars ? { bars: 2 } : {}), ...(flat ? { xp: 2 } : {}), ...(gone ? { gone: 1, claim: payload.claim } : {}), ...(rate !== XP_RATE.default ? { rate } : {}) });
     const draft = ctx.draft('dataModules');
     const awards = [];
     for (const character of paidOf(sheet)) {
@@ -269,6 +278,8 @@ export function fightGuard({ state, hash }, { guard, source, recorded }) {
         if (recorded.groups !== undefined && !groups) return bad('The fight\'s groups were damaged.');
         if ((recorded.bars !== undefined && recorded.bars !== 2) || (predicate.bars === 2) !== (recorded.bars === 2)) return bad('The fight\'s mark was damaged.');
         if ((recorded.xp !== undefined && (recorded.xp !== 2 || recorded.bars !== 2)) || (predicate.xp === 2) !== (recorded.xp === 2)) return bad('The fight\'s XP mark was damaged.');
+        if ((recorded.gone !== undefined && recorded.gone !== 1) || (predicate.gone === 1) !== (recorded.gone === 1) || (recorded.gone === 1) !== (recorded.claim !== undefined)) return bad('The fight\'s clear mark was damaged.');
+        if (recorded.gone === 1 && (!CLAIM.test(recorded.claim) || state.meta?.claims?.[recorded.claim] !== true)) return bad('The fight on the board this XP was for was taken back.');
         const witness = fightWitness(readSheet(state), state.domains?.dataModules, source, { was, groups });
         if (hash({ source, predicate, witness }) !== guard.inputHash) return bad('The sheet before this step changed; Re-read this reply.');
         return { ok: true };

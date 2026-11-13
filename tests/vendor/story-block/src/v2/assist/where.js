@@ -6,6 +6,8 @@
 // one but plainly means a place the map has, and a `time` line that sets a time without a clock time. A refusal is reported
 // as a Problems line on the reply (turn.js captureAssist), never applied. Pure: no DOM, no state.
 
+import { readChatter } from '../extras.js';
+
 // How many known place names the extractor is told (the nearest first), and the longest name told.
 export const MAX_NEAR = 20;
 export const NAME_CHARS = 80;
@@ -70,6 +72,23 @@ export function whereNow({ here = null, places = [], time = '' } = {}, { cap = M
     };
 }
 
+// How many open world events and factions the extractor is told, and the longest stance told.
+export const MAX_WORLD = 10;
+export const STANCE_CHARS = 40;
+
+/**
+ * The world the Chronicle already holds, for the safety net's world and faction lines: `{ events, factions }`; the names of
+ * the open world events (query rows `{ name }`) and the factions with their stance (`{ name, stance }`), each at most `cap`, names clipped.
+ */
+export function worldKnown(world, { cap = MAX_WORLD } = {}) {
+    const { events = [], factions = [] } = world ?? {};
+    const rows = (list, make) => (Array.isArray(list) ? list : []).filter(row => typeof row?.name === 'string' && row.name.trim()).slice(0, Math.max(0, cap)).map(make);
+    return {
+        events: rows(events, row => clip(row.name, NAME_CHARS)),
+        factions: rows(factions, row => ({ name: clip(row.name, NAME_CHARS), stance: clip(row.stance, STANCE_CHARS) })),
+    };
+}
+
 /** The lines that tell the extractor where and when the scene is (none when nothing is known). */
 export function whereLines(around) {
     if (!around) return [];
@@ -77,6 +96,8 @@ export function whereLines(around) {
     if (around.time) lines.push(`Story date and time now: ${around.time}`);
     if (around.here) lines.push(`Place now: ${around.here.name}${around.here.kind || around.here.region ? ` (${[around.here.kind, around.here.region].filter(Boolean).join(', ')})` : ''}`);
     if (around.near?.length) lines.push(`Known places near it (use these exact names): ${around.near.join('; ')}`);
+    if (around.events?.length) lines.push(`Open world events the story already keeps (to update one, write ~ world with its exact name): ${around.events.join('; ')}`);
+    if (around.factions?.length) lines.push(`Factions the story already keeps, with stance (never write a stance for one): ${around.factions.map(item => (item.stance ? `${item.name} (${item.stance})` : item.name)).join('; ')}`);
     return lines;
 }
 
@@ -125,4 +146,43 @@ export function whereWhy(line, { places = [], here = '' } = {}) {
         }
     }
     return '';
+}
+
+// A safety-net move is refused only on evidence against the proposed place: the reply's own `+ present ... | at: Place` locates an
+// arrival somewhere else. A bare `+ present` or chatter names no place (and `with:` need not list people already at the destination),
+// so neither refuses a move. Two places agree when they are the same, one holds the other ("Village" and "Village / Office"),
+// or they end in the same spot; siblings ("Village / Market", "Village / Office") do not. Map aliases resolve through `places`.
+export function assistPlaceConflict(line, own = [], places = []) {
+    if (line?.kind !== 'place' || !['~', '+'].includes(line.op)) return '';
+    const arrivals = new Map();
+    for (const item of own) {
+        if (item.kind !== 'present' || !['+', '-'].includes(item.op)) continue;
+        for (const name of String(item.name ?? '').split(',').map(name => name.trim()).filter(Boolean)) {
+            if (item.op === '-') arrivals.delete(fold(name));
+            else arrivals.set(fold(name), { name, place: item.labels?.place ?? item.labels?.at ?? item.labels?.where ?? '' });
+        }
+    }
+    const map = mapPlaces(places);
+    const path = text => String(knownPlace(map, text)?.name ?? text).split(/\s[\/|]\s|\s—\s/).map(fold).filter(Boolean);
+    const agree = (a, b) => {
+        const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+        return short.length > 0 && (short.every((part, at) => part === long[at]) || a.at(-1) === b.at(-1));
+    };
+    const destination = path(line.name);
+    for (const { name, place } of arrivals.values()) {
+        if (place && !agree(path(place), destination)) return `the reply places ${name} at ${place}`;
+    }
+    return '';
+}
+
+// Explicit departures already read for this reply win over an Assist place's companion list, including
+// people who were already absent. A later explicit arrival cancels the departure.
+export function assistDepartures(receipts = []) {
+    const left = new Set();
+    for (const receipt of receipts) {
+        if (receipt?.type !== 'capture.present') continue;
+        for (const name of [...(receipt.data?.removed ?? []), ...(receipt.data?.missing ?? [])]) left.add(name.toLowerCase());
+        for (const name of receipt.data?.added ?? []) left.delete(name.toLowerCase());
+    }
+    return [...left];
 }
