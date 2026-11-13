@@ -216,3 +216,15 @@ test('the card line and its tooltip write the time the way the Game view hero do
     assert.equal(statusExtras(makeState(), {}, shown).when, '');
     assert.equal(part.queries['director.time'](run.state, {}, tools).text, 'CY 611, Goldwane 12, 07:40 pm');
 });
+
+test('calendarRule: only a custom calendar without a week; foreignNames: whole words, capitalised, "May" only as a date', async () => {
+    const { calendarRule, foreignNames } = await import('../../../src/v2/tracker/calendar-settings.js');
+    const custom = makeCalendar({ preset: 'custom', era: 'CY', months: [{ name: 'Goldwane', days: 30 }, { name: 'Icewane', days: 30 }], leapYears: false });
+    assert.equal(calendarRule(custom), "Dates use this world's calendar only: months Goldwane, Icewane; no weekdays. Never use Monday–Sunday or January–December, in narration or speech; say 'three days ago', 'yesterday' or the date (Goldwane 14).");
+    assert.equal(calendarRule(GREGORIAN), '');
+    assert.equal(calendarRule(makeCalendar({ preset: 'custom', months: [{ name: 'A', days: 30 }], week: ['Ax', 'Bx'] })), '');
+    assert.deepEqual(foreignNames('On Tuesday and Friday; Tuesdays no; tuesday no; Mayhem no; in December, of May, May 4. "May I?" Maybe.', custom), ['Tuesday', 'Friday', 'December', 'May']);
+    assert.deepEqual(foreignNames('March on at August noon. The August hall.', custom), []);
+    assert.deepEqual(foreignNames('Goldwane 3', makeCalendar({ preset: 'custom', months: [{ name: 'March', days: 30 }] })), []);
+    assert.deepEqual(foreignNames('in March', makeCalendar({ preset: 'custom', months: [{ name: 'March', days: 30 }] })), []);
+});

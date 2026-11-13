@@ -1,7 +1,7 @@
 // Story Director v2: building the one module definition from its parts.
 
-import { CALENDAR_KEYS, liveCalendarSettings } from '../tracker/calendar-settings.js';
-import { packCalendarOf } from '../tracker/time.js';
+import { CALENDAR_KEYS, calendarRule, liveCalendarSettings } from '../tracker/calendar-settings.js';
+import { calendarOf, packCalendarOf, settingsFrom } from '../tracker/time.js';
 import { rareKindsUsed } from '../rare.js';
 import { MODULE_ID, MODULE_NAME, PARTS, STORY_BLOCK_RANGE, VERSION } from './parts.js';
 import { LIVE_HOST, isObject, liveSdk, tryLive } from './shared.js';
@@ -32,7 +32,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
     // It starts from what fightRunner says now (a dormant fight runner is none), true where that cannot be known.
     // `chronicle`, `map`, `routes`: whether the story uses the rare kinds (world and faction lines; landmark and route lines; trip lines),
     // so their grammar is taught only then (the lean diet, 3 Nov). All start false and are learnt from the state before each reply.
-    const env = { fights: fightRunner() ?? true, rpg: false, keyPeople: false, chronicle: false, map: false, routes: false };
+    const env = { fights: fightRunner() ?? true, rpg: false, keyPeople: false, chronicle: false, map: false, routes: false, calendarRule: '' };
     const learn = view => {
         const found = fightRunner(view);
         if (typeof found === 'boolean') env.fights = found;
@@ -43,6 +43,11 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         // people sends the prompt it always did. The prompt changes when the first person is pinned and when the last is unpinned.
         const pins = view?.state?.domains?.keypeople?.pins;
         if (isObject(view?.state?.domains)) env.keyPeople = isObject(pins) && Object.keys(pins).length > 0;
+        // The custom calendar's one rule (no real-world day or month names): a setting, so the same bytes every reply of the story.
+        env.calendarRule = tryLive(() => {
+            const base = typeof view?.settings === 'function' ? id => view.settings(id) : id => (id === undefined || id === null || id === MODULE_ID ? view?.settings : {});
+            return calendarRule(calendarOf(settingsFrom(settingsFor('tracker', base, { defaults, query: view?.query })()), packCalendarOf(view?.query)));
+        }, '');
     };
     // The model call a part may ask for (the host's `callModel`); built each time the parts' views are, so a host that gains or loses it is followed.
     const modelOf = () => (typeof host?.callModel === 'function' && (typeof host.canCallModel !== 'function' || host.canCallModel()) ? Object.freeze({ callModel: request => host.callModel(request), chat: () => (typeof host.chat === 'function' ? host.chat() : []) }) : null);
@@ -164,7 +169,7 @@ export function createModule({ parts = PARTS, host = LIVE_HOST } = {}) {
         if (last && !last.feature && !chunk.feature) last.items.push(chunk.static);
         else grouped.push({ feature: chunk.feature, items: [chunk.static] });
     }
-    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes }) ?? '').trim()).filter(Boolean).join('\n');
+    const staticOf = items => () => items.map(fn => String(fn({ fights: env.fights, keyPeople: env.keyPeople, chronicle: env.chronicle, map: env.map, routes: env.routes, calendarRule: env.calendarRule }) ?? '').trim()).filter(Boolean).join('\n');
     const staticParts = grouped.slice(grouped[0] && !grouped[0].feature ? 1 : 0)
         .map(group => ({ ...(group.feature ? { feature: group.feature } : {}), static: staticOf(group.items) }));
     const def = {

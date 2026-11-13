@@ -17,6 +17,7 @@ import { givenUpIn, offersChosenIn, untrackedCorrections } from '../../tracker.j
 import { orderedThreads, toTracker } from './convert.js';
 import { problemList } from './domain.js';
 import { calendarOf, packCalendarOf, settingsFrom } from './time.js';
+import { calendarRule } from './calendar-settings.js';
 import { dropThreads, quietThreads } from './quiet.js';
 import { elsewhereCap, elsewhereItem, elsewhereLine, knownToUser, sceneOf, splitByScene } from './scene.js';
 import { initiativeTail } from './initiative.js';
@@ -54,9 +55,11 @@ const PACING_V2 = 'Pacing: a due item comes in only where it fits (on-screen if 
  * set of modules. `threads: false` leaves out the Pacing paragraph, which belongs to the feature
  * `story-director.threads` (the module hands it to the host as a context part under that feature, so
  * it is sent only while the feature is on). `fights` no longer changes it: the encounter field is in the beat grammar.
+ * `calendarRule` (calendar-settings.js calendarRule) is the one line a custom calendar without weekdays adds: the world's own month
+ * names and no real-world day or month names. The calendar is a setting, so the line is the same every reply of a story.
  */
-export function staticText({ threads = true } = {}) {
-    return [...RULES, threads ? PACING_V2 : ''].filter(Boolean).join('\n');
+export function staticText({ threads = true, calendarRule = '' } = {}) {
+    return [...RULES, calendarRule, threads ? PACING_V2 : ''].filter(Boolean).join('\n');
 }
 
 /** The Pacing paragraph (a due item comes in only where it fits), the feature `story-director.threads`' own. */
@@ -194,7 +197,7 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     // Who takes the initiative in this reply (initiative.js): its line is kept, so its room comes first.
     const initiative = initiativeTail(view, { scene });
     const initiativeCost = initiative ? estimateTokens(`\n${initiative}`) : 0;
-    const instruction = staticText({ fights, threads });
+    const instruction = staticText({ fights, threads, calendarRule: calendarRule(calendar) });
     const total = budget + estimateTokens(instruction);
     let parts = noteParts(selection, {
         calendar,
@@ -216,6 +219,8 @@ export function directorTail(view, { budget = TAIL_BUDGET } = {}) {
     ].filter(Boolean);
     // A note with nothing else in it still says when and where it is.
     if (extra.length && !parts.some(entry => entry.label === 'Header')) parts = [{ label: 'Header', text: noteHeader(selection, calendar), join: '\n' }, ...parts];
+    // The static part says there are no weekdays (calendarRule): the tail's own line for it would say it twice.
+    if (calendarRule(calendar)) parts = parts.filter((entry, index) => !index || entry.label !== 'No weekdays');
     const text = v2Lines(tailNote(insertAfterKinds(parts, extra)));
     // The Initiative line is kept (Story Block pins a `{ text, keep: true }` tail line under a tight budget); the rest are plain lines.
     const pinnedLine = initiative ? v2Lines(initiative).trimEnd() : '';

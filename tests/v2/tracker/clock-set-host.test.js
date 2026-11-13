@@ -21,7 +21,7 @@ const quiet = t => t.mock.method(console, 'warn', () => {});
 
 async function newHost(options = {}) {
     let host = null;
-    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text), chat: () => host?.ctx.chat ?? [] } });
     host = await createHost({ modules: [module], ...options });
     return host;
 }
@@ -359,5 +359,62 @@ test('a rewind and the cast: the routine is read on the rewound clock, the cast 
     } finally {
         castPlans.clear();
         host.close();
+    }
+});
+
+const STATIC_KEY = 'story_suite_static';
+const RULE_START = "Dates use this world's calendar only: months Dawnwane, Rainmoot,";
+
+test('Ersveil: the static part carries one calendar-names rule (same bytes every reply, no second weekday line); Gregorian has none', async t => {
+    quiet(t);
+    const host = await newHost();
+    try {
+        assert.equal((await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' })).ok, true);
+        await host.send('I wake.', reply('Gulls over the quay.'));
+        await host.send('I walk.', reply('The road.'));
+        const statics = sent(host, STATIC_KEY);
+        assert.ok(statics.length >= 2);
+        assert.equal(new Set(statics.slice(-2)).size, 1, 'the same bytes reply to reply');
+        const text = statics.at(-1);
+        assert.equal(text.split(RULE_START).length, 2, 'once');
+        assert.match(text, /Icewane, Yearsend; no weekdays\. Never use Monday–Sunday or January–December, in narration or speech; say 'three days ago', 'yesterday' or the date \(Dawnwane 14\)\./);
+        assert.doesNotMatch(sent(host, TAIL_KEY).at(-1) ?? '', /no weekdays/, 'the tail does not say it again');
+    } finally {
+        host.close();
+    }
+    const plain = await newHost();
+    try {
+        await plain.send('Hello.', reply('The road.'));
+        assert.doesNotMatch(sent(plain, STATIC_KEY).at(-1) ?? '', /Dates use this world's calendar/);
+    } finally {
+        plain.close();
+    }
+});
+
+test('Ersveil: a reply that says Tuesday or January in its prose gets one quiet Problem; lore in the change block, "May I" and the pack\'s months do not', async t => {
+    quiet(t);
+    const host = await newHost();
+    try {
+        assert.equal((await host.packs.packs.install(ERSVEIL, { origin: 'pack.json' })).ok, true);
+        const problems = () => Object.values(host.head().domains.director.problems ?? {}).filter(problem => problem.kind === 'calendar-names');
+        await host.send('Hi.', reply('"May I sit?" the boy asked. It is Goldwane 14. March on, they said.', ['~ time Goldwane 15, 611, 08:00 am']));
+        assert.equal(problems().length, 0);
+        const sentReply = await host.send('Who?', reply('The ditch boy from Tuesday waved; it was in January, in May.'));
+        assert.ok(sentReply);
+        const found = problems();
+        assert.equal(found.length, 1);
+        assert.equal(found[0].severity, 'info');
+        assert.match(found[0].text, /Tuesday, January, May/);
+        host.store.rebuild();
+        assert.equal(problems().length, 1, 'replay keeps it');
+    } finally {
+        host.close();
+    }
+    const plain = await newHost();
+    try {
+        await plain.send('Who?', reply('The ditch boy from Tuesday waved.'));
+        assert.equal(Object.values(plain.head().domains.director.problems ?? {}).filter(problem => problem.kind === 'calendar-names').length, 0, 'Gregorian: no Problem');
+    } finally {
+        plain.close();
     }
 });
