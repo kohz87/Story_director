@@ -11,7 +11,7 @@ import { GRAMMAR, GRAMMAR_ALONE, PACING_TEXT, TAIL_BUDGET, directorTail, grammar
 import { threadCommands, threadReplayGuard } from './writers.js';
 import { intentCommand } from './acceptance.js';
 import { SEED, seedCommand, seedHook } from './seed.js';
-import { CLOCK, clockCommand } from './clock-set.js';
+import { CALENDAR_NAMES, CLOCK, calendarNamesCommand, calendarNamesHook, clockCommand } from './clock-set.js';
 import { DEFAULT_COOLDOWN, FEATURE as INITIATIVE_FEATURE, INITIATIVE, INITIATIVE_STATIC, MAX_COOLDOWN, initiativeCommand, initiativeHook } from './initiative.js';
 import { DEFAULT_ELSEWHERE, MAX_ELSEWHERE } from './scene.js';
 import { PRESET_CHOICES, settingsDefaults } from './time.js';
@@ -58,7 +58,7 @@ export const part = {
         default: true,
         presets: { lean: false },
     }],
-    commands: { [SEED]: seedCommand, [CLOCK]: clockCommand, ...threadCommands, 'threads.intent': intentCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
+    commands: { [SEED]: seedCommand, [CLOCK]: clockCommand, [CALENDAR_NAMES]: calendarNamesCommand, ...threadCommands, 'threads.intent': intentCommand, [INITIATIVE]: Object.assign((ctx, payload) => initiativeCommand(ctx, payload), { feature: INITIATIVE_FEATURE }) },
     queries,
     kinds,
     context: {
@@ -71,7 +71,7 @@ export const part = {
         parts: [{ feature: INITIATIVE_FEATURE, static: () => INITIATIVE_STATIC }],
     },
     // Seed the clock and choose optional NPC initiative before generation.
-    hooks: { beforeGenerate, replayGuard: threadReplayGuard },
+    hooks: { beforeGenerate, afterCapture: Object.assign((view, info) => calendarNamesHook(view, info), { always: true }), replayGuard: threadReplayGuard },
     settings: {
         section: 'Calendar',
         defaults: settingsDefaults(),
