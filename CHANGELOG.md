@@ -1,5 +1,6 @@
 ## Unreleased
 
+- **Finished jobs and leads now get closed.** The hook / quest prompt line asks the story to write `+ quest` with the hook's exact name when {{user}} takes a job on, and `- quest Name — outcome` (or `- hook Name`) in the same reply that pays, fails or drops it, so a paid contract no longer stays listed as an open hook. This changes the prompt only (a few words longer); written replies replay as before.
 - **World news is easier to record.** The prompt now asks for a world line when a scene reports or shows changes beyond it, and for a new faction when an unknown group acts, an update when a faction's stance or aims change, and an end when it is gone; news can also be a hook. This changes the prompt only, and written replies replay as before.
 
 ## 2.15.2

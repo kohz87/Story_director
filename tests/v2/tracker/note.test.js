@@ -46,7 +46,7 @@ test('the static part is byte-identical whatever the tracker holds, and names no
     // The date rule is in the rules, so it is said with the threads feature off too (not in the agenda line).
     assert.match(empty, /Only on, due and arrive take a date, as <date, clock time>/);
     assert.doesNotMatch(GRAMMAR.agenda, /take a date/);
-    assert.match(GRAMMAR.hook, /done or failed: - it/);
+    assert.match(GRAMMAR.hook, /close it in the same reply: - quest Name/);
 });
 
 test('every thread kind has one concrete example line in the static grammar, and says when to write it (flash never wrote them)', () => {
@@ -63,9 +63,9 @@ test('every thread kind has one concrete example line in the static grammar, and
     assert.doesNotMatch(hook, /\S\|(Missing boatman|Pest job)/);
     assert.equal(hook.split('Missing boatman').length, 2);
     assert.equal(hook.split('Pest job').length, 2);
-    // One line each (no newline), the same bytes for every reply (no state in them), and small: about 570 characters in all.
+    // One line each (no newline), the same bytes for every reply (no state in them), and small: about 600 characters in all.
     assert.ok(!agenda.includes('\n') && !hook.includes('\n'));
-    assert.ok(agenda.length + hook.length < 1200, `${agenda.length + hook.length}`);
+    assert.ok(agenda.length + hook.length < 1350, `${agenda.length + hook.length}`);
     assert.equal(part.kinds.agenda.grammar({ fights: true }), agenda);
     // The examples use generic placeholders (Person A / B, Place X), never a person or place of a world pack.
     assert.match(agenda + hook, /Person A[\s\S]*Place X/);
@@ -89,7 +89,7 @@ test('each kind has one grammar line for the change instruction, a family on its
     }
     assert.match(part.kinds.agenda.grammar({ fights: true }), /encounter \(the foes, for a fight\)/);
     // A hook is an open thread, no job offer with a giver and a reward; + quest is written once {{user}} accepts.
-    assert.match(part.kinds.hook.grammar, /a hook is an open thread or lead \(a job only offered stays in the story; \+ quest once \{\{user\}\} accepts it\); a quest is a job \{\{user\}\} accepted/);
+    assert.match(part.kinds.hook.grammar, /a hook is an open thread or lead \(a job only offered stays in the story; \+ quest with the same name once \{\{user\}\} accepts it\); a quest is a job \{\{user\}\} accepted, not an errand\. When a job or lead is finished, paid, failed, given up or no longer matters, close it in the same reply: - quest Name — outcome \(or - hook Name\)/);
     assert.doesNotMatch(part.kinds.agenda.grammar({ fights: false }), /encounter|fight|foe/);
 });
 
