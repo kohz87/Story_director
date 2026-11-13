@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { CORE_FEATURE } from '../../vendor/story-block/src/v2/features.js';
 import { createModule } from '../../../src/v2/module.js';
+import { THREADS_FEATURE } from '../../../src/v2/threads.js';
 
 const reply = (text, lines = []) => (lines.length ? `${text}\n<Changes>\n${lines.join('\n')}\n</Changes>` : text);
 const assisted = host => host.sdk.receipts().map(entry => entry.receipt).filter(receipt => receipt.assist === 'now' || receipt.assist === 'late');
@@ -81,6 +82,33 @@ test('assist: a line the reply\'s own block already has is not applied twice', a
         await settle();
         assert.equal(minutes(host) - before, 20, 'once, the story\'s');
         assert.deepEqual(assisted(host), []);
+    } finally {
+        host.close();
+    }
+});
+
+// World news and factions through the safety net, with Story Director's real chronicle part (the owner's live lines, 13 Nov).
+const WORLD_LINES = [
+    '~ weather thinning mist, warm sunlight',
+    '+ faction Red Cords — pier crew locking down the salt barges | Bluewatch Village | stance: neutral',
+    '+ world Shornmarch Wolf-Push — Shornmarch skirmishers pushing wolves onto the timber track; convoy pay doubled | state: ongoing | timber track | factions: Shornmarch',
+    '+ world Shackles Retaliation — Watch-Captain sending rider to Ledgerford over two dead Shackles collectors | state: looming | Bluewatch Village | factions: Shackles',
+];
+test('assist: + world and + faction lines apply like the main block\'s (real chronicle), and nothing is refused', async () => {
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    const kinds = '~ weather, + world, ~ world, + faction, ~ faction';
+    host = await createHost({ modules: [module], settings: { modules: { 'story-block': { assistExtractorKinds: kinds } } }, callModel: async () => `<Changes>\n${WORLD_LINES.join('\n')}\n</Changes>` });
+    try {
+        host.features.set(THREADS_FEATURE, true);
+        await host.send('Hello.', reply('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am']));
+        host.features.set(CORE_FEATURE.extractor, true);
+        await host.send('We watch the pier.', 'The Red Cords lock down the salt barges while wolves press the timber track.');
+        await settle();
+        const marked = assisted(host).map(receipt => receipt.type);
+        assert.deepEqual(marked, ['capture.weather', 'capture.faction', 'capture.world', 'capture.world']);
+        const problems = host.turn.problems().filter(item => item.code === 'UNKNOWN_KIND');
+        assert.deepEqual(problems, []);
     } finally {
         host.close();
     }

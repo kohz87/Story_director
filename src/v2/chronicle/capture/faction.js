@@ -1,5 +1,5 @@
 // Story Director v2, chronicle part: the factions (moved out of capture.js unchanged; capture.js re-exports the
-// public names): `faction` lines and their summaries.
+// public names): `faction` lines and their summaries. A safety-net line (`ctx.carrier.assist`, rule mark `assistFaction`) never sets an existing faction's stance.
 
 import { MAX_FACTIONS, cleanName, cleanSummary, findIn, isRecord, keyOf, newId, revOf } from '../domain.js';
 import { CLEAR, asText, labelOf, lineText, sentence } from './text.js';
@@ -53,6 +53,9 @@ export function applyFactionLine(ctx, line) {
         return { summary: factionSummary(faction), narrate: false, data: { faction: id, created: true } };
     }
     const faction = chronicle.factions[found.id];
+    // The Assist safety net's line never sets the stance of a faction the chronicle already keeps (it is the story's and the reader's to move). Only a
+    // reply carrying Story Block's `assistFaction` rule mark (`ctx.carrier.rules`); an older reply keeps what its Re-read did.
+    if (ctx.carrier?.assist && Array.isArray(ctx.carrier.rules) && ctx.carrier.rules.includes('assistFaction')) fields.stance = undefined;
     const changes = changeFaction(faction, fields, rev);
     return { summary: changes.length ? factionSummary(faction) : `Faction: ${faction.name} is unchanged.`, narrate: false, data: { faction: faction.id } };
 }
