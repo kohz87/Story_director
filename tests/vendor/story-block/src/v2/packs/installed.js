@@ -21,6 +21,7 @@ import { HOST_VERSION } from './validate/core.js';
 import { findPackEntries } from './lorebook.js';
 import { byteLength } from './safety.js';
 import { packTag } from './kind.js';
+import { deepFreeze } from '../ops/freeze.js';
 
 const SOURCES = ['file', 'lorebook'];
 
@@ -86,7 +87,11 @@ export function createInstalled({ settings, hostVersion = HOST_VERSION, capabili
     const check = entry => {
         if (!entry.pack || typeof entry.pack !== 'object') return { ok: false, errors: [{ code: 'NOT_OBJECT', path: '', message: 'The stored pack is missing.' }] };
         if (!validator) { ensure(); return STILL_LOADING; }
-        if (!checked.has(entry.pack)) checked.set(entry.pack, validator(entry.pack, { hostVersion: host(), limits, readableConditions: false }));
+        if (!checked.has(entry.pack)) {
+            const result = validator(entry.pack, { hostVersion: host(), limits, readableConditions: false });
+            if (result.ok) deepFreeze(result.pack);   // once here: packs.content hands its records out without copying
+            checked.set(entry.pack, result);
+        }
         return checked.get(entry.pack);
     };
     const changed = async () => {

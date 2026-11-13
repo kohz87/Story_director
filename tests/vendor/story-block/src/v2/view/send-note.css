@@ -1,0 +1,45 @@
+/* send-note.css: the "Send pending" note just above SillyTavern's message box (ui-host/send-note.js; approved mockup sendmock).
+   Layout is decided by the note's own container (the box's parent), never the device: narrow = a full-width pill, wide = a pill
+   right-aligned over the Send side. Colours are Story Suite tokens (busy = accent, stalled = pill, fight = warn, sent = good). */
+.ss-send-note {
+    container-type: inline-size;
+    box-sizing: border-box; width: 100%; padding: 0 8px 6px;
+    font-family: var(--ss-font, inherit); color: var(--ss-text, inherit);
+    /* SillyTavern sets `white-space: nowrap` on #form_sheld; the note's words wrap inside the pill. */
+    white-space: normal;
+}
+.ss-send-note-pill {
+    --note: var(--ss-accent, #7b6cf0); --note-text: var(--ss-accent-text, inherit);
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 4px 8px;
+    box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 0 4px 0 14px;
+    border-radius: 22px; font-size: 14px; font-weight: 600; line-height: 1.3;
+    border: 1px solid var(--note); color: var(--note-text);
+    background: linear-gradient(color-mix(in srgb, var(--note) 16%, transparent), color-mix(in srgb, var(--note) 16%, transparent)), var(--ss-glass-strong, var(--ss-surface, #171717));
+    transition: opacity 0.2s ease;
+}
+.ss-send-note-stalled {
+    --note: color-mix(in srgb, var(--ss-text, #dcdcd2) 30%, transparent); --note-text: var(--ss-text, inherit);
+}
+.ss-send-note-fightHeld { --note: var(--ss-warn, #e8b04b); --note-text: var(--ss-warn-text, inherit); flex-wrap: wrap; padding-block: 6px; }
+.ss-send-note-sent { --note: var(--ss-good, #4caf6e); --note-text: var(--ss-good, inherit); padding-right: 14px; }
+.ss-send-note-icon { flex: none; }
+.ss-send-note-text { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; padding-block: 6px; }
+/* Buttons: 44px hit area; the solid ones draw a 34px fill inside it (transparent border, fill clipped to the padding box). */
+.ss-send-note-btn {
+    flex: none; box-sizing: border-box; min-height: 44px; min-width: 44px; margin: 0; padding: 0 12px;
+    border: 0; border-radius: 999px; background: transparent; color: inherit;
+    font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer;
+}
+.ss-send-note-btn-solid {
+    border: 5px solid transparent; background: color-mix(in srgb, var(--ss-text, #dcdcd2) 14%, transparent); background-clip: padding-box;
+}
+.ss-send-note-btn:hover, .ss-send-note-btn:focus-visible { outline: 2px solid var(--note); outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference) {
+    .ss-send-note-icon-pending { animation: ss-send-note-spin 1s linear infinite; }
+    @keyframes ss-send-note-spin { to { transform: rotate(360deg); } }
+}
+/* A wide container (the desktop panel): one line, right-aligned, as wide as its words. */
+@container (min-width: 560px) {
+    .ss-send-note-pill { width: fit-content; max-width: 100%; margin-left: auto; flex-wrap: nowrap; border-radius: 999px; padding-block: 0; }
+    .ss-send-note-text { flex: 0 1 auto; padding-block: 0; }
+}

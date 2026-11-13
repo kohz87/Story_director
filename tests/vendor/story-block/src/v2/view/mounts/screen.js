@@ -23,7 +23,7 @@
 // deps (see common.js) plus:
 //   container   () → element the view is added to (optional, default document.body)
 //   inNav       (screenId) → bool: listed in the navigation (optional, default every screen)
-//   inBar       (screenId) → bool: in the bar, not under More (optional, default every screen)
+//   inBar       (screenId) → bool: in the bar, not after the bar's own (the `moreOnly` ones, drawn last in the same strip) (optional, default every screen)
 //   heroOf      (state) → the props of the header's ss.hero, or null (optional: no header)
 //   headerControls (state) → [{ key, label, icon, command, payload, on }] the title bar's toggles (optional: none)
 //
@@ -56,7 +56,7 @@ export function createScreenMount(deps) {
     doc.addEventListener?.('pointerdown', onPointer, true);
     doc.addEventListener?.('keydown', onInput, true);
 
-    // The bar: the listed screens, and whether the window is wide (every screen in one row, no More).
+    // The bar: the listed screens, and one strip of every screen.
     function drawBar() {
         const entries = screensFor(deps, 'screen');
         const listed = typeof deps.inNav === 'function' ? entries.filter(entry => deps.inNav(entry.id)) : entries;
@@ -67,7 +67,7 @@ export function createScreenMount(deps) {
             return { id: entry.id, label: entry.screen.title ?? entry.id, icon: iconFor(entry.id, entry.screen.icon), alert: now.alert, alertText: now.badge ?? '',
                 moreOnly: typeof deps.inBar === 'function' && !deps.inBar(entry.id) };
         });
-        // One scrolling strip with every screen (nothing is under More); the bar's CSS makes it one full row from 1000px.
+        // One scrolling strip with every screen (no pill, no More sheet); the bar's CSS makes it one full row from 1000px.
         view.bar.update({ items, current: view.screenId });
         return entries;
     }

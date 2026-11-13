@@ -24,9 +24,13 @@ const NOTE = 'story-suite-reply-note';
 /** How many of the last drawn messages a redraw after a rebuild goes over. */
 export const RECENT_MESSAGES = 30;
 
-/** The reason part of a turn problem about a change line (its message without the line itself). */
+/**
+ * The reason part of a turn problem about a change line (its message without the line itself). Any message gives a readable
+ * reason: the safety net's "(assist) " mark is dropped, "<line> was not used: why" is cut at the colon, an unknown kind keeps its friendly
+ * text, and any other message loses the quoted line and keeps the rest.
+ */
 export function problemReason(item) {
-    const message = String(item?.message ?? '');
+    const message = String(item?.message ?? '').replace(/^\(assist[^)]*\)\s*/, '');
     const line = typeof item?.line === 'string' ? item.line : null;
     if (line) {
         const prefix = `"${line}" was not used: `;
@@ -36,7 +40,8 @@ export function problemReason(item) {
         const kind = /^No module keeps "([^"]*)"/.exec(message)?.[1];
         if (kind !== undefined) return fill(STRINGS.card.unknownKind, { kind });
     }
-    return line && message.includes(`"${line}"`) ? '' : message;
+    if (!line || !message.includes(`"${line}"`)) return message;
+    return message.split(`"${line}"`).join('').replace(/\s+/g, ' ').replace(/^\s*(?:was not used\s*[:,.]?\s*)/i, '').replace(/^[\s,:;.—-]+/, '').trim();
 }
 
 /**

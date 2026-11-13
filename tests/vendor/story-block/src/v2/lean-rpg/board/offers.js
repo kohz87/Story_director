@@ -29,6 +29,21 @@ function receiptsOf(store, index) {
     return { slots, ended };
 }
 
+/**
+ * The chat index of the latest reply that touched the Foes block: a `set-slot-N` line (a group set or replaced) or a board fight's result (hurt and clear lines are not offered under the board grammar, so they are not read).
+ * -1 when no receipt says (foes set by hand). Foes untouched for FOES_FRESH_REPLIES replies no longer start a fight (stale-foes rule, `foesFresh` mark).
+ */
+export function lastFoeTouch(entries) {
+    let at = -1;
+    for (const entry of Array.isArray(entries) ? entries : []) {
+        const type = entry?.receipt?.type, data = entry?.receipt?.data?.v2?.result;
+        const touched = (type === 'capture.dm' && /^set-slot-[1-6]$/u.test(String(data?.kind ?? ''))) || (type === 'rpg.resolve' && Boolean(data?.board));
+        if (touched && Number.isInteger(entry.index) && entry.index > at) at = entry.index;
+    }
+    return at;
+}
+export const FOES_FRESH_REPLIES = 3;
+
 // `enabled` is a flag or a function that answers it: the function is asked last, only once a foe stands and no board is staged, because
 // the answer reads the pack's rules through sdk queries, each of which settles the timeline (the Fight tab asks this on every redraw).
 function findFightOffer(chat, store, meta, enabled = true) {
@@ -61,7 +76,7 @@ function findFightOffer(chat, store, meta, enabled = true) {
         // new foes the same reply introduced keep the usual "A fight started".
         const left = ended !== null && next.size > 0;
         if (introduced || left) {
-            if (meta?.rpgFightOffers?.[record.sid] === true || (session && !(session.carried && session.anchor === record.sid))) return null;
+            if (meta?.rpgFightOffers?.[record.sid] === true || (session && !((session.carried || session.idle) && session.anchor === record.sid))) return null;
             return { index, sid: record.sid, fight: { groups: current.map(foe => foe.slot), ...(introduced ? {} : { standing: true }) } };
         }
         next = prior;

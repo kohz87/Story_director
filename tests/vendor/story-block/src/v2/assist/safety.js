@@ -12,7 +12,7 @@ import { parseChanges } from '../capture.js';
 // conditions (no heal), and an item handed over or used up (`- item`: only what the party holds).
 export const DEFAULT_KINDS = '! time, ~ time, ~ place, + present, - present, ~ weather, ~ quest, - quest, ~ wound, - item';
 
-// The kinds the settings page offers as chips, one per entry of the default allow-list and in its order: the kinds the wall
+// The kinds the settings page offers as chips: the default allow-list in order, followed by optional kinds the wall
 // lets through. Coin, new items, XP, loot, heals and rewards have no chip: the wall never writes them, whatever is stored
 // (a test keeps every chip on the right side of it).
 export const KIND_CHOICES = Object.freeze([
@@ -26,6 +26,10 @@ export const KIND_CHOICES = Object.freeze([
     Object.freeze({ value: '- quest', label: 'Quest turned in' }),
     Object.freeze({ value: '~ wound', label: 'Wounds' }),
     Object.freeze({ value: '- item', label: 'Item handed over' }),
+    Object.freeze({ value: '+ world', label: 'World news' }),
+    Object.freeze({ value: '~ world', label: 'World news update' }),
+    Object.freeze({ value: '+ faction', label: 'Faction' }),
+    Object.freeze({ value: '~ faction', label: 'Faction update' }),
 ]);
 
 // Kinds whose `+` line adds value or something only the reader decides, under any setting.

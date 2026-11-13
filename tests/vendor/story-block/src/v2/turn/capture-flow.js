@@ -2,14 +2,14 @@
 // wrote in the story or the safety net kept (stray, late, now), run one by one as their owner's capture command within the line cap,
 // the afterCapture steps, the seeds and order a Re-read gives them, and the held-module check. `createCaptureFlow(s, deps)` is given the
 // turn's state holder `s` and the turn parts it uses (the session's `problem`); it never imports turn.js.
-
 import { MAX_CHANGE_LINES, makeView } from '../sdk.js';
 import {
-    LEGACY_PROBLEM, assistSections, grammarHeads, markCaps, parseChanges, sameChangeLine, strayLines, stripBlock,
+    LEGACY_PROBLEM, assistSections, extractBlock, grammarHeads, markCaps, parseChanges, sameChangeLine, strayLines, stripBlock,
 } from '../capture.js';
 import { cutAt } from '../../text.js';
 import { refusedWhy } from '../assist/safety.js';
 import { notWritten } from '../assist/extractor.js';
+import { assistDepartures, assistPlaceConflict } from '../assist/where.js';
 import { CHATTER_MAX, displayLines, readDisplayLine } from '../extras.js';
 import { receiptWithCue } from '../lean-rpg/cue.js';
 import { CAPTURE_PREFIX, HOST_MODULE } from '../registry.js';
@@ -20,18 +20,15 @@ import { LEAN_RPG_FEATURE, practiceFromRollsOnly } from '../lean-rpg/names.js';
 import { allRuleNames, createMarkHistory, foeLine, ruleMarksFor, ruleMarksOf } from './rule-marks.js';
 import { boardFailure, boardStep } from './held-board.js';
 import { earlierReceipts, moneyWarning } from './money-guard.js';
-
 export function createCaptureFlow(s, deps) {
     const { ctx, store, bus, registry, settings, events, hostSettings, view, viewReader, lateReader, problem, isCarrier, boardError, PRACTICE_LINE, HOOK_TIMEOUT_MS } = deps;
     const markHistory = createMarkHistory();
     const holdBoard = message => Object.assign(new Error(`${boardFailure('The fight could not be saved:', message)} Once restored, this reply can finish; after discarding, regenerate it.`), { code: 'BOARD_PRELUDE' });
-
     // Runs the reply's change lines; returns { receipts, problems }.
     // Each line runs on the state the lines before it left (bus.run's `state`), as its owner's
     // capture handler (bus.run's `capture`), and is stored on the reply before the next one runs.
     // A reply holds at most maxChangeLines change lines; the rest are one Problem (pushed to `found`).
     const lineCap = () => (Number.isInteger(hostSettings()?.maxChangeLines) && hostSettings().maxChangeLines > 0 ? hostSettings().maxChangeLines : MAX_CHANGE_LINES);
-
     // A block's lines read, at most maxChangeLines, the rest one Problem. `fresh` (first live capture) or the reply's `caretWords` mark: drop a preset's ^ before each word.
     function readBlock(index, text, { fresh = false } = {}) {
         const cap = lineCap();
@@ -43,7 +40,6 @@ export function createCaptureFlow(s, deps) {
         }
         return { lines: parsed.lines, problems };
     }
-
     // The heads of the kinds the reply may write ("! encounter", "+ quest"), for the change lines a
     // model writes in the story near the block (capture.js strayLines). Read at each capture, so a
     // feature turned off takes its kinds' heads with it.
@@ -109,7 +105,7 @@ export function createCaptureFlow(s, deps) {
     // How many lines of each display kind `mes` already shows (extras.js displayLines, the rule the card
     // draws by): lines a Continue or the extractor adds count after these against the cap (F115), so a
     // choice past it is told as one of the original reply's would be.
-    const shownIn = mes => new Map(Object.entries(displayLines(mes, { entryOf: word => registry.capture(word), max: lineCap() }))
+    const shownIn = (mes, caret = false) => new Map(Object.entries(displayLines(mes, { entryOf: word => registry.capture(word), max: lineCap(), caret }))
         .map(([kind, values]) => [kind, values.length]));
 
     // `before`: the reply's text before these lines were added (a Continue's, the extractor's), or null.
@@ -128,7 +124,7 @@ export function createCaptureFlow(s, deps) {
         const lines = capped(index, all, found);
         const extra = assistRoom(index, [...late.map(line => ({ line, mark: LATE })), ...assist.map(line => ({ line, mark: NOW }))], used + lines.length, found);
         const blocked = markHistory(ctx?.chat?.[index], store.carrierSid?.(index), type, before, changeHeads(), type === 'continue' || type === 'late' ? lateLines(index) : []);
-        const shown = typeof before === 'string' ? shownIn(before) : new Map();
+        const shown = typeof before === 'string' ? shownIn(before, ruleMarksOf(readRecord(ctx?.chat?.[index])?.rules).includes('caretWords')) : new Map();
         // One write of the reply's record for all its lines and its afterCapture steps (store.batch).
         let off = [];
         let steps = [];
@@ -303,6 +299,9 @@ export function createCaptureFlow(s, deps) {
         const marks = ruleMarksOf(readRecord(message)?.rules), fresh = base === null ? (blocked.first ? allRuleNames() : ruleMarksFor(lines)).filter(name => !marks.includes(name) && !blocked.rules.includes(name)) : [];
         if (fresh.length && typeof store.setRuleMarks === 'function') { try { store.setRuleMarks(index, fresh); marks.push(...fresh); } catch { /* an unmarked reply keeps the old rule */ } }
         if (marks.length) carrier.rules = marks;
+        if (assist && (marks.includes('assistPlace') || marks.includes('assistFaction'))) { carrier.assist = assist; carrier.assistLeft = []; }
+        const prior = carrier.assist && base === null && assist === NOW ? (readRecord(message)?.receipts ?? []) : [];
+        const own = carrier.assist ? readBlock(index, extractBlock(String(message?.mes ?? ''), 'Changes', null, { heads: changeHeads() }) ?? '').lines : [];
         // The message right before the reply (system messages aside), and only when it is the reader's: a reply that
         // follows another reply has no message of the reader's to quote (proof, EVIDENCE.md).
         const before = (ctx?.chat ?? []).slice(0, index).findLast(item => !item?.is_system);
@@ -317,11 +316,14 @@ export function createCaptureFlow(s, deps) {
         for (const line of lines) {
             const entry = registry.capture(line.kind);
             if (!entry) {
-                found.push(problem({ index, line: line.raw, code: 'UNKNOWN_KIND', message: `No module keeps "${line.kind}", so "${line.raw}" was not used.` }));
+                const held = registry.captureOwner?.(line.kind); // declared but held back (dormant, restore): not an unknown kind
+                found.push(problem(held ? { module: held, index, line: line.raw, code: 'MODULE_HELD', message: `"${line.raw}" was not used: ${held} is held back right now (dormant, or a restore is in progress).` }
+                    : { index, line: line.raw, code: 'UNKNOWN_KIND', message: `No module keeps "${line.kind}", so "${line.raw}" was not used.` }));
                 continue;
             }
             const mark = lineMark(line.raw);
             const seed = seeds?.(entry.kind, mark), kept = plan && seed !== undefined ? plan.reuse.receipt(`${CAPTURE_PREFIX}${entry.kind}`, mark) : undefined;
+            if (carrier.assist) { carrier.assistLeft = assistDepartures([...prior, ...receipts]); carrier.assistCheck = seed === undefined ? (item, places) => assistPlaceConflict(item, own, places) : null; }
             // C3-4: a Re-read runs a line that made a change before (its receipt gives the seed) even
             // while its feature is off, so turning a feature off never takes away what it already did.
             const again = base !== null && seed !== undefined;
@@ -378,9 +380,7 @@ export function createCaptureFlow(s, deps) {
             if (warned) found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'LIMITED', message: warned }));
             receipts.push(result.receipt);
             // Used, but not all of it (a clamp): the owner says why, and that goes to the Problems list.
-            if (typeof result.problem === 'string' && result.problem) {
-                found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'LIMITED', message: result.problem }));
-            }
+            if (typeof result.problem === 'string' && result.problem) found.push(problem({ module: entry.moduleId, index, line: line.raw, code: 'LIMITED', message: result.problem }));
             if (!base) events?.emit('committed', { receipt: result.receipt });
         }
         // What the safety net's lines met is marked as its in the Problems list.

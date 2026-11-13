@@ -33,6 +33,23 @@ export function withKind(definition, line) {
     return fits.length === 1 ? { ...labels, kind: fits[0] } : labels;
 }
 
+// The narrator's natural clear, `! dm foes - cleared` (or `- dm foes - cleared`, no kind; or the run's `kind: set-slot-N | count: 0`): read as clear-N when exactly one group stands on a Foes block
+// (two or more would be a guess). Only a reply with the `foesClear` rule mark (rule-marks.js): an older reply keeps the line unused.
+const FOES_CLEARED = /^(?:cleared?|all clear(?:ed)?|gone|all gone|defeated|all down|fight over|over)\.?$/iu;
+function foesClearLine(ctx, definition, prefix, module, line) {
+    if (!line || definition.role !== 'foes' || !ctx.carrier?.rules?.includes('foesClear')) return line;
+    const labels = line.labels ?? {};
+    // The slot named with a zero count (`kind: set-slot-N | count: 0`, the block prompt's "0 = empty slot"), under any sign: the clear of that slot (a named slot is no guess).
+    const named = /^set-slot-([1-6])$/u.exec(String(labels.kind ?? ''));
+    if (named && String(labels.count ?? '').trim() === '0' && definition.kinds[`clear-${named[1]}`]?.op === '-') return { ...line, op: '-', labels: { kind: `clear-${named[1]}`, why: 'gone' } };
+    if ((line.op !== '!' && line.op !== '-') || dmOwn(labels, 'kind') || !FOES_CLEARED.test(String(line.text ?? '').trim())) return line;
+    const keys = Object.keys(labels);
+    if (keys.length && !(keys.length === 1 && keys[0] === 'why')) return line;
+    const have = prefix.domains?.dataModules?.instances?.[module]?.chat?.fields;
+    const standing = have ? [1, 2, 3, 4, 5, 6].filter(n => have[`count${n}`] > 0 && definition.kinds[`clear-${n}`]?.op === '-') : [];
+    return standing.length === 1 ? { ...line, op: '-', labels: { kind: `clear-${standing[0]}`, why: keys.length ? labels.why : 'gone' } } : line;
+}
+
 export function createAct(deps) {
     const { dependency, guard, finish, growSkills, skillRoute, skillRoom, skillWant, settings } = deps;
     // A Foes block of the Levels rules (its set-slot kind has a `level` label): a line that gives a level keeps it; one that gives a rank gets a level drawn inside that
@@ -79,8 +96,17 @@ export function createAct(deps) {
                     && (!ctx.standing || fold(deps.standingBlock(ctx, String(fields.who ?? ''))?.fields?.[`skill${probe.slot}`] ?? '') === fold(String(named.name ?? '')))) redirect = probe.kind;
             }
         }
+        line = foesClearLine(ctx, definition, prefix, module, line);
         let given = line ? withKind(definition, line) : { ...payload.labels, kind: payload.kind, ...(payload.who !== undefined ? { who: payload.who } : {}) };
         if (redirect) given = { ...given, kind: redirect };
+        const strictPractice = Boolean(line && definition.role === 'skills' && PRACTICE_KIND.test(String(given.kind ?? '')) && ctx.carrier?.rules?.includes('skillPractice'));
+        let namedSkill;
+        if (strictPractice && (dmOwn(given, 'skill') || dmOwn(given, 'name'))) {
+            if (dmOwn(given, 'skill') && dmOwn(given, 'name') && fold(given.skill) !== fold(given.name)) refuse('DM_LABEL', 'skill', 'Name exactly one skill to practise.');
+            namedSkill = String(given.skill ?? given.name ?? '').trim();
+            const { skill: _skill, name: _name, ...other } = given;
+            given = other;
+        }
         const kind = dmOwn(definition.kinds, given.kind) && definition.kinds[given.kind];
         // A foe group the narrator sets may give `level: N` or `rank: <name>`, or neither: then its level is drawn from the reply's seed (see foeLevelLabels).
         const labels = kind && line && definition.role === 'foes' ? foeLevelLabels(given, kind, prefix, ctx, module) : given;
@@ -114,9 +140,11 @@ export function createAct(deps) {
         const subject = definition.scope === 'chat' ? 'chat' : resolveActor(prefix, labels.who, subjectsOf(prefix, module));
         const active = prefix.domains.dataModules.active[module], draft = draftOf(ctx);
         const instance = atPath(draft, instancePath(module, subject)), inputs = inputsOf(prefix, definition);
+        const practiceRoute = strictPractice ? skillRoute(instance.fields, labels.kind, args, line.text, skillRoom(prefix, definition, instance.fields), { strict: true, ...(namedSkill !== undefined ? { skill: namedSkill } : {}) }) : null;
+        if (practiceRoute?.refuse) refuse('DM_CONDITION', '', practiceRoute.refuse);
         // (a line that works a List of entries is told apart by everything it says: two quests in one reply are two lines, the same line twice is one)
         const entryLine = kind.effects?.some(effect => ['entryAdd', 'entrySet', 'entryDrop'].includes(effect?.op));
-        const claim = `dm:${pairKey(ctx.source)}:${module}:${labels.kind}:${subject}:${hashJson(entryLine ? args : kind.oncePerReply.map(key => args[key]))}`;
+        const claim = `dm:${pairKey(ctx.source)}:${module}:${practiceRoute?.kind ?? labels.kind}:${subject}:${hashJson(entryLine ? args : kind.oncePerReply.map(key => args[key]))}`;
         if (!ctx.claim(claim)) refuse('CLAIMED', '', `${labels.kind} was already applied for this in this reply`);
         const listKey = `${module}:${subject}`, listsKept = draft.perReply[pairKey(ctx.source)]?.lists ?? {};
         const evaluation = createEvaluation(definition, instance, { inputs, source: ctx.source, cursor: ctx.cursor(), subject, lists: copy(listsKept[listKey] ?? {}) });
@@ -132,7 +160,7 @@ export function createAct(deps) {
         evaluation.timers();
         // A foe group the narrator sets by a name already on a slot of the same Foes block (the pre-call may have opened this very fight, lean-rpg/open.js)
         // is that group: the slot is updated (count and class), never a second slot with the same name; its health stays as it is.
-        const route = definition.role === 'skills' && line ? skillRoute(instance.fields, labels.kind, args, line.text, skillRoom(prefix, definition, instance.fields)) : null;
+        const route = practiceRoute ?? (definition.role === 'skills' && line ? skillRoute(instance.fields, labels.kind, args, line.text, skillRoom(prefix, definition, instance.fields)) : null);
         if (route?.refuse) refuse('DM_CONDITION', '', route.refuse);
         const same = definition.role === 'foes' && /^set-slot-\d$/u.test(labels.kind) && typeof args.name === 'string'
             ? [1, 2, 3, 4, 5, 6].find(n => typeof instance.fields[`foe${n}`] === 'string' && instance.fields[`count${n}`] > 0 && fold(instance.fields[`foe${n}`]) === fold(args.name)) : undefined;
@@ -152,7 +180,7 @@ export function createAct(deps) {
         const result = evaluation.finish();
         const changes = namedChanges(definition, fieldsBefore, instance.fields);
         const recorded = guard(ctx, prefix, { kind: 'dm.act', module, hash: active.hash, generation: active.generation, subject,
-            reads: result.reads.map(read => read.path), imports: prefixImports(definition), clock: restKind,
+            reads: [...result.reads.map(read => read.path), ...(strictPractice ? Object.keys(definition.state).filter(key => /^skill\d+$/u.test(key)).sort().map(key => ['fields', key]) : [])], imports: prefixImports(definition), clock: restKind,
             actor: subject !== 'chat', decision: { args, inputs, decisions: result.decisions.map(({ source: _source, cursor: _cursor, ...rest }) => rest), conds: grown ? [] : result.conds, ...(clock !== null ? { clock } : {}), ...(xpRate !== XP_RATE.default ? { xpRate } : {}), ...(grown ? { grown: dataModuleHash(grown) } : {}) } });
         // The concrete outcome kept beside the inputs (and past the receipts' display data): which line, for whom, what was frozen, what was limited.
         const outcome = { kind: labels.kind, ...(route ? { skill: { slot: route.slot, name: route.update ? route.name : instance.fields[`skill${route.slot}`] } } : {}), subject, ...(xpKept !== null ? { xpRate: xpKept } : {}), decisions: result.decisions.map(({ source: _source, cursor: _cursor, ...rest }) => rest), notes: result.notes, ...(result.fired.length ? { rules: result.fired } : {}) };

@@ -20,9 +20,10 @@ const whole = value => Number.isInteger(value) && value >= METER_LIMITS.min && v
 /**
  * The normalized cast of one pack. `add(code, path, message)` collects problems. At most
  * `CAST_LIMITS.entries` entries and `PORTRAIT_LIMITS.perPack` different portrait files. `items`: the pack's own normalized
- * items, which a person's `gear` is checked against (it is kept as their item ids).
+ * items, which a person's `gear` is checked against (it is kept as their item ids). `calendar`: the pack's normalized calendar (or
+ * null), whose month names a person's `birthday` is read against.
  */
-export function checkCast(list, packId, add, items = []) {
+export function checkCast(list, packId, add, items = [], calendar = null) {
     if (!Array.isArray(list)) {
         add('BAD_CONTENT', 'content.cast', 'content.cast must be a list of people like [{ "id": "fenna", "name": "Fenna", "about": "…", "look": "…", "start": { "place": "…", "goal": "…" } }].');
         return [];
@@ -123,6 +124,7 @@ export function checkCast(list, packId, add, items = []) {
         }
         const withYou = text('withYou', record.withYou, CAST_LIMITS.withYou);
         const history = text('history', record.history, CAST_LIMITS.history);
+        const birthday = record.birthday === undefined ? undefined : birthdayOf(record.birthday, calendar, say);
 
         let portrait;
         if (record.portrait !== undefined) {
@@ -331,6 +333,7 @@ export function checkCast(list, packId, add, items = []) {
             ...(behaviour ? { behaviour } : {}), ...(mannerisms ? { mannerisms } : {}), ...(withYou ? { withYou } : {}),
             ...(history ? { history } : {}),
             ...(portrait ? { portrait } : {}),
+            ...(birthday ? { birthday } : {}),
             start,
             ...(drawnTo ? { drawnTo } : {}),
             ...(meters && Object.keys(meters).length ? { meters } : {}),
@@ -358,4 +361,19 @@ function gearItem(items, wanted) {
         ?? list.find(item => foldKey(item.name) === key)
         ?? list.find(item => (item.aliases ?? []).some(alias => foldKey(alias) === key))
         ?? null;
+}
+
+// A person's `birthday`: "<month> <day>" in the pack's calendar, with an optional year ("Icewane 27" or "Icewane 27, 1204"). The month is one
+// of the calendar's names (any letter case), the day within that month; kept as the calendar's own spelling, "Month day[, year]".
+function birthdayOf(value, calendar, say) {
+    const line = typeof value === 'string' ? oneLine(value) : '';
+    const match = /^(.+?)\s+(\d{1,3})(?:,?\s+(-?\d{1,9}))?$/u.exec(line);
+    const shape = 'birthday must be a month name and a day of the pack\'s calendar, with an optional year, like "Icewane 27" or "Icewane 27, 1204".';
+    if (!match || [...line].length > CAST_LIMITS.birthday) return say('birthday', shape), undefined;
+    if (!calendar?.months?.length) return say('birthday', 'birthday is read against the pack\'s calendar, and this pack has none; add a calendar with the month names.'), undefined;
+    const month = calendar.months.find(each => foldKey(each.name) === foldKey(match[1]));
+    if (!month) return say('birthday', `birthday names "${oneLine(match[1], 40)}", which is not a month of the pack's calendar (${calendar.months.map(each => each.name).join(', ')}).`), undefined;
+    const day = Number(match[2]);
+    if (day < 1 || day > month.days) return say('birthday', `birthday day must be a whole number from 1 to ${month.days} for ${month.name}.`), undefined;
+    return `${month.name} ${day}${match[3] === undefined ? '' : `, ${Number(match[3])}`}`;
 }

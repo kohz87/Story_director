@@ -37,6 +37,20 @@ export const RULE_LINES = Object.freeze({
     // A preset's ^ before every word of a change line is dropped when the block is read (capture/lines.js stripCaretWords). It changes how a
     // line is read, not what a parsed line is, so no parsed line falls under it: only a reply's first live capture is marked.
     caretWords: () => false,
+    // Foes the narrator has not touched for a few replies no longer start a fight from a typed attack (lean-rpg/precall.js currentFoes). Static per chat: only a reply's first live capture is marked, so an old chat keeps its foes as they were.
+    foesFresh: () => false,
+    // `! dm foes - cleared` (no kind) clears the one group that stands (data-modules/part/act.js foesClearLine). Static per chat: only a reply's first live capture is marked, so an older reply keeps the line unused on Re-read.
+    foesClear: () => false,
+    // `~ time` with a month name the calendar does not have ("Redfall 1") is refused with a Problem and the clock stays (Story Director tracker/time.js timeAfter). Static per chat: only a reply's first live capture is marked, so an older reply keeps reading such a line as it did.
+    clockMonth: () => false,
+    // `~ you rank:` that contradicts the pack's rank data module (Ersveil guild-membership: registered, letter) is left out with a Problem (domains/scene/you.js changeYou). Static per chat: only a reply's first live capture is marked, so an older reply keeps its rank line on Re-read.
+    youRank: () => false,
+    // Practice lines can explicitly name a skill and must not credit an arbitrary slot when their reason names several skills.
+    skillPractice: line => line?.kind === 'dm' && line.op === '+' && (!line.labels?.kind || /^practice-(?:[1-9]|1[01])$/u.test(String(line.labels.kind))),
+    // Only new replies change how the safety net's place lines affect presence or reject conflicting places.
+    assistPlace: () => false,
+    // A safety-net `+/~ faction` line never sets the stance of a faction the Chronicle already keeps (Story Director chronicle/capture/faction.js, read from `ctx.carrier.assist`). Only new replies; an older reply keeps what its Re-read did.
+    assistFaction: () => false,
 });
 
 /** A narrator's set-slot line, using normalized labels and the same omitted-kind inference as the handler. */
@@ -54,7 +68,7 @@ export function foeLine(line, state = null) {
     } catch { return false; }
 }
 
-export const MAX_RULE_MARKS = 16;
+export const MAX_RULE_MARKS = 24;
 const NAME = /^[A-Za-z][A-Za-z0-9]{0,31}$/u;
 
 /** The marks a record keeps: known names only, sorted, no repeats, at most MAX_RULE_MARKS. Anything else in the field is ignored. */

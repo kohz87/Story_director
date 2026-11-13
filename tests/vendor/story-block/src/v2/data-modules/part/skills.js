@@ -13,20 +13,20 @@ const skillCapacity = definition => Math.min(SKILL_SLOTS_MAX, Object.keys(defini
 const skillRow = (fields, n) => ({ name: fields[`skill${n}`], about: typeof fields[`about${n}`] === 'string' ? fields[`about${n}`] : '', stat: fields[`stat${n}`], uses: fields[`uses${n}`] ?? 'stamina', rank: Number.isSafeInteger(fields[`rank${n}`]) ? fields[`rank${n}`] : 0, ...(fields[`type${n}`] === 'utility' ? { type: 'utility' } : {}) });
 // A skill name or a reason as the matcher compares it: NFKC, lower case, runs of spaces and dashes as one space.
 const words = value => ` ${String(value ?? '').normalize('NFKC').toLowerCase().replace(/[\s\-‐‑–—_]+/gu, ' ').replace(/[^\p{L}\p{N} ]/gu, '').replace(/ +/gu, ' ').trim()} `;
-// The one skill a reason names (whole words; of two names inside it, the longer one if the shorter is part of it), else null.
-function skillNamed(slots, reason) {
+// Skills a reason names (whole words; of two names inside it, the longer one if the shorter is part of it).
+function skillsNamed(slots, reason) {
     const text = words(reason);
     const found = slots.filter(slot => slot.name && words(slot.name).trim() && text.includes(words(slot.name)));
     const top = found.filter(slot => !found.some(other => other !== slot && words(other.name).includes(words(slot.name)) && words(other.name) !== words(slot.name)));
-    const keys = new Set(top.map(slot => words(slot.name)));
-    return keys.size === 1 && top.length === 1 ? top[0] : null;
+    return top;
 }
+const skillNamed = (slots, reason) => { const found = skillsNamed(slots, reason); return found.length === 1 ? found[0] : null; };
 // The Skills block's story lines never overwrite a slot (USER, 3 Nov). `learn-N` of a name some slot already holds updates that slot (a signature skill, one a
 // pack's cast member brought, is never updated: it keeps its name and slot); a new name goes to slot N if it is empty and open, else the first open one, else the
 // line is refused. A slot is open when the block has it and the character's level has opened it (names.js skillSlots: 5, a sixth at Lv 20, a seventh at 40, an
 // eighth at 60; a level drop only closes the empty ones). `practice-N` whose reason names one of the skills credits that skill's slot.
 // → { kind, slot, name, update? } | { refuse } | null (not one of these lines: as written).
-function skillRoute(fields, kindName, args, reason, room = SKILL_SLOTS_BASE) {
+function skillRoute(fields, kindName, args, reason, room = SKILL_SLOTS_BASE, options = {}) {
     const typed = isTypedSkills(fields), top = typed ? SKILL_FIELDS_MAX : SKILL_SLOTS_MAX;
     const learn = new RegExp(`^learn-(${SLOT_NUMBER})$`, 'u').exec(kindName), practice = new RegExp(`^practice-(${SLOT_NUMBER})$`, 'u').exec(kindName);
     if ((!learn && !practice) || Number((learn ?? practice)[1]) > top) return null;
@@ -44,8 +44,9 @@ function skillRoute(fields, kindName, args, reason, room = SKILL_SLOTS_BASE) {
         const held = slots.filter(slot => slot.name).length;
         return { refuse: `No free skill slot for ${args.name}. ${held >= SKILL_SLOTS_MAX ? J.slotsFull : fill(J.slotLater, { level: Math.max(0, held + 1 - SKILL_SLOTS_BASE) * SKILL_SLOTS_EVERY })}`, full: true };
     }
-    const named = skillNamed(slots, reason);
-    const slot = named ? named.n : Number(practice[1]);
+    const named = options.skill !== undefined ? slots.filter(slot => slot.name && fold(slot.name) === fold(options.skill)) : skillsNamed(slots, reason);
+    if (options.strict && (named.length > 1 || (options.skill !== undefined && named.length !== 1))) return { refuse: 'Name exactly one known skill to practise.' };
+    const slot = named.length === 1 ? named[0].n : Number(practice[1]);
     return { kind: `practice-${slot}`, slot, name: slots[slot - 1].name };
 }
 // A learn line for a new name in a block with types: the line's `type` (utility, else combat) names the pool. A combat skill needs a free one of the slots the level opens (`room`), a

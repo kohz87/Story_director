@@ -5,8 +5,9 @@
 import { NEEDS_HINT, featureOf } from '../features.js';
 import { isObject } from '../registry-checks.js';
 
-export function createFeatureLookups({ defs, declared, owners, fallbacks, canonical, featureValue, held, lifecycle }) {
-    function featureDecl(id) {
+export function createFeatureLookups({ defs, declared, owners, fallbacks, canonical, featureValue, held, steadyHeld = held, lifecycle }) {
+    // `isHeld` is `held` (dormant or the restore barrier) for the real answer, `steadyHeld` (dormant only) for what shows (offShown).
+    function declOf(id, isHeld) {
         const owner = owners.feature.get(String(id ?? ''));
         if (!owner) return null;
         const def = defs.get(owner);
@@ -14,8 +15,8 @@ export function createFeatureLookups({ defs, declared, owners, fallbacks, canoni
         if (!feature) return null;
         const { needs } = feature;
         // A feature of a module held back (dormant, restore barrier) is not available, whatever it needs.
-        const heldOwner = held(owner);
-        const available = !heldOwner && availableFor(needs);
+        const heldOwner = isHeld(owner);
+        const available = !heldOwner && availableFor(needs, isHeld);
         return Object.freeze({
             id: feature.id,
             moduleId: owner,
@@ -40,16 +41,18 @@ export function createFeatureLookups({ defs, declared, owners, fallbacks, canoni
     // Available: every kind, command and query it needs is registered (by any module, whatever its
     // features say: a feature never waits on another's switch).
     // Held back, a module's kinds, commands and queries are not there for another's feature to need.
-    const there = (table, name) => table.has(name) && !held(table.get(name));
-    const availableFor = needs => needs.kinds.every(kind => canonical.has(kind.toLowerCase()) && !held(owners.kind.get(canonical.get(kind.toLowerCase()))))
-        && needs.commands.every(type => there(owners.command, type))
-        && needs.queries.every(name => there(owners.query, name) || there(fallbacks, name));
+    const availableFor = (needs, isHeld) => {
+        const there = (table, name) => table.has(name) && !isHeld(table.get(name));
+        return needs.kinds.every(kind => canonical.has(kind.toLowerCase()) && !isHeld(owners.kind.get(canonical.get(kind.toLowerCase()))))
+            && needs.commands.every(type => there(owners.command, type))
+            && needs.queries.every(name => there(owners.query, name) || there(fallbacks, name));
+    };
+    const featureDecl = id => declOf(id, held);
     // What a read would say with other switches (`withFeatures`): feature id → true | false, set only while that call runs.
     let asIf = null;
     // On: the reader's choice when there is one, else the feature's default; an id no module declares, or
     // a feature whose `needs` no module meets, is off.
-    function featureOn(id) {
-        const decl = featureDecl(id);
+    function featureOn(id, decl = featureDecl(id)) {
         if (!decl || !decl.available) return false;
         if (asIf?.has(decl.id)) return asIf.get(decl.id) === true;
         let value;
@@ -71,7 +74,13 @@ export function createFeatureLookups({ defs, declared, owners, fallbacks, canoni
         const id = featureOf(item);
         return id !== null && !featureOn(id);
     };
+    // The same for what is drawn (tabs, screens): the restore barrier holds every part for a moment (a native change finishing, a scan),
+    // and a tab must not leave the strip then, so only a dormant module (or the reader's switch) takes its tabs and screens away.
+    const offShown = item => {
+        const id = featureOf(item);
+        return id !== null && !featureOn(id, declOf(id, steadyHeld));
+    };
     const offQuery = () => null;
 
-    return { featureDecl, needsOf, featureOn, withFeatures, hypothetical, off, offQuery };
+    return { featureDecl, needsOf, featureOn, withFeatures, hypothetical, off, offShown, offQuery };
 }

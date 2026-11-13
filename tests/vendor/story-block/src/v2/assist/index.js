@@ -26,7 +26,7 @@ export {
     ANSWER_TOKENS as CLASSIFIER_ANSWER_TOKENS, CHECK_KIND, CLASSIFIER_HEAD, MESSAGE_LIMIT, PRECHECK, PROMPT_BUDGET, ROLLED_LINE,
     checkLine, claimKey, classifierPrompt, createClassifier, normalizeDc, parseClassifierAnswer, precheck,
 } from './classifier.js';
-export { EXTRACTOR_FOOT, EXTRACTOR_HEAD, MAX_LINES, REPLY_HEAD, REPLY_LIMIT, WHERE_HEAD, WRITTEN_HEAD, allowedGrammar, createExtractor, extractorPrompt, grammarKind, notWritten, parseExtractorAnswer } from './extractor.js';
+export { EXTRACTOR_FOOT, EXTRACTOR_HEAD, MAX_LINES, WORLD_FOOT, footFor, REPLY_HEAD, REPLY_LIMIT, WHERE_HEAD, WRITTEN_HEAD, allowedGrammar, createExtractor, extractorPrompt, grammarKind, notWritten, parseExtractorAnswer } from './extractor.js';
 export { DEFAULT_KINDS, KIND_CHOICES, allowedKinds, refusedWhy, safeLines } from './safety.js';
 export { MAX_NEAR, hasClockTime, knownPlace, mapPlaces, whereLines, whereNow, whereWhy } from './where.js';
 export { renderAssistSection, runLine } from './section.js';

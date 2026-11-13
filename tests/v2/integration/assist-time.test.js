@@ -113,3 +113,65 @@ test('assist: + world and + faction lines apply like the main block\'s (real chr
         host.close();
     }
 });
+
+// Through the real host path (vendored Story Block with the `assistFaction` rule mark): a safety-net faction line never moves the stance of a known faction.
+async function worldHost(answer) {
+    let host = null;
+    const module = createModule({ host: { settings: id => host?.sdk.settings(id) ?? null, substitute: text => host?.sdk.substitute(text) } });
+    const kinds = '~ weather, + world, ~ world, + faction, ~ faction';
+    host = await createHost({ modules: [module], settings: { modules: { 'story-block': { assistExtractorKinds: kinds } } }, callModel: async () => answer() });
+    host.features.set(THREADS_FEATURE, true);
+    return host;
+}
+const stanceOf = (host, name) => host.sdk.query('chronicle.factions', {}).find(row => row.name === name)?.stance;
+
+test('assist: a safety-net faction line never resets the stance of a known faction (real host, rule mark); a new faction is written whole', async () => {
+    let line = '~ faction Red Cords — now openly hostile | stance: hostile';
+    const host = await worldHost(() => `<Changes>\n${line}\n</Changes>`);
+    try {
+        await host.send('Hello.', reply('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am', '+ faction Red Cords — pier crew | Bluewatch Village | stance: neutral']));
+        host.features.set(CORE_FEATURE.extractor, true);
+        assert.equal(stanceOf(host, 'Red Cords'), 'neutral');
+        await host.send('We watch the pier.', 'The Red Cords glare at the Watch.');
+        await settle();
+        assert.ok(host.ctx.chat.at(-1).extra.storySuite.rules.includes('assistFaction'), 'the new reply carries the mark');
+        assert.equal(stanceOf(host, 'Red Cords'), 'neutral', 'stance stays the main model\'s');
+        line = '+ faction Blue Lamps — lamplighters | Bluewatch Village | stance: friendly';
+        await host.send('We walk on.', 'The Blue Lamps light the quay.');
+        await settle();
+        assert.equal(stanceOf(host, 'Blue Lamps'), 'friendly', 'a new faction is written whole');
+        // The stance a reader/main block sets in a reply's own block still works.
+        await host.send('Again.', reply('Red Cords turn on the Watch.', ['~ faction Red Cords | stance: hostile']));
+        assert.equal(stanceOf(host, 'Red Cords'), 'hostile');
+    } finally {
+        host.close();
+    }
+});
+
+test('assist: world/faction lines that arrive while a restore barrier holds Story Director wait and apply once it is released (real chronicle)', async () => {
+    const { announceModules } = await import('../../vendor/story-block/src/v2/sdk/lifecycle.js');
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    let calls = 0;
+    const host = await worldHost(async () => { calls += 1; await gate; return `<Changes>\n${WORLD_LINES.join('\n')}\n</Changes>`; });
+    try {
+        await host.send('Hello.', reply('The harbour at dawn.', ['~ time June 3, 1200, 08:00 am']));
+        host.features.set(CORE_FEATURE.extractor, true);
+        await host.send('We watch the pier.', 'The Red Cords lock down the salt barges while wolves press the timber track.');
+        host.registry.setRestore('pending', 'Restoring a save point.');
+        announceModules(host.registry, host.events);
+        release();
+        await settle();
+        assert.equal(calls, 1);
+        assert.deepEqual(host.turn.problems().filter(item => /UNKNOWN_KIND|MODULE_HELD/.test(item.code)), [], 'neither unknown nor dropped');
+        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather'], 'Story Block\'s own kind ran; Story Director\'s wait');
+        host.registry.setRestore('idle');
+        announceModules(host.registry, host.events);
+        await settle();
+        assert.deepEqual(assisted(host).map(receipt => receipt.type), ['capture.weather', 'capture.faction', 'capture.world', 'capture.world']);
+        assert.equal(host.sdk.query('chronicle.events', { open: true }).length, 2);
+        assert.equal(stanceOf(host, 'Red Cords'), 'neutral');
+    } finally {
+        host.close();
+    }
+});

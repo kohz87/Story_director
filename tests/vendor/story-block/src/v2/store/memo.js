@@ -12,7 +12,7 @@ import { hashJson } from '../replay.js';
 import { payloadHashOf } from './digest.js';
 
 export function createMemo(s, deps) {
-    const { KEPT_ASIDE, WHY, api, appliedOf, archive, blocksBefore, chain, chainHash, chatId, checkpointBytes, checkpointEvery, checkpointState, headKey, list, markNow, marked, metadata, packOwners, packProblems, preservedAt, proofBefore, proofsBefore, rawKind, rawSidAt, recordId, replay, replayEnv, replayRecord, sameKey, settleBehind, sourceFor, spineBefore, stateAfterPrefix, stillHolds, windowHash } = deps;
+    const { KEPT_ASIDE, WHY, api, appliedOf, archive, bareHash, blocksBefore, chain, chainHash, chatId, checkpointBytes, checkpointEvery, checkpointState, headKey, list, markNow, marked, metadata, packOwners, packProblems, preservedAt, proofBefore, proofsBefore, rawKind, rawSidAt, recordId, replay, replayEnv, replayRecord, sameKey, settleBehind, sourceFor, spineBefore, stateAfterPrefix, stillHolds, windowHash } = deps;
 
     // Memos of what a reply reads over the whole chat (docs/v2/PERFORMANCE.md, "Long chats"): the stored
     // receipts and the untold ones, each kept until a record is written or the store rebuilds (`epoch`) or
@@ -391,6 +391,8 @@ export function createMemo(s, deps) {
         return {
             index, op: count, state,
             prefixHash: hashJson({ p: chainHash(arr, index), k: cursor.swipeKey, t: payloadHashOf(arr[index]), b: blocksBefore(earlier) }),
+            // (the same prefix without the stamps a reconcile writes anew: the timeline carries a mapping over a rewrite that changed nothing else)
+            bare: hashJson({ p: bareHash(arr, index), k: cursor.swipeKey, t: payloadHashOf(arr[index]), b: blocksBefore(earlier) }),
         };
     }
 

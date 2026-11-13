@@ -1,6 +1,6 @@
 ## Unreleased
 
-- **The safety net no longer resets a faction's stance.** A world-news or faction line from Assist's safety net (new replies, Story Block's `assistFaction` mark) updates a known faction's summary and area but never its stance; a new faction takes the stance it is written with.
+- **The safety net no longer resets a faction's stance.** A world-news or faction line from Assist's safety net (new replies, Story Block's `assistFaction` mark) updates a known faction's summary and area but never its stance; a new faction takes the stance it is written with. Tested through the real host with Story Block 2.32.1 vendored (commit 2a4ef67a); safety-net world and faction lines that arrive while the module is held back wait and run once it is released.
 - **World news is easier to record.** The prompt now asks for a world line when a scene reports or shows changes beyond it, and for a new faction when an unknown group acts, an update when a faction's stance or aims change, and an end when it is gone; news can also be a hook. This changes the prompt only, and written replies replay as before.
 
 ## 2.15.2

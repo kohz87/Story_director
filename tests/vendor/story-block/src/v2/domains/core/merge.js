@@ -82,6 +82,7 @@ export function mergeParts(parts) {
                     else {
                         lines.push(...(Array.isArray(answer?.lines) ? answer.lines : []));
                         commands.push(...(Array.isArray(answer?.commands) ? answer.commands : []));
+                        problems.push(...(Array.isArray(answer?.problems) ? answer.problems : []));
                         if (answer?.fightStart) fightStart = answer.fightStart;
                     }
                 }

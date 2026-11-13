@@ -143,6 +143,8 @@ export function mountLeanRpg({ doc, ctx, store, events = null, screens, widgets,
     refresh();
     return {
         battleLog,
+        sendHeld: () => fightStart.holds(),
+        openHeldFight: () => fightStart.openHeld(),
         wizard,
         exporter,
         start,

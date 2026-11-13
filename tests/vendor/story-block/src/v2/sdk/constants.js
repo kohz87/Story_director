@@ -7,7 +7,7 @@
 export const EVENTS = Object.freeze(['committed', 'head', 'turn', 'feature', 'modules']);
 // The most change lines one reply's block may hold; the rest are one Problem (turn.js).
 export const MAX_CHANGE_LINES = 150;
-export const HOST_SETTINGS_DEFAULTS = Object.freeze({ tailBudget: 1500, contextShare: 40, maxChangeLines: MAX_CHANGE_LINES, callQueue: true, panelStyle: 'glass', glassStrength: 50, font: 'nunito', textSize: '100' });
+export const HOST_SETTINGS_DEFAULTS = Object.freeze({ tailBudget: 1500, contextShare: 40, maxChangeLines: MAX_CHANGE_LINES, callQueue: true, panelStyle: 'glass', glassStrength: 50, font: 'nunito', textSize: '100', sendPending: true });
 export const HOST_SETTINGS_SCHEMA = Object.freeze({
     tailBudget: Object.freeze({
         type: 'int', min: 100, max: 20000, label: 'Notes per reply (tokens)',
@@ -53,6 +53,11 @@ export const HOST_SETTINGS_SCHEMA = Object.freeze({
             Object.freeze({ value: '120', label: '120%' }),
         ]),
         help: 'Makes the text in Story Suite\'s panels bigger: the Game view, cards, dialogs and these settings. Your SillyTavern chat text keeps its own size (SillyTavern\'s User Settings → Font scale).',
+    }),
+    // The "Send pending" note above the message box (ui-host/send-note.js): a UI note only.
+    sendPending: Object.freeze({
+        type: 'bool', label: 'Send pending note',
+        help: 'Shows a small note above the message box when a Send could not go yet (the story is still finishing, or a fight start is holding it), and sends your text once by itself when the story is free. It never changes what you typed.',
     }),
 });
 

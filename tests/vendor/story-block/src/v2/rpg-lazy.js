@@ -13,7 +13,7 @@
 // cards, queries, hooks, settings and guard as lean-rpg/index.js createLeanRpgPart, handed to the real part once the
 // library is there), the loader (`createRpgLoader`) and the check of a chat (`holdsRpg`). No DOM, no SillyTavern.
 import { CORE_FEATURE } from './features.js';
-import { AUTO_CAP, AUTO_CAP_SETTING, BOARD_SKILL, BOARD_SKILL_CARRY, CHECKS_SETTING, CHECK_STEP, DICE, FIGHT, LEAN_RPG_FEATURE, LEVEL, LEVEL_CAP_SETTING, NOROLL, PRACTICE, PRACTICE_SETTING, PRACTICE_STEP, PRECHECK_LIMIT_MS, PRECHECK_SETTING, RESOLVE, ROLLS, ROLLS_SETTING } from './lean-rpg/names.js';
+import { AUTO_CAP, AUTO_CAP_SETTING, BOARD_SKILL, BOARD_SKILL_CARRY, CHECKS_SETTING, CHECK_STEP, DICE, FIGHT, FOES_TOUCH_QUERY, LEAN_RPG_FEATURE, LEVEL, LEVEL_CAP_SETTING, NOROLL, PRACTICE, PRACTICE_SETTING, PRACTICE_STEP, PRECHECK_LIMIT_MS, PRECHECK_SETTING, RESOLVE, ROLLS, ROLLS_SETTING } from './lean-rpg/names.js';
 import { noRoll } from './lean-rpg/noroll.js';
 import { RANK_QUERY, SETTINGS_SCHEMA, XP_RATE, XP_RATE_SETTING, rankQuery } from './lean-rpg/levels.js';
 import { levelsQuery, rosterQueries } from './lean-rpg/roster.js';
@@ -122,6 +122,8 @@ export function createLazyRpgPart(deps = {}) {
         queries: {
             [JOINS_QUERY]: Object.assign((...args) => part()?.queries[JOINS_QUERY](...args) ?? [], { feature: LEAN_RPG_FEATURE }),
             [ROLLS_QUERY]: Object.assign((...args) => part()?.queries[ROLLS_QUERY](...args) ?? null, { feature: LEAN_RPG_FEATURE }),
+            // (the latest reply that touched the Foes block; -1 while the library is not loaded: no foe was ever set by a reply)
+            [FOES_TOUCH_QUERY]: Object.assign((...args) => part()?.queries[FOES_TOUCH_QUERY](...args) ?? -1, { feature: LEAN_RPG_FEATURE }),
             // (the ranks are a pure read of the packs: answered at once, the library or not)
             [RANK_QUERY]: Object.assign(rankQuery, { feature: LEAN_RPG_FEATURE }),
             // (the roster is a pure read of the Character blocks: answered at once too, roster.js)

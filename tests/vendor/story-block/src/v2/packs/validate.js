@@ -138,7 +138,7 @@ function normalize(raw, { add, warn, hostVersion, capabilities, limits, dataModu
     }
     if (given.rpg !== undefined) content.rpg = checkRpg(given.rpg, packId, add);
     // The cast (cast.js): kept only when given, so older packs normalize as they always did.
-    if (given.cast !== undefined) content.cast = checkCast(given.cast, packId, add, items);
+    if (given.cast !== undefined) content.cast = checkCast(given.cast, packId, add, items, calendar);
     // The name lists: one object (not a list), kept only when given and when every part checks.
     if (given.names !== undefined) {
         const names = checkNames(given.names, warn);

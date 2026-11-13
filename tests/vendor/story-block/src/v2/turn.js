@@ -129,6 +129,7 @@ export function createTurn({ ctx, live = () => ctx, store, bus, registry, settin
         replyBusy: false,
         // The Assist safety net's runs on the last reply (afterReply), until they settle.
         assistPending: null,
+        assistHeld: [],   // the safety net's lines parked for a module held back: { index, swipe, lines } (events.js)
         busyTimer: null,
         idleWaiters: [],
         // Every earlier reply is in every prompt: what its text is without blocks is remembered, and a

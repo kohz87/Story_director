@@ -15,6 +15,9 @@ export function carryRecord(from, to) {
     const same = swipeOf(to) === swipeOf(from) && String(to.name ?? '') === String(from.name ?? '')
         && JSON.stringify(to.send_date ?? null) === JSON.stringify(from.send_date ?? null);
     if (!same) return false;
+    // A message that holds a record of another reply's own is another message (a chat opened again with its messages shifted, a new reply at the old place): never written over.
+    const there = to.extra?.[KEY];
+    if (isObject(there) && typeof there.sid === 'string' && there.sid !== record.sid) return false;
     writeRecord(to, structuredClone(record));
     return true;
 }
