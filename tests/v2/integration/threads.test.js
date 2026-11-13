@@ -10,8 +10,9 @@ import { readFileSync } from 'node:fs';
 
 import { createHost } from '../../vendor/story-block/testkit/index.js';
 import { featureProblems } from '../../vendor/story-block/src/v2/features.js';
+import { allowedGrammar, allowedKinds } from '../../vendor/story-block/src/v2/assist/index.js';
 import { createModule, storyDirectorModule } from '../../../src/v2/module.js';
-import { TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
+import { GRAMMAR, TAIL_HEADER } from '../../../src/v2/chronicle/note.js';
 import { PACING_TEXT, staticText } from '../../../src/v2/tracker/note.js';
 import { STATIC_TEXT as WORLD_PARAGRAPHS } from '../../../src/v2/chronicle/note.js';
 import { FEATURE as KEY_PEOPLE_FEATURE } from '../../../src/v2/keypeople/domain.js';
@@ -91,12 +92,28 @@ test('on: the static part and the kinds are what the fixtures hold, byte for byt
         // The thread kinds ride on the `agenda` line; a fresh story has no route, landmark or world entry, and the check line is the RPG-off one.
         // (Story Block 2.19.0 lists a kind that has only `heads` too: quest and trip carry heads, no grammar line.)
         assert.deepEqual(gone.kinds.filter(entry => entry.grammar).map(entry => entry.kind), ['check', 'hook', 'time']);
-        assert.deepEqual(got.kinds.filter(entry => entry.grammar).map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind && entry.grammar)).sort(), ['agenda', 'world']);
+        assert.deepEqual(got.kinds.filter(entry => entry.grammar).map(entry => entry.kind).filter(kind => !gone.kinds.some(entry => entry.kind === kind && entry.grammar)).sort(), ['agenda', 'faction', 'world']);
         // What stays: the Director lines and the hook, quest and time line (the fields are in the grammar lines).
         assert.ok(gone.static.startsWith(staticText({ threads: false }).split('\n')[0]));
         assert.match(gone.kinds.find(entry => entry.kind === 'hook').grammar, /goal \| giver \| reward \| step \| due \| difficulty \| type/);
     } finally {
         on.close();
+        off.close();
+    }
+});
+
+test('the safety net can select the owning grammar for each world or faction kind independently', async () => {
+    const host = await newHost();
+    const off = await newHost({ features: { [THREADS_FEATURE]: false } });
+    try {
+        const grammar = contextOf(host).kinds.map(kind => kind.grammar).filter(Boolean);
+        const offGrammar = contextOf(off).kinds.map(kind => kind.grammar).filter(Boolean);
+        for (const [kind, expected] of [['+ world', GRAMMAR.world], ['~ world', GRAMMAR.world], ['+ faction', GRAMMAR.faction]]) {
+            assert.deepEqual(allowedGrammar(grammar, allowedKinds(kind)), [expected], kind);
+            assert.deepEqual(allowedGrammar(offGrammar, allowedKinds(kind)), [], `${kind} stays off with threads`);
+        }
+    } finally {
+        host.close();
         off.close();
     }
 });

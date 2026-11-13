@@ -1,5 +1,7 @@
 ## Unreleased
 
+- **World news is easier to record.** The prompt now asks for a world line when a scene reports or shows changes beyond it, and for a new faction when an unknown group acts, an update when a faction's stance or aims change, and an end when it is gone; news can also be a hook. This changes the prompt only, and written replies replay as before.
+
 ## 2.15.2
 
 Update Story Director. Completes the 2.15.1 cast fix: a chance meeting can no longer bring someone from farther away than the story time allows (a real run showed one path still did), while people placed in a town can still be met there; places match by the map's own links, not by similar names. New replies only.
