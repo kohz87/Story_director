@@ -321,3 +321,91 @@ test('W6: a meter that ended where it began is no change (a person with none has
     }), HIDDEN, { now: NOW });
     assert.deepEqual(kindOf(day, 'relationships').items.map(row => [row.title, row.tags]), [['Sieke', ['affection 5 → 6']]]);
 });
+
+// ---- display only: the narrator's [Earlier days] input is byte-identical to before (14 Nov) ------------------------------------------
+
+const auditHidden = { words: new Set(['duke betrayal']), behind: new Set(['sieke', 'red-cord blockade']) };
+const auditQ = { taken: [], done: [], failed: [], dropped: [] };
+const auditWhole = { day: 20, date: 'Goldwane 20', short: 'to Bluewatch; Name: Watch-Captain Roeland is new; look: mid-forties human man, broad-…', facts: [], more: 0, met: ['Sieke', 'Klaas'], npcs: [], places: ['Bluewatch'], quests: auditQ,
+    world: ['Red-Cord Blockade — pickets doubled lanterns', 'The Duke Betrayal spreads.'],
+    happened: ['Sieke: trust 7 → 8, affection 5 → 6.', 'Sieke: trust 8 → 7.', 'Klaas: nothing changed (today\'s ordinary is used).', 'Sieke: mood anxious (feeling -1).', 'Harmen: nothing moved.', "Klaas' look is fixed: a long scarred thi…", 'Voice: rough r… | temper…', 'The ledger was signed.', 'Sieke: tension 1 → 2.'],
+    tags: ['capture.npc', 'capture.npc', 'capture.npc', 'npc.mood', 'npc.adjust', 'npc.flag', '-', '-', 'capture.npc'] };
+const auditBrief = { day: 19, date: 'Goldwane 19', brief: true, short: 'to Harrow; took on Rope', facts: [], met: ['Sieke'], npcs: [], places: [], quests: auditQ, world: [], happened: [], tags: [],
+    cats: { met: ['Sieke'], relationships: ['Sieke: trust 1 → 2.', 'Klaas: trust 0 → 1.'], events: ['Klaas: nothing moved.', 'Klaas asked for the ledger.'], news: ['Red-Cord Blockade — doubled'] } };
+const promptFields = d => ({ eventLines: d.eventLines, eventWho: d.eventWho, short: d.short, summary: d.summary, happened: d.happened, world: d.world, search: d.search });
+// Worked out by origin/main's code (before the World tab fix) from the fixture above.
+const GOLDEN = {
+    "fields": [
+        {
+            "eventLines": [
+                "Sieke: mood anxious (feeling -1).",
+                "Klaas' look is fixed: a long scarred thi…",
+                "Voice: rough r… | temper…",
+                "The ledger was signed."
+            ],
+            "eventWho": [
+                [],
+                [],
+                [],
+                []
+            ],
+            "short": "to Bluewatch; 1 world event.",
+            "summary": "Went to Bluewatch, 1 world event.",
+            "happened": [
+                "Sieke: trust 7 → 8, affection 5 → 6.",
+                "Sieke: trust 8 → 7.",
+                "Klaas: nothing changed (today's ordinary is used).",
+                "Sieke: mood anxious (feeling -1).",
+                "Harmen: nothing moved.",
+                "Klaas' look is fixed: a long scarred thi…",
+                "Voice: rough r… | temper…",
+                "The ledger was signed.",
+                "Sieke: tension 1 → 2."
+            ],
+            "world": [
+                "Red-Cord Blockade — pickets doubled lanterns"
+            ],
+            "search": "Goldwane 20 • to Bluewatch; 1 world event. • Sieke: trust 7 → 8, affection 5 → 6. • Sieke: trust 8 → 7. • Klaas: nothing changed (today's ordinary is used). • Sieke: mood anxious (feeling -1). • Harmen: nothing moved. • Klaas' look is fixed: a long scarred thi… • Voice: rough r… | temper… • The ledger was signed. • Sieke: tension 1 → 2. • Bluewatch • Red-Cord Blockade — pickets doubled lanterns • Sieke • Klaas • Sieke • Klaas • Klaas: nothing changed (today's ordinary is used). • Harmen: nothing moved. • Sieke: mood anxious (feeling -1). • Klaas' look is fixed: a long scarred thi… • Voice: rough r… | temper… • The ledger was signed. • Red-Cord Blockade — pickets doubled lanterns"
+        },
+        {
+            "eventLines": [
+                "Klaas: nothing moved.",
+                "Klaas asked for the ledger."
+            ],
+            "eventWho": [
+                [],
+                []
+            ],
+            "short": "to Harrow; took on Rope",
+            "summary": "Went to Harrow, took on Rope.",
+            "happened": [],
+            "world": [],
+            "search": "Goldwane 19 • to Harrow; took on Rope • Sieke • Sieke • Klaas trust 0 → 1 • Klaas: nothing moved. • Klaas asked for the ledger. • Red-Cord Blockade — doubled"
+        }
+    ],
+    "block": [
+        "[Earlier days]",
+        "Goldwane 20 (2 days ago): Sieke: mood anxious (feeling -1).",
+        "Goldwane 19 (3 days ago): to Harrow; took on Rope"
+    ]
+};
+
+test('W7: the narrator\'s [Earlier days] input (eventLines, short, summary, happened, world, search, and the block) is exactly what it was before the display rules; only the screen\'s rows differ', () => {
+    const days = [auditWhole, auditBrief].map(entry => knownDay(entry, auditHidden, { now: 22 * 1440 }));
+    assert.deepEqual(days.map(promptFields), GOLDEN.fields);
+    assert.deepEqual(backlogBlock({ days: days.map(d => ({ ...d })), now: 22 * 1440, present: ['Sieke'] }), GOLDEN.block);
+    // The screen's rows do differ: no upkeep in Events, no net-zero meter, a word-end cut, a met person's relationships and the story's news shown.
+    const [whole, brief] = days;
+    assert.deepEqual(kindOf(whole, 'events').items.map(row => row.detail), ['Voice: rough r…', 'The ledger was signed.']);
+    assert.deepEqual(kindOf(whole, 'relationships').items.map(row => [row.title, row.tags]), [['Sieke', ['affection 5 → 6', 'tension 1 → 2']]]);
+    assert.deepEqual(kindOf(brief, 'events').items.map(row => row.detail), ['Klaas asked for the ledger.']);
+    assert.notEqual(whole.find, whole.search);
+});
+
+test('W8: a person with a relationship row has no second, loose line on the screen (their net-zero meters included)', () => {
+    const day = knownDay(stored({
+        npcs: [], world: [], met: [], quests: { taken: [], done: [], failed: [], dropped: [] },
+        happened: ['Torka: affection 7 -> 8.', 'Torka: affection 8 -> 7.', 'Torka: affection moved, then settled.', 'Klaas: trust 0 → 1.', 'A stray line.'], tags: ['capture.npc', 'capture.npc', 'capture.npc', 'capture.npc', 'capture.npc'],
+    }), HIDDEN, { now: NOW });
+    assert.deepEqual(kindOf(day, 'relationships').items.map(row => row.title || row.detail), ['Klaas', 'A stray line.']);
+});

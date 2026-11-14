@@ -81,43 +81,56 @@ const wordEnd = value => {
     const head = body.slice(0, at).replace(/[\s,;:|–—-]+$/u, '');
     return head.endsWith('…') ? head : `${head}…`;
 };
-const plain = detail => ({ title: '', chip: '', detail: wordEnd(detail), note: '', since: '', stepsLabel: '', steps: [], tags: [] });
+// `fit` is `wordEnd` for the screen's rows and the identity for the narrator's input (see foldsOf: `display`).
+const same = value => value;
+const plain = (detail, fit = same) => ({ title: '', chip: '', detail: fit(detail), note: '', since: '', stepsLabel: '', steps: [], tags: [] });
+
+// NPC State Delta's per-reply upkeep receipts (mood, drives, taste, a flag or a look fixed, a meeting): not events of the day, shown or not by the screen only.
+const UPKEEP_TYPES = new Set(['npc.mood', 'npc.drives', 'npc.taste', 'npc.flag', 'npc.meet', 'npc.look', 'npc.identity']);
+const UPKEEP_TEXT = /^[^:]{1,80}: (?:nothing moved|meters started|nothing changed)\b/i;
+const isUpkeep = (type, text) => UPKEEP_TYPES.has(type) || UPKEEP_TEXT.test(String(text ?? '').trim());
 
 // "Torka: affection 9 -> 10, desire 7 -> 8 (held at 7)" → one row per person, its meter changes as tags (a meter moved twice: first from, last to).
-function relationRows(lines) {
+function relationRows(lines, display = false) {
     const rows = new Map();
     const loose = [];
+    const named = new Set();
     for (const line of lines) {
         const at = line.indexOf(': ');
         const name = at > 0 ? line.slice(0, at) : '';
         const moves = (at > 0 ? line.slice(at + 2) : line).replace(/\([^)]*\)/g, '').split(',').map(part => ARROW.exec(part.trim())).filter(Boolean);
-        if (!name || !moves.length) { loose.push(plain(line)); continue; }
+        if (!name || !moves.length) { loose.push({ line, name }); continue; }
+        named.add(name.toLowerCase());
         const row = rows.get(name.toLowerCase()) ?? { ...plain(''), title: name, meters: new Map() };
         rows.set(name.toLowerCase(), row);
         for (const [, meter, from, to] of moves) row.meters.set(meter, { from: row.meters.get(meter)?.from ?? from, to: to.replace(/[\s.]+$/, '') });
     }
-    // A meter that ended where it began (7 → 8, then 8 → 7) did not move; a person whose meters all ended so has no row.
-    return [...rows.values()].map(({ meters, ...row }) => ({ ...row, tags: [...meters].filter(([, move]) => move.from !== move.to).map(([meter, move]) => `${meter} ${move.from} → ${move.to}`) })).filter(row => row.tags.length).concat(loose);
+    // On the screen a meter that ended where it began (7 → 8, then 8 → 7) did not move; a person whose meters all ended so has no row.
+    // On the screen only: a person with a row (even one dropped for that) has no second, loose line, and an upkeep line ("nothing changed") is none.
+    const fit = display ? wordEnd : same;
+    const rest = loose.filter(item => !display || (!named.has(item.name.toLowerCase()) && !UPKEEP_TEXT.test(item.line.trim()))).map(item => plain(item.line, fit));
+    const shown = [...rows.values()].map(({ meters, ...row }) => ({ ...row, tags: [...meters].filter(([, move]) => !display || move.from !== move.to).map(([meter, move]) => `${meter} ${move.from} → ${move.to}`) }));
+    return (display ? shown.filter(row => row.tags.length) : shown).concat(rest);
 }
 
 // A day's repeated "Lost X xN (n left)" lines are one: "Lost: A x36, B x12" (the counts of one item add up; a lone one stays as it was).
-function itemRows(lines) {
+function itemRows(lines, fit = same) {
     const lost = lines.map(line => LOST.exec(line)).filter(Boolean);
-    if (lost.length < 2) return lines.map(plain);
+    if (lost.length < 2) return lines.map(line => plain(line, fit));
     const total = new Map();
     for (const [, name, count] of lost) total.set(name, (total.get(name) ?? 0) + (count ? Number(count) : 1));
     const merged = [...total].map(([name, count]) => (count > 1 ? `${name} x${count}` : name));
-    return [...lines.filter(line => !LOST.test(line)).map(plain), plain(`Lost: ${merged.join(', ')}`)];
+    return [...lines.filter(line => !LOST.test(line)).map(line => plain(line, fit)), plain(`Lost: ${merged.join(', ')}`, fit)];
 }
 
 // Events: one row per thread (a quest or thread the lines or the stamps name): its latest line, "N steps today", and "began <date>" on the day it ends.
-function eventRows(day, events, { threads, format }) {
+function eventRows(day, events, { threads, format, fit = same }) {
     const groups = new Map();
     const rows = [];
     for (const { line, thread, who } of events) {
         const known = thread ? threads.get(thread) : null;
         const title = known ? String(known.key ?? '') : '';
-        if (!title || day.hide(title)) { rows.push({ ...plain(line), ...whoOf(who), order: rows.length }); continue; }
+        if (!title || day.hide(title)) { rows.push({ ...plain(line, fit), ...whoOf(who), order: rows.length }); continue; }
         const key = title.toLowerCase();
         const group = groups.get(key) ?? { title, lines: [], thread: known, order: rows.length };
         if (!groups.has(key)) rows.push(group);
@@ -141,7 +154,7 @@ function eventRows(day, events, { threads, format }) {
         const began = ends && isInt(row.thread?.taken?.at) && typeof format === 'function' ? format(row.thread.taken.at) : '';
         const since = began && dayOfMinutes(row.thread.taken.at) !== day.day ? `began ${began}` : '';
         const stepsLabel = row.lines.length > 1 ? `${row.lines.length} steps today` : '';
-        return { ...plain(row.lines.at(-1) ?? ''), title: row.title, chip: row.chip || 'step', note: [stepsLabel, since].filter(Boolean).join(' · '), since, stepsLabel, steps: row.lines.length > 1 ? row.lines.map(wordEnd) : [], ...whoOf(row.who) };
+        return { ...plain(row.lines.at(-1) ?? '', fit), title: row.title, chip: row.chip || 'step', note: [stepsLabel, since].filter(Boolean).join(' · '), since, stepsLabel, steps: row.lines.length > 1 ? row.lines.map(fit) : [], ...whoOf(row.who) };
     });
 }
 
@@ -151,29 +164,33 @@ const dayOfMinutes = minutes => Math.floor(minutes / 1440);
 const textOf = row => [row.title, row.chip, row.detail, row.note, ...row.steps, ...row.tags].filter(Boolean).join(' ');
 
 /** The Journal's folds of one known day: `[{ id, label, count, items: [{ title, chip, detail, note, tags }], search }]`, only kinds with something. */
-function foldsOf(entry, { kept, quests, hidden, threads, format }) {
+function foldsOf(entry, { kept, quests, hidden, threads, format }, display = false) {
+    const fit = display ? wordEnd : same;
     const hide = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
     const made = bucketDay({ ...entry, happened: kept.map(item => item.line), tags: kept.map(item => item.tag) });
     // A short day's own lists were made when it was written, before anything was hidden: they pass the same filter as a whole day's lines, at read time (a later Reveal shows them again).
-    // Every kind passes the same filter: a secret's or an arc's name hides the line. A person with an agenda, or a name a beat or clock shares with
-    // the story's own news, is not a spoiler (the line is the story's own; the planning text is never in it).
+    // `display`: the rows the screen draws. Every kind passes the same filter there: a secret's or an arc's name hides the line (a person with an agenda, or a
+    // name a beat or clock shares with the story's own news, is not a spoiler: the line is the story's own). Without it (the narrator's [Earlier days] input,
+    // eventLines) only relationships and news also hide agenda keys, as before: the prompt is unchanged.
     const plainHide = line => namesHidden(line, hidden.words);
-    if (entry.brief) for (const cat of Object.keys(made)) made[cat] = made[cat].filter(line => !plainHide(line) && !isNarratorNote(line));
+    const relHide = display ? plainHide : hide;
+    if (entry.brief) for (const cat of Object.keys(made)) made[cat] = made[cat].filter(line => !(!display && (cat === 'relationships' || cat === 'news') ? hide(line) : plainHide(line)) && !isNarratorNote(line));
     // Events keep their thread (a short day has only the lines).
-    const events = entry.brief ? (made.events ?? []).map(line => ({ line, thread: '' }))
-        : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events').map(item => ({ line: item.line, thread: parseTag(item.tag).thread, who: item.who }));
+    // On the screen, NPC upkeep ("nothing moved", mood, a look fixed) is not an event; the meter moves are the Relationships rows.
+    const events = entry.brief ? (made.events ?? []).filter(line => !display || !isUpkeep('', line)).map(line => ({ line, thread: '' }))
+        : kept.filter(item => classify({ type: parseTag(item.tag).type, text: item.line }) === 'events' && (!display || !isUpkeep(parseTag(item.tag).type, item.line))).map(item => ({ line: item.line, thread: parseTag(item.tag).thread, who: item.who }));
     const items = [...(made.items ?? []), ...(entry.moneyText && !entry.brief ? [`Money: ${entry.moneyText}`] : [])];
     const rows = {
         met: list(entry.met).map(name => ({ ...plain(''), title: name })),
-        relationships: relationRows((made.relationships ?? []).filter(line => !plainHide(line))),
-        events: eventRows({ day: entry.day, quests, hide }, events, { threads, format }),
-        party: (made.party ?? []).map(plain),
-        items: itemRows(items),
-        standing: (made.standing ?? []).map(plain),
-        fame: (made.fame ?? []).map(plain),
-        guild: (made.guild ?? []).map(plain),
-        reputation: (made.reputation ?? []).map(plain),
-        news: (entry.brief ? made.news ?? [] : list(entry.world).filter(line => !plainHide(line))).map(plain),
+        relationships: relationRows((made.relationships ?? []).filter(line => !relHide(line)), display),
+        events: eventRows({ day: entry.day, quests, hide }, events, { threads, format, fit }),
+        party: (made.party ?? []).map(line => plain(line, fit)),
+        items: itemRows(items, fit),
+        standing: (made.standing ?? []).map(line => plain(line, fit)),
+        fame: (made.fame ?? []).map(line => plain(line, fit)),
+        guild: (made.guild ?? []).map(line => plain(line, fit)),
+        reputation: (made.reputation ?? []).map(line => plain(line, fit)),
+        news: (entry.brief ? made.news ?? [] : list(entry.world).filter(line => !relHide(line))).map(line => plain(line, fit)),
     };
     if (entry.brief) rows.met = (made.met ?? []).map(name => ({ ...plain(''), title: name }));
     return KINDS.filter(([id]) => rows[id].length).map(([id, label]) => ({ id, label, count: rows[id].length, items: rows[id], search: rows[id].map(textOf).join(' • ') }));
@@ -211,9 +228,14 @@ export function knownDay(entry, hidden, { now = null, threads = new Map(), forma
         const line = dayLine(entry.date, { places: list(entry.places), quests, fights: entry.fights ?? { count: 0 }, money: entry.money ?? { in: 0, out: 0 }, npcs, world, happened, count: Math.max(0, (entry.count ?? 0) - removed) });
         short = entry.date && line.startsWith(`${entry.date}: `) ? line.slice(entry.date.length + 2) : line;
     }
-    const cats = foldsOf(entry, { kept, quests, hidden, threads, format });
-    const events = cats.find(cat => cat.id === 'events');
-    const search = [entry.date, short, ...happened, ...list(entry.places), ...Object.values(quests).flatMap(list), ...npcs, ...world, ...met, ...cats.map(cat => cat.search)].join(' • ');
+    // The narrator's input (`eventLines`, `eventWho`, `search`) is worked out as it always was; the screen's own rows (`cats`, `meta`, `line`, `find`) by the display rules.
+    const context = { kept, quests, hidden, threads, format };
+    const told = foldsOf(entry, context);
+    const events = told.find(cat => cat.id === 'events');
+    const search = [entry.date, short, ...happened, ...list(entry.places), ...Object.values(quests).flatMap(list), ...npcs, ...world, ...met, ...told.map(cat => cat.search)].join(' • ');
+    const cats = foldsOf(entry, context, true);
+    const shown = cats.find(cat => cat.id === 'events');
+    const find = [entry.date, short, ...happened, ...list(entry.places), ...Object.values(quests).flatMap(list), ...npcs, ...world, ...met, ...cats.map(cat => cat.search)].join(' • ');
     const ago = isInt(now) && isInt(entry.day) ? agoWords(dayOf(now) - entry.day) : '';
     return {
         day: entry.day,
@@ -232,10 +254,13 @@ export function knownDay(entry, hidden, { now = null, threads = new Map(), forma
         cats,
         hasCats: cats.length > 0,
         ago,
-        eventCount: events?.count ?? 0,
+        eventCount: shown?.count ?? 0,
         // The "today" pill stands for today's own ago; every day tells its events ("quiet day" with none).
-        meta: [entry.today === true ? '' : ago, events ? `${events.count} ${events.count === 1 ? 'event' : 'events'}` : 'quiet day'].filter(Boolean).join(' · '),
-        summary: wordEnd(summaryOf(short)),
+        meta: [entry.today === true ? '' : ago, shown ? `${shown.count} ${shown.count === 1 ? 'event' : 'events'}` : 'quiet day'].filter(Boolean).join(' · '),
+        summary: summaryOf(short),
+        // What the screen draws: the summary cut at a word end, and its search text (`search` is the narrator's, kept as it was).
+        line: wordEnd(summaryOf(short)),
+        find,
         // One line per event row (the thread's latest), for the narrator's [Earlier days] block.
         eventLines: (events?.items ?? []).map(row => (row.title ? `${row.title} (${row.chip}${row.note ? `, ${row.note}` : ''}): ${row.detail}`.replace(/: $/, '') : row.detail)),
         // Who was there for each of those lines (parallel; [] when unknown), for the same block's witnesses.

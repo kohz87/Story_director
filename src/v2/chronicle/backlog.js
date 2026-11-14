@@ -48,7 +48,6 @@ const PRESENT_TYPES = new Set(['capture.present', 'scene.present', 'npc.present'
 // The text shapes of a stored line without its type (older digests): the first that matches wins.
 const SHAPES = [
     [/^Key people: noted/, 'bookkeeping'],
-    [/^[^:]{1,80}: (?:nothing moved|meters started)\.?$/i, 'bookkeeping'],
     [/\b(?:is|is not) here\.?$/i, 'bookkeeping'],
     [/\b(?:left the party|is back in the party|bound gear|Gear:)/i, 'party'],
     [/^Lost\b|^Found\b|\b(?:copper|silver|gold)\b/i, 'items'],
@@ -71,10 +70,6 @@ export function classify(entry) {
     if (type && BOOKKEEPING_TYPES.has(type)) return 'bookkeeping';
     if (PRESENT_TYPES.has(type) && PRESENCE_TEXT.test(body)) return 'bookkeeping';
     if (type === 'npc.tick' && !/^Key people: /.test(body)) return 'bookkeeping';
-    // A reply that moved nobody's meters ("Sieke: nothing changed (today's ordinary is used).") says nothing to show.
-    if (type === 'capture.npc' && /^[^:]{1,80}: nothing changed\b/.test(body)) return 'bookkeeping';
-    // NPC State Delta's per-reply meter upkeep (mood, drives, taste, a look fixed, "meters started", "nothing moved"): the meter moves themselves are the Relationships rows.
-    if (type.startsWith('npc.') && !BY_TYPE.has(type)) return 'bookkeeping';
     if (type && BY_TYPE.has(type)) return BY_TYPE.get(type);
     const [base, kind] = type.split(':');
     if (kind && BY_TYPE.get(base) === 'reputation') return DM_KINDS.get(kind) ?? DEFAULT_CATEGORY;
