@@ -27,8 +27,10 @@ import { threadsOn } from '../threads.js';
 export const FEATURE = 'story-director.world';
 export const DEFAULT_UPCOMING_DAYS = 30;
 export const MAX_UPCOMING_DAYS = 365;
-// Story Block's cap on chatter lines a reply (MODULES §F115), read no further.
-const MAX_THOUGHTS = 3;
+// Story Block's own limit on its "Most chatter lines per reply" setting (CHATTER_LIMIT, MODULES §F115). `chatter.head`
+// already holds only as many lines as the reader's setting allowed (3 unless set), so this is only a safety bound:
+// it must not be lower than the setting, or the last people's cards lose their thought.
+const MAX_THOUGHTS = 10;
 // A thought on the World tab is cut to this many code points: the same as Story Block's CHATTER_CHARS (extras.js).
 const THOUGHT_CHARS = 240;
 /** How many of each list the Now view shows. */
