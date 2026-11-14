@@ -348,8 +348,8 @@ test('pulse: skipped (and the reason recorded) in a fight, in a quiet scene, wit
 test('pulse: the hook asks for one step per reply written; a swipe is one below the chat length; a Continue, off and mode off ask for none', () => {
     const state = clocked();
     const view = (extra = {}) => ({ state, settings: {}, chat: { length: 5, lastUser: '' }, ...extra });
-    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3, persona: '' } }] });
-    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3, persona: '' } }] });
+    assert.deepEqual(pulseHook(view()), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3, pulse: 2, persona: '' } }] });
+    assert.deepEqual(pulseHook(view({ chat: { length: 6 } }), { type: 'swipe' }), { commands: [{ type: PULSE, payload: { at: 5, age: 1, reach: 3, pulse: 2, persona: '' } }] });
     assert.ok(pulseHook(view(), { type: 'regenerate' }));
     assert.equal(pulseHook(view(), { type: 'continue', commit: false }), undefined);
     assert.equal(pulseHook(view({ feature: id => id !== 'story-director.pulse' })), undefined);
@@ -506,4 +506,100 @@ test('chance meeting: a step recorded before the reach rule (no `reach`) replays
     assert.deepEqual(old.payload.who, [{ key: 'ersveil:rika', why: 'goal', reason: 'chance meeting', place: 'Bluewatch Village' }]);
     assert.deepEqual(meetEntry({ cast, at: 4, place: 'Bluewatch Village', draw: { actor: 0.1 }, here: new Set(['ersveil:rika']) }).payload.who, [{ key: 'ersveil:rika', why: 'place', reason: '' }]);
     assert.equal(meetEntry({ cast: { people: {} }, at: 4, place: 'Bluewatch Village', here: new Set() }), null, 'nobody who can be here: the roll steps down');
+});
+
+// ---- World pulse step version 2: intensity, the narrator brief, recent memory, wider fallback lines ----
+
+import { INTENSITIES, QUIET_SPREAD, briefFor, flavourLines, intensityOf } from '../../../src/v2/pulse/tables.js';
+
+const V2 = { age: 1, reach: 3, pulse: 2 };
+const pulseChain = (state, seeds, { settings = {}, payload = V2 } = {}) => {
+    let current = state;
+    for (let at = 1; at <= seeds; at += 1) current = pulseAt(current, at * 7 + 3, { at, settings, payload }).state;
+    return resultsOf(current.domains.director);
+};
+
+test('pulse v2: intensity is about 1 in 5 intrusive, mostly around/noticed, and never two intrusive in a row', () => {
+    const counts = { around: 0, noticed: 0, intrusive: 0 };
+    for (let i = 0; i < 1000; i += 1) counts[intensityOf(i / 1000)] += 1;
+    assert.deepEqual(INTENSITIES, ['around', 'noticed', 'intrusive']);
+    assert.ok(counts.intrusive >= 150 && counts.intrusive <= 250, `intrusive share ${counts.intrusive}`);
+    assert.ok(counts.around + counts.noticed >= 750);
+    for (let i = 0; i < 1000; i += 1) assert.notEqual(intensityOf(i / 1000, 'intrusive'), 'intrusive');
+    assert.equal(intensityOf(0.001), 'intrusive');
+});
+
+test('pulse v2: a roll gives a brief for the narrator (kind, intensity, place group, the guide, recent pulses); invents off gives the fixed line; a v1 step gives no intensity', () => {
+    const state = clocked();
+    const on = pulseChain(state, 12).filter(entry => entry.invent);
+    assert.ok(on.length > 0, 'some briefs');
+    for (const entry of on) {
+        assert.ok(INTENSITIES.includes(entry.intensity));
+        assert.match(entry.brief, /^\[[a-z ]+, (around|noticed|intrusive), [a-z]+\] invent ONE small plausible thing/);
+        assert.match(worldLine(entry.brief, 330), /^World this reply: \[/);
+        assert.ok(entry.brief.length <= 330);
+        assert.match(entry.text, /^[a-z ]+ \((around|noticed|intrusive)\): the narrator invents it$/);
+        assert.ok(!/invent ONE/.test(entry.text), 'the display text never holds the brief');
+    }
+    assert.match(on.at(-1).brief, /not like: |no repeats/);
+    const off = pulseChain(state, 12, { settings: { invents: false } });
+    assert.ok(off.every(entry => !entry.invent && !/invent ONE/.test(entry.text)), 'fixed lines when the switch is off');
+    assert.ok(off.some(entry => entry.text), 'fixed lines have text');
+    assert.ok(pulseTexts(state, 60).every(entry => entry.intensity === undefined && !entry.invent), 'a step without the version flag rolls as before');
+});
+
+test('pulse v2: never the same kind twice in a row, intensity never intrusive twice; the brief lists the last three', () => {
+    for (const settings of [{}, { mode: 'quiet' }]) {
+        const results = pulseChain(clocked(), 40, { settings });
+        for (let i = 1; i < results.length; i += 1) {
+            if (results[i].kind !== 'CALM') assert.notEqual(results[i].kind, results[i - 1].kind, `repeat at ${i}`);
+            assert.ok(!(results[i].intensity === 'intrusive' && results[i - 1].intensity === 'intrusive'), `double intrusive at ${i}`);
+        }
+    }
+    assert.match(briefFor({ kind: 'MOOD_SWING', intensity: 'noticed', group: 'town', name: 'Elula', recent: [{ kind: 'A_B', intensity: 'around' }, { kind: 'C', intensity: 'intrusive' }] }), /\(Elula may figure\).*not like: around a b, intrusive c$/);
+    assert.ok(!/[{}<>]/.test(briefFor({ kind: 'CALM', name: '{x}<b>' })));
+});
+
+test('pulse v2: the fallback has more lines per kind and group, quiet mode spreads over other kinds, and v1 keeps the short list', () => {
+    for (const kind of ['BACKGROUND_INCIDENT', 'MUNDANE_INTERRUPTION', 'MOOD_SWING', 'PHYSICAL_REACTION', 'OBJECT_DISCOVERY', 'OUTSIDE_INTRUSION', 'MEMORY_TRIGGER', 'POWER_SHIFT']) {
+        for (const group of ['wild', 'town', 'indoors', 'road', 'water']) {
+            assert.equal(flavourLines(kind, group, null, false).length, 1);
+            const wide = flavourLines(kind, group, null, true);
+            assert.ok(wide.length >= 5, `${kind}/${group}`);
+            assert.equal(new Set(wide).size, wide.length);
+            for (const text of wide) assert.ok(text.replace('{place}', 'Harrow').replace('{name}', 'Elula').length <= 128 && !/[<>]/.test(text), text);
+        }
+    }
+    assert.equal(new Set(Object.values(QUIET_SPREAD)).size, 5);
+    const quiet = pulseChain(clocked(), 60, { settings: { mode: 'quiet', invents: false } });
+    assert.ok(new Set(quiet.map(entry => entry.kind)).size >= 5, 'quiet pulses spread over kinds');
+});
+
+test('pulse v2: the invents switch is a setting, default on; the hook marks new steps as version 2', () => {
+    assert.equal(pulsePart.settings.defaults.invents, true);
+    assert.equal(pulsePart.settings.schema.invents.label, 'Pulse invents events (model)');
+    assert.equal(pulseHook({ state: clocked(), settings: {}, chat: { length: 5, lastUser: '' } }).commands[0].payload.pulse, 2);
+});
+
+test('pulse v2: an invent entry shows a display text (no narrator brief) on the Director card and the under-reply row; the note carries the brief', async () => {
+    const { createScreensPart } = await import('../../../src/v2/screens/index.js');
+    const state = clocked();
+    const stepped = pulseAt(state, 11, { settings: { mode: 'lively' }, payload: V2 });
+    const entry = resultsOf(stepped.state.domains.director).find(item => item.invent) ?? pulseChain(state, 12).find(item => item.invent);
+    assert.ok(entry, 'an invent entry');
+    const view = createScreensPart({ settings: { 'pulse.mode': 'lively', 'pulse.showUnderReply': true } }).queries['pulse.view'](stepped.state, {}, {});
+    for (const row of [view.now, ...view.recent].filter(Boolean)) assert.ok(!/invent ONE/.test(row.text ?? ''), `row text: ${row.text}`);
+    assert.ok(/invent ONE/.test(worldLine(entry.brief, 330)));
+});
+
+test('pulse v2: quiet mode when the spread kind is the last kind steps down (blocked, retried) without a repeat, a throw or an empty entry', () => {
+    for (let seed = 1; seed <= 150; seed += 1) {
+        const first = pulseAt(clocked(), seed, { settings: { mode: 'quiet' }, payload: V2 });
+        assert.equal(first.ok, true, first.message);
+        const second = pulseAt(first.state, seed + 500, { at: 6, settings: { mode: 'quiet' }, payload: V2 });
+        assert.equal(second.ok, true, second.message);
+        const [a, b] = resultsOf(second.state.domains.director).slice(-2);
+        assert.ok(b && typeof b.kind === 'string');
+        if (b.kind !== 'CALM') assert.notEqual(b.kind, a.kind, `repeat at seed ${seed}`);
+    }
 });
