@@ -190,6 +190,15 @@ test('Here: a 200-character thought is kept whole; a 300-character one is cut to
     assert.equal(Array.from(text('Kell')).length, 240);
 });
 
+test('Here: a reply with five chatter lines (setting 8) gives all five people their thought, the last two included', () => {
+    const names = ['Watch-Captain Roeland', 'Klaas', 'Harmen', 'Sieke', 'Sister Temiwa'];
+    const lines = names.map(name => ({ name, text: `${name} thinks` }));
+    const query = name => ({ 'scene.present': ['Sieke', 'Sister Temiwa', 'Klaas', 'Harmen', 'Watch-Captain Roeland'], 'chatter.head': lines })[name] ?? null;
+    const here = hereView({}, {}, query);
+    for (const name of names) assert.equal(here.people.find(person => person.name === name).thought, `${name} thinks`, name);
+    assert.equal(here.chatter.length, 5);
+});
+
 // While NPC State Delta reads a new reply (page.busy()): the last cards stay with an "updating" label.
 test('busy with no cards keeps the last cards and the label; done redraws without it; no earlier cards gives a chip; no busy() as before', async () => {
     const people = { Mira: { rank: 'Friend' }, 'Old Tom': {} };
