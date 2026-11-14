@@ -6,8 +6,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installFakeDom } from '../../ui-fake-dom.js';
 import { resolveData, runtime, skipReason } from './helpers/runtime.js';
-import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, rats, wolves } from './helpers/fixtures.js';
+import { at, calendar, earlierState, headState, makeQueries, makeRunner, makeState, plot, raid, rats, smuggler, thread, wolves } from './helpers/fixtures.js';
 import { DIRECTOR_ID, QUESTS_ID, STATUS_CARD_ID, createBehindWidget, createScreensPart, createRipplesWidget, part, planWidget, questsWidget, screens } from '../../../src/v2/screens/index.js';
+import { SPOILER_STORE, createSpoilerPreference, createSpoilerSwitchWidget, spoilerSwitchWidget } from '../../../src/v2/screens/director.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
 import { toSlot } from '../../../src/v2/slot.js';
 
@@ -16,14 +17,14 @@ import { toSlot } from '../../../src/v2/slot.js';
 let shown = true;
 const stillReveal = { guard: () => true, revealed: () => shown, set: on => { shown = on; }, hidden: () => !shown, subscribe: () => () => {} };
 const noPlanner = { status: () => ({ available: true, busy: false, draft: null, error: '', hidden: !shown, arc: null }), subscribe: () => () => {}, plan() {}, end() {} };
-const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.plan': planWidget, 'story-director.ripples': createRipplesWidget() });
+const moduleWidgets = () => ({ ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.quests': questsWidget, 'story-director.plan': planWidget, 'story-director.ripples': createRipplesWidget(), 'story-director.spoiler-switch': spoilerSwitchWidget });
 
 const skip = runtime ? false : skipReason;
 const byId = Object.fromEntries(screens.map(screen => [screen.id, screen]));
 const formatters = { time: minutes => (Number.isInteger(minutes) ? calendar.format(minutes) : '') };
 const squash = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0], queries = makeQueries(), index = undefined } = {}) {
+function draw(id, state, { command = null, changes = [], mount = byId[id].mounts[0], queries = makeQueries(), index = undefined, widgets = moduleWidgets() } = {}) {
     const { run } = makeRunner(queries);
     const screen = byId[id];
     const doc = installFakeDom();
@@ -38,13 +39,13 @@ function draw(id, state, { command = null, changes = [], mount = byId[id].mounts
     const results = [];
     const view = runtime.renderTemplate(el, compiled, { state, q: data.q, changes, settings: {}, mount, screenId: id, index, api: {} }, {
         evaluate: runtime.evaluate,
-        widgets: moduleWidgets(),
+        widgets,
         formatters,
         command,
         onWarn: message => warnings.push(message),
         onResult: result => results.push(result),
     });
-    return { el, view, warnings, results, doc };
+    return { el, view, warnings, results, doc, data };
 }
 
 const button = (root, label) => root.querySelectorAll('button').filter(node => squash(node.textContent) === label);
@@ -75,6 +76,77 @@ test('director: the arc then the plan cards; secrets by name; problems (visible,
     assert.equal(el.querySelector('.sd-empty'), null);
     const { el: none } = draw(DIRECTOR_ID, makeState());
     assert.match(squash(none.textContent), /Director shows spoilers .*No arc planned yet\. Plan arc Nothing planned yet\.$/);
+});
+
+test('director spoiler switch hides all planning cards, keeps pulse and quiet, survives redraws and restores from either control', { skip }, () => {
+    const values = new Map();
+    const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    const preference = createSpoilerPreference({ storage });
+    const widgets = { ...moduleWidgets(), 'story-director.spoiler-switch': createSpoilerSwitchWidget({ preference }) };
+    const state = headState({ threads: [
+        thread('th_beat0001', 'beat', 'A secret meeting'), thread('th_hook0001', 'hook', 'A planned hook', { then: 'the trap closes' }),
+        raid(), smuggler(), plot(),
+    ] });
+    const queries = { ...makeQueries(), 'ripples.sway': () => [{ id: 'power', name: 'Power', sway: 52, reasons: [] }] };
+    const sent = [];
+    const first = draw(DIRECTOR_ID, state, { widgets, queries, command: (type, payload) => sent.push([type, payload]) });
+    assert.deepEqual(first.warnings, []);
+    const root = first.el;
+    const group = root.querySelector('.sd-spoilers');
+    const toggle = root.querySelector('button.sd-spoil');
+    const note = root.querySelector('.sd-spoiler-note');
+    assert.equal(toggle.getAttribute('role'), 'switch');
+    assert.equal(toggle.getAttribute('aria-label'), 'Show spoilers');
+    assert.equal(toggle.getAttribute('aria-checked'), 'true');
+    assert.equal(group.hidden, false);
+    assert.equal(note.hidden, true);
+    for (const kind of ['arc', 'beat', 'hook', 'clock', 'agenda', 'secret', 'problem', 'ripples']) {
+        const card = root.querySelector(`section[data-kind="${kind}"]`);
+        assert.ok(card && group.contains(card), `${kind} is in the spoiler group`);
+    }
+    assert.ok(root.querySelector('section[data-kind="pulse"]'));
+    assert.ok(root.querySelector('.sd-quiet'));
+    assert.equal(group.contains(root.querySelector('section[data-kind="pulse"]')), false);
+    assert.equal(group.contains(root.querySelector('.sd-quiet')), false);
+    toggle.focus();
+    toggle.click();
+    assert.equal(first.doc.activeElement, toggle);
+    assert.equal(toggle.getAttribute('aria-checked'), 'false');
+    assert.equal(group.hidden, true);
+    assert.equal(note.hidden, false);
+    assert.equal(note.textContent, 'Spoilers hidden — tap to show');
+    assert.equal(values.get(SPOILER_STORE), 'hidden');
+    assert.deepEqual(sent, [], 'a view preference sends no story command');
+    first.view.update({ state, q: first.data.q, changes: [], settings: {}, mount: 'screen', screenId: DIRECTOR_ID, api: {} });
+    assert.equal(group.hidden, true, 'a screen redraw keeps spoilers hidden');
+    root.querySelector('.sd-quiet button').click();
+    assert.deepEqual(sent, [['director.pulse.quiet', { on: true }]], 'quiet scene still works');
+    const second = draw(DIRECTOR_ID, state, { widgets, queries });
+    assert.equal(second.el.querySelector('.sd-spoilers').hidden, true, 'another mounted view shares the choice');
+    const reloaded = createSpoilerPreference({ storage });
+    assert.equal(reloaded.shown(), false, 'a new page reads the saved device choice');
+    note.click();
+    assert.equal(group.hidden, false);
+    assert.equal(second.el.querySelector('.sd-spoilers').hidden, false);
+    assert.equal(toggle.getAttribute('aria-checked'), 'true');
+    assert.equal(values.get(SPOILER_STORE), 'shown');
+    toggle.click();
+    toggle.click();
+    assert.equal(group.hidden, false, 'the switch itself also restores the cards');
+    first.view.destroy();
+    second.view.destroy();
+});
+
+test('director spoiler preference defaults to shown and keeps a page choice when storage is blocked or damaged', () => {
+    const denied = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('full'); } };
+    const preference = createSpoilerPreference({ storage: denied });
+    assert.equal(preference.shown(), true);
+    preference.set(false);
+    assert.equal(preference.shown(), false);
+    preference.set(true);
+    assert.equal(preference.shown(), true);
+    assert.equal(createSpoilerPreference({ storage: { getItem: () => 'unexpected' } }).shown(), true);
+    assert.equal(createSpoilerPreference({ storage: null }).shown(), true);
 });
 
 test('status card: time, place, goal and step, progress, with what this reply changed marked; no next beat', { skip }, () => {
