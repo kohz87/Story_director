@@ -5,8 +5,8 @@
 // itself (same seed), so a swipe, a regenerate or a delete of the reply takes its roll and effects back. Its receipt's summary is the one
 // "World this reply: …" cue (none on CALM or a skip; at most 40 tokens), told in the leading note, not an optional tail line.
 // A reply is skipped (and the skip recorded) in a fight, after a rest or a 6+ hour jump, in a quiet scene and while the clock is unset.
-// Pulse step version 2 (payload `pulse: 2`, every new reply; older steps replay as written): each result has an `intensity`, never two intrusive or the
-// same kind running; a flavour kind's text is a brief for the narrator to invent the event (setting `invents`), else a fixed line (more of them, flavour-more.js).
+// Pulse step version 2 (payload `pulse: 2`, new replies; older steps replay as written): each result has an `intensity`; never two intrusive or the same kind running;
+// a flavour kind with `invent: true` shows a short `text` and carries the narrator `brief` for the note (setting `invents`), else a fixed line (flavour-more.js).
 // The builders below are pure (no state, no ctx, no model call); the part (the command, hook, settings) is at the end.
 //
 // Each builder takes the filtered candidates and the roll's draw units (tables.js drawsFrom): `actor` picks the candidate, `line` decides the
@@ -43,9 +43,9 @@ export const REPLY_MINUTES = 20;
  * replies' own rolls record them, `foes`), the pulse rolls again. A step from a reply written before this rule has no `age` flag and keeps the old rule.
  */
 export const STALE_REPLIES = 2;
-// The note line is at most 40 tokens (4 characters each): the label and TAIL_CHARS of text stay under 150 characters.
+// The note line is at most 40 tokens (4 chars each): the label and TAIL_CHARS of text stay under 150; BRIEF_CHARS is the version 2 narrator brief.
 export const TAIL_CHARS = 128;
-export const BRIEF_CHARS = 330; // the narrator brief of pulse step version 2 (about 85 tokens)
+export const BRIEF_CHARS = 330;
 export const RUMOUR_ROOM = 54;
 export const SKIP_REASONS = Object.freeze(['fight', 'rest', 'jump', 'quiet', 'clock']);
 const NAME_MAX = 80;
@@ -325,12 +325,11 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
         const rolled = resolveKind(table, d20, { group, weather, counts, blocked });
         // Quiet: an effect entry keeps its band but reads as its flavour fallback.
         const quiet = !lively && (v2 ? QUIET_SPREAD : QUIET_FALLBACK)[rolled.kind];
-        if (quiet && v2 && quiet === lastKind) { blocked.add(rolled.kind); continue; }
-        if (quiet) rolled.kind = quiet;
+        if (quiet && v2 && quiet === lastKind) { blocked.add(rolled.kind); continue; } else if (quiet) rolled.kind = quiet;
         const base = { d20, table, kind: rolled.kind, ...(intensity ? { intensity } : {}), ...(place ? { place } : {}) };
         if (!EFFECTS.has(rolled.kind)) {
             const who = others.length ? others[pickIndex(others.length, draw.actor)]?.name : '';
-            if (material && rolled.kind !== 'CALM') return { ...base, invent: true, text: cutWord(briefFor({ kind: rolled.kind, intensity, group, name: ACTOR_NEEDS[rolled.kind] === 'present' ? who : '', recent }), BRIEF_CHARS) };
+            if (material && rolled.kind !== 'CALM') return { ...base, invent: true, text: `${rolled.kind.toLowerCase().replaceAll('_', ' ')} (${intensity}): the narrator invents it`, brief: cutWord(briefFor({ kind: rolled.kind, intensity, group, name: ACTOR_NEEDS[rolled.kind] === 'present' ? who : '', recent }), BRIEF_CHARS) };
             const text = rolled.kind === 'CALM' ? '' : fillSlots(flavourFor(rolled.kind, draw.line, { group, weather, wide: v2 }), { name: who, place });
             return { ...base, ...(who && text.includes(who) ? { who } : {}), text: cutWord(text, TAIL_CHARS) };
         }
@@ -401,7 +400,7 @@ export function pulseCommand(ctx, payload = {}) {
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
-    const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text, entry.invent ? BRIEF_CHARS : TAIL_CHARS);
+    const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.brief ?? entry.text, entry.brief ? BRIEF_CHARS : TAIL_CHARS);
     // A chance meeting also carries the cast's cue for the person met: the prelude is previewed on the head state, which has no meeting yet.
     return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { keep: true, kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
 }

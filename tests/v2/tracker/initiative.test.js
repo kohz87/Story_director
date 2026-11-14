@@ -535,11 +535,13 @@ test('pulse v2: a roll gives a brief for the narrator (kind, intensity, place gr
     assert.ok(on.length > 0, 'some briefs');
     for (const entry of on) {
         assert.ok(INTENSITIES.includes(entry.intensity));
-        assert.match(entry.text, /^\[[a-z ]+, (around|noticed|intrusive), [a-z]+\] invent ONE small plausible thing/);
-        assert.match(worldLine(entry.text, 330), /^World this reply: \[/);
-        assert.ok(entry.text.length <= 330);
+        assert.match(entry.brief, /^\[[a-z ]+, (around|noticed|intrusive), [a-z]+\] invent ONE small plausible thing/);
+        assert.match(worldLine(entry.brief, 330), /^World this reply: \[/);
+        assert.ok(entry.brief.length <= 330);
+        assert.match(entry.text, /^[a-z ]+ \((around|noticed|intrusive)\): the narrator invents it$/);
+        assert.ok(!/invent ONE/.test(entry.text), 'the display text never holds the brief');
     }
-    assert.match(on.at(-1).text, /not like: |no repeats/);
+    assert.match(on.at(-1).brief, /not like: |no repeats/);
     const off = pulseChain(state, 12, { settings: { invents: false } });
     assert.ok(off.every(entry => !entry.invent && !/invent ONE/.test(entry.text)), 'fixed lines when the switch is off');
     assert.ok(off.some(entry => entry.text), 'fixed lines have text');
@@ -577,4 +579,27 @@ test('pulse v2: the invents switch is a setting, default on; the hook marks new 
     assert.equal(pulsePart.settings.defaults.invents, true);
     assert.equal(pulsePart.settings.schema.invents.label, 'Pulse invents events (model)');
     assert.equal(pulseHook({ state: clocked(), settings: {}, chat: { length: 5, lastUser: '' } }).commands[0].payload.pulse, 2);
+});
+
+test('pulse v2: an invent entry shows a display text (no narrator brief) on the Director card and the under-reply row; the note carries the brief', async () => {
+    const { createScreensPart } = await import('../../../src/v2/screens/index.js');
+    const state = clocked();
+    const stepped = pulseAt(state, 11, { settings: { mode: 'lively' }, payload: V2 });
+    const entry = resultsOf(stepped.state.domains.director).find(item => item.invent) ?? pulseChain(state, 12).find(item => item.invent);
+    assert.ok(entry, 'an invent entry');
+    const view = createScreensPart({ settings: { 'pulse.mode': 'lively', 'pulse.showUnderReply': true } }).queries['pulse.view'](stepped.state, {}, {});
+    for (const row of [view.now, ...view.recent].filter(Boolean)) assert.ok(!/invent ONE/.test(row.text ?? ''), `row text: ${row.text}`);
+    assert.ok(/invent ONE/.test(worldLine(entry.brief, 330)));
+});
+
+test('pulse v2: quiet mode when the spread kind is the last kind steps down (blocked, retried) without a repeat, a throw or an empty entry', () => {
+    for (let seed = 1; seed <= 150; seed += 1) {
+        const first = pulseAt(clocked(), seed, { settings: { mode: 'quiet' }, payload: V2 });
+        assert.equal(first.ok, true, first.message);
+        const second = pulseAt(first.state, seed + 500, { at: 6, settings: { mode: 'quiet' }, payload: V2 });
+        assert.equal(second.ok, true, second.message);
+        const [a, b] = resultsOf(second.state.domains.director).slice(-2);
+        assert.ok(b && typeof b.kind === 'string');
+        if (b.kind !== 'CALM') assert.notEqual(b.kind, a.kind, `repeat at seed ${seed}`);
+    }
 });
