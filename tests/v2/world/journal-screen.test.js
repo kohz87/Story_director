@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DAYS_ID, WORLD_ID, daysScreen, knownDay, part, worldScreen } from '../../../src/v2/world/index.js';
+import { DAYS_ID, WORLD_ID, daysScreen, hiddenNames, knownDay, part, worldScreen } from '../../../src/v2/world/index.js';
 import { backlogBlock } from '../../../src/v2/chronicle/backlog.js';
 import { DIGEST_FEATURE } from '../../../src/v2/chronicle/days.js';
 import { part as chronicle } from '../../../src/v2/chronicle/index.js';
@@ -324,7 +324,9 @@ test('W6: a meter that ended where it began is no change (a person with none has
 
 // ---- display only: the narrator's [Earlier days] input is byte-identical to before (14 Nov) ------------------------------------------
 
-const auditHidden = { words: new Set(['duke betrayal']), behind: new Set(['sieke', 'red-cord blockade']) };
+// The hidden names are built as the Journal builds them (an agenda person, a beat named like the story's own world event, a secret).
+const auditThread = (id, kind, key) => ({ id, kind, key, status: 'active' });
+const auditHidden = hiddenNames({ domains: { director: { threads: { a: auditThread('a', 'agenda', 'Sieke'), b: auditThread('b', 'beat', 'Red-Cord Blockade'), c: auditThread('c', 'secret', 'Duke Betrayal') } } } });
 const auditQ = { taken: [], done: [], failed: [], dropped: [] };
 const auditWhole = { day: 20, date: 'Goldwane 20', short: 'to Bluewatch; Name: Watch-Captain Roeland is new; look: mid-forties human man, broad-…', facts: [], more: 0, met: ['Sieke', 'Klaas'], npcs: [], places: ['Bluewatch'], quests: auditQ,
     world: ['Red-Cord Blockade — pickets doubled lanterns', 'The Duke Betrayal spreads.'],
@@ -349,8 +351,8 @@ const GOLDEN = {
                 [],
                 []
             ],
-            "short": "to Bluewatch; 1 world event.",
-            "summary": "Went to Bluewatch, 1 world event.",
+            "short": "to Bluewatch.",
+            "summary": "Went to Bluewatch.",
             "happened": [
                 "Sieke: trust 7 → 8, affection 5 → 6.",
                 "Sieke: trust 8 → 7.",
@@ -362,10 +364,8 @@ const GOLDEN = {
                 "The ledger was signed.",
                 "Sieke: tension 1 → 2."
             ],
-            "world": [
-                "Red-Cord Blockade — pickets doubled lanterns"
-            ],
-            "search": "Goldwane 20 • to Bluewatch; 1 world event. • Sieke: trust 7 → 8, affection 5 → 6. • Sieke: trust 8 → 7. • Klaas: nothing changed (today's ordinary is used). • Sieke: mood anxious (feeling -1). • Harmen: nothing moved. • Klaas' look is fixed: a long scarred thi… • Voice: rough r… | temper… • The ledger was signed. • Sieke: tension 1 → 2. • Bluewatch • Red-Cord Blockade — pickets doubled lanterns • Sieke • Klaas • Sieke • Klaas • Klaas: nothing changed (today's ordinary is used). • Harmen: nothing moved. • Sieke: mood anxious (feeling -1). • Klaas' look is fixed: a long scarred thi… • Voice: rough r… | temper… • The ledger was signed. • Red-Cord Blockade — pickets doubled lanterns"
+            "world": [],
+            "search": "Goldwane 20 • to Bluewatch. • Sieke: trust 7 → 8, affection 5 → 6. • Sieke: trust 8 → 7. • Klaas: nothing changed (today's ordinary is used). • Sieke: mood anxious (feeling -1). • Harmen: nothing moved. • Klaas' look is fixed: a long scarred thi… • Voice: rough r… | temper… • The ledger was signed. • Sieke: tension 1 → 2. • Bluewatch • Sieke • Klaas • Sieke • Klaas • Klaas: nothing changed (today's ordinary is used). • Harmen: nothing moved. • Sieke: mood anxious (feeling -1). • Klaas' look is fixed: a long scarred thi… • Voice: rough r… | temper… • The ledger was signed."
         },
         {
             "eventLines": [
@@ -380,7 +380,7 @@ const GOLDEN = {
             "summary": "Went to Harrow, took on Rope.",
             "happened": [],
             "world": [],
-            "search": "Goldwane 19 • to Harrow; took on Rope • Sieke • Sieke • Klaas trust 0 → 1 • Klaas: nothing moved. • Klaas asked for the ledger. • Red-Cord Blockade — doubled"
+            "search": "Goldwane 19 • to Harrow; took on Rope • Sieke • Sieke • Klaas trust 0 → 1 • Klaas: nothing moved. • Klaas asked for the ledger."
         }
     ],
     "block": [
@@ -393,11 +393,13 @@ const GOLDEN = {
 test('W7: the narrator\'s [Earlier days] input (eventLines, short, summary, happened, world, search, and the block) is exactly what it was before the display rules; only the screen\'s rows differ', () => {
     const days = [auditWhole, auditBrief].map(entry => knownDay(entry, auditHidden, { now: 22 * 1440 }));
     assert.deepEqual(days.map(promptFields), GOLDEN.fields);
+    assert.deepEqual(days[0].world, [], 'the beat-named world line stays out of the narrator\'s input (the screen\'s News shows it)');
     assert.deepEqual(backlogBlock({ days: days.map(d => ({ ...d })), now: 22 * 1440, present: ['Sieke'] }), GOLDEN.block);
     // The screen's rows do differ: no upkeep in Events, no net-zero meter, a word-end cut, a met person's relationships and the story's news shown.
     const [whole, brief] = days;
     assert.deepEqual(kindOf(whole, 'events').items.map(row => row.detail), ['Voice: rough r…', 'The ledger was signed.']);
     assert.deepEqual(kindOf(whole, 'relationships').items.map(row => [row.title, row.tags]), [['Sieke', ['affection 5 → 6', 'tension 1 → 2']]]);
+    assert.deepEqual(kindOf(whole, 'news').items.map(row => row.detail), ['Red-Cord Blockade — pickets doubled lanterns']);
     assert.deepEqual(kindOf(brief, 'events').items.map(row => row.detail), ['Klaas asked for the ledger.']);
     assert.notEqual(whole.find, whole.search);
 });
@@ -408,4 +410,17 @@ test('W8: a person with a relationship row has no second, loose line on the scre
         happened: ['Torka: affection 7 -> 8.', 'Torka: affection 8 -> 7.', 'Torka: affection moved, then settled.', 'Klaas: trust 0 → 1.', 'A stray line.'], tags: ['capture.npc', 'capture.npc', 'capture.npc', 'capture.npc', 'capture.npc'],
     }), HIDDEN, { now: NOW });
     assert.deepEqual(kindOf(day, 'relationships').items.map(row => row.title || row.detail), ['Klaas', 'A stray line.']);
+});
+
+test('W9: a faction whose only summary was "Seen in:" draws no summary line (no empty gap)', () => {
+    const doc = installFakeDom();
+    doc.head = doc.createElement('head');
+    const el = doc.createElement('div');
+    doc.body.appendChild(el);
+    const compiled = compileTemplate(worldScreen.template);
+    const world = { here: { people: [] }, news: [], factions: [{ id: 'f1', name: 'Red Cords', summary: '', area: 'Bluewatch Village', stance: '' }], hasFactions: true, factionCount: 1, upcoming: [] };
+    renderTemplate(el, compiled, { state: {}, q: { world, journal: { on: true, days: [] }, threads: { on: true }, keys: {}, leads: {}, trip: {}, chat: {} }, draft: { view: 'now' }, settings: {}, mount: 'tab', screenId: worldScreen.id, api: {} }, { evaluate: conditionEvaluator({ compile, evaluate }), widgets: {}, onWarn() {} });
+    const card = el.querySelector('.wv-factions .wv-item');
+    assert.ok(card, 'the faction card is drawn');
+    assert.equal(card.querySelectorAll('.ss-listcard-sub').length, 0);
 });

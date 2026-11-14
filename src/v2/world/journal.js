@@ -86,7 +86,7 @@ const same = value => value;
 const plain = (detail, fit = same) => ({ title: '', chip: '', detail: fit(detail), note: '', since: '', stepsLabel: '', steps: [], tags: [] });
 
 // NPC State Delta's per-reply upkeep receipts (mood, drives, taste, a flag or a look fixed, a meeting): not events of the day, shown or not by the screen only.
-const UPKEEP_TYPES = new Set(['npc.mood', 'npc.drives', 'npc.taste', 'npc.flag', 'npc.meet', 'npc.look', 'npc.identity']);
+const UPKEEP_TYPES = new Set(['npc.mood', 'npc.drives', 'npc.taste', 'npc.flag', 'npc.meet']);
 const UPKEEP_TEXT = /^[^:]{1,80}: (?:nothing moved|meters started|nothing changed)\b/i;
 const isUpkeep = (type, text) => UPKEEP_TYPES.has(type) || UPKEEP_TEXT.test(String(text ?? '').trim());
 
@@ -215,7 +215,9 @@ export function knownDay(entry, hidden, { now = null, threads = new Map(), forma
     const kept = lines.map((line, index) => ({ line, tag: entry.tags?.[index] ?? '', who: list(entry.who?.[index]).filter(name => !namesHidden(name, hidden.words)) })).filter(item => !namesHidden(item.line, hidden.words) && !isNarratorNote(item.line));
     const happened = kept.map(item => item.line);
     const happenedWho = kept.map(item => item.who);
-    const world = list(entry.world).filter(line => !namesHidden(line, hidden.words));
+    // The narrator's input hides agenda, beat and clock names too, as it always did; the screen's News fold reads the entry's own list (foldsOf).
+    const drop = line => namesHidden(line, hidden.words) || namesHidden(line, hidden.behind);
+    const world = list(entry.world).filter(line => !drop(line));
     const met = list(entry.met);
     const npcs = list(entry.npcs);
     const quests = isRecord(entry.quests) ? entry.quests : { taken: [], done: [], failed: [], dropped: [] };
