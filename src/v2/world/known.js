@@ -14,8 +14,10 @@
 // Never shown, while hidden or not: agendas, beats, clocks and secrets (behind the scenes, screens/reveal.js),
 // anything the arc planner made or touched (a thread with `track.arc`: its words are the planner's, not
 // the story's), the arcs themselves, and the Director's problems. A chronicle event or faction named like
-// one of those (an agenda, beat, clock or secret, or an arc) is left out too, and a journal line that
-// names a secret or an arc is dropped, so a hidden name never reaches the page through another list.
+// a secret or an arc is left out too, and a journal line that names one is dropped, so a hidden name never reaches
+// the page through another list. A chronicle event the story wrote is the story's own even when an agenda, beat
+// or clock bears its name (only that thread's planning text is hidden), so it shows in News; a faction's
+// "Seen in: <event>" summary follows the same rule: it shows only while that event is in News.
 // Quests show their name, goal and due date only (a plan line can never write those).
 
 import { lineKey } from '../../changes.js';
@@ -250,7 +252,7 @@ export function knownNews(state, tools, { hidden = hiddenNames(state), calendar 
     const events = tryQuery(query, 'chronicle.events', {}, null);
     for (const event of Array.isArray(events) ? events : []) {
         // A pulse rumour is unknown to {{user}} until the story's own world line named it (`heard`).
-        if (!isRecord(event) || hidden.behind.has(lineKey(text(event.name))) || (event.rumour !== undefined && event.heard !== true)) continue;
+        if (!isRecord(event) || hidden.words.has(lineKey(text(event.name))) || (event.rumour !== undefined && event.heard !== true)) continue;
         out.push({
             id: text(event.id), kind: 'world', name: cut(event.name, 80), summary: cut(event.summary, SUMMARY_POINTS),
             state: text(event.state), open: event.open === true, when: text(event.updatedText), ago: text(event.updatedAgo),
@@ -275,13 +277,19 @@ export function knownNews(state, tools, { hidden = hiddenNames(state), calendar 
 }
 
 /** The known factions, newest first (by the receipt that last changed them): `{ id, name, summary, area, stance }`. */
-export function knownFactions(state, tools, { hidden = hiddenNames(state) } = {}) {
+export function knownFactions(state, tools, { hidden = hiddenNames(state), news = null } = {}) {
     const query = queryOf(tools);
     const factions = tryQuery(query, 'chronicle.factions', {}, null);
+    // "Seen in: <event>" (made by the chronicle) names an event; it shows only while that event is in News.
+    const seen = new Set((news ?? knownNews(state, tools, { hidden })).filter(item => item.kind === 'world').map(item => lineKey(text(item.name))));
+    const summaryOf = faction => {
+        const named = /^Seen in: (.+?)\.?$/.exec(text(faction.summary));
+        return named && !seen.has(lineKey(named[1])) ? '' : cut(faction.summary, SUMMARY_POINTS);
+    };
     return (Array.isArray(factions) ? factions : [])
-        .filter(faction => isRecord(faction) && !hidden.behind.has(lineKey(text(faction.name))))
+        .filter(faction => isRecord(faction) && !hidden.words.has(lineKey(text(faction.name))))
         .sort((a, b) => (b.rev ?? 0) - (a.rev ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        .map(faction => ({ id: text(faction.id), name: cut(faction.name, 80), summary: cut(faction.summary, SUMMARY_POINTS), area: cut(faction.area, 80), stance: cut(faction.stance, 80) }));
+        .map(faction => ({ id: text(faction.id), name: cut(faction.name, 80), summary: summaryOf(faction), area: cut(faction.area, 80), stance: cut(faction.stance, 80) }));
 }
 
 // ---- upcoming -------------------------------------------------------------------------------------
@@ -395,7 +403,7 @@ export function worldView(state, args, tools) {
     const hidden = hiddenNames(state);
     const days = upcomingDaysOf(tools);
     const news = knownNews(state, tools, { hidden, calendar, now });
-    const factions = knownFactions(state, tools, { hidden });
+    const factions = knownFactions(state, tools, { hidden, news });
     const upcoming = knownUpcoming(state, tools, { calendar, now, days });
     return {
         here: hereView(state, args, tools),

@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DAYS_ID, FEATURE, FOLD_WIDGET, PEOPLE_WIDGET, WORLD_ID, createFoldWidget, createPeopleWidget, daysScreen, foldMemory, holidays, part, worldScreen } from '../../../src/v2/world/index.js';
+import { DAYS_ID, FEATURE, FOLD_WIDGET, PEOPLE_WIDGET, WORLD_ID, createFoldWidget, createPeopleWidget, daysScreen, foldMemory, holidays, knownFactions, knownNews, part, worldScreen } from '../../../src/v2/world/index.js';
 import { DIGEST_FEATURE } from '../../../src/v2/chronicle/days.js';
 import { createModule, storyDirectorModule } from '../../../src/v2/module.js';
 import { makeCalendar } from '../../../src/calendar.js';
@@ -386,4 +386,31 @@ test('folds: every Now section folds with a chevron and its count; remembered pe
     assert.equal(blocked.get('c/news'), false);
     // A damaged value is ignored.
     assert.equal(foldMemory({ getItem: () => '{not json', setItem() {} }).get('c/x'), null);
+});
+
+// ---- the World tab audit (14 Nov): News and Factions follow one rule ------------------------------------------------------------
+
+const auditTools = ({ events = [], factions = [] } = {}) => ({ query: name => (name === 'chronicle.events' ? events : name === 'chronicle.factions' ? factions : null) });
+const blockade = { id: 'w1', name: 'Red-Cord Blockade', summary: 'pickets doubled lanterns', state: 'ongoing', open: true, place: 'Bluewatch Village', factionsText: 'Red Cords', updated: 100, rev: 5 };
+const redCords = { id: 'f1', name: 'Red Cords', summary: 'Seen in: Red-Cord Blockade', area: 'Bluewatch Village', stance: '', rev: 5 };
+const stateWith = (...threads) => ({ domains: { director: { threads: Object.fromEntries(threads.map(thread => [thread.id, thread])) } } });
+const beat = { id: 'th_b', kind: 'beat', key: 'Red-Cord Blockade', status: 'active' };
+
+test('W4: a world event the story wrote shows in News and in the faction\'s "Seen in" even when a beat has the same name', () => {
+    const tools = auditTools({ events: [blockade], factions: [redCords] });
+    const state = stateWith(beat);
+    assert.deepEqual(knownNews(state, tools).map(item => item.name), ['Red-Cord Blockade']);
+    assert.equal(knownFactions(state, tools)[0].summary, 'Seen in: Red-Cord Blockade');
+});
+
+test('W5: "Seen in: <event>" shows only while that event is in News (a rumour not heard, or a secret\'s name, hides both)', () => {
+    const state = stateWith({ id: 'th_s', kind: 'secret', key: 'Red-Cord Blockade', status: 'active' });
+    const hiddenEvent = auditTools({ events: [blockade], factions: [redCords] });
+    assert.deepEqual(knownNews(state, hiddenEvent), []);
+    assert.equal(knownFactions(state, hiddenEvent)[0].summary, '', 'the event is not news, so the summary does not name it');
+    const rumour = auditTools({ events: [{ ...blockade, rumour: 'pulse' }], factions: [redCords] });
+    assert.equal(knownNews(stateWith(), rumour).length, 0);
+    assert.equal(knownFactions(stateWith(), rumour)[0].summary, '');
+    const plain = { ...redCords, summary: 'the Red Cords hold the quay' };
+    assert.equal(knownFactions(stateWith(), auditTools({ factions: [plain] }))[0].summary, 'the Red Cords hold the quay', 'another summary is untouched');
 });

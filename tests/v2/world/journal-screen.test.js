@@ -264,7 +264,7 @@ test('render 4/8: today\'s card is open and the others folded; an event\'s detai
     assert.equal(person.querySelectorAll('.wv-tags .wv-tag').length, 2, 'its meters wrap under it');
 });
 
-test('N1: a person with an agenda keeps their Met, events and fight lines on a short day (Journal, search, backlog), as on a whole day', () => {
+test('N1: a person with an agenda keeps their Met, events, fight, relationship and news lines on a short day (Journal, search, backlog), as on a whole day', () => {
     const agenda = { words: new Set(), behind: new Set(['bregje']) };
     const cats = {
         met: ['Bregje'], events: ['Bregje asked for the ledger.', 'Fight won: Astra +60 XP, Bregje +60 XP.'],
@@ -277,8 +277,47 @@ test('N1: a person with an agenda keeps their Met, events and fight lines on a s
     assert.equal(kindOf(day, 'party').items.length, 1);
     assert.equal(kindOf(day, 'items').items.length, 1);
     assert.equal(kindOf(day, 'reputation').items.length, 1);
-    assert.equal(kindOf(day, 'relationships'), undefined, 'relationships and news still hide agenda keys, as on a whole day');
-    assert.equal(kindOf(day, 'news'), undefined);
+    assert.equal(kindOf(day, 'relationships').items.length, 1, 'a met person\'s relationship change shows, agenda or not');
+    assert.equal(kindOf(day, 'news').items.length, 1);
     assert.match(day.search, /Fight won: Astra \+60 XP, Bregje/);
     assert.match(backlogBlock({ days: [{ ...day, day: 20 }], now: 22 * 1440, present: ['Bregje'] }).join('\n'), /Bregje/);
+});
+
+// ---- the World tab audit (14 Nov): relationships of people with an agenda, meter noise, word-end cuts -----------------------------
+
+const AUDIT_HIDDEN = { words: new Set(['duke betrayal']), behind: new Set(['sieke', 'harmen', 'temiwa']) };
+
+test('W1: a whole day shows a relationship change of someone who has an agenda; a secret\'s name still hides a line; no person is shown by one rule and hidden by another', () => {
+    const day = knownDay(stored({
+        npcs: [], world: ['Red-Cord Blockade — pickets doubled lanterns', 'The Duke Betrayal spreads.'], met: ['Sieke', 'Harmen'],
+        happened: ['Sieke: trust 7 → 8, affection 5 → 6.', 'Harmen: trust 0 → 1.', 'Roeland: trust 0 → 1, tension 0 → -1.', 'Klaas: tension 0 → 2, the Duke Betrayal.'],
+        tags: ['capture.npc', 'capture.npc', 'capture.npc', 'capture.npc'], quests: { taken: [], done: [], failed: [], dropped: [] },
+    }), AUDIT_HIDDEN, { now: NOW, threads, format });
+    assert.deepEqual(kindOf(day, 'relationships').items.map(row => row.title), ['Sieke', 'Harmen', 'Roeland'], 'Klaas\'s line names a secret: hidden');
+    assert.deepEqual(kindOf(day, 'relationships').items[0].tags, ['trust 7 → 8', 'affection 5 → 6']);
+    assert.deepEqual(kindOf(day, 'news').items.map(row => row.detail), ['Red-Cord Blockade — pickets doubled lanterns']);
+});
+
+test('W2: meter upkeep (mood, drives, taste, a look fixed, "nothing moved", "meters started") is not an Events row; the meter moves stay Relationships', () => {
+    const lines = ['Sieke: trust 7 → 8.', 'Klaas: nothing changed (today\'s ordinary is used).', 'Sieke: mood anxious (feeling -1, energy +2, control -1).', 'Harmen: nothing moved.', 'Klaas: meters started.', "Neeltje's look is fixed: a long text.", 'The ledger was signed.'];
+    const day = knownDay(stored({ npcs: [], world: [], met: [], quests: { taken: [], done: [], failed: [], dropped: [] }, happened: lines, tags: ['capture.npc', 'capture.npc', 'npc.mood', 'npc.drives', '-', 'npc.flag', '-'] }), HIDDEN, { now: NOW });
+    assert.deepEqual(kindOf(day, 'events').items.map(row => row.detail), ['The ledger was signed.']);
+    assert.deepEqual(kindOf(day, 'relationships').items.map(row => row.title), ['Sieke']);
+    assert.equal(day.eventCount, 1);
+});
+
+test('W3: a line the digest cut with "…" is shown ending at a word end; a whole line is left as it is', () => {
+    const day = knownDay(stored({
+        short: '', npcs: [], world: [], met: [], quests: { taken: [], done: [], failed: [], dropped: [] },
+        happened: ['Name: Watch-Captain Roeland is new; look: mid-forties human man, broad-…', 'Klaas\' look is fixed: a long scarred thi…', 'Voice: rough r… | temper…', 'The ledger was signed.'], tags: ['-', '-', '-', '-'],
+    }), HIDDEN, { now: NOW });
+    assert.deepEqual(kindOf(day, 'events').items.map(row => row.detail), ['Name: Watch-Captain Roeland is new; look: mid-forties human man…', "Klaas' look is fixed: a long scarred…", 'Voice: rough r…', 'The ledger was signed.']);
+});
+
+test('W6: a meter that ended where it began is no change (a person with none has no row); nothing else is merged away', () => {
+    const day = knownDay(stored({
+        npcs: [], world: [], met: [], quests: { taken: [], done: [], failed: [], dropped: [] },
+        happened: ['Sieke: trust 7 → 8, affection 5 → 6.', 'Sieke: trust 8 → 7.', 'Klaas: trust 1 → 0.', 'Klaas: trust 0 → 1.'], tags: ['capture.npc', 'capture.npc', 'capture.npc', 'capture.npc'],
+    }), HIDDEN, { now: NOW });
+    assert.deepEqual(kindOf(day, 'relationships').items.map(row => [row.title, row.tags]), [['Sieke', ['affection 5 → 6']]]);
 });
