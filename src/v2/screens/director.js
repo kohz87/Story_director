@@ -28,17 +28,28 @@ function browserStorage() {
     try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 
-/** A reader's device-wide choice, with a page-memory fallback if storage is blocked. */
-export function createSpoilerPreference({ storage = browserStorage() } = {}) {
-    let shown = true;
-    try { shown = storage?.getItem?.(SPOILER_STORE) !== 'hidden'; } catch { /* default to shown */ }
+/** A reader's device-wide choice. It is read from storage on every draw (so a tab opened earlier follows a change made in
+ *  another tab), with a page-memory fallback if storage is blocked or a write fails. */
+export function createSpoilerPreference({ storage = browserStorage(), win = globalThis } = {}) {
+    let memory = true;
+    let writeFailed = false;
     const listeners = new Set();
+    const notify = () => { for (const fn of [...listeners]) { try { fn(); } catch { /* an unavailable view */ } } };
+    const onStorage = event => { if (!event || event.key == null || event.key === SPOILER_STORE) notify(); };
+    try { win?.addEventListener?.('storage', onStorage); } catch { /* no cross-tab events here */ }
     return {
-        shown: () => shown,
+        shown() {
+            if (writeFailed) return memory;
+            try {
+                const saved = storage?.getItem?.(SPOILER_STORE);
+                if (saved === 'hidden' || saved === 'shown') memory = saved === 'shown';
+            } catch { /* keep the page's choice */ }
+            return memory;
+        },
         set(on) {
-            shown = on === true;
-            try { storage?.setItem?.(SPOILER_STORE, shown ? 'shown' : 'hidden'); } catch { /* keep the page's choice */ }
-            for (const fn of [...listeners]) { try { fn(); } catch { /* an unavailable view */ } }
+            memory = on === true;
+            try { storage?.setItem?.(SPOILER_STORE, memory ? 'shown' : 'hidden'); writeFailed = false; } catch { writeFailed = true; }
+            notify();
         },
         subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     };
@@ -69,7 +80,7 @@ export function createSpoilerSwitchWidget({ preference = spoilerPreference } = {
                 if (note) note.hidden = shown;
             };
             const change = event => { event?.stopPropagation?.(); preference.set(!preference.shown()); };
-            const show = event => { event?.stopPropagation?.(); preference.set(true); };
+            const show = event => { event?.stopPropagation?.(); preference.set(true); toggle.focus?.(); };
             toggle.addEventListener('click', change);
             note?.addEventListener('click', show);
             const off = preference.subscribe(draw);

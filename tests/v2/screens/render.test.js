@@ -125,7 +125,9 @@ test('director spoiler switch hides all planning cards, keeps pulse and quiet, s
     assert.equal(second.el.querySelector('.sd-spoilers').hidden, true, 'another mounted view shares the choice');
     const reloaded = createSpoilerPreference({ storage });
     assert.equal(reloaded.shown(), false, 'a new page reads the saved device choice');
+    note.focus();
     note.click();
+    assert.equal(first.doc.activeElement, toggle, 'activating the restore line moves focus to the switch');
     assert.equal(group.hidden, false);
     assert.equal(second.el.querySelector('.sd-spoilers').hidden, false);
     assert.equal(toggle.getAttribute('aria-checked'), 'true');
@@ -147,6 +149,28 @@ test('director spoiler preference defaults to shown and keeps a page choice when
     assert.equal(preference.shown(), true);
     assert.equal(createSpoilerPreference({ storage: { getItem: () => 'unexpected' } }).shown(), true);
     assert.equal(createSpoilerPreference({ storage: null }).shown(), true);
+});
+
+test('director spoiler choice follows another open tab: storage is re-read on each draw and a storage event redraws', () => {
+    const values = new Map();
+    const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    const listeners = [];
+    const win = { addEventListener: (type, fn) => { if (type === 'storage') listeners.push(fn); } };
+    const tabA = createSpoilerPreference({ storage, win });
+    const tabB = createSpoilerPreference({ storage, win });
+    let drawsB = 0;
+    tabB.subscribe(() => { drawsB += 1; });
+    tabA.set(false);
+    assert.equal(tabB.shown(), false, 'a new mount in tab B reads the choice made in tab A');
+    for (const fn of listeners) fn({ key: SPOILER_STORE });
+    assert.ok(drawsB > 0, 'a storage event redraws tab B');
+    const before = drawsB;
+    for (const fn of listeners) fn({ key: 'other' });
+    assert.equal(drawsB, before, 'unrelated keys are ignored');
+    tabB.set(true);
+    assert.equal(tabA.shown(), true, 'and the other direction');
+    values.set(SPOILER_STORE, 'garbage');
+    assert.equal(tabA.shown(), true, 'a damaged value keeps the last good choice');
 });
 
 test('status card: time, place, goal and step, progress, with what this reply changed marked; no next beat', { skip }, () => {
