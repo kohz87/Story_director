@@ -1,6 +1,6 @@
 // Story Director v2, part screens: `story-director/director` (SPEC §13.1), the Director screen: the author's view of the plan,
-// in the game view only (no tab mount, so never in the Story panel's strip; always in the game view's bar, no switch). It shows
-// everything, so it says so ("shows spoilers"); there is no Reveal step and the `screens.hideBehind` setting is harmless here.
+// in the game view only (no tab mount, so never in the Story panel's strip; always in the game view's bar). A reader's
+// spoiler switch hides the arc, plan and Ripples on this device; it defaults to shown and does not change story state.
 //
 // Cards, each short (the first few rows and "+N more" that opens it, no inner scroll box): the arc (widget `story-director.arc`,
 // opened: name, beats played, what it is about, Plan next arc / End arc), then widget `story-director.plan` (behind.js, from
@@ -21,6 +21,76 @@ import { hostHasHeaderSlot } from '../module/shared.js';
 import { FEATURE as PULSE_FEATURE, modeOf, resultsOf } from '../pulse/effects.js';
 
 export const DIRECTOR_ID = 'story-director/director';
+export const SPOILER_WIDGET = 'story-director.spoiler-switch';
+export const SPOILER_STORE = 'story-director.spoilers';
+
+function browserStorage() {
+    try { return globalThis.localStorage ?? null; } catch { return null; }
+}
+
+/** A reader's device-wide choice. It is read from storage on every draw (so a tab opened earlier follows a change made in
+ *  another tab), with a page-memory fallback if storage is blocked or a write fails. */
+export function createSpoilerPreference({ storage = browserStorage(), win = globalThis } = {}) {
+    let memory = true;
+    let writeFailed = false;
+    const listeners = new Set();
+    const notify = () => { for (const fn of [...listeners]) { try { fn(); } catch { /* an unavailable view */ } } };
+    const onStorage = event => { if (!event || event.key == null || event.key === SPOILER_STORE) notify(); };
+    try { win?.addEventListener?.('storage', onStorage); } catch { /* no cross-tab events here */ }
+    return {
+        shown() {
+            if (writeFailed) return memory;
+            try {
+                const saved = storage?.getItem?.(SPOILER_STORE);
+                if (saved === 'hidden' || saved === 'shown') memory = saved === 'shown';
+            } catch { /* keep the page's choice */ }
+            return memory;
+        },
+        set(on) {
+            memory = on === true;
+            try { storage?.setItem?.(SPOILER_STORE, memory ? 'shown' : 'hidden'); writeFailed = false; } catch { writeFailed = true; }
+            notify();
+        },
+        subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    };
+}
+
+const spoilerPreference = createSpoilerPreference();
+
+/** The header switch and the restore line operate on the Director screen's spoiler group. */
+export function createSpoilerSwitchWidget({ preference = spoilerPreference } = {}) {
+    return Object.freeze({
+        props: Object.freeze({}),
+        validate: () => [],
+        render(el) {
+            const root = el.closest('.sd-director');
+            const group = root?.querySelector('.sd-spoilers');
+            const note = root?.querySelector('.sd-spoiler-note');
+            const toggle = (el.ownerDocument ?? globalThis.document).createElement('button');
+            toggle.className = 'ss-pill sd-spoil';
+            toggle.setAttribute('type', 'button');
+            toggle.setAttribute('role', 'switch');
+            toggle.setAttribute('aria-label', 'Show spoilers');
+            el.replaceChildren(toggle);
+            const draw = () => {
+                const shown = preference.shown();
+                toggle.setAttribute('aria-checked', String(shown));
+                toggle.textContent = shown ? 'shows spoilers' : 'spoilers hidden';
+                if (group) group.hidden = !shown;
+                if (note) note.hidden = shown;
+            };
+            const change = event => { event?.stopPropagation?.(); preference.set(!preference.shown()); };
+            const show = event => { event?.stopPropagation?.(); preference.set(true); toggle.focus?.(); };
+            toggle.addEventListener('click', change);
+            note?.addEventListener('click', show);
+            const off = preference.subscribe(draw);
+            draw();
+            return { destroy() { off(); note?.removeEventListener('click', show); toggle.removeEventListener('click', change); toggle.remove(); } };
+        },
+    });
+}
+
+export const spoilerSwitchWidget = createSpoilerSwitchWidget();
 
 /** The kinds in the order the screen shows them, with their headings (the tracker tab's order). */
 export const KIND_GROUPS = Object.freeze([
@@ -77,7 +147,7 @@ const TEMPLATE = `
 <div class="sd-director">
   <header class="sd-dir-head sd-wide">
     <h3 class="sd-dir-title">Director</h3>
-    <span class="ss-pill sd-spoil">shows spoilers</span>
+    <ss-widget name="${SPOILER_WIDGET}"></ss-widget>
   </header>
   <div class="sd-quiet sd-wide ss-glass" data-if="q.pulse.localSwitch">
     <span aria-hidden="true">🌙</span><b>Quiet scene</b><small data-if="q.pulse.quiet">pulse paused</small>
@@ -106,10 +176,13 @@ const TEMPLATE = `
       </div>
     </div>
   </section>
-  <ss-widget class="sd-wide" name="${ARC_WIDGET}" data-props='{"bind":"q.arc","open":"true"}'></ss-widget>
-  <p class="sd-empty sd-wide" data-if="!q.plan.any">Nothing planned yet.</p>
-  <ss-widget class="sd-wide" name="${PLAN_WIDGET}" data-props='{"bind":"q.plan"}' data-if="q.plan.any"></ss-widget>
-  <ss-widget class="sd-wide" name="${RIPPLES_WIDGET}" data-props='{"bind":"q.ripples"}' data-if="len(q.ripples)"></ss-widget>
+  <button type="button" class="sd-spoiler-note sd-wide" hidden>Spoilers hidden — tap to show</button>
+  <div class="sd-spoilers sd-wide">
+    <ss-widget class="sd-wide" name="${ARC_WIDGET}" data-props='{"bind":"q.arc","open":"true"}'></ss-widget>
+    <p class="sd-empty sd-wide" data-if="!q.plan.any">Nothing planned yet.</p>
+    <ss-widget class="sd-wide" name="${PLAN_WIDGET}" data-props='{"bind":"q.plan"}' data-if="q.plan.any"></ss-widget>
+    <ss-widget class="sd-wide" name="${RIPPLES_WIDGET}" data-props='{"bind":"q.ripples"}' data-if="len(q.ripples)"></ss-widget>
+  </div>
 </div>
 `;
 
@@ -146,7 +219,11 @@ const CSS = `${BASE_CSS}
 .sd-empty, .sd-wide { grid-column: 1 / -1; }
 .sd-dir-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
 .sd-dir-title { margin: 0; font-size: 1.1em; font-weight: 700; }
-.sd-spoil { border-color: var(--sd-warn); color: var(--ss-warn-text, var(--sd-warn)); font-weight: 600; }
+.sd-spoil { border-color: var(--sd-warn); color: var(--ss-warn-text, var(--sd-warn)); font-weight: 600; background: color-mix(in srgb, var(--sd-warn) 12%, transparent); box-shadow: none; font-family: inherit; min-width: calc(44px / var(--ss-zoomed, 1)); min-height: calc(44px / var(--ss-zoomed, 1)); cursor: pointer; }
+.sd-spoilers { display: grid; gap: 14px; min-width: 0; }
+.sd-spoilers > ss-widget { display: block; min-width: 0; }
+.sd-spoilers[hidden], .sd-spoiler-note[hidden] { display: none; }
+.sd-spoiler-note { justify-self: start; min-height: calc(44px / var(--ss-zoomed, 1)); padding: 0; border: 0; background: none; color: var(--sd-muted); font: inherit; text-align: left; cursor: pointer; }
 .sd-kind { min-width: 0; }
 .sd-thread .sd-key, .sd-thread .sd-line { overflow-wrap: anywhere; }
 .sd-thread .sd-meta { margin-top: 2px; }
@@ -189,7 +266,7 @@ const data = {
     arc: { query: 'director.arc' },
     // The cards below the arc: the hooks with their Next, and (threads feature on) beats, off-screen, secrets, then every problem.
     plan: { query: 'director.plan' },
-    // Each pack power's hidden sway (the Ripples card; empty without a pack table), always shown (no Reveal).
+    // Each pack power's hidden sway (the Ripples card; empty without a pack table).
     ripples: { query: 'ripples.sway' },
     // The World pulse card, the recent rolls and the quiet switch (feature `story-director.pulse`; null while it is off, so none is drawn).
     pulse: { query: 'pulse.view' },

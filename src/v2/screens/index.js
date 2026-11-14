@@ -9,12 +9,11 @@
 // `director.next`, `quest.board`, `director.problems`), which work out what a template cannot
 // (sorting, dates, each quest's status line and details, `{{user}}` in problem texts) from those same
 // queries. No screen draws a command button (F95): quests follow the reader's words and the story. No commands, domains or change-line kinds of its own.
-// Behind the scenes (agendas, beats, clocks, secrets) is hidden on the Director screen until the reader
-// presses Reveal, per chat (reveal.js, widget `story-director.behind`; setting `hideBehind`, on). HIDE_SETTING
-// is its namespaced key. The status card is
+// The Director screen's device-wide spoiler switch is independent of the older Behind widget's per-chat
+// Reveal choice (reveal.js, widget `story-director.behind`; setting `hideBehind`, on). The status card is
 // on under every reply by default (`defaultOn: true`, MODULES §F24; the reader can turn it off).
 
-import { PULSE_FEATURE, directorScreen, pulseQuiet, pulseView } from './director.js';
+import { PULSE_FEATURE, SPOILER_WIDGET, directorScreen, pulseQuiet, pulseView, spoilerSwitchWidget } from './director.js';
 import { questsScreen } from './quests.js';
 import { screenQueries } from './queries.js';
 import { statusCardScreen } from './status-card.js';
@@ -61,13 +60,13 @@ export function createScreensPart({ settings = hostSettings } = {}) {
         hooks: {},
         tabs: [],
         screens: [...screens],
-        widgets: { [BEHIND_WIDGET]: behindWidget, [PLAN_WIDGET]: planWidget, [RIPPLES_WIDGET]: ripplesWidget, [QUESTS_WIDGET]: questsWidget },
+        widgets: { [BEHIND_WIDGET]: behindWidget, [PLAN_WIDGET]: planWidget, [RIPPLES_WIDGET]: ripplesWidget, [QUESTS_WIDGET]: questsWidget, [SPOILER_WIDGET]: spoilerSwitchWidget },
         settings: {
             defaults: { hideBehind: true },
             schema: {
                 // Per chat, Reveal shows them (remembered in this browser); this hides nothing from the story.
                 // Shown only while the feature `story-director.threads` is on (what it hides is that feature's).
-                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets (the Director screen shows everything and ignores this)', feature: THREADS_FEATURE },
+                hideBehind: { type: 'bool', label: 'Behind the scenes: Hide agendas, planned beats, clocks and secrets (the Director screen has its own spoiler switch)', feature: THREADS_FEATURE },
             },
         },
     };

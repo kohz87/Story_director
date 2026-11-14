@@ -10,7 +10,7 @@ import { DIRECTOR_ID, STATUS_CARD_ID, createBehindWidget, planWidget, screens } 
 import { statusExtras, clockText } from '../../../src/v2/screens/queries.js';
 import { STATUS_SUMMARY, STATUS_TITLE, statusCardScreen } from '../../../src/v2/screens/status-card.js';
 import { BASE_CSS } from '../../../src/v2/screens/style.js';
-import { directorScreen } from '../../../src/v2/screens/director.js';
+import { directorScreen, spoilerSwitchWidget } from '../../../src/v2/screens/director.js';
 import { worldScreen, createPeopleWidget, foldWidget } from '../../../src/v2/world/index.js';
 import { makeCalendar } from '../../../src/calendar.js';
 import { createArcWidget } from '../../../src/v2/arc/widget.js';
@@ -34,7 +34,7 @@ function draw(screen, state, { queries = makeQueries(), q = null, mount = 'scree
     const warnings = [...compiled.warnings];
     runtime.renderTemplate(el, compiled, { state, q: data.q, changes: [], settings: {}, mount, screenId: screen.id, api: {} }, {
         evaluate: runtime.evaluate,
-        widgets: { ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.people': createPeopleWidget(), 'story-director.plan': planWidget, 'story-director.fold': foldWidget },
+        widgets: { ...runtime.widgets, 'story-director.arc': createArcWidget({ controller: noPlanner }), 'story-director.behind': createBehindWidget({ reveal: stillReveal }), 'story-director.people': createPeopleWidget(), 'story-director.plan': planWidget, 'story-director.fold': foldWidget, 'story-director.spoiler-switch': spoilerSwitchWidget },
         formatters: { time: minutes => (Number.isInteger(minutes) ? calendar.format(minutes) : '') },
         onWarn: message => warnings.push(message),
     });
@@ -148,6 +148,7 @@ test('the Director\'s layout is one column of cards at every width: the plan car
     assert.doesNotMatch(directorScreen.css.slice(BASE_CSS.length), /@media/, 'one rule for every width');
     assert.match(directorScreen.css, /\.sd-director > \* \{ min-width: 0; \}/);
     assert.match(directorScreen.css, /\.sd-director > ss-widget \{ display: block; \}/);
+    assert.match(directorScreen.css, /\.sd-spoil \{[^}]*min-width: calc\(44px \/ var\(--ss-zoomed, 1\)\); min-height: calc\(44px \/ var\(--ss-zoomed, 1\)\)/, 'the switch stays a 44px target at the host zoom');
     assert.match(directorScreen.css, /\.sd-empty, \.sd-wide \{ grid-column: 1 \/ -1; \}/);
     assert.equal((directorScreen.template.match(/class="sd-wide"/g) ?? []).length, 3, 'the arc, the plan and the Ripples card span the whole row');
 });

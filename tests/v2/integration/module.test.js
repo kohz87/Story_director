@@ -126,7 +126,7 @@ test('two parts claiming one name is refused', () => {
 test('screens and widgets: every part\'s, in part order; one id in two parts is refused', () => {
     assert.deepEqual(storyDirectorModule.screens.map(screen => screen.id), [mapScreen, chronicleScreen, worldScreen, daysScreen, ...SCREENS].map(screen => screen.id));
     assert.deepEqual(storyDirectorModule.tabs, []);
-    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.journal-events', 'story-director.fold', 'story-director.key-people', 'story-director.arc', 'story-director.behind', 'story-director.plan', 'story-director.ripples', 'story-director.quests'], 'the atlas\'s Map, the World screen\'s people, journal events and key people, the arc panel, behind the scenes and the Quests cards');
+    assert.deepEqual(Object.keys(storyDirectorModule.widgets), ['story-director.map', 'story-director.people', 'story-director.journal-events', 'story-director.fold', 'story-director.key-people', 'story-director.arc', 'story-director.behind', 'story-director.plan', 'story-director.ripples', 'story-director.quests', 'story-director.spoiler-switch'], 'the atlas\'s Map, the World screen\'s people, journal events and key people, the arc panel, behind the scenes, the Quests cards and the spoiler switch');
     const status = storyDirectorModule.screens.find(screen => screen.id === 'story-director/status-card');
     assert.equal(status.defaultOn, true, 'the status card is on under every reply by default (§F24)');
     const widget = { render: () => {} };
