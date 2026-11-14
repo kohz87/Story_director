@@ -63,11 +63,11 @@ const JOURNAL = `
     <input type="search" data-draft="find" placeholder="A place, a quest, a name…" maxlength="80" aria-label="Search the journal">
   </label>
   <ol class="wv-days" data-if="q.journal.hasDays" aria-label="Story days, newest first">
-    <li class="wv-day ss-glass" data-each="q.journal.days as d" data-if="contains(d.search, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
+    <li class="wv-day ss-glass" data-each="q.journal.days as d" data-if="contains(d.find, draft.find)" data-day="{{ d.day }}" data-brief="{{ d.brief }}" data-today="{{ d.today }}">
       <details class="wv-fold" data-bind-attr="open: d.today" data-if="!draft.find">
         <summary class="wv-head"><span class="wv-top"><span class="wv-date">{{ d.date }}</span> <span class="ss-pill" data-if="d.today">today</span> <small class="wv-meta" data-if="d.meta">{{ d.meta }}</small></span></summary>
         <div class="wv-body">
-          <p class="wv-line" data-if="d.summary">{{ d.summary }}</p>
+          <p class="wv-line" data-if="d.line">{{ d.line }}</p>
           <p class="wv-note" data-if="d.brief && !d.hasCats">Only this line is kept for an older day.</p>
           <details class="wv-cat" data-each="d.cats as c" data-kind="{{ c.id }}">
             <summary class="wv-cathead"><b>{{ c.label }}</b> <small>{{ c.count }}</small></summary>
