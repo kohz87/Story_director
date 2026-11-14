@@ -219,7 +219,7 @@ const CSS = `${BASE_CSS}
 .sd-empty, .sd-wide { grid-column: 1 / -1; }
 .sd-dir-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
 .sd-dir-title { margin: 0; font-size: 1.1em; font-weight: 700; }
-.sd-spoil { border-color: var(--sd-warn); color: var(--ss-warn-text, var(--sd-warn)); font-weight: 600; min-width: calc(44px / var(--ss-zoomed, 1)); min-height: calc(44px / var(--ss-zoomed, 1)); cursor: pointer; }
+.sd-spoil { border-color: var(--sd-warn); color: var(--ss-warn-text, var(--sd-warn)); font-weight: 600; background: color-mix(in srgb, var(--sd-warn) 12%, transparent); box-shadow: none; font-family: inherit; min-width: calc(44px / var(--ss-zoomed, 1)); min-height: calc(44px / var(--ss-zoomed, 1)); cursor: pointer; }
 .sd-spoilers { display: grid; gap: 14px; min-width: 0; }
 .sd-spoilers > ss-widget { display: block; min-width: 0; }
 .sd-spoilers[hidden], .sd-spoiler-note[hidden] { display: none; }
