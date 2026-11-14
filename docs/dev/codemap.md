@@ -39,7 +39,8 @@ Generated 2026-11-07.
 - `src/v2/ripples/index.js`: Hidden sway per named power from quests, world events, standing and fights: validates the pack's `ripples` table, scores with caps, picks the leader, and is the part (queries `ripples.sway` / `ripples.leader`, no stored state).
 
 ## src/v2/pulse/
-- `src/v2/pulse/tables.js`: World pulse tables (Standard and Duo d20 rows), the table choice by real counts, the fixed draw order (d20, actor, line), place groups by atlas kind, flavour lines per group and weather, and the step-down past an entry that cannot happen here; pure.
+- `src/v2/pulse/tables.js`: World pulse tables (Standard and Duo d20 rows), the table choice by real counts, the fixed draw order (d20, actor, line), place groups by atlas kind, flavour lines per group and weather, and the step-down past an entry that cannot happen here; plus the version-2 intensity (around / noticed / intrusive), the quiet-mode spread and the narrator brief; pure.
+- `src/v2/pulse/flavour-more.js`: the extra fixed fallback lines per flavour kind and place group (pulse step version 2 and later only); pure data.
 - `src/v2/pulse/effects.js`: the World pulse part (feature `story-director.pulse`): the `director.pulse` roll step, quiet-scene command, hook, optional tail line, settings and the skip check; effect builders (rumour, chance meeting, ENTER_CHECK arrival, TASK_SHIFT step shift) and agenda step progress.
 
 ## src/v2/screens/

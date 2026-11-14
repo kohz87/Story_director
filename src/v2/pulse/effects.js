@@ -4,26 +4,23 @@
 // slot `director.pulse = [{ results: [last 5] }]`. The step is a host prelude: it is previewed for the prompt and stored on the generated reply
 // itself (same seed), so a swipe, a regenerate or a delete of the reply takes its roll and effects back. Its receipt's summary is the one
 // "World this reply: …" cue (none on CALM or a skip; at most 40 tokens), told in the leading note, not an optional tail line.
-// A reply is skipped, and the skip recorded, during a fight (a board open, or Foes slots that changed in the last STALE_REPLIES replies), after an explicit rest, after a jump of 6+ story hours, while the
-// reader's quiet-scene flag is set (`director.pulse.quiet { on }`, slot `director.pulseQuiet`) and while the clock is unset.
+// A reply is skipped (and the skip recorded) in a fight, after a rest or a 6+ hour jump, in a quiet scene and while the clock is unset.
+// Pulse step version 2 (payload `pulse: 2`, every new reply; older steps replay as written): each result has an `intensity`, never two intrusive or the
+// same kind running; a flavour kind's text is a brief for the narrator to invent the event (setting `invents`), else a fixed line (more of them, flavour-more.js).
 // The builders below are pure (no state, no ctx, no model call); the part (the command, hook, settings) is at the end.
 //
-// Each builder takes the candidates the caller has already filtered (what could be used here) and the roll's draw units
-// (tables.js drawsFrom): `actor` picks the candidate, `line` decides the rest. It returns `{ kind, type, payload, tail, receipt }`:
-// the command the hook runs (`chronicle.rumor`, `cast.meet`, `director.pulse.arrive`, `director.pulse.shift`), the tail text
-// without its label (worldLine adds "World this reply:"), and what `director.pulse` stores. `null` means the entry cannot
-// happen with these candidates; the caller then steps down the table (tables.js resolveKind does not know the candidates).
+// Each builder takes the filtered candidates and the roll's draw units (tables.js drawsFrom): `actor` picks the candidate, `line` decides the
+// rest. It returns `{ kind, type, payload, tail, receipt }` (the command the hook runs, the tail text without its label, what `director.pulse`
+// stores), or `null` when the entry cannot happen with these candidates; the caller then steps down the table.
 //
-// * skipReason: why a reply writes no roll at all, the first that holds: 'fight', 'rest', 'jump' (JUMP_MINUTES or more since
-//   the last reply), 'quiet' (the chat's quiet-scene flag), 'clock' (no story clock). '' when the reply is rolled.
+// * skipReason: why a reply writes no roll: 'fight', 'rest', 'jump' (JUMP_MINUTES+), 'quiet', 'clock'; '' when rolled.
 // * Rumour (GOSSIP_SURGE, OVERHEARD_DETAIL): one known fact becomes a `looming` chronicle event. Known facts only: a candidate
 //   whose name is in `behind` (the lineKeys of hidden names, world/known.js hiddenNames) is dropped before the pick.
 // * Chance meeting (CHANCE_MEETING): one unmet, living cast person is met at `place` (`cast.meet`, why 'goal').
 // * Arrival (ENTER_CHECK): one off-screen agenda's `arrive` moves 1 or 2 replies' worth of story minutes ahead (REPLY_MINUTES).
 // * Shift (TASK_SHIFT): one off-screen agenda's `on` moves early or late by 1 to 4 hours. Agenda dates are calendar text, so
 //   the caller parses them (`abs`: story minutes) and gives `format(minutes)` back; without `format` the entry cannot happen.
-// * Names: a person or agenda is named in the tail only when the caller says the name is known to {{user}} (`named`); else the
-//   line stays general, so a hidden agenda or secret never reaches the note.
+// * Names: a person or agenda is named only when `named` (known to {{user}}); else the line stays general.
 // * Tail lines are plain text: plainSlot (no braces, angle brackets or line breaks), cut by code points.
 
 import { lineKey } from '../../changes.js';
@@ -37,7 +34,7 @@ import { calendarFrom } from '../keypeople/time.js';
 import { isPersona, personaName } from '../tracker/initiative.js';
 import { orderedThreads } from '../tracker/convert.js';
 import { ask, cutPoints, namesPerson, sceneOf } from '../tracker/scene.js';
-import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plainSlot, resolveKind, tableFor, QUIET_FALLBACK } from './tables.js';
+import { drawsFrom, d20Of, fillSlots, flavourFor, pickIndex, placeGroupOf, plainSlot, resolveKind, tableFor, briefFor, intensityOf, ACTOR_NEEDS, QUIET_FALLBACK, QUIET_SPREAD } from './tables.js';
 
 export const JUMP_MINUTES = 360;
 export const REPLY_MINUTES = 20;
@@ -48,6 +45,7 @@ export const REPLY_MINUTES = 20;
 export const STALE_REPLIES = 2;
 // The note line is at most 40 tokens (4 characters each): the label and TAIL_CHARS of text stay under 150 characters.
 export const TAIL_CHARS = 128;
+export const BRIEF_CHARS = 330; // the narrator brief of pulse step version 2 (about 85 tokens)
 export const RUMOUR_ROOM = 54;
 export const SKIP_REASONS = Object.freeze(['fight', 'rest', 'jump', 'quiet', 'clock']);
 const NAME_MAX = 80;
@@ -83,8 +81,8 @@ export function cutWord(text, max = TAIL_CHARS) {
 }
 
 /** The tail line for an effect's text: "World this reply: …", plain and cut at a word to TAIL_CHARS; '' when there is no text. */
-export function worldLine(text) {
-    const body = cutWord(text, TAIL_CHARS);
+export function worldLine(text, max = TAIL_CHARS) {
+    const body = cutWord(text, max);
     return body ? `World this reply: ${body}` : '';
 }
 
@@ -282,7 +280,7 @@ function offscreenAgendas(director, scene) {
 }
 
 // The roll's entry for this reply: the kind from the table (stepping past what cannot happen), its effect applied, its line.
-function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = 0, persona = '' }) {
+function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach = 0, persona = '', v2 = false, invents = true, recent = [] }) {
     const here = ask(query, 'atlas.here', {}, null);
     const place = cutPoints(here?.name || scene.place, NAME_MAX);
     const group = placeGroupOf(here?.placeKind ?? here?.kind ?? '');
@@ -318,15 +316,22 @@ function rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, 
     const counts = { present: others.length, offscreen: lively ? agendas.length + away + unmet.length : 1, known: lively ? known.length : 1, cast: lively ? (near ? near.length : unmet.length) : 1 };
     const table = tableFor({ named: names.size, offscreen: agendas.length + away + unmet.length });
     const d20 = d20Of(draw.d20);
-    const blocked = new Set();
+    // Version 2: how strongly it shows; never the same kind twice running, nor two intrusive ones; the narrator may invent the event from what the note holds.
+    const lastKind = v2 ? recent.at(-1)?.kind : '';
+    const intensity = v2 ? intensityOf(draw.d20, recent.at(-1)?.intensity) : '';
+    const material = v2 && invents && (others.length > 0 || open.length > 0 || orderedThreads(director).some(thread => thread.status === 'active'));
+    const blocked = new Set(lastKind && lastKind !== 'CALM' ? [lastKind] : []);
     for (let tries = 0; tries < 8; tries += 1) {
         const rolled = resolveKind(table, d20, { group, weather, counts, blocked });
         // Quiet: an effect entry keeps its band but reads as its flavour fallback.
-        if (!lively && QUIET_FALLBACK[rolled.kind]) rolled.kind = QUIET_FALLBACK[rolled.kind];
-        const base = { d20, table, kind: rolled.kind, ...(place ? { place } : {}) };
+        const quiet = !lively && (v2 ? QUIET_SPREAD : QUIET_FALLBACK)[rolled.kind];
+        if (quiet && v2 && quiet === lastKind) { blocked.add(rolled.kind); continue; }
+        if (quiet) rolled.kind = quiet;
+        const base = { d20, table, kind: rolled.kind, ...(intensity ? { intensity } : {}), ...(place ? { place } : {}) };
         if (!EFFECTS.has(rolled.kind)) {
             const who = others.length ? others[pickIndex(others.length, draw.actor)]?.name : '';
-            const text = rolled.kind === 'CALM' ? '' : fillSlots(flavourFor(rolled.kind, draw.line, { group, weather }), { name: who, place });
+            if (material && rolled.kind !== 'CALM') return { ...base, invent: true, text: cutWord(briefFor({ kind: rolled.kind, intensity, group, name: ACTOR_NEEDS[rolled.kind] === 'present' ? who : '', recent }), BRIEF_CHARS) };
+            const text = rolled.kind === 'CALM' ? '' : fillSlots(flavourFor(rolled.kind, draw.line, { group, weather, wide: v2 }), { name: who, place });
             return { ...base, ...(who && text.includes(who) ? { who } : {}), text: cutWord(text, TAIL_CHARS) };
         }
         const made = effectFor(rolled.kind, {
@@ -378,6 +383,8 @@ export function pulseCommand(ctx, payload = {}) {
     // The draws come first and always: a skip or a step-down never shifts them.
     const draw = drawsFrom(ctx.rng);
     const before = resultsOf(director).filter(entry => entry.at !== at);
+    const v2 = payload?.pulse === 2;
+    const recent = before.filter(entry => entry.kind && entry.kind !== 'SKIP').slice(-3);
     const clock = isInt(director.time?.minutes) ? director.time.minutes : null;
     const last = before.at(-1);
     const scene = sceneOf(query, state);
@@ -390,11 +397,11 @@ export function pulseCommand(ctx, payload = {}) {
     });
     // A skipped reply still closes the rumours that are over (they would stay in the narrator's chronicle note otherwise).
     if (skipped && ask(query, 'chronicle.events', { open: true }, []).some(event => event?.rumour)) { try { ctx.call('chronicle.rumor', { at, expire: true }); } catch { /* the skip goes on */ } }
-    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2, 3].includes(payload?.reach) ? payload.reach : 0, persona: typeof payload?.persona === 'string' ? payload.persona : '' });
+    const { cue = '', ...entry } = skipped ? { kind: 'SKIP', skipped, text: '' } : rollEntry({ ctx, director, state, query, scene, draw, at, clock, mode, reach: [1, 2, 3].includes(payload?.reach) ? payload.reach : 0, persona: typeof payload?.persona === 'string' ? payload.persona : '', v2, invents: settingsOf(ctx.settings).invents !== false, recent });
     director.pulse = toSlot({ results: [...before, { at, clock, ...entry, ...(payload?.age === 1 && foes ? { foes } : {}) }].slice(-RESULTS_MAX) });
     // The line rides the reply's own receipt as its [Happened] cue (a prelude: previewed for the prompt, stored with the generated reply), so
     // a swipe, a regenerate or a delete of the reply takes the roll and its effects back; a CALM or skipped roll tells nothing.
-    const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text);
+    const line = skipped || entry.kind === 'CALM' ? '' : worldLine(entry.text, entry.invent ? BRIEF_CHARS : TAIL_CHARS);
     // A chance meeting also carries the cast's cue for the person met: the prelude is previewed on the head state, which has no meeting yet.
     return { summary: cue && line ? `${line}\n${cue}` : line, narrate: Boolean(line), data: { keep: true, kind: entry.kind, ...(entry.d20 ? { d20: entry.d20 } : {}), ...(skipped ? { skipped } : {}) } };
 }
@@ -413,7 +420,7 @@ export function pulseHook(view, info = {}) {
     const length = view?.chat?.length;
     if (info?.commit === false || !['normal', 'swipe', 'regenerate'].includes(type) || !isInt(length)) return undefined;
     // The chat holds the reply being swiped, so the reply's place is one below its length.
-    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 3, persona: personaName() } }] };
+    return { commands: [{ type: PULSE, payload: { at: Math.max(0, length - (type === 'swipe' ? 1 : 0)), age: 1, reach: 3, pulse: 2, persona: personaName() } }] };
 }
 
 // A prelude (Story Block registry.isPrelude): the host previews it for the prompt and stores it on the generated reply with the same seed.
@@ -430,13 +437,14 @@ export const part = {
     context: { parts: [{ feature: FEATURE, static: () => PULSE_STATIC }] },
     hooks: { beforeGenerate: pulseHook },
     settings: {
-        defaults: { mode: 'lively', showUnderReply: false },
+        defaults: { mode: 'lively', showUnderReply: false, invents: true },
         schema: {
             mode: {
                 type: 'choice', form: 'segmented', label: 'World pulse', feature: FEATURE,
                 options: [{ value: 'off', label: 'Off' }, { value: 'quiet', label: 'Quiet' }, { value: 'lively', label: 'Lively' }],
                 help: 'Off: nothing. Quiet: small background touches only. Lively: rumours, meetings, arrivals and schedule shifts too.',
             },
+            invents: { type: 'bool', label: 'Pulse invents events (model)', help: 'On: the note asks the narrator to invent one small event from the people and threads in play. Off: fixed lines.', feature: FEATURE },
             showUnderReply: { type: 'bool', label: 'Show the roll under replies', help: 'Off: only the Director tab shows it (spoilers).', feature: FEATURE },
         },
     },
